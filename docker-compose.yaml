@@ -1,0 +1,31 @@
+version: '3'
+services:
+  grafana:
+    user: root
+    container_name: 'pims-vision-app'
+
+    build:
+      context: ./.config
+      args:
+        grafana_image: grafana
+        grafana_version: "9.3.16"
+        development: "false"
+    ports:
+      - 3001:3000/tcp
+      - 2345:2345/tcp
+    security_opt:
+      - 'apparmor:unconfined'
+      - 'seccomp:unconfined'
+    cap_add:
+      - SYS_PTRACE
+    volumes:
+      - ./dist:/var/lib/grafana/plugins/pims-vision-app
+      - ./provisioning:/etc/grafana/provisioning
+      - .:/root/pims-vision-app
+
+    environment:
+      NODE_ENV: development
+      GF_LOG_FILTERS: plugin.pims-vision-app:debug
+      GF_LOG_LEVEL: debug
+      GF_DATAPROXY_LOGGING: 1
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: pims-vision-app

@@ -1,0 +1,103 @@
+import React from 'react';
+import { isPiPointBinding } from '../../pi/piPointBinding';
+import type { BarElement } from '../createBar';
+import { formatScaleValue, getScaleRatio } from '../scaleOptions';
+import type { ValueRuntimeState } from '../runtime/valueRuntime';
+import { getMultistateColor } from '../multistate';
+
+export interface BarElementViewProps {
+  element: BarElement;
+  runtimeState?: ValueRuntimeState;
+}
+
+export const BarElementView = React.memo(function BarElementView({ element, runtimeState }: BarElementViewProps) {
+  const options = element.properties;
+  const binding = options.binding;
+  const value = getNumericValue(runtimeState);
+  const ratio = value === undefined ? undefined : getScaleRatio(value, options.minimum, options.maximum);
+  const horizontal = options.orientation === 'horizontal';
+  const padding = 12;
+  const plotX = element.x + padding;
+  const plotY = element.y + 34;
+  const plotWidth = Math.max(1, element.width - padding * 2);
+  const plotHeight = Math.max(1, element.height - 62);
+  const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
+  const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
+  const valueText = getValueText(binding, runtimeState, value, options.decimals);
+  const activeColor = getMultistateColor(value, options.multistate, '#6e9fff');
+
+  return (
+    <g
+      data-testid={`display-element-${element.id}`}
+      data-element-id={element.id}
+      data-element-type={element.type}
+      style={{ cursor: 'move' }}
+    >
+      <rect
+        x={element.x}
+        y={element.y}
+        width={element.width}
+        height={element.height}
+        fill="rgba(255, 255, 255, 0.06)"
+        stroke="rgba(255, 255, 255, 0.35)"
+        strokeWidth={1}
+        data-testid={`bar-background-${element.id}`}
+        data-element-id={element.id}
+        pointerEvents="all"
+      />
+      {binding && isPiPointBinding(binding) && options.showTagName && (
+        <text x={element.x + element.width / 2} y={element.y + 18} textAnchor="middle" fill="rgba(255, 255, 255, 0.86)" fontSize={12} pointerEvents="none">
+          {binding.pointName}
+        </text>
+      )}
+      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={3} fill="rgba(255, 255, 255, 0.12)" data-testid={`bar-track-${element.id}`} pointerEvents="none" />
+      {ratio !== undefined && (
+        <rect
+          x={horizontal ? plotX : plotX}
+          y={horizontal ? plotY : plotY + plotHeight - fillHeight}
+          width={fillWidth}
+          height={fillHeight}
+          rx={3}
+          fill={activeColor}
+          data-testid={`bar-fill-${element.id}`}
+          pointerEvents="none"
+        />
+      )}
+      <text x={element.x + element.width / 2} y={element.y + element.height - 12} textAnchor="middle" fill="rgba(255, 255, 255, 0.86)" fontSize={Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
+        {options.showValue ? valueText : ''}
+      </text>
+      {!isValidScale(options.minimum, options.maximum) && (
+        <text x={element.x + element.width / 2} y={element.y + element.height / 2} textAnchor="middle" fill="#f2cc0c" fontSize={10} data-testid={`bar-invalid-scale-${element.id}`} pointerEvents="none">
+          Escala inválida
+        </text>
+      )}
+    </g>
+  );
+});
+
+function getNumericValue(state: ValueRuntimeState | undefined): number | undefined {
+  const value = state?.result?.value;
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function getValueText(
+  binding: BarElement['properties']['binding'],
+  state: ValueRuntimeState | undefined,
+  value: number | undefined,
+  decimals: number | null,
+): string {
+  if (!binding || !isPiPointBinding(binding)) {
+    return 'Sem tag';
+  }
+  if (state?.status === 'loading') {
+    return '...';
+  }
+  if (value !== undefined) {
+    return formatScaleValue(value, decimals);
+  }
+  return state?.status === 'error' ? 'BAD' : '--';
+}
+
+function isValidScale(minimum: number, maximum: number): boolean {
+  return Number.isFinite(minimum) && Number.isFinite(maximum) && minimum < maximum;
+}
