@@ -89,4 +89,50 @@ describe('TrendElementView', () => {
     expect(screen.getByTestId('trend-cursor-hit-trend-1-cursor-1')).toHaveAttribute('stroke-width', '12');
     expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('3');
   });
+
+  it('renderiza várias séries com cores, legenda e falha independente', () => {
+    const secondBinding = { ...binding, pointName: 'OTHER' };
+    const multiElement = {
+      ...element,
+      properties: {
+        series: [
+          { binding, color: '#6e9fff' },
+          { binding: secondBinding, color: '#ff9830' },
+        ],
+      },
+    };
+    render(
+      <svg>
+        <TrendElementView
+          element={multiElement}
+          cursors={[{ id: 'cursor-1', time: 1_500 }]}
+          seriesStates={[
+            {
+              series: multiElement.properties.series[0],
+              runtimeState: {
+                status: 'success',
+                data: { pointName: 'SINUSOID', points: [{ time: 1_000, value: 0 }, { time: 2_000, value: 2 }] },
+              },
+            },
+            {
+              series: multiElement.properties.series[1],
+              runtimeState: {
+                status: 'error',
+                data: { pointName: 'OTHER', points: [{ time: 1_000, value: 10 }, { time: 2_000, value: 20 }] },
+                error: new Error('falha refinada'),
+              },
+            },
+          ]}
+        />
+      </svg>,
+    );
+
+    expect(screen.getByTestId('trend-line-trend-1')).toHaveAttribute('stroke', '#6e9fff');
+    expect(screen.getByTestId('trend-line-trend-1-1')).toHaveAttribute('stroke', '#ff9830');
+    expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveTextContent('SINUSOID 2');
+    expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveTextContent('OTHER 20');
+    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('SINUSOID 1');
+    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('OTHER 15');
+    expect(screen.getByTestId('trend-refresh-error-trend-1')).toBeInTheDocument();
+  });
 });

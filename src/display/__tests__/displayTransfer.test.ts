@@ -1,4 +1,5 @@
 import {
+  addTrendSeries,
   appendBar,
   appendDisplayElement,
   appendGauge,
@@ -75,6 +76,24 @@ describe('displayTransfer', () => {
     const document = createDisplayDocument({ id: 'old', name: 'Old' });
     const imported = parseImportedDisplay(serializeDisplay(appendValue(document, createValue({ id: 'value', binding }))));
     expect(imported.elements[0].properties.multistate).toBeUndefined();
+  });
+
+  it('carrega binding único legado e salva várias séries no contrato canônico', () => {
+    const envelope = JSON.parse(serializeDisplay(makeDocument()));
+    const trend = envelope.document.elements.find((element: { type: string }) => element.type === 'trend');
+    trend.properties = { binding };
+
+    const importedLegacy = parseImportedDisplay(JSON.stringify(envelope));
+    expect(importedLegacy.elements[2].properties).toEqual({
+      series: [{ binding, color: '#6e9fff' }],
+    });
+
+    const withSecond = addTrendSeries(importedLegacy, 'trend', { ...binding, pointName: 'OTHER' });
+    const reopened = parseImportedDisplay(serializeDisplay(withSecond));
+    expect(reopened.elements[2].properties.series).toEqual([
+      { binding, color: '#6e9fff' },
+      { binding: { ...binding, pointName: 'OTHER' }, color: '#ff9830' },
+    ]);
   });
 
   it.each(['', '{', '{}', 'null', '[]', JSON.stringify({ format: 'other', version: 1, document: {} }), JSON.stringify({ format: DISPLAY_EXPORT_FORMAT, version: 2, document: {} }), JSON.stringify({ format: DISPLAY_EXPORT_FORMAT, version: 1 })])(

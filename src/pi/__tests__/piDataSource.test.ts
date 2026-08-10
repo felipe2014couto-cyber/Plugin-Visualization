@@ -16,9 +16,13 @@ function makeDataSourceSrv(options: {
   testDatasource?: () => Promise<unknown>;
   metricFindQuery?: (query: unknown, options: unknown) => Promise<unknown[]>;
   query?: (request: unknown) => Promise<unknown>;
+  instanceUid?: string;
+  instanceType?: string;
 }) {
   const getList = jest.fn(() => options.dataSources ?? []);
-  const get = jest.fn(async () => ({
+  const get = jest.fn(async (ref?: { uid?: string; type?: string }) => ({
+    uid: options.instanceUid ?? ref?.uid ?? 'pi-default',
+    type: options.instanceType ?? PI_DATASOURCE_TYPE,
     testDatasource: options.testDatasource ?? (async () => undefined),
     metricFindQuery: options.metricFindQuery ?? (async () => []),
     query: options.query ?? (async () => ({ data: [] })),
@@ -142,6 +146,50 @@ describe('PI data source integration', () => {
       digitalStates: { enable: true },
     });
     expect(request.targets[0]).not.toHaveProperty('recordedValues.enable', true);
+    expect(dataSourceSrv.get).toHaveBeenCalledWith({ uid: 'pi-default', type: PI_DATASOURCE_TYPE });
+  });
+
+  it('preserva zero, timestamp numérico e campos de qualidade disponíveis', async () => {
+    const timestamp = Date.parse('2026-08-06T12:00:00.000Z');
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      query: async () => ({
+        data: [{
+          refId: 'A',
+          fields: [
+            { name: 'Time', values: [timestamp] },
+            { name: 'Good', values: [true] },
+            { name: 'TAG_ZERO', values: [0] },
+            { name: 'Questionable', values: [false] },
+          ],
+        }],
+      }),
+    });
+    const { getPiPointCurrentValue } = await import('../piDataSource');
+
+    await expect(getPiPointCurrentValue({
+      dataSourceUid: 'pi-default',
+      serverPath: 'pims',
+      pointName: 'TAG_ZERO',
+    }, dataSourceSrv)).resolves.toEqual({
+      value: 0,
+      timestamp: '2026-08-06T12:00:00.000Z',
+      quality: { Good: true, Questionable: false },
+    });
+  });
+
+  it('rejeita de forma controlada instância incompatível resolvida pelo UID', async () => {
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      instanceType: 'other-datasource',
+    });
+    const { getPiPointCurrentValue } = await import('../piDataSource');
+
+    await expect(getPiPointCurrentValue({
+      dataSourceUid: 'pi-default',
+      serverPath: 'pims',
+      pointName: 'TAG_A',
+    }, dataSourceSrv)).rejects.toThrow('não é compatível com OSIsoft-PI');
   });
 
   it('preserva estado digital/textual e transforma respostas vazias ou com erro em falha controlada', async () => {
@@ -301,6 +349,86 @@ describe('PI data source integration', () => {
     expect(results['pi-default\u0000pims\u0000TAG_B']).toMatchObject({ status: 'success', series: { points: [{ value: 2 }] } });
   });
 
+  it('envia vinte tags em uma consulta com refIds exclusivos e prévia limitada', async () => {
+    const query = jest.fn(async (_request: unknown) => ({ data: [] }));
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      query,
+    });
+    const bindings = Array.from({ length: 20 }, (_, index) => ({
+      dataSourceUid: 'pi-default',
+      serverPath: 'pims',
+      pointName: `TAG_${index + 1}`,
+    }));
+    const { getPiTrendsPreviewForRange } = await import('../piDataSource');
+
+    await getPiTrendsPreviewForRange(
+      bindings,
+      { from: 1_000, to: 2_000 },
+      dataSourceSrv,
+      { maxDataPoints: 250 },
+    );
+
+    expect(query).toHaveBeenCalledTimes(1);
+    const request = query.mock.calls[0][0] as {
+      maxDataPoints: number;
+      targets: Array<{ refId: string; target: string }>;
+    };
+    expect(request.maxDataPoints).toBe(250);
+    expect(request.targets).toHaveLength(20);
+    expect(new Set(request.targets.map(({ refId }) => refId)).size).toBe(20);
+    expect(request.targets.every((target) => target.target.startsWith('pims;TAG_'))).toBe(true);
+  });
+
+  it('divide somente lotes acima de vinte targets e mantém refIds únicos em cada chamada', async () => {
+    const query = jest.fn(async (_request: unknown) => ({ data: [] }));
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      query,
+    });
+    const bindings = Array.from({ length: 21 }, (_, index) => ({
+      dataSourceUid: 'pi-default',
+      serverPath: 'pims',
+      pointName: `TAG_${index + 1}`,
+    }));
+    const { getPiPointsCurrentValues } = await import('../piDataSource');
+
+    await getPiPointsCurrentValues(bindings, dataSourceSrv);
+
+    expect(query).toHaveBeenCalledTimes(2);
+    const targetBatches = query.mock.calls.map(([request]) => (
+      request as unknown as { targets: Array<{ refId: string }> }
+    ).targets);
+    expect(targetBatches.map((targets) => targets.length)).toEqual([20, 1]);
+    expect(targetBatches.every((targets) => new Set(targets.map(({ refId }) => refId)).size === targets.length)).toBe(true);
+  });
+
+  it('limita a duas chamadas de datasource em paralelo', async () => {
+    const resolvers: Array<(response: { data: unknown[] }) => void> = [];
+    const query = jest.fn(() => new Promise<{ data: unknown[] }>((resolve) => resolvers.push(resolve)));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const bindings = Array.from({ length: 41 }, (_, index) => ({
+      dataSourceUid: 'pi-default',
+      serverPath: 'pims',
+      pointName: `TAG_${index + 1}`,
+    }));
+    const { getPiPointsCurrentValues } = await import('../piDataSource');
+
+    const result = getPiPointsCurrentValues(bindings, dataSourceSrv);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(query).toHaveBeenCalledTimes(2);
+
+    resolvers[0]?.({ data: [] });
+    for (let index = 0; index < 6; index += 1) {
+      await Promise.resolve();
+    }
+    expect(query).toHaveBeenCalledTimes(3);
+    resolvers[1]?.({ data: [] });
+    resolvers[2]?.({ data: [] });
+    await result;
+  });
+
   it('envia o intervalo explícito da barra de tempo na consulta histórica', async () => {
     const query = jest.fn(async (_request: unknown) => ({ data: [] }));
     const dataSourceSrv = makeDataSourceSrv({
@@ -330,7 +458,7 @@ describe('PI data source integration', () => {
     expect((query.mock.calls[0][0] as { range: { from: { valueOf: () => number }; to: { valueOf: () => number } } }).range.to.valueOf()).toBe(to);
   });
 
-  it('usa interpolação leve de 5 minutos na prévia rápida do Trend', async () => {
+  it('usa interpolação adaptativa limitada pela resolução visual na prévia rápida do Trend', async () => {
     const query = jest.fn(async (_request: unknown) => ({ data: [] }));
     const dataSourceSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ isDefault: true })],
@@ -348,13 +476,13 @@ describe('PI data source integration', () => {
       startTime: from,
       endTime: to,
       targets: [expect.objectContaining({
-        interpolate: { enable: true, interval: '5m' },
+        interpolate: { enable: true, interval: '81s' },
         recordedValues: { enable: false, boundaryType: 'Inside' },
       })],
     });
   });
 
-  it('solicita até 30000 Recorded Values para o cache detalhado', async () => {
+  it('aplica teto seguro à resolução refinada solicitada', async () => {
     const query = jest.fn(async (_request: unknown) => ({ data: [] }));
     const dataSourceSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ isDefault: true })],
@@ -366,16 +494,30 @@ describe('PI data source integration', () => {
 
     await getPiTrendsRecordedHistoryForRange([
       { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID' },
-    ], { from, to }, dataSourceSrv);
+    ], { from, to }, dataSourceSrv, { maxDataPoints: 6_000 });
 
     expect(query.mock.calls[0][0]).toMatchObject({
       startTime: from,
       endTime: to,
+      maxDataPoints: 2_000,
       targets: [expect.objectContaining({
         interpolate: { enable: false },
-        recordedValues: { enable: true, maxNumber: 30_000, boundaryType: 'Inside' },
+        recordedValues: { enable: true, maxNumber: 2_000, boundaryType: 'Inside' },
       })],
     });
+  });
+
+  it.each([8, 24, 7 * 24])('mantém maxDataPoints constante ao navegar por %i horas', async (hours) => {
+    const query = jest.fn(async (_request: unknown) => ({ data: [] }));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const to = Date.parse('2026-08-07T12:00:00.000Z');
+    const { getPiTrendsHistoryForRange } = await import('../piDataSource');
+
+    await getPiTrendsHistoryForRange([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID' },
+    ], { from: to - hours * 60 * 60 * 1000, to }, dataSourceSrv, { maxDataPoints: 1_200 });
+
+    expect(query.mock.calls[0][0]).toMatchObject({ maxDataPoints: 1_200 });
   });
 
   it('controla série vazia, erro e PI Point digital/string', async () => {

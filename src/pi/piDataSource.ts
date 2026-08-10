@@ -11,6 +11,10 @@ import {
 import { getDataSourceSrv, type DataSourceSrv } from '@grafana/runtime';
 import { firstValueFrom, type Observable } from 'rxjs';
 import type { PiPointBinding } from './piPointBinding';
+import {
+  DATA_QUERY_MAX_CONCURRENT_BATCHES,
+  DATA_QUERY_MAX_TARGETS,
+} from './dataQueryPolicy';
 
 export const PI_DATASOURCE_TYPE = 'gridprotectionalliance-osisoftpi-datasource';
 
@@ -37,6 +41,7 @@ export interface PiPointSearchResult {
 export interface PiPointValue {
   value: unknown;
   timestamp?: string;
+  quality?: Record<string, unknown>;
 }
 
 export type PiPointValueResult =
@@ -57,6 +62,15 @@ export interface PiTrendTimeRange {
   from: number;
   to: number;
 }
+
+export interface PiTrendQueryOptions {
+  maxDataPoints?: number;
+}
+
+export const TREND_QUERY_MIN_DATA_POINTS = 100;
+export const TREND_QUERY_MAX_DATA_POINTS = 2000;
+const TREND_QUERY_DEFAULT_MAX_DATA_POINTS = 360;
+let dataQueryRequestSequence = 0;
 
 export type PiTrendSeriesResult =
   | { status: 'success'; series: PiTrendSeries }
@@ -157,26 +171,29 @@ export async function getPiPointsCurrentValues(
   const grouped = groupBindingsByDataSource(uniqueBindings);
   const results: Record<string, PiPointValueResult> = {};
 
-  await Promise.all([...grouped.entries()].map(async ([dataSourceUid, group]) => {
-    try {
-      const instance = await getResolvedPiDataSource(dataSourceSrv, {
-        uid: dataSourceUid,
-        name: '',
-        type: PI_DATASOURCE_TYPE,
-      });
-      if (typeof instance.query !== 'function') {
-        throw new Error('A Data Source PI não expõe consulta de valores');
-      }
+  const tasks = [...grouped.entries()].flatMap(([dataSourceUid, group]) => (
+    chunkBindings(group).map((batch) => async () => {
+      try {
+        const instance = await getResolvedPiDataSource(dataSourceSrv, {
+          uid: dataSourceUid,
+          name: '',
+          type: PI_DATASOURCE_TYPE,
+        });
+        if (typeof instance.query !== 'function') {
+          throw new Error('A Data Source PI não expõe consulta de valores');
+        }
 
-      const now = Date.now();
-      const response = await resolveQueryResponse(instance.query(buildCurrentValuesRequest(group, now)));
-      Object.assign(results, normalizeCurrentValues(response, group));
-    } catch (error) {
-      for (const binding of group) {
-        results[getBindingKey(binding)] = { status: 'error', error: toError(error) };
+        const now = Date.now();
+        const response = await resolveQueryResponse(instance.query(buildCurrentValuesRequest(batch, now)));
+        Object.assign(results, normalizeCurrentValues(response, batch));
+      } catch (error) {
+        for (const binding of batch) {
+          results[getBindingKey(binding)] = { status: 'error', error: toError(error) };
+        }
       }
-    }
-  }));
+    })
+  ));
+  await runQueryTasks(tasks);
 
   return results;
 }
@@ -208,25 +225,31 @@ export async function getPiTrendsHistory(
 export async function getPiTrendsHistoryForRange(
   bindings: readonly PiPointBinding[],
   range: PiTrendTimeRange,
-  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+  dataSourceSrvOrOptions: Pick<DataSourceSrv, 'get'> | PiTrendQueryOptions = getDataSourceSrv(),
+  explicitOptions: PiTrendQueryOptions = {},
 ): Promise<Record<string, PiTrendSeriesResult>> {
-  return queryPiTrendsHistory(bindings, range, dataSourceSrv, 'plot');
+  const { dataSourceSrv, options } = resolveTrendQueryArguments(dataSourceSrvOrOptions, explicitOptions);
+  return queryPiTrendsHistory(bindings, range, dataSourceSrv, 'plot', options);
 }
 
 export async function getPiTrendsPreviewForRange(
   bindings: readonly PiPointBinding[],
   range: PiTrendTimeRange,
-  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+  dataSourceSrvOrOptions: Pick<DataSourceSrv, 'get'> | PiTrendQueryOptions = getDataSourceSrv(),
+  explicitOptions: PiTrendQueryOptions = {},
 ): Promise<Record<string, PiTrendSeriesResult>> {
-  return queryPiTrendsHistory(bindings, range, dataSourceSrv, 'preview');
+  const { dataSourceSrv, options } = resolveTrendQueryArguments(dataSourceSrvOrOptions, explicitOptions);
+  return queryPiTrendsHistory(bindings, range, dataSourceSrv, 'preview', options);
 }
 
 export async function getPiTrendsRecordedHistoryForRange(
   bindings: readonly PiPointBinding[],
   range: PiTrendTimeRange,
-  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+  dataSourceSrvOrOptions: Pick<DataSourceSrv, 'get'> | PiTrendQueryOptions = getDataSourceSrv(),
+  explicitOptions: PiTrendQueryOptions = {},
 ): Promise<Record<string, PiTrendSeriesResult>> {
-  return queryPiTrendsHistory(bindings, range, dataSourceSrv, 'recorded');
+  const { dataSourceSrv, options } = resolveTrendQueryArguments(dataSourceSrvOrOptions, explicitOptions);
+  return queryPiTrendsHistory(bindings, range, dataSourceSrv, 'recorded', options);
 }
 
 async function queryPiTrendsHistory(
@@ -234,6 +257,7 @@ async function queryPiTrendsHistory(
   range: PiTrendTimeRange,
   dataSourceSrv: Pick<DataSourceSrv, 'get'>,
   mode: 'plot' | 'preview' | 'recorded',
+  options: PiTrendQueryOptions = {},
 ): Promise<Record<string, PiTrendSeriesResult>> {
   const uniqueBindings = deduplicateBindings(bindings);
   const grouped = groupBindingsByDataSource(uniqueBindings);
@@ -246,25 +270,28 @@ async function queryPiTrendsHistory(
     ]));
   }
 
-  await Promise.all([...grouped.entries()].map(async ([dataSourceUid, group]) => {
-    try {
-      const instance = await getResolvedPiDataSource(dataSourceSrv, {
-        uid: dataSourceUid,
-        name: '',
-        type: PI_DATASOURCE_TYPE,
-      });
-      if (typeof instance.query !== 'function') {
-        throw new Error('A Data Source PI não expõe consulta histórica');
-      }
+  const tasks = [...grouped.entries()].flatMap(([dataSourceUid, group]) => (
+    chunkBindings(group).map((batch) => async () => {
+      try {
+        const instance = await getResolvedPiDataSource(dataSourceSrv, {
+          uid: dataSourceUid,
+          name: '',
+          type: PI_DATASOURCE_TYPE,
+        });
+        if (typeof instance.query !== 'function') {
+          throw new Error('A Data Source PI não expõe consulta histórica');
+        }
 
-      const response = await resolveQueryResponse(instance.query(buildHistoricalTrendRequest(group, range, mode)));
-      Object.assign(results, normalizeTrendResponse(response, group));
-    } catch (error) {
-      for (const binding of group) {
-        results[getBindingKey(binding)] = { status: 'error', error: toError(error) };
+        const response = await resolveQueryResponse(instance.query(buildHistoricalTrendRequest(batch, range, mode, options)));
+        Object.assign(results, normalizeTrendResponse(response, batch));
+      } catch (error) {
+        for (const binding of batch) {
+          results[getBindingKey(binding)] = { status: 'error', error: toError(error) };
+        }
       }
-    }
-  }));
+    })
+  ));
+  await runQueryTasks(tasks);
 
   return results;
 }
@@ -273,7 +300,11 @@ async function getResolvedPiDataSource(
   dataSourceSrv: Pick<DataSourceSrv, 'get'>,
   identity: PiDataSourceIdentity,
 ): Promise<PiDataSourceApi> {
-  return (await dataSourceSrv.get({ uid: identity.uid, type: identity.type })) as PiDataSourceApi;
+  const instance = (await dataSourceSrv.get({ uid: identity.uid, type: identity.type })) as PiDataSourceApi;
+  if (instance.uid !== identity.uid || instance.type !== PI_DATASOURCE_TYPE) {
+    throw new Error('A Data Source selecionada não é compatível com OSIsoft-PI');
+  }
+  return instance;
 }
 
 function buildCurrentValuesRequest(
@@ -284,7 +315,7 @@ function buildCurrentValuesRequest(
   const start = dateTime(now - 60_000);
 
   return {
-    requestId: `pims-values-${bindings[0].dataSourceUid}`,
+    requestId: nextDataQueryRequestId('values', bindings[0].dataSourceUid),
     interval: '1s',
     intervalMs: 1000,
     maxDataPoints: 1,
@@ -321,15 +352,19 @@ function buildHistoricalTrendRequest(
   bindings: readonly PiPointBinding[],
   timeRange: PiTrendTimeRange,
   mode: 'plot' | 'preview' | 'recorded',
+  options: PiTrendQueryOptions,
 ): DataQueryRequest<DataQuery> {
   const end = dateTime(timeRange.to);
   const start = dateTime(timeRange.from);
 
+  const maxDataPoints = clampTrendMaxDataPoints(options.maxDataPoints);
+  const intervalMs = Math.max(1000, Math.ceil((timeRange.to - timeRange.from) / Math.max(1, maxDataPoints - 1)));
+  const interval = formatQueryInterval(intervalMs);
   return {
-    requestId: `pims-trend-${bindings[0].dataSourceUid}`,
-    interval: '10s',
-    intervalMs: 10_000,
-    maxDataPoints: 360,
+    requestId: nextDataQueryRequestId('trend', bindings[0].dataSourceUid),
+    interval,
+    intervalMs,
+    maxDataPoints,
     range: { from: start, to: end, raw: { from: start, to: end } },
     scopedVars: {},
     targets: bindings.map((binding, index) => ({
@@ -341,12 +376,10 @@ function buildHistoricalTrendRequest(
       useLastValue: { enable: false },
       digitalStates: { enable: true },
       interpolate: mode === 'preview'
-        ? { enable: true, interval: '5m' }
+        ? { enable: true, interval }
         : { enable: false },
-      // With Recorded Values the datasource maps maxDataPoints to PI Web API
-      // maxCount, which truncates dense tags at the beginning of the range.
       recordedValues: mode === 'recorded'
-        ? { enable: true, maxNumber: 30_000, boundaryType: 'Inside' }
+        ? { enable: true, maxNumber: maxDataPoints, boundaryType: 'Inside' }
         : { enable: false, boundaryType: 'Inside' },
       summary: { enable: false, types: [] },
       useUnit: { enable: false },
@@ -373,13 +406,13 @@ function isPromiseLike(value: Promise<DataQueryResponse> | Observable<DataQueryR
   return typeof (value as Promise<DataQueryResponse>).then === 'function';
 }
 
-function normalizeCurrentValue(frame: DataFrame): PiPointValue {
+function normalizeCurrentValue(frame: DataFrame, pointName: string): PiPointValue {
   if (!frame || frame.fields.length === 0) {
     throw new Error('PI Point sem valor atual');
   }
 
-  const valueField = frame.fields.find((field) => field.name.toLocaleLowerCase() !== 'time')
-    ?? frame.fields[1];
+  const valueField = frame.fields.find((field) => field.name.toLocaleLowerCase() === pointName.toLocaleLowerCase())
+    ?? frame.fields.find((field) => !isCurrentValueMetadataField(field.name));
   const value = getFirstFieldValue(valueField);
   if (value === null || value === undefined) {
     throw new Error('PI Point sem valor atual');
@@ -388,9 +421,11 @@ function normalizeCurrentValue(frame: DataFrame): PiPointValue {
   const timeField = frame.fields.find((field) => field.name.toLocaleLowerCase() === 'time');
   const timestamp = timeField ? getFirstFieldValue(timeField) : undefined;
 
+  const quality = normalizeQuality(frame);
   return {
     value,
     timestamp: normalizeTimestamp(timestamp),
+    ...(quality ? { quality } : {}),
   };
 }
 
@@ -399,7 +434,7 @@ function normalizeCurrentValues(
   bindings: readonly PiPointBinding[],
 ): Record<string, PiPointValueResult> {
   const results: Record<string, PiPointValueResult> = {};
-  const frames = response.data as DataFrame[];
+  const frames = Array.isArray(response.data) ? response.data as DataFrame[] : [];
   const framesByRefId = new Map(frames.flatMap((frame) => {
     const refId = frame.refId;
     return refId ? [[refId, frame] as const] : [];
@@ -413,7 +448,7 @@ function normalizeCurrentValues(
 
     try {
       if (frame) {
-        results[key] = { status: 'success', value: normalizeCurrentValue(frame) };
+        results[key] = { status: 'success', value: normalizeCurrentValue(frame, binding.pointName) };
       } else {
         results[key] = { status: 'error', error: getResponseError(response, refId) };
       }
@@ -430,7 +465,7 @@ function normalizeTrendResponse(
   bindings: readonly PiPointBinding[],
 ): Record<string, PiTrendSeriesResult> {
   const results: Record<string, PiTrendSeriesResult> = {};
-  const frames = response.data as DataFrame[];
+  const frames = Array.isArray(response.data) ? response.data as DataFrame[] : [];
   const framesByRefId = new Map(frames.flatMap((frame) => {
     const refId = frame.refId;
     return refId ? [[refId, frame] as const] : [];
@@ -558,6 +593,60 @@ function groupBindingsByDataSource(
   return groups;
 }
 
+function resolveTrendQueryArguments(
+  value: Pick<DataSourceSrv, 'get'> | PiTrendQueryOptions,
+  explicitOptions: PiTrendQueryOptions,
+): { dataSourceSrv: Pick<DataSourceSrv, 'get'>; options: PiTrendQueryOptions } {
+  if ('get' in value && typeof value.get === 'function') {
+    return { dataSourceSrv: value, options: explicitOptions };
+  }
+  return { dataSourceSrv: getDataSourceSrv(), options: value as PiTrendQueryOptions };
+}
+
+function clampTrendMaxDataPoints(value: number | undefined): number {
+  if (!Number.isFinite(value)) {
+    return TREND_QUERY_DEFAULT_MAX_DATA_POINTS;
+  }
+  return Math.min(
+    TREND_QUERY_MAX_DATA_POINTS,
+    Math.max(TREND_QUERY_MIN_DATA_POINTS, Math.round(value as number)),
+  );
+}
+
+function chunkBindings(bindings: readonly PiPointBinding[]): PiPointBinding[][] {
+  const chunks: PiPointBinding[][] = [];
+  for (let index = 0; index < bindings.length; index += DATA_QUERY_MAX_TARGETS) {
+    chunks.push(bindings.slice(index, index + DATA_QUERY_MAX_TARGETS));
+  }
+  return chunks;
+}
+
+async function runQueryTasks(tasks: ReadonlyArray<() => Promise<void>>): Promise<void> {
+  let nextTask = 0;
+  const workers = Array.from(
+    { length: Math.min(DATA_QUERY_MAX_CONCURRENT_BATCHES, tasks.length) },
+    async () => {
+      while (nextTask < tasks.length) {
+        const task = tasks[nextTask];
+        nextTask += 1;
+        await task();
+      }
+    },
+  );
+  await Promise.all(workers);
+}
+
+function formatQueryInterval(intervalMs: number): string {
+  const seconds = Math.max(1, Math.ceil(intervalMs / 1000));
+  if (seconds % 3600 === 0) {
+    return `${seconds / 3600}h`;
+  }
+  if (seconds % 60 === 0) {
+    return `${seconds / 60}m`;
+  }
+  return `${seconds}s`;
+}
+
 function deduplicateBindings(bindings: readonly PiPointBinding[]): PiPointBinding[] {
   const unique = new Map<string, PiPointBinding>();
   for (const binding of bindings) {
@@ -582,6 +671,11 @@ function refIdForIndex(index: number): string {
     value = Math.floor(value / 26);
   }
   return refId;
+}
+
+function nextDataQueryRequestId(mode: 'values' | 'trend', dataSourceUid: string): string {
+  dataQueryRequestSequence += 1;
+  return `pims-${mode}-${dataSourceUid}-${dataQueryRequestSequence}`;
 }
 
 function toError(error: unknown): Error {
@@ -609,7 +703,29 @@ function normalizeTimestamp(value: unknown): string | undefined {
   if (value instanceof Date) {
     return value.toISOString();
   }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return new Date(value).toISOString();
+  }
   return typeof value === 'string' ? value : undefined;
+}
+
+const CURRENT_VALUE_QUALITY_FIELDS = new Set(['quality', 'good', 'questionable', 'substituted']);
+
+function isCurrentValueMetadataField(fieldName: string): boolean {
+  const normalized = fieldName.toLocaleLowerCase();
+  return normalized === 'time' || CURRENT_VALUE_QUALITY_FIELDS.has(normalized);
+}
+
+function normalizeQuality(frame: DataFrame): Record<string, unknown> | undefined {
+  const entries = frame.fields.flatMap((field) => {
+    const normalized = field.name.toLocaleLowerCase();
+    if (!CURRENT_VALUE_QUALITY_FIELDS.has(normalized)) {
+      return [];
+    }
+    const value = getFirstFieldValue(field);
+    return value === undefined ? [] : [[field.name, value] as const];
+  });
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function getMetricField(value: MetricFindValue | undefined, field: 'text' | 'WebId' | 'Path'): string | undefined {
@@ -628,4 +744,4 @@ function toPiDataSourceIdentity(dataSource: DataSourceInstanceSettings): PiDataS
   };
 }
 
-export type PiDataSourceApi = Pick<DataSourceApi, 'testDatasource' | 'metricFindQuery' | 'query'>;
+export type PiDataSourceApi = Pick<DataSourceApi, 'uid' | 'type' | 'testDatasource' | 'metricFindQuery' | 'query'>;

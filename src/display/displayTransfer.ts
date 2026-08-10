@@ -4,7 +4,7 @@ import { GAUGE_TYPE } from './createGauge';
 import { normalizeMultistateConfig, type MultistateConfig, type MultistateRule } from './multistate';
 import { normalizeScaleOptions } from './scaleOptions';
 import { DISPLAY_SCHEMA_VERSION } from './schemaVersion';
-import { TREND_TYPE } from './createTrend';
+import { TREND_TYPE, trendSeriesColor, type TrendSeries } from './createTrend';
 import {
   DEFAULT_VALUE_VISUAL_OPTIONS,
   normalizeValueVisualOptions,
@@ -120,7 +120,7 @@ function portableElement(input: unknown): DisplayElement {
         ...portableMultistate(input.properties.multistate),
       } };
     case TREND_TYPE:
-      return { ...base, type: TREND_TYPE, properties: { binding: portableBinding(input.properties.binding) } };
+      return { ...base, type: TREND_TYPE, properties: { series: portableTrendSeries(input.properties) } };
     case GAUGE_TYPE:
       return { ...base, type: GAUGE_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
@@ -148,6 +148,34 @@ function portableBinding(input: unknown): PiPointBinding {
 
 function portableOptionalBinding(input: unknown): { binding?: PiPointBinding } {
   return input === undefined ? {} : { binding: portableBinding(input) };
+}
+
+function portableTrendSeries(properties: Record<string, unknown>): TrendSeries[] {
+  const inputs = Array.isArray(properties.series)
+    ? properties.series
+    : properties.binding === undefined
+      ? []
+      : [{ binding: properties.binding }];
+  if (inputs.length === 0) {
+    throw new DisplayImportError('Arquivo de Display inválido.');
+  }
+  const unique = new Map<string, TrendSeries>();
+  inputs.forEach((input, index) => {
+    if (!isRecord(input)) {
+      throw new DisplayImportError('Arquivo de Display inválido.');
+    }
+    const binding = portableBinding(input.binding);
+    const key = `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
+    if (!unique.has(key)) {
+      unique.set(key, {
+        binding,
+        color: typeof input.color === 'string' && input.color.trim().length > 0
+          ? input.color
+          : trendSeriesColor(index),
+      });
+    }
+  });
+  return [...unique.values()];
 }
 
 function portableVisual(input: unknown): ValueVisualOptions {

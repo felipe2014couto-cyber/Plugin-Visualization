@@ -20,7 +20,13 @@ import {
   type ValueElement,
   type ValueVisualOptions,
 } from '../../createValue';
-import { appendTrend, createTrend } from '../../createTrend';
+import {
+  addTrendSeries,
+  appendTrend,
+  createTrend,
+  TREND_TYPE,
+  type TrendElement,
+} from '../../createTrend';
 import {
   appendGauge,
   createGauge,
@@ -89,6 +95,8 @@ interface PiPointDragPreview {
   valid: boolean;
   label: string;
   symbolType: PiPointDropSymbolType;
+  targetTrend: boolean;
+  targetTrendId?: string;
 }
 
 export function DisplayEditor({
@@ -322,6 +330,21 @@ export function DisplayEditor({
     dispatch({ type: 'SELECT', elementId: trend.id });
   }, [commitDocument, dispatch, selectedPiPoint]);
 
+  const handleAddPiPointToSelectedTrend = useCallback(() => {
+    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+    const selectedElementId = stateRef.current.selectedElementId;
+    if (!binding || !selectedElementId || !onChangeRef.current) {
+      return;
+    }
+    const selectedTrend = documentRef.current.elements.find((element) => (
+      element.id === selectedElementId && element.type === TREND_TYPE
+    ));
+    if (!selectedTrend) {
+      return;
+    }
+    commitDocument(addTrendSeries(documentRef.current, selectedTrend.id, binding));
+  }, [commitDocument, selectedPiPoint]);
+
   const handleInsertGauge = useCallback(() => {
     const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
     if (selectedPiPoint && !binding) {
@@ -357,6 +380,14 @@ export function DisplayEditor({
     event.preventDefault();
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
     const svg = event.currentTarget.querySelector('svg');
+    const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
+    const targetTrend = resolveTrendDropTarget(
+      documentRef.current,
+      event.target,
+      event.clientX,
+      event.clientY,
+      point,
+    );
     const preview = svg && pointResult
       ? createPiPointDragPreview(
         svg,
@@ -367,17 +398,22 @@ export function DisplayEditor({
         pointResult.name,
         dropSymbolType,
         pointResult,
+        targetTrend,
       )
       : undefined;
     event.dataTransfer.dropEffect = preview?.valid ? 'copy' : 'none';
-    setPiPointDragPreview(preview ?? createInvalidDragPreview(
+    const nextPreview = preview ?? createInvalidDragPreview(
       event.currentTarget,
       event.clientX,
       event.clientY,
       pointResult?.name ?? 'PI Point',
       dropSymbolType,
-    ));
-  }, [dropSymbolType, mode, selectedPiPoint]);
+    );
+    setPiPointDragPreview(nextPreview);
+    if (nextPreview.targetTrendId && stateRef.current.selectedElementId !== nextPreview.targetTrendId) {
+      dispatch({ type: 'SELECT', elementId: nextPreview.targetTrendId });
+    }
+  }, [dispatch, dropSymbolType, mode, selectedPiPoint]);
 
   const handlePiPointDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     const nextTarget = event.relatedTarget as Node | null;
@@ -395,12 +431,24 @@ export function DisplayEditor({
     const binding = pointResult ? createPiPointBinding(pointResult) : undefined;
     const svg = event.currentTarget.querySelector('svg');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
-    if (!binding || !point) {
+    const currentDocument = documentRef.current;
+    const targetTrend = resolveTrendDropTarget(
+      currentDocument,
+      event.target,
+      event.clientX,
+      event.clientY,
+      point,
+    );
+    if (!binding || (!point && !targetTrend)) {
       return;
     }
     event.preventDefault();
 
-    const currentDocument = documentRef.current;
+    if (targetTrend) {
+      commitDocument(addTrendSeries(currentDocument, targetTrend.id, binding));
+      dispatch({ type: 'SELECT', elementId: targetTrend.id });
+      return;
+    }
     const createOptions = {
       binding,
       surface: currentDocument.surface,
@@ -409,25 +457,25 @@ export function DisplayEditor({
 
     switch (dropSymbolType) {
       case 'trend': {
-        const element = positionElementAt(createTrend(createOptions), point, currentDocument);
+        const element = positionElementAt(createTrend(createOptions), point!, currentDocument);
         commitDocument(appendTrend(currentDocument, element));
         dispatch({ type: 'SELECT', elementId: element.id });
         break;
       }
       case 'gauge': {
-        const element = positionElementAt(createGauge(createOptions), point, currentDocument);
+        const element = positionElementAt(createGauge(createOptions), point!, currentDocument);
         commitDocument(appendGauge(currentDocument, element));
         dispatch({ type: 'SELECT', elementId: element.id });
         break;
       }
       case 'bar': {
-        const element = positionElementAt(createBar(createOptions), point, currentDocument);
+        const element = positionElementAt(createBar(createOptions), point!, currentDocument);
         commitDocument(appendBar(currentDocument, element));
         dispatch({ type: 'SELECT', elementId: element.id });
         break;
       }
       case 'value': {
-        const element = positionElementAt(createValue(createOptions), point, currentDocument);
+        const element = positionElementAt(createValue(createOptions), point!, currentDocument);
         commitDocument(appendValue(currentDocument, element));
         dispatch({ type: 'SELECT', elementId: element.id });
         break;
@@ -482,6 +530,12 @@ export function DisplayEditor({
       && element.type === VALUE_TYPE
       && isPiPointBinding(element.properties.binding)
     )) as ValueElement | undefined
+    : undefined;
+
+  const selectedTrend = mode === 'edit' && state.selectedElementId
+    ? displayDocument.elements.find((element) => (
+      element.id === state.selectedElementId && element.type === TREND_TYPE
+    )) as TrendElement | undefined
     : undefined;
 
   const handleValueVisualChange = useCallback((patch: Partial<ValueVisualOptions>) => {
@@ -615,6 +669,15 @@ export function DisplayEditor({
             </div>
             <span className={styles.toolbarDivider} aria-hidden="true" />
             <div className={styles.toolbarGroup} aria-label="Símbolos">
+              <button
+                type="button"
+                title="Adicionar tag à Trend selecionada"
+                aria-label="Adicionar tag à Trend selecionada"
+                className={styles.addTrendSeriesButton}
+                data-testid="display-add-tag-to-selected-trend"
+                disabled={!selectedTrend || !createPiPointBinding(selectedPiPoint ?? {})}
+                onClick={handleAddPiPointToSelectedTrend}
+              ><AddTagIcon /><span>Adicionar tag</span></button>
               <button type="button" title="Inserir retângulo" aria-label="Inserir retângulo" className={styles.iconButton} data-testid="display-insert-rectangle" onClick={handleInsertRectangle}><RectangleIcon /></button>
               <button type="button" title="Inserir Value" aria-label="Inserir Value" className={styles.iconButton} data-testid="display-insert-value" disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={handleInsertValue}><ValueIcon /></button>
               <button type="button" title="Inserir Gauge" aria-label="Inserir Gauge" className={styles.iconButton} data-testid="display-insert-gauge" onClick={handleInsertGauge}><GaugeIcon /></button>
@@ -651,9 +714,12 @@ export function DisplayEditor({
           />
           {piPointDragPreview && (
             <div
-              className={piPointDragPreview.valid ? styles.piPointDragPreviewValid : styles.piPointDragPreviewInvalid}
+              className={piPointDragPreview.targetTrend
+                ? styles.piPointDragPreviewTrendTarget
+                : piPointDragPreview.valid ? styles.piPointDragPreviewValid : styles.piPointDragPreviewInvalid}
               data-testid="pi-point-drag-preview"
               data-valid={piPointDragPreview.valid ? 'true' : 'false'}
+              data-target-trend={piPointDragPreview.targetTrend ? 'true' : 'false'}
               style={{
                 left: piPointDragPreview.left,
                 top: piPointDragPreview.top,
@@ -661,7 +727,9 @@ export function DisplayEditor({
                 height: piPointDragPreview.height,
               }}
             >
-              {piPointDragPreview.valid ? (
+              {piPointDragPreview.targetTrend ? (
+                <><TagIcon /><span>{piPointDragPreview.label}</span></>
+              ) : piPointDragPreview.valid ? (
                 <DropPreviewIcon symbolType={piPointDragPreview.symbolType} />
               ) : (
                 <span>{piPointDragPreview.label}</span>
@@ -723,9 +791,30 @@ function getDropPoint(
     || clientY < bounds.top || clientY > bounds.bottom) {
     return undefined;
   }
+  const viewport = getSvgViewport(bounds, document);
+  if (clientX < viewport.left || clientX > viewport.left + viewport.width
+    || clientY < viewport.top || clientY > viewport.top + viewport.height) {
+    return undefined;
+  }
   return {
-    x: (clientX - bounds.left) * (document.surface.width / bounds.width),
-    y: (clientY - bounds.top) * (document.surface.height / bounds.height),
+    x: (clientX - viewport.left) / viewport.scale,
+    y: (clientY - viewport.top) / viewport.scale,
+  };
+}
+
+function getSvgViewport(bounds: DOMRect, document: DisplayDocument) {
+  const scale = Math.min(
+    bounds.width / document.surface.width,
+    bounds.height / document.surface.height,
+  );
+  const width = document.surface.width * scale;
+  const height = document.surface.height * scale;
+  return {
+    left: bounds.left + (bounds.width - width) / 2,
+    top: bounds.top + (bounds.height - height) / 2,
+    width,
+    height,
+    scale,
   };
 }
 
@@ -750,32 +839,113 @@ function createPiPointDragPreview(
   label: string,
   symbolType: PiPointDropSymbolType,
   pointResult: PiPointSearchResult,
+  trendAtClientPoint?: TrendElement,
 ): PiPointDragPreview {
   const binding = createPiPointBinding(pointResult);
   const point = binding ? getDropPoint(svg, clientX, clientY, document) : undefined;
   const prototype = binding ? createDropPreviewElement(symbolType, binding, document) : undefined;
+  const targetTrend = trendAtClientPoint ?? (point ? findTrendAtPoint(document, point) : undefined);
   // The drop handler clamps the element to the surface bounds, so every
   // pointer position inside the display is a valid placement.
-  const valid = !!point && !!prototype;
+  const valid = !!binding && !!prototype && (!!point || !!targetTrend);
 
   if (!valid || !prototype) {
     return createInvalidDragPreview(wrapper, clientX, clientY, label, symbolType);
   }
 
-  const positioned = positionElementAt(prototype, point!, document);
   const svgBounds = svg.getBoundingClientRect();
   const wrapperBounds = wrapper.getBoundingClientRect();
-  const scaleX = svgBounds.width / document.surface.width;
-  const scaleY = svgBounds.height / document.surface.height;
+  const viewport = getSvgViewport(svgBounds, document);
+  if (targetTrend) {
+    const trendLeft = viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale;
+    const trendTop = viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale;
+    const trendWidth = targetTrend.width * viewport.scale;
+    const trendHeight = targetTrend.height * viewport.scale;
+    const width = Math.min(320, Math.max(1, trendWidth - 12));
+    const height = Math.min(64, Math.max(1, trendHeight - 12));
+    const pointerLeft = clientX - wrapperBounds.left - width / 2;
+    const pointerTop = clientY - wrapperBounds.top - height / 2;
+    return {
+      left: Math.max(trendLeft + 6, Math.min(pointerLeft, trendLeft + trendWidth - width - 6)),
+      top: Math.max(trendTop + 6, Math.min(pointerTop, trendTop + trendHeight - height - 6)),
+      width,
+      height,
+      valid: true,
+      label,
+      symbolType: 'trend',
+      targetTrend: true,
+      targetTrendId: targetTrend.id,
+    };
+  }
+  const positioned = positionElementAt(prototype, point!, document);
   return {
-    left: svgBounds.left - wrapperBounds.left + positioned.x * scaleX,
-    top: svgBounds.top - wrapperBounds.top + positioned.y * scaleY,
-    width: positioned.width * scaleX,
-    height: positioned.height * scaleY,
+    left: viewport.left - wrapperBounds.left + positioned.x * viewport.scale,
+    top: viewport.top - wrapperBounds.top + positioned.y * viewport.scale,
+    width: positioned.width * viewport.scale,
+    height: positioned.height * viewport.scale,
     valid: true,
     label,
     symbolType,
+    targetTrend: false,
   };
+}
+
+function findTrendAtPoint(document: DisplayDocument, point: Point): TrendElement | undefined {
+  const topmostElement = [...document.elements].reverse().find((element) => (
+    point.x >= element.x
+    && point.x <= element.x + element.width
+    && point.y >= element.y
+    && point.y <= element.y + element.height
+  ));
+  return topmostElement?.type === TREND_TYPE ? topmostElement as TrendElement : undefined;
+}
+
+function findTrendAtClientPoint(
+  clientX: number,
+  clientY: number,
+  displayDocument: DisplayDocument,
+): TrendElement | undefined {
+  const hit = globalThis.document.elementFromPoint?.(clientX, clientY);
+  const trendNode = hit instanceof Element
+    ? hit.closest('[data-element-id][data-element-type="trend"]')
+    : null;
+  const elementId = trendNode?.getAttribute('data-element-id');
+  if (!elementId) {
+    return undefined;
+  }
+  const element = displayDocument.elements.find((candidate) => (
+    candidate.id === elementId && candidate.type === TREND_TYPE
+  ));
+  return element as TrendElement | undefined;
+}
+
+function resolveTrendDropTarget(
+  document: DisplayDocument,
+  eventTarget: EventTarget | null,
+  clientX: number,
+  clientY: number,
+  point: Point | undefined,
+): TrendElement | undefined {
+  return findTrendFromEventTarget(eventTarget, document)
+    ?? findTrendAtClientPoint(clientX, clientY, document)
+    ?? (point ? findTrendAtPoint(document, point) : undefined)
+}
+
+function findTrendFromEventTarget(
+  eventTarget: EventTarget | null,
+  displayDocument: DisplayDocument,
+): TrendElement | undefined {
+  const trendNode = eventTarget instanceof Element
+    ? eventTarget.closest('[data-element-id][data-element-type="trend"]')
+    : null;
+  const elementId = trendNode?.getAttribute('data-element-id');
+  if (!elementId) {
+    return undefined;
+  }
+  const element = displayDocument.elements.find((candidate) => (
+    candidate.id === elementId && candidate.type === TREND_TYPE
+  ));
+  return element as TrendElement | undefined;
 }
 
 function createInvalidDragPreview(
@@ -798,6 +968,7 @@ function createInvalidDragPreview(
     valid: false,
     label,
     symbolType,
+    targetTrend: false,
   };
 }
 
@@ -915,6 +1086,35 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: 3px;
     flex: 0 0 auto;
   `,
+  addTrendSeriesButton: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    flex: 0 0 auto;
+    padding: 0 9px;
+    border: 1px solid rgba(110, 159, 255, 0.72);
+    border-radius: 0;
+    background: rgba(51, 91, 135, 0.46);
+    color: #e8f1fb;
+    cursor: pointer;
+    font-size: 12px;
+
+    &:hover:not(:disabled) {
+      background: rgba(70, 120, 175, 0.7);
+      border-color: #9bc2ff;
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.38;
+    }
+
+    & svg {
+      width: 17px;
+      height: 17px;
+    }
+  `,
   toolbarDivider: css`
     width: 1px;
     height: 25px;
@@ -1004,6 +1204,38 @@ const getStyles = (theme: GrafanaTheme2) => ({
       color: rgba(255, 255, 255, 0.72);
     }
   `,
+  piPointDragPreviewTrendTarget: css`
+    position: absolute;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    box-sizing: border-box;
+    padding: 0 8px;
+    border: 2px solid #38b000;
+    background: rgba(31, 31, 31, 0.9);
+    color: #ffffff;
+    font-size: 16px;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+
+    & svg {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 18px;
+      color: #7b858f;
+    }
+
+    & span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  `,
   piPointDragPreviewInvalid: css`
     position: absolute;
     z-index: 5;
@@ -1046,6 +1278,14 @@ function DropPreviewIcon({ symbolType }: { symbolType: PiPointDropSymbolType }) 
     case 'value':
       return <ValueIcon />;
   }
+}
+
+function TagIcon() {
+  return <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 12.4 11.4 4H20v8.6L11.6 21 3 12.4Zm13-5.9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" /></svg>;
+}
+
+function AddTagIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 12.4 11.4 4H20v8.6L11.6 21 3 12.4Z" /><circle cx="16" cy="8" r="1" fill="currentColor" stroke="none" /><path d="M18 15v6M15 18h6" /></svg>;
 }
 
 function RedoIcon() {

@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { createDisplayDocument, type DisplayDocument } from '../../../index';
+import { createDisplayDocument, createTrend, createValue, type DisplayDocument } from '../../../index';
 import { PI_POINT_DRAG_MIME, serializePiPointDragData } from '../../../../pi/piPointDrag';
+import { PiPointSearch } from '../../../../pi/PiPointSearch';
+import { searchPiPoints, type PiPointSearchResult } from '../../../../pi/piDataSource';
 import { DisplayEditor, type PiPointDropSymbolType } from '../DisplayEditor';
+import type { LoadCurrentValues } from '../../../runtime/valueRuntime';
+import type { LoadTrendSeries } from '../../../runtime/trendRuntime';
 
 jest.mock('@grafana/ui', () => ({
   useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+}));
+
+jest.mock('../../../../pi/piDataSource', () => ({
+  searchPiPoints: jest.fn(),
 }));
 
 const point = {
@@ -16,26 +24,81 @@ const point = {
   dataSourceUid: 'ds',
 };
 
-function Harness({ type }: { type: PiPointDropSymbolType }) {
+function Harness({
+  type,
+  loadValues = () => new Promise(() => undefined),
+  loadTrend = () => new Promise(() => undefined),
+  withExistingValue = false,
+  withExistingTrend = false,
+}: {
+  type: PiPointDropSymbolType;
+  loadValues?: LoadCurrentValues;
+  loadTrend?: LoadTrendSeries;
+  withExistingValue?: boolean;
+  withExistingTrend?: boolean;
+}) {
   const [document, setDocument] = useState<DisplayDocument>(() => {
     const initial = createDisplayDocument({ name: 'Drop' });
     initial.surface.width = 800;
     initial.surface.height = 600;
+    if (withExistingValue) {
+      initial.elements = [createValue({
+        id: 'existing-value',
+        binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'EXISTING' },
+      })];
+    }
+    if (withExistingTrend) {
+      initial.elements = [createTrend({
+        id: 'existing-trend',
+        binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'EXISTING' },
+        surface: initial.surface,
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 100,
+      })];
+    }
     return initial;
   });
-  return (
+  return <>
     <DisplayEditor
-      document={document}
-      onChange={setDocument}
-      dropSymbolType={type}
-      loadValues={() => new Promise(() => undefined)}
-      loadTrend={() => new Promise(() => undefined)}
-    />
-  );
+        document={document}
+        onChange={setDocument}
+        dropSymbolType={type}
+        loadValues={loadValues}
+        loadTrend={loadTrend}
+      />
+    <output data-testid="display-document-json">{JSON.stringify(document)}</output>
+  </>;
 }
 
-function createDataTransfer(): DataTransfer {
-  const payload = serializePiPointDragData(point);
+function SearchDropHarness() {
+  const [selectedPiPoint, setSelectedPiPoint] = useState<PiPointSearchResult | null>(null);
+  const [document, setDocument] = useState<DisplayDocument>(() => {
+    const initial = createDisplayDocument({ name: 'Drop com busca' });
+    initial.surface.width = 800;
+    initial.surface.height = 600;
+    initial.elements = [createTrend({
+      id: 'existing-trend',
+      binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'EXISTING' },
+      surface: initial.surface,
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+    })];
+    return initial;
+  });
+
+  return <>
+    <PiPointSearch enabled onSelect={setSelectedPiPoint} />
+    <DisplayEditor document={document} onChange={setDocument} selectedPiPoint={selectedPiPoint} dropSymbolType="trend" />
+    <output data-testid="display-document-json">{JSON.stringify(document)}</output>
+  </>;
+}
+
+function createDataTransfer(selectedPoint = point): DataTransfer {
+  const payload = serializePiPointDragData(selectedPoint);
   return {
     types: [PI_POINT_DRAG_MIME],
     effectAllowed: 'copy',
@@ -45,17 +108,28 @@ function createDataTransfer(): DataTransfer {
   } as unknown as DataTransfer;
 }
 
-function mockSurfaceBounds() {
+function createBrowserDataTransfer(): DataTransfer {
+  const values = new Map<string, string>();
+  return {
+    effectAllowed: 'none',
+    dropEffect: 'none',
+    get types() {
+      return [...values.keys()];
+    },
+    getData: (type: string) => values.get(type) ?? '',
+    setData: (type: string, value: string) => values.set(type, value),
+    setDragImage: jest.fn(),
+  } as unknown as DataTransfer;
+}
+
+function mockSurfaceBounds(bounds = { left: 100, top: 50, width: 800, height: 600 }) {
   const surface = screen.getByTestId('display-surface') as unknown as SVGSVGElement;
   jest.spyOn(surface, 'getBoundingClientRect').mockReturnValue({
-    left: 100,
-    top: 50,
-    right: 900,
-    bottom: 650,
-    width: 800,
-    height: 600,
-    x: 100,
-    y: 50,
+    ...bounds,
+    right: bounds.left + bounds.width,
+    bottom: bounds.top + bounds.height,
+    x: bounds.left,
+    y: bounds.top,
     toJSON: () => ({}),
   });
 }
@@ -71,6 +145,8 @@ function fireDragEvent(target: Element, type: 'dragover' | 'drop', dataTransfer:
 }
 
 describe('DisplayEditor - drop de PI Point', () => {
+  const searchMock = searchPiPoints as jest.MockedFunction<typeof searchPiPoints>;
+
   it.each<PiPointDropSymbolType>(['value', 'trend', 'gauge', 'bar'])(
     'cria %s vinculado na posição solta e registra no histórico',
     (type) => {
@@ -105,4 +181,160 @@ describe('DisplayEditor - drop de PI Point', () => {
     expect(screen.getByTestId('pi-point-drag-preview')).toHaveAttribute('data-valid', 'false');
     expect(screen.getByTestId('pi-point-drag-preview')).toHaveTextContent('SINUSOID');
   });
+
+  it.each<PiPointDropSymbolType>(['value', 'gauge', 'bar'])(
+    'consulta %s imediatamente após o drop, sem avançar o scheduler',
+    async (type) => {
+      const loadValues = jest.fn(async () => ({
+        'ds\u0000pims\u0000SINUSOID': { status: 'success' as const, value: { value: 0 } },
+      }));
+      render(<Harness type={type} loadValues={loadValues} />);
+      mockSurfaceBounds();
+
+      fireDragEvent(screen.getByTestId('display-editor-surface-wrapper'), 'drop', createDataTransfer());
+
+      await waitFor(() => expect(loadValues).toHaveBeenCalledWith([{
+        dataSourceUid: 'ds',
+        serverPath: 'pims',
+        pointName: 'SINUSOID',
+      }]));
+    },
+  );
+
+  it('ao adicionar uma tag consulta imediatamente apenas o novo binding', async () => {
+    const loadValues: jest.MockedFunction<LoadCurrentValues> = jest.fn(async (bindings) => Object.fromEntries(bindings.map((binding) => [
+      `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`,
+      { status: 'success' as const, value: { value: 1 } },
+    ])));
+    render(<Harness type="value" loadValues={loadValues} withExistingValue />);
+    await waitFor(() => expect(loadValues).toHaveBeenCalledWith([{
+      dataSourceUid: 'ds', serverPath: 'pims', pointName: 'EXISTING',
+    }]));
+    loadValues.mockClear();
+    mockSurfaceBounds();
+    const newPoint = { ...point, name: 'NEW_TAG', path: '\\\\pims\\NEW_TAG', webId: 'new-web-id' };
+
+    fireDragEvent(screen.getByTestId('display-editor-surface-wrapper'), 'drop', createDataTransfer(newPoint));
+
+    await waitFor(() => expect(loadValues).toHaveBeenCalledTimes(1));
+    expect(loadValues).toHaveBeenCalledWith([{
+      dataSourceUid: 'ds', serverPath: 'pims', pointName: 'NEW_TAG',
+    }]);
+  });
+
+  it('adiciona tags sobre a mesma Trend, agrupa a consulta e integra undo/redo', async () => {
+    const loadTrend: jest.MockedFunction<LoadTrendSeries> = jest.fn(async (bindings) => Object.fromEntries(bindings.map((binding) => [
+      `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`,
+      { status: 'success' as const, series: { pointName: binding.pointName, points: [{ time: 1, value: 1 }] } },
+    ])));
+    render(<Harness type="trend" loadTrend={loadTrend} />);
+    mockSurfaceBounds();
+    const wrapper = screen.getByTestId('display-editor-surface-wrapper');
+    const second = { ...point, name: 'SECOND', path: '\\\\pims\\SECOND' };
+    const third = { ...point, name: 'THIRD', path: '\\\\pims\\THIRD' };
+
+    fireDragEvent(wrapper, 'drop', createDataTransfer());
+    fireDragEvent(wrapper, 'dragover', createDataTransfer(second));
+    expect(screen.getByTestId('pi-point-drag-preview')).toHaveAttribute('data-valid', 'true');
+    fireDragEvent(wrapper, 'drop', createDataTransfer(second));
+    fireDragEvent(wrapper, 'drop', createDataTransfer(third));
+
+    await waitFor(() => expect(readDocument().elements[0].properties.series).toHaveLength(3));
+    expect(readDocument().elements).toHaveLength(1);
+    await waitFor(() => expect(loadTrend).toHaveBeenCalledTimes(1));
+    expect(loadTrend.mock.calls[0][0].map((binding) => binding.pointName)).toEqual(['SINUSOID', 'SECOND', 'THIRD']);
+
+    fireEvent.click(screen.getByTestId('display-undo'));
+    expect(readDocument().elements[0].properties.series).toHaveLength(2);
+    fireEvent.click(screen.getByTestId('display-redo'));
+    expect(readDocument().elements[0].properties.series).toHaveLength(3);
+  });
+
+  it('adiciona a tag à Trend sob o ponteiro independentemente do tipo de criação selecionado', () => {
+    render(<Harness type="value" withExistingTrend />);
+    mockSurfaceBounds({ left: 100, top: 50, width: 1600, height: 600 });
+    const trendBackground = screen.getByTestId('trend-background-existing-trend');
+
+    fireDragEvent(trendBackground, 'dragover', createDataTransfer(), 550, 100);
+    const preview = screen.getByTestId('pi-point-drag-preview');
+    expect(preview).toHaveAttribute('data-valid', 'true');
+    expect(preview).toHaveAttribute('data-target-trend', 'true');
+    expect(preview).toHaveTextContent('SINUSOID');
+    expect(preview).toHaveStyle({ width: '88px', height: '64px' });
+    expect(screen.getByTestId('display-selection-bounding-box')).toBeInTheDocument();
+    expect(screen.getByTestId('display-resize-handle-tl')).toBeInTheDocument();
+    fireDragEvent(trendBackground, 'drop', createDataTransfer(), 550, 100);
+
+    expect(readDocument().elements).toHaveLength(1);
+    expect(screen.getByTestId(/^display-element-/)).toHaveAttribute('data-element-type', 'trend');
+    expect(readDocument().elements[0].properties.series).toHaveLength(2);
+  });
+
+  it('reconhece a Trend pelo alvo real do evento mesmo sem elementFromPoint', () => {
+    render(<Harness type="trend" withExistingTrend />);
+    mockSurfaceBounds({ left: 100, top: 50, width: 1600, height: 600 });
+    const trendBackground = screen.getByTestId('trend-background-existing-trend');
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: jest.fn(() => null),
+    });
+
+    fireDragEvent(trendBackground, 'dragover', createDataTransfer(), 899, 649);
+
+    const preview = screen.getByTestId('pi-point-drag-preview');
+    expect(preview).toHaveAttribute('data-target-trend', 'true');
+    expect(preview).toHaveTextContent('SINUSOID');
+    expect(screen.getByTestId('display-selection-bounding-box')).toBeInTheDocument();
+
+    fireDragEvent(trendBackground, 'drop', createDataTransfer(), 899, 649);
+    expect(readDocument().elements).toHaveLength(1);
+    expect(readDocument().elements[0].properties.series).toHaveLength(2);
+    Reflect.deleteProperty(document, 'elementFromPoint');
+  });
+
+  it('finaliza o arraste iniciado na lista de tags sobre um filho SVG da Trend', async () => {
+    searchMock.mockResolvedValueOnce([point]);
+    render(<SearchDropHarness />);
+    mockSurfaceBounds({ left: 100, top: 50, width: 1600, height: 600 });
+
+    fireEvent.change(screen.getByTestId('pi-point-search-input'), { target: { value: point.name } });
+    fireEvent.click(screen.getByTestId('pi-point-search-submit'));
+    await waitFor(() => expect(screen.getByTestId(`pi-point-result-${point.webId}`)).toBeInTheDocument());
+
+    const dataTransfer = createBrowserDataTransfer();
+    fireEvent.dragStart(screen.getByTestId(`pi-point-result-${point.webId}`), { dataTransfer });
+    const trendBackground = screen.getByTestId('trend-background-existing-trend');
+    fireDragEvent(trendBackground, 'dragover', dataTransfer, 899, 649);
+    expect(screen.getByTestId('pi-point-drag-preview')).toHaveAttribute('data-target-trend', 'true');
+    fireDragEvent(trendBackground, 'drop', dataTransfer, 899, 649);
+
+    await waitFor(() => expect(readDocument().elements).toHaveLength(1));
+    expect(readDocument().elements[0].properties.series.map((series: { binding: { pointName: string } }) => series.binding.pointName))
+      .toEqual(['EXISTING', 'SINUSOID']);
+    expect(screen.queryByTestId('pi-point-drag-preview')).toBeNull();
+  });
+
+  it('ignora série duplicada e distingue a mesma tag em outro datasource', async () => {
+    render(<Harness type="trend" />);
+    mockSurfaceBounds();
+    const wrapper = screen.getByTestId('display-editor-surface-wrapper');
+
+    fireDragEvent(wrapper, 'drop', createDataTransfer());
+    fireDragEvent(wrapper, 'drop', createDataTransfer());
+    fireDragEvent(wrapper, 'drop', createDataTransfer({ ...point, dataSourceUid: 'other-ds' }));
+
+    await waitFor(() => expect(readDocument().elements[0].properties.series).toHaveLength(2));
+    expect(readDocument().elements).toHaveLength(1);
+    expect(readDocument().elements[0].properties.series.map((series: { binding: { dataSourceUid: string } }) => (
+      series.binding.dataSourceUid
+    ))).toEqual(['ds', 'other-ds']);
+  });
 });
+
+function readDocument(): {
+  elements: Array<{
+    properties: { series: Array<{ binding: { dataSourceUid: string; pointName: string } }> };
+  }>;
+} {
+  return JSON.parse(screen.getByTestId('display-document-json').textContent ?? '{}');
+}

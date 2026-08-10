@@ -77,4 +77,11 @@ describe('ValueElementView', () => {
     await waitFor(() => expect(screen.getByTestId('display-value-value-multistate')).toHaveTextContent('60'));
     expect(screen.getByTestId('display-value-value-multistate')).toHaveAttribute('fill', '#ff0000');
   });
+
+  it('renderiza zero como valor válido', () => {
+    const element = createValue({ binding, id: 'value-zero' });
+    render(<svg><ValueElementView element={element} runtimeState={{ status: 'success', result: { value: 0 } }} /></svg>);
+
+    expect(screen.getByTestId('display-value-value-zero')).toHaveTextContent('0');
+  });
 });

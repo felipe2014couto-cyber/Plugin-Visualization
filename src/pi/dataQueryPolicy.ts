@@ -1,0 +1,3 @@
+export const DATA_QUERY_BATCH_WINDOW_MS = 40;
+export const DATA_QUERY_MAX_TARGETS = 20;
+export const DATA_QUERY_MAX_CONCURRENT_BATCHES = 2;

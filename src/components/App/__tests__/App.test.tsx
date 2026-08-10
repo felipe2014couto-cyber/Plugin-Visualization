@@ -1,7 +1,9 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { checkPiConnection } from '../../../pi';
+import {
+  checkPiConnection,
+} from '../../../pi';
 import { App } from '../App';
 
 jest.mock('@grafana/runtime', () => ({
@@ -17,6 +19,7 @@ jest.mock('../../../pi', () => ({
   createProgressiveTrendLoader: jest.fn(() => jest.fn(async () => ({}))),
   getPiTrendsHistoryForRange: jest.fn(async () => ({})),
   getPiTrendsPreviewForRange: jest.fn(async () => ({})),
+  getPiTrendsRecordedHistoryForRange: jest.fn(async () => ({})),
 }));
 
 describe('App', () => {

@@ -12,11 +12,13 @@ import {
   checkPiConnection,
   getPiPointCurrentValue,
   getPiPointsCurrentValues,
+  getPiTrendsHistoryForRange,
   getPiTrendsPreviewForRange,
   getPiTrendsRecordedHistoryForRange,
   createProgressiveTrendLoader,
   type PiConnectionState,
   type PiPointSearchResult,
+  type ProgressiveTrendLoader,
 } from '../../pi';
 import { PiPointSearch } from '../../pi/PiPointSearch';
 import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
@@ -34,10 +36,14 @@ export function App() {
   const [dropSymbolType, setDropSymbolType] = useState<PiPointDropSymbolType>('trend');
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
-  const progressiveTrendLoader = useRef(createProgressiveTrendLoader(
-    (bindings, range) => getPiTrendsRecordedHistoryForRange(bindings, range),
-    (bindings, range) => getPiTrendsPreviewForRange(bindings, range),
-  )).current;
+  const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
+  if (!progressiveTrendLoaderRef.current) {
+    progressiveTrendLoaderRef.current = createProgressiveTrendLoader(
+      (bindings, range, options) => getPiTrendsHistoryForRange(bindings, range, options),
+      (bindings, range, options) => getPiTrendsPreviewForRange(bindings, range, options),
+    );
+  }
+  const progressiveTrendLoader = progressiveTrendLoaderRef.current;
 
   useEffect(() => {
     let active = true;
@@ -56,20 +62,23 @@ export function App() {
   const rangeFrom = timeSelection.range.from;
   const rangeTo = timeSelection.range.to;
   const loadTrend = useCallback<LoadTrendSeries>(
-    (bindings, publishUpdate) => progressiveTrendLoader(
+    (bindings, publishUpdate, options) => progressiveTrendLoader(
       bindings,
       { from: rangeFrom, to: rangeTo },
       publishUpdate,
+      options,
     ),
     [progressiveTrendLoader, rangeFrom, rangeTo],
   );
   const loadRecordedTrend = useCallback<LoadTrendSeries>(
-    (bindings) => progressiveTrendLoader.loadRecorded(
+    (bindings, _publishUpdate, options) => getPiTrendsRecordedHistoryForRange(
       bindings,
       { from: rangeFrom, to: rangeTo },
+      options,
     ),
-    [progressiveTrendLoader, rangeFrom, rangeTo],
+    [rangeFrom, rangeTo],
   );
+  const hasPiConnection = piConnection.status === 'connected';
 
   return (
     <div data-testid="pims-vision-home" className={styles.container}>
@@ -133,10 +142,10 @@ export function App() {
             onChange={setDocument}
             onModeChange={setEditorMode}
             selectedPiPoint={selectedPiPoint}
-            loadValue={getPiPointCurrentValue}
-            loadValues={getPiPointsCurrentValues}
-            loadTrend={loadTrend}
-            loadRecordedTrend={loadRecordedTrend}
+            loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
+            loadValues={hasPiConnection ? getPiPointsCurrentValues : undefined}
+            loadTrend={hasPiConnection ? loadTrend : undefined}
+            loadRecordedTrend={hasPiConnection ? loadRecordedTrend : undefined}
             showToolbar={isAssetsPanelOpen}
             dropSymbolType={dropSymbolType}
             trendRefreshKey={`${rangeFrom}:${rangeTo}`}

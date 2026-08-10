@@ -3,18 +3,30 @@ import { css } from '@emotion/css';
 import type { DisplayDocument } from '../../displayDocument';
 import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE } from '../../createRectangle';
 import { VALUE_TYPE, type ValueElement } from '../../createValue';
-import { TREND_TYPE, type TrendElement } from '../../createTrend';
+import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
 import { BAR_TYPE, type BarElement } from '../../createBar';
 import { GAUGE_TYPE, type GaugeElement } from '../../createGauge';
 import { ValueElementView } from '../ValueElementView';
 import { GaugeElementView } from '../GaugeElementView';
 import { BarElementView } from '../BarElementView';
-import { TrendElementView, buildTrendChart, trendTimeForX } from '../TrendElementView';
+import {
+  TrendElementView,
+  buildTrendChartForSeries,
+  trendTimeForX,
+  type TrendSeriesViewState,
+} from '../TrendElementView';
 import type { PiPointValue, PiPointValueResult, PiTrendSeriesResult } from '../../../pi/piDataSource';
 import type { DisplayTimeRange } from '../../../time/timeRange';
 import { isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBinding';
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer } from '../../runtime/valueRuntime';
-import { useTrendRuntime, type LoadTrendSeries, type TrendRuntimeConsumer } from '../../runtime/trendRuntime';
+import {
+  getTrendSeriesConsumerId,
+  trendMaxDataPointsForWidth,
+  useTrendRuntime,
+  type LoadTrendSeries,
+  type TrendRuntimeConsumer,
+  type TrendRuntimeState,
+} from '../../runtime/trendRuntime';
 import {
   clampTrendCursorTime,
   isTrendCursorWithinSeries,
@@ -146,11 +158,17 @@ export function DisplaySurface({
     return Object.fromEntries(entries);
   }, [loadValue]);
   const runtimeStates = useValueRuntime(valueConsumers, loadValues ?? fallbackLoader);
-  const trendConsumers: TrendRuntimeConsumer[] = elements.flatMap((element) => (
-    element.type === TREND_TYPE && isPiPointBinding(element.properties.binding)
-      ? [{ elementId: element.id, binding: element.properties.binding }]
-      : []
-  ));
+  const trendConsumers: TrendRuntimeConsumer[] = elements.flatMap((element) => {
+    if (element.type !== TREND_TYPE) {
+      return [];
+    }
+    return getTrendSeries(element as TrendElement).map(({ binding }) => ({
+      elementId: element.id,
+      consumerId: getTrendSeriesConsumerId(element.id, binding),
+      binding,
+      width: element.width,
+    }));
+  });
   const fallbackTrendLoader = useCallback<LoadTrendSeries>(async (bindings) => Object.fromEntries(
     bindings.map((binding) => [
       `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`,
@@ -172,18 +190,27 @@ export function DisplaySurface({
       return;
     }
     const element = elements.find((candidate) => candidate.id === elementId);
-    if (!element || element.type !== TREND_TYPE || !isPiPointBinding(element.properties.binding)) {
+    if (!element || element.type !== TREND_TYPE) {
+      return;
+    }
+    const series = getTrendSeries(element as TrendElement);
+    if (series.length === 0) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
     recordedRequests.current.add(elementId);
-    const binding = element.properties.binding;
-    void loadRecordedTrend([binding]).then((results) => {
-      const result = results[`${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`];
-      if (result?.status === 'success') {
-        setRecordedTrendStates((current) => ({ ...current, [elementId]: result }));
-      }
+    const bindings = series.map(({ binding }) => binding);
+    void loadRecordedTrend(bindings, undefined, {
+      maxDataPoints: trendMaxDataPointsForWidth(element.width),
+    }).then((results) => {
+      setRecordedTrendStates((current) => ({
+        ...current,
+        ...Object.fromEntries(series.flatMap(({ binding }) => {
+          const result = results[`${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`];
+          return result ? [[getTrendSeriesConsumerId(elementId, binding), result]] : [];
+        })),
+      }));
     }).finally(() => {
       recordedRequests.current.delete(elementId);
     });
@@ -198,10 +225,8 @@ export function DisplaySurface({
           changed = true;
           continue;
         }
-        const runtimeState = trendRuntimeStates.get(elementId);
-        const points = runtimeState?.status === 'success' || runtimeState?.status === 'error'
-          ? runtimeState.data?.points
-          : undefined;
+        const element = elements.find((candidate) => candidate.id === elementId) as TrendElement | undefined;
+        const points = element ? getTrendPoints(element, trendRuntimeStates) : undefined;
         const retained = points ? cursors.filter((cursor) => isTrendCursorWithinSeries(points, cursor.time)) : cursors;
         if (retained.length > 0) {
           next[elementId] = retained;
@@ -224,16 +249,14 @@ export function DisplaySurface({
   const handleTrendPlotPointerDown = useCallback((
     event: React.PointerEvent<SVGRectElement>,
     elementId: string,
-    chart: ReturnType<typeof buildTrendChart>,
+    chart: ReturnType<typeof buildTrendChartForSeries>,
   ) => {
     if (editable) {
       return;
     }
     const svg = svgRef.current;
-    const runtimeState = trendRuntimeStates.get(elementId);
-    const points = runtimeState?.status === 'success' || runtimeState?.status === 'error'
-      ? runtimeState.data?.points
-      : undefined;
+    const element = elements.find((candidate) => candidate.id === elementId) as TrendElement | undefined;
+    const points = element ? getTrendPoints(element, trendRuntimeStates) : undefined;
     if (!svg || !points || points.length === 0 || cursorDrag) {
       return;
     }
@@ -252,7 +275,7 @@ export function DisplaySurface({
     }));
     setSelectedCursor({ trendElementId: elementId, cursorId: cursor.id });
     svg.focus();
-  }, [cursorDrag, editable, trendRuntimeStates]);
+  }, [cursorDrag, editable, elements, trendRuntimeStates]);
 
   const handleTrendCursorPointerDown = useCallback((
     event: React.PointerEvent<SVGLineElement>,
@@ -327,14 +350,17 @@ export function DisplaySurface({
           return;
         }
         const element = elements.find((candidate) => candidate.id === cursorDrag.trendElementId);
-        const runtimeState = trendRuntimeStates.get(cursorDrag.trendElementId);
-        const points = runtimeState?.status === 'success' || runtimeState?.status === 'error'
-          ? runtimeState.data?.points
-          : undefined;
-        if (!element || element.type !== TREND_TYPE || !points || points.length === 0) {
+        if (!element || element.type !== TREND_TYPE) {
           return;
         }
-        const chart = buildTrendChart(element as TrendElement, points);
+        const trendElement = element as TrendElement;
+        const seriesPoints = getTrendSeriesStates(trendElement, trendRuntimeStates)
+          .flatMap(({ runtimeState }) => runtimeState.data?.points ? [runtimeState.data.points] : []);
+        const points = seriesPoints.flat().sort((left, right) => left.time - right.time);
+        if (points.length === 0) {
+          return;
+        }
+        const chart = buildTrendChartForSeries(trendElement, seriesPoints, trendTimeRange);
         const time = clampTrendCursorTime(points, trendTimeForX(chart, svgPointFromEvent(svg, e.clientX, e.clientY).x));
         if (time === undefined) {
           return;
@@ -358,7 +384,7 @@ export function DisplaySurface({
       }
       onPointerMove(svgPointFromEvent(svg, e.clientX, e.clientY));
     },
-    [cursorDrag, editable, elements, onPointerMove, trendRuntimeStates],
+    [cursorDrag, editable, elements, onPointerMove, trendRuntimeStates, trendTimeRange],
   );
 
   const handleSvgPointerEnd = useCallback(
@@ -469,16 +495,25 @@ export function DisplaySurface({
             />
           );
         }
-        if (element.type === TREND_TYPE && isPiPointBinding(element.properties.binding)) {
-          const recordedResult = recordedTrendStates[element.id];
-          const recordedRuntimeState = recordedResult?.status === 'success'
-            ? { status: 'success' as const, data: recordedResult.series }
-            : undefined;
+        if (element.type === TREND_TYPE) {
+          const trendElement = element as unknown as TrendElement;
+          const seriesStates = getTrendSeriesStates(trendElement, trendRuntimeStates).map(({ series, runtimeState }) => {
+            const recordedResult = recordedTrendStates[getTrendSeriesConsumerId(element.id, series.binding)];
+            return {
+              series,
+              runtimeState: recordedResult?.status === 'success'
+                ? { status: 'success' as const, data: recordedResult.series }
+                : runtimeState,
+            };
+          });
+          if (seriesStates.length === 0) {
+            return null;
+          }
           return (
             <TrendElementView
               key={element.id}
-              element={element as unknown as TrendElement}
-              runtimeState={recordedRuntimeState ?? trendRuntimeStates.get(element.id) ?? { status: 'loading' }}
+              element={trendElement}
+              seriesStates={seriesStates}
               cursors={cursorsByTrend[element.id] ?? []}
               cursorEnabled={cursorEnabled}
               selectedCursorId={cursorEnabled && selectedCursor?.trendElementId === element.id ? selectedCursor.cursorId : null}
@@ -545,6 +580,26 @@ export function DisplaySurface({
       )}
     </svg>
   );
+}
+
+function getTrendSeriesStates(
+  element: TrendElement,
+  runtimeStates: ReadonlyMap<string, TrendRuntimeState>,
+): TrendSeriesViewState[] {
+  return getTrendSeries(element).map((series) => ({
+    series,
+    runtimeState: runtimeStates.get(getTrendSeriesConsumerId(element.id, series.binding)) ?? { status: 'loading' },
+  }));
+}
+
+function getTrendPoints(
+  element: TrendElement,
+  runtimeStates: ReadonlyMap<string, TrendRuntimeState>,
+) {
+  const points = getTrendSeriesStates(element, runtimeStates)
+    .flatMap(({ runtimeState }) => runtimeState.data?.points ?? [])
+    .sort((left, right) => left.time - right.time);
+  return points.length > 0 ? points : undefined;
 }
 
 function getElementFill(element: DisplayDocument['elements'][number]): string {

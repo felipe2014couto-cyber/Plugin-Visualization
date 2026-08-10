@@ -3,7 +3,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createTheme } from '@grafana/data';
 import { createDisplayDocument, createTrend, type DisplayDocument } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
-import type { LoadTrendSeries } from '../../../runtime/trendRuntime';
+import {
+  DATA_QUERY_BATCH_WINDOW_MS,
+  type LoadTrendSeries,
+} from '../../../runtime/trendRuntime';
 
 jest.mock('@grafana/ui', () => ({
   useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
@@ -171,6 +174,7 @@ describe('DisplayEditor - cursores de Trend', () => {
     });
     render(<Harness document={makeDocument()} loadTrend={loadTrend} />);
     await act(async () => {
+      jest.advanceTimersByTime(DATA_QUERY_BATCH_WINDOW_MS);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -182,7 +186,7 @@ describe('DisplayEditor - cursores de Trend', () => {
     const firstLabel = screen.getByTestId('trend-cursor-label-trend-a-cursor-1').textContent;
 
     await act(async () => {
-      jest.advanceTimersByTime(5_000);
+      jest.advanceTimersByTime(5_000 + DATA_QUERY_BATCH_WINDOW_MS);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -191,7 +195,7 @@ describe('DisplayEditor - cursores de Trend', () => {
     expect(screen.getByTestId('trend-cursor-label-trend-a-cursor-1')).not.toHaveTextContent(firstLabel ?? '');
 
     await act(async () => {
-      jest.advanceTimersByTime(5_000);
+      jest.advanceTimersByTime(5_000 + DATA_QUERY_BATCH_WINDOW_MS);
       await Promise.resolve();
       await Promise.resolve();
     });

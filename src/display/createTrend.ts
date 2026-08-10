@@ -6,14 +6,43 @@ import { isPiPointBinding, type PiPointBinding } from '../pi/piPointBinding';
 
 export const TREND_TYPE = 'trend' as const;
 
-export interface TrendProperties extends Record<string, unknown> {
+export interface TrendSeries {
   binding: PiPointBinding;
+  color: string;
+}
+
+export interface TrendProperties extends Record<string, unknown> {
+  /** Legacy single-series contract, read for backwards compatibility only. */
+  binding?: PiPointBinding;
+  series?: TrendSeries[];
 }
 
 export type TrendElement = DisplayElement<typeof TREND_TYPE, TrendProperties>;
 
 const DEFAULT_TREND_WIDTH = 520;
 const DEFAULT_TREND_HEIGHT = 280;
+export const TREND_SERIES_COLORS = [
+  '#6e9fff',
+  '#ff9830',
+  '#73bf69',
+  '#f2495c',
+  '#b877d9',
+  '#fade2a',
+  '#8ab8ff',
+  '#ff780a',
+  '#56d2ba',
+  '#e0b400',
+  '#5794f2',
+  '#c15c17',
+  '#96d98d',
+  '#ff7383',
+  '#cca6e8',
+  '#ffec75',
+  '#1f78c1',
+  '#bf1b00',
+  '#37872d',
+  '#8f3bb8',
+] as const;
 
 export interface CreateTrendOptions {
   binding: PiPointBinding;
@@ -54,7 +83,9 @@ export function createTrend(options: CreateTrendOptions): TrendElement {
     y,
     width: safeWidth,
     height: safeHeight,
-    properties: { binding: { ...options.binding } },
+    properties: {
+      series: [{ binding: { ...options.binding }, color: trendSeriesColor(0) }],
+    },
   };
 }
 
@@ -63,4 +94,72 @@ export function appendTrend(document: DisplayDocument, element: TrendElement): D
     ...document,
     elements: [...document.elements, element],
   };
+}
+
+export function getTrendSeries(element: Pick<TrendElement, 'properties'>): TrendSeries[] {
+  const configured = Array.isArray(element.properties.series)
+    ? element.properties.series.filter((series): series is TrendSeries => (
+      !!series
+      && isPiPointBinding(series.binding)
+      && typeof series.color === 'string'
+      && series.color.trim().length > 0
+    ))
+    : [];
+  if (configured.length > 0) {
+    return deduplicateTrendSeries(configured);
+  }
+  return isPiPointBinding(element.properties.binding)
+    ? [{ binding: element.properties.binding, color: trendSeriesColor(0) }]
+    : [];
+}
+
+export function addTrendSeries(
+  document: DisplayDocument,
+  elementId: string,
+  binding: PiPointBinding,
+): DisplayDocument {
+  if (!isPiPointBinding(binding)) {
+    return document;
+  }
+  const elementIndex = document.elements.findIndex((element) => element.id === elementId && element.type === TREND_TYPE);
+  if (elementIndex < 0) {
+    return document;
+  }
+  const element = document.elements[elementIndex] as TrendElement;
+  const series = getTrendSeries(element);
+  const bindingKey = trendBindingKey(binding);
+  if (series.some((item) => trendBindingKey(item.binding) === bindingKey)) {
+    return document;
+  }
+  const currentProperties = { ...element.properties };
+  delete currentProperties.binding;
+  const nextElement: TrendElement = {
+    ...element,
+    properties: {
+      ...currentProperties,
+      series: [...series, { binding: { ...binding }, color: trendSeriesColor(series.length) }],
+    },
+  };
+  const elements = [...document.elements];
+  elements[elementIndex] = nextElement;
+  return { ...document, elements };
+}
+
+export function trendBindingKey(binding: PiPointBinding): string {
+  return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
+}
+
+export function trendSeriesColor(index: number): string {
+  return TREND_SERIES_COLORS[index % TREND_SERIES_COLORS.length];
+}
+
+function deduplicateTrendSeries(series: readonly TrendSeries[]): TrendSeries[] {
+  const unique = new Map<string, TrendSeries>();
+  for (const item of series) {
+    const key = trendBindingKey(item.binding);
+    if (!unique.has(key)) {
+      unique.set(key, { binding: { ...item.binding }, color: item.color });
+    }
+  }
+  return [...unique.values()];
 }

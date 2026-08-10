@@ -1,5 +1,5 @@
 import React from 'react';
-import type { TrendElement } from '../createTrend';
+import { getTrendSeries, type TrendElement, type TrendSeries } from '../createTrend';
 import type { TrendPoint } from '../../pi/piDataSource';
 import type { TrendRuntimeState } from '../runtime/trendRuntime';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
@@ -8,6 +8,7 @@ import type { DisplayTimeRange } from '../../time/timeRange';
 export interface TrendElementViewProps {
   element: TrendElement;
   runtimeState?: TrendRuntimeState;
+  seriesStates?: readonly TrendSeriesViewState[];
   cursors?: readonly TrendCursor[];
   cursorEnabled?: boolean;
   selectedCursorId?: string | null;
@@ -26,6 +27,11 @@ export interface TrendElementViewProps {
   onDoubleClick?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
 }
 
+export interface TrendSeriesViewState {
+  series: TrendSeries;
+  runtimeState: TrendRuntimeState;
+}
+
 const PLOT_MARGIN = { left: 48, right: 12, top: 30, bottom: 32 };
 const GRID_COLOR = 'rgba(255, 255, 255, 0.14)';
 const AXIS_COLOR = 'rgba(255, 255, 255, 0.45)';
@@ -35,6 +41,7 @@ const LINE_COLOR = '#6e9fff';
 export function TrendElementView({
   element,
   runtimeState,
+  seriesStates,
   cursors = [],
   cursorEnabled = true,
   selectedCursorId = null,
@@ -44,12 +51,12 @@ export function TrendElementView({
   onDoubleClick,
 }: TrendElementViewProps) {
   const state = runtimeState ?? { status: 'loading' as const };
-  const data = state.status === 'success' || state.status === 'error' ? state.data : undefined;
+  const configuredSeries = getTrendSeries(element);
+  const resolvedSeriesStates = seriesStates ?? configuredSeries.slice(0, 1).map((series) => ({ series, runtimeState: state }));
   const cursorPointerDown = cursorEnabled ? onCursorPointerDown : undefined;
   const content = getTrendContent(
     element,
-    state,
-    data,
+    resolvedSeriesStates,
     cursorEnabled ? cursors : [],
     cursorEnabled ? selectedCursorId : null,
     cursorEnabled ? onPlotPointerDown : undefined,
@@ -84,14 +91,19 @@ export function TrendElementView({
 
 function getTrendContent(
   element: TrendElement,
-  state: TrendRuntimeState,
-  data: { pointName: string; points: TrendPoint[] } | undefined,
+  seriesStates: readonly TrendSeriesViewState[],
   cursors: readonly TrendCursor[],
   selectedCursorId: string | null,
   onPlotPointerDown: TrendElementViewProps['onPlotPointerDown'],
   onCursorPointerDown: TrendElementViewProps['onCursorPointerDown'],
   timeRange: DisplayTimeRange | undefined,
 ): React.ReactNode {
+  const dataSeries = seriesStates.flatMap(({ series, runtimeState }) => {
+    const data = runtimeState.status === 'success' || runtimeState.status === 'error'
+      ? runtimeState.data
+      : undefined;
+    return data ? [{ series, data }] : [];
+  });
   const title = (
     <text
       x={element.x + 10}
@@ -101,23 +113,38 @@ function getTrendContent(
       data-testid={`trend-title-${element.id}`}
       pointerEvents="none"
     >
-      {element.properties.binding.pointName}
+      {seriesStates.map(({ series, runtimeState }, index) => {
+        const data = runtimeState.status === 'success' || runtimeState.status === 'error'
+          ? runtimeState.data
+          : undefined;
+        const currentValue = data?.points.at(-1)?.value;
+        return (
+          <tspan
+            key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}
+            fill={series.color}
+            data-testid={`trend-legend-${element.id}-${index}`}
+          >
+            {index > 0 ? '   ' : ''}{series.binding.pointName}{currentValue !== undefined ? ` ${formatNumber(currentValue)}` : ''}
+          </tspan>
+        );
+      })}
     </text>
   );
 
-  if (state.status === 'loading') {
+  if (dataSeries.length === 0 && seriesStates.some(({ runtimeState }) => runtimeState.status === 'loading')) {
     return <>{title}<TrendMessage element={element} message="Carregando..." testId="trend-loading" /></>;
   }
 
-  if (!data) {
+  if (dataSeries.length === 0 && seriesStates.some(({ runtimeState }) => runtimeState.status === 'error')) {
     return <>{title}<TrendMessage element={element} message="BAD" testId="trend-error" /></>;
   }
 
-  if (data.points.length === 0) {
+  if (dataSeries.every(({ data }) => data.points.length === 0)) {
     return <>{title}<TrendMessage element={element} message="Sem dados" testId="trend-empty" /></>;
   }
 
-  const chart = buildTrendChart(element, data.points, timeRange);
+  const drawableSeries = dataSeries.filter(({ data }) => data.points.length > 0);
+  const chart = buildTrendChartForSeries(element, drawableSeries.map(({ data }) => data.points), timeRange);
   return (
     <>
       {title}
@@ -179,29 +206,40 @@ function getTrendContent(
           {formatAxisTime(tick.time, chart.domainEnd - chart.domainStart)}
         </text>
       ))}
-      <path
-        d={chart.path}
-        fill="none"
-        stroke={LINE_COLOR}
-        strokeWidth={2}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        data-testid={`trend-line-${element.id}`}
-        pointerEvents="none"
-      />
-      {chart.singlePoint && (
-        <circle
-          cx={chart.singlePoint.x}
-          cy={chart.singlePoint.y}
-          r={3}
-          fill={LINE_COLOR}
-          data-testid={`trend-point-${element.id}`}
-          pointerEvents="none"
-        />
-      )}
+      {drawableSeries.map(({ series, data }, index) => {
+        const path = trendPathForPoints(chart, data.points);
+        const singlePoint = data.points.length === 1 ? trendPointForValue(chart, data.points[0]) : undefined;
+        return (
+          <React.Fragment key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}>
+            <path
+              d={path}
+              fill="none"
+              stroke={series.color || LINE_COLOR}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              data-testid={index === 0 ? `trend-line-${element.id}` : `trend-line-${element.id}-${index}`}
+              pointerEvents="none"
+            />
+            {singlePoint && (
+              <circle
+                cx={singlePoint.x}
+                cy={singlePoint.y}
+                r={3}
+                fill={series.color || LINE_COLOR}
+                data-testid={index === 0 ? `trend-point-${element.id}` : `trend-point-${element.id}-${index}`}
+                pointerEvents="none"
+              />
+            )}
+          </React.Fragment>
+        );
+      })}
       {cursors.map((cursor) => {
-        const value = resolveTrendCursorValue(data.points, cursor.time);
-        if (value === undefined) {
+        const values = drawableSeries.flatMap(({ series, data }) => {
+          const value = resolveTrendCursorValue(data.points, cursor.time);
+          return value === undefined ? [] : [{ pointName: series.binding.pointName, value }];
+        });
+        if (values.length === 0) {
           return null;
         }
         const x = trendXForTime(chart, cursor.time);
@@ -241,12 +279,12 @@ function getTrendContent(
               pointerEvents="none"
               data-testid={`trend-cursor-label-${element.id}-${cursor.id}`}
             >
-              {formatCursorTime(cursor.time)} {formatNumber(value)}
+              {formatCursorTime(cursor.time)} {values.map(({ pointName, value }) => `${pointName} ${formatNumber(value)}`).join('  ')}
             </text>
           </g>
         );
       })}
-      {state.status === 'error' && (
+      {seriesStates.some(({ runtimeState }) => runtimeState.status === 'error') && (
         <text
           x={element.x + element.width - 10}
           y={element.y + 18}
@@ -295,6 +333,8 @@ export interface TrendChartModel {
   plotHeight: number;
   domainStart: number;
   domainEnd: number;
+  domainMin: number;
+  domainMax: number;
   path: string;
   yTicks: Array<{ value: number; y: number }>;
   xTicks: Array<{ time: number; x: number }>;
@@ -306,10 +346,19 @@ export function buildTrendChart(
   points: TrendPoint[],
   timeRange?: DisplayTimeRange,
 ): TrendChartModel {
+  return buildTrendChartForSeries(element, [points], timeRange);
+}
+
+export function buildTrendChartForSeries(
+  element: TrendElement,
+  seriesPoints: readonly TrendPoint[][],
+  timeRange?: DisplayTimeRange,
+): TrendChartModel {
   const plotX = element.x + PLOT_MARGIN.left;
   const plotY = element.y + PLOT_MARGIN.top;
   const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - PLOT_MARGIN.right);
   const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
+  const points = seriesPoints.flat();
   const values = points.map((point) => point.value);
   const valueMin = Math.min(...values);
   const valueMax = Math.max(...values);
@@ -322,8 +371,9 @@ export function buildTrendChart(
     && Number.isFinite(timeRange.from)
     && Number.isFinite(timeRange.to)
     && timeRange.from < timeRange.to;
-  const firstTime = points[0].time;
-  const lastTime = points[points.length - 1].time;
+  const pointTimes = points.map((point) => point.time);
+  const firstTime = Math.min(...pointTimes);
+  const lastTime = Math.max(...pointTimes);
   const timePadding = firstTime === lastTime ? 30 * 60 * 1000 : (lastTime - firstTime) * 0.02;
   const domainStart = hasRequestedRange ? timeRange.from : firstTime - timePadding;
   const domainEnd = hasRequestedRange ? timeRange.to : lastTime + timePadding;
@@ -342,6 +392,8 @@ export function buildTrendChart(
     plotHeight,
     domainStart,
     domainEnd,
+    domainMin,
+    domainMax,
     path,
     yTicks: [0, 1, 2].map((index) => {
       const value = domainMax - ((domainMax - domainMin) * index) / 2;
@@ -353,6 +405,20 @@ export function buildTrendChart(
     }),
     singlePoint: points.length === 1 ? { x: xFor(points[0].time), y: yFor(points[0].value) } : undefined,
   };
+}
+
+function trendPathForPoints(chart: TrendChartModel, points: readonly TrendPoint[]): string {
+  return points.map((point, index) => {
+    const position = trendPointForValue(chart, point);
+    return `${index === 0 ? 'M' : 'L'} ${position.x} ${position.y}`;
+  }).join(' ');
+}
+
+function trendPointForValue(chart: TrendChartModel, point: TrendPoint): { x: number; y: number } {
+  const x = trendXForTime(chart, point.time);
+  const y = chart.plotY
+    + ((chart.domainMax - point.value) / Math.max(1e-12, chart.domainMax - chart.domainMin)) * chart.plotHeight;
+  return { x, y };
 }
 
 export function trendTimeForX(chart: TrendChartModel, x: number): number {

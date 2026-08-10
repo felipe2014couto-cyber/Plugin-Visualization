@@ -10,6 +10,8 @@ export {
   getPiTrendsHistoryForRange,
   getPiTrendsPreviewForRange,
   getPiTrendsRecordedHistoryForRange,
+  TREND_QUERY_MAX_DATA_POINTS,
+  TREND_QUERY_MIN_DATA_POINTS,
   type PiConnectionState,
   type PiConnectionStatus,
   type PiDataSourceIdentity,
@@ -19,14 +21,24 @@ export {
   type PiTrendSeries,
   type PiTrendSeriesResult,
   type PiTrendTimeRange,
+  type PiTrendQueryOptions,
   type TrendPoint,
 } from './piDataSource';
 export {
   createProgressiveTrendLoader,
+  TREND_HISTORY_CACHE_TTL_MS,
+  TREND_PREVIEW_MAX_DATA_POINTS,
   TREND_PREVIEW_DURATION_MS,
+  TREND_REFINED_DEFAULT_MAX_DATA_POINTS,
   type PublishTrendResults,
   type ProgressiveTrendLoader,
   type QueryTrendRange,
+  type TrendLoadOptions,
 } from './progressiveTrendLoader';
+export {
+  DATA_QUERY_BATCH_WINDOW_MS,
+  DATA_QUERY_MAX_CONCURRENT_BATCHES,
+  DATA_QUERY_MAX_TARGETS,
+} from './dataQueryPolicy';
 export { createPiPointBinding, isPiPointBinding } from './piPointBinding';
 export type { PiPointBinding } from './piPointBinding';
