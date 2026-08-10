@@ -3,6 +3,7 @@ import type {
   PiTrendSeriesResult,
   PiTrendTimeRange,
 } from './piDataSource';
+import { getTrendPersistentCache, type TrendPersistentCache } from './trendPersistentCache';
 
 export const TREND_PREVIEW_DURATION_MS = 8 * 60 * 60 * 1000;
 export const TREND_PREVIEW_MAX_DATA_POINTS = 250;
@@ -48,6 +49,7 @@ interface TrendCacheEntry {
 export function createProgressiveTrendLoader(
   queryRecorded: QueryTrendRange,
   queryPreview: QueryTrendRange,
+  persistentCache: TrendPersistentCache = getTrendPersistentCache(),
 ): ProgressiveTrendLoader {
   const entries = new Map<string, TrendCacheEntry>();
 
@@ -65,7 +67,7 @@ export function createProgressiveTrendLoader(
       previewRange,
       queryPreview,
     );
-    void loadRecordedBatch(entries, bindings, range, maxDataPoints, queryRecorded)
+    void loadRecordedBatch(entries, bindings, range, maxDataPoints, queryRecorded, persistentCache)
       .then((recorded) => publishComplete?.(recorded))
       .catch(() => undefined);
     return previewResults;
@@ -82,6 +84,7 @@ export function createProgressiveTrendLoader(
       range,
       options.maxDataPoints ?? TREND_REFINED_DEFAULT_MAX_DATA_POINTS,
       queryRecorded,
+      persistentCache,
     );
   };
 
@@ -147,9 +150,11 @@ async function loadRecordedBatch(
   range: PiTrendTimeRange,
   maxDataPoints: number,
   queryRecorded: QueryTrendRange,
+  persistentCache: TrendPersistentCache,
 ): Promise<Record<string, PiTrendSeriesResult>> {
   const unique = deduplicateBindings(bindings);
   const missing: Array<{ binding: PiPointBinding; entry: TrendCacheEntry; deferred: Deferred<PiTrendSeriesResult> }> = [];
+  const cacheLookups: Array<Promise<void>> = [];
   const requests = unique.map((binding) => {
     const entry = getEntry(entries, binding, range, maxDataPoints);
     if (entry.recorded && isFresh(entry.recordedStoredAt)) {
@@ -162,9 +167,25 @@ async function loadRecordedBatch(
     }
     const deferred = createDeferred<PiTrendSeriesResult>();
     entry.recordedRequest = deferred.promise;
-    missing.push({ binding, entry, deferred });
+    cacheLookups.push(persistentCache.get(persistentCacheKey(binding, range, maxDataPoints))
+      .then((cachedSeries) => {
+        if (cachedSeries) {
+          const cachedResult: PiTrendSeriesResult = { status: 'success', series: cachedSeries };
+          entry.recorded = cachedResult;
+          entry.recordedStoredAt = Date.now();
+          entry.recordedRequest = undefined;
+          deferred.resolve(cachedResult);
+        } else {
+          missing.push({ binding, entry, deferred });
+        }
+      })
+      .catch(() => {
+        missing.push({ binding, entry, deferred });
+      }));
     return deferred.promise;
   });
+
+  await Promise.all(cacheLookups);
 
   if (missing.length > 0) {
     void queryRecorded(
@@ -177,6 +198,10 @@ async function loadRecordedBatch(
         if (result.status === 'success') {
           item.entry.recorded = result;
           item.entry.recordedStoredAt = Date.now();
+          void persistentCache.set(
+            persistentCacheKey(item.binding, range, maxDataPoints),
+            result.series,
+          );
         }
         item.deferred.resolve(result);
       }
@@ -210,6 +235,14 @@ function getEntry(
 
 function bindingResultKey(binding: PiPointBinding): string {
   return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
+}
+
+function persistentCacheKey(
+  binding: PiPointBinding,
+  range: PiTrendTimeRange,
+  maxDataPoints: number,
+): string {
+  return `v1|${range.from}:${range.to}:${maxDataPoints}|${bindingResultKey(binding)}`;
 }
 
 function deduplicateBindings(bindings: readonly PiPointBinding[]): PiPointBinding[] {

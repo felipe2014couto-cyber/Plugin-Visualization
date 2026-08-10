@@ -53,9 +53,15 @@ export interface TrendPoint {
   value: number;
 }
 
+export interface TrendStatePoint {
+  time: number;
+  value: string;
+}
+
 export interface PiTrendSeries {
   pointName: string;
   points: TrendPoint[];
+  states?: TrendStatePoint[];
 }
 
 export interface PiTrendTimeRange {
@@ -501,17 +507,18 @@ function normalizeTrendFrame(frame: DataFrame, pointName: string): PiTrendSeries
     throw new Error('Série histórica sem campos Time/Value');
   }
 
-  const valueField = valueFields.find((field) => getFieldValues(field)
-    .some((value) => typeof value === 'number' && Number.isFinite(value)));
-  if (!valueField) {
+  const preferredField = valueFields.find((field) => field.name.toLocaleLowerCase() === pointName.toLocaleLowerCase());
+  const valueField = preferredField ?? valueFields[0];
+  const values = getFieldValues(valueField);
+  const hasNumericValue = values.some((value) => typeof value === 'number' && Number.isFinite(value));
+  if (!hasNumericValue) {
     if (valueFields.every((field) => getFieldValues(field).length === 0)) {
       return { pointName, points: [] };
     }
-    throw new Error('Trend suporta somente PI Points numéricos');
+    return normalizeStateTrendFrame(pointName, getFieldValues(timeField), values);
   }
 
   const times = getFieldValues(timeField);
-  const values = getFieldValues(valueField);
   const points: TrendPoint[] = [];
   const length = Math.min(times.length, values.length);
   for (let index = 0; index < length; index += 1) {
@@ -525,6 +532,25 @@ function normalizeTrendFrame(frame: DataFrame, pointName: string): PiTrendSeries
 
   points.sort((left, right) => left.time - right.time);
   return { pointName, points };
+}
+
+function normalizeStateTrendFrame(
+  pointName: string,
+  times: unknown[],
+  values: unknown[],
+): PiTrendSeries {
+  const states: TrendStatePoint[] = [];
+  const length = Math.min(times.length, values.length);
+  for (let index = 0; index < length; index += 1) {
+    const time = normalizeTrendTimestamp(times[index]);
+    const value = values[index];
+    if (time === undefined || value === null || value === undefined) {
+      continue;
+    }
+    states.push({ time, value: String(value) });
+  }
+  states.sort((left, right) => left.time - right.time);
+  return { pointName, points: [], states };
 }
 
 function getTrendResponseError(response: DataQueryResponse, refId: string): Error {

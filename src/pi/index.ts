@@ -23,6 +23,7 @@ export {
   type PiTrendTimeRange,
   type PiTrendQueryOptions,
   type TrendPoint,
+  type TrendStatePoint,
 } from './piDataSource';
 export {
   createProgressiveTrendLoader,

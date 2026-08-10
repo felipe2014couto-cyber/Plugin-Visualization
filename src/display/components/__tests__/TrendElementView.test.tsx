@@ -46,6 +46,74 @@ describe('TrendElementView', () => {
     expect(screen.getAllByText(/SINUSOID/).length).toBeGreaterThan(0);
   });
 
+  it('renderiza mudanças de estado de uma tag digital/string sem marcar BAD', () => {
+    render(
+      <svg>
+        <TrendElementView
+          element={element}
+          timeRange={{ from: 1_000, to: 3_000 }}
+          runtimeState={{
+            status: 'success',
+            data: {
+              pointName: 'SINUSOID',
+              points: [],
+              states: [
+                { time: 1_000, value: 'Desligado' },
+                { time: 2_000, value: 'Ligado' },
+              ],
+            },
+          }}
+        />
+      </svg>,
+    );
+
+    expect(screen.getByTestId('trend-state-plot-trend-1')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-state-line-trend-1')).toHaveAttribute('d', expect.stringContaining('V'));
+    expect(screen.getByTestId('trend-title-trend-1')).toHaveTextContent('Ligado');
+    expect(screen.getByText('0')).toBeInTheDocument();
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.queryByTestId('trend-error-trend-1')).toBeNull();
+  });
+
+  it('mantém a série textual e a numérica com escalas independentes', () => {
+    const numericBinding = { ...binding, pointName: 'FLOW' };
+    const mixedElement = {
+      ...element,
+      properties: {
+        series: [
+          { binding, color: '#6e9fff' },
+          { binding: numericBinding, color: '#ff9830' },
+        ],
+      },
+    };
+    render(
+      <svg>
+        <TrendElementView
+          element={mixedElement}
+          timeRange={{ from: 1_000, to: 3_000 }}
+          seriesStates={[
+            {
+              series: mixedElement.properties.series[0],
+              runtimeState: { status: 'success', data: { pointName: 'SINUSOID', points: [], states: [{ time: 1_000, value: 'A' }, { time: 2_000, value: 'B' }] } },
+            },
+            {
+              series: mixedElement.properties.series[1],
+              runtimeState: { status: 'success', data: { pointName: 'FLOW', points: [{ time: 1_000, value: 1400 }, { time: 2_000, value: 1560 }] } },
+            },
+          ]}
+        />
+      </svg>,
+    );
+
+    expect(screen.getByTestId('trend-mixed-plot-trend-1')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-state-line-trend-1')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-line-trend-1')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveTextContent('SINUSOID');
+    expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveTextContent('FLOW');
+    expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveAttribute('y', '38');
+    expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveAttribute('y', '72');
+  });
+
   it('redesenha a geometria do gráfico sem alterar os dados', () => {
     const { rerender } = render(
       <svg><TrendElementView element={element} runtimeState={{ status: 'success', data: { pointName: 'SINUSOID', points: [{ time: 1_000, value: 1 }, { time: 2_000, value: 2 }] } }} /></svg>,
@@ -129,8 +197,10 @@ describe('TrendElementView', () => {
 
     expect(screen.getByTestId('trend-line-trend-1')).toHaveAttribute('stroke', '#6e9fff');
     expect(screen.getByTestId('trend-line-trend-1-1')).toHaveAttribute('stroke', '#ff9830');
-    expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveTextContent('SINUSOID 2');
-    expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveTextContent('OTHER 20');
+    expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveTextContent('SINUSOID');
+    expect(screen.getByTestId('trend-legend-value-trend-1-0')).toHaveTextContent('2');
+    expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveTextContent('OTHER');
+    expect(screen.getByTestId('trend-legend-value-trend-1-1')).toHaveTextContent('20');
     expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('SINUSOID 1');
     expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('OTHER 15');
     expect(screen.getByTestId('trend-refresh-error-trend-1')).toBeInTheDocument();

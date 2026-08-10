@@ -520,7 +520,7 @@ describe('PI data source integration', () => {
     expect(query.mock.calls[0][0]).toMatchObject({ maxDataPoints: 1_200 });
   });
 
-  it('controla série vazia, erro e PI Point digital/string', async () => {
+  it('controla série vazia e preserva mudanças de estado de PI Points digitais/string', async () => {
     const emptyQuery = jest.fn(async () => ({ data: [{ refId: 'A', fields: [{ name: 'Time', values: [] }, { name: 'SINUSOID', values: [] }] }] }));
     const emptySrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query: emptyQuery });
     const { getPiTrendHistory } = await import('../piDataSource');
@@ -529,9 +529,19 @@ describe('PI data source integration', () => {
 
     const digitalSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ isDefault: true })],
-      query: async () => ({ data: [{ refId: 'A', fields: [{ name: 'Time', values: ['2026-08-06T12:00:00.000Z'] }, { name: 'State', values: ['Running'] }] }] }),
+      query: async () => ({ data: [{ refId: 'A', fields: [
+        { name: 'Time', values: ['2026-08-06T12:00:00.000Z', '2026-08-06T12:05:00.000Z'] },
+        { name: 'State', values: ['Running', 'Stopped'] },
+      ] }] }),
     });
     await expect(getPiTrendHistory({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'State' }, digitalSrv))
-      .rejects.toThrow('somente PI Points numéricos');
+      .resolves.toEqual({
+        pointName: 'State',
+        points: [],
+        states: [
+          { time: Date.parse('2026-08-06T12:00:00.000Z'), value: 'Running' },
+          { time: Date.parse('2026-08-06T12:05:00.000Z'), value: 'Stopped' },
+        ],
+      });
   });
 });

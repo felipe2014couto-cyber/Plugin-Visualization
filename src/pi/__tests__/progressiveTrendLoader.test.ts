@@ -5,13 +5,58 @@ import {
 } from '../progressiveTrendLoader';
 import type { PiTrendSeriesResult } from '../piDataSource';
 import type { PiPointBinding } from '../piPointBinding';
+import type { TrendPersistentCache } from '../trendPersistentCache';
 
 const binding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID' };
 const resultKey = 'ds\u0000pims\u0000SINUSOID';
 const secondBinding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'OTHER' };
 const thirdBinding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'THIRD' };
 
+async function flushAsyncWork(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('progressive trend loader', () => {
+  it('reutiliza o histórico persistido após recarregar o app sem consultar o servidor', async () => {
+    const cachedSeries = { pointName: 'SINUSOID', points: [{ time: 1, value: 42 }] };
+    const persistentCache: TrendPersistentCache = {
+      get: jest.fn(async () => cachedSeries),
+      set: jest.fn(async () => undefined),
+    };
+    const queryRecorded = jest.fn(async () => ({}));
+    const loader = createProgressiveTrendLoader(queryRecorded, jest.fn(async () => ({})), persistentCache);
+
+    await expect(loader.loadRecorded([binding], { from: 0, to: TREND_PREVIEW_DURATION_MS }))
+      .resolves.toEqual({ [resultKey]: { status: 'success', series: cachedSeries } });
+
+    expect(queryRecorded).not.toHaveBeenCalled();
+    expect(persistentCache.get).toHaveBeenCalledWith(expect.stringContaining(`|${resultKey}`));
+  });
+
+  it('persiste somente o histórico refinado obtido com sucesso', async () => {
+    const recorded = {
+      [resultKey]: { status: 'success' as const, series: { pointName: 'SINUSOID', points: [{ time: 2, value: 3 }] } },
+    };
+    const persistentCache: TrendPersistentCache = {
+      get: jest.fn(async () => undefined),
+      set: jest.fn(async () => undefined),
+    };
+    const loader = createProgressiveTrendLoader(
+      jest.fn(async () => recorded),
+      jest.fn(async () => ({})),
+      persistentCache,
+    );
+
+    await loader.loadRecorded([binding], { from: 0, to: TREND_PREVIEW_DURATION_MS });
+
+    expect(persistentCache.set).toHaveBeenCalledWith(
+      expect.stringContaining(`|${resultKey}`),
+      recorded[resultKey].series,
+    );
+  });
+
   it('exibe a janela completa em baixa resolução e mantém o refinamento no cache curto', async () => {
     const preview = {
       [resultKey]: { status: 'success' as const, series: { pointName: 'SINUSOID', points: [{ time: 1, value: 1 }] } },
@@ -30,6 +75,7 @@ describe('progressive trend loader', () => {
 
     await expect(loader([binding], range)).resolves.toStrictEqual(preview);
     expect(queryPreview).toHaveBeenCalledWith([binding], range, { maxDataPoints: 250 });
+    await flushAsyncWork();
     expect(queryRange).toHaveBeenCalledWith([binding], range, { maxDataPoints: 750 });
 
     resolveComplete?.(complete);
@@ -71,6 +117,7 @@ describe('progressive trend loader', () => {
 
     await expect(loader([binding], range)).resolves.toStrictEqual(preview);
     expect(queryPreview).toHaveBeenCalledWith([binding], range, { maxDataPoints: 250 });
+    await flushAsyncWork();
     expect(queryRecorded).toHaveBeenCalledWith([binding], range, { maxDataPoints: 750 });
     await expect(loader.loadRecorded([binding], range)).resolves.toStrictEqual(recorded);
   });
@@ -205,6 +252,7 @@ describe('progressive trend loader', () => {
 
     await loader([binding], range, undefined, { maxDataPoints: 600 });
     await loader([binding], range, undefined, { maxDataPoints: 900 });
+    await flushAsyncWork();
 
     expect(queryPreview).toHaveBeenCalledTimes(1);
     expect(queryRecorded).toHaveBeenCalledTimes(2);
