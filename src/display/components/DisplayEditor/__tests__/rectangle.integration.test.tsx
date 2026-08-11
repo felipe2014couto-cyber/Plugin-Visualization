@@ -260,6 +260,7 @@ describe('DisplayEditor - inserção de Value', () => {
       dataSourceUid: 'resolved-datasource',
       serverPath: 'pims',
       pointName: 'LFI_A268SV_TEMPERATURA_AMBIENTE',
+      webId: 'point-webid',
     });
   });
 
@@ -293,6 +294,7 @@ describe('DisplayEditor - inserção de Value', () => {
       dataSourceUid: 'resolved-datasource',
       serverPath: 'pims',
       pointName: 'LFI_A268SV_TEMPERATURA_AMBIENTE',
+      webId: 'point-webid',
     });
 
     fireEvent.click(screen.getByTestId('display-mode-view'));

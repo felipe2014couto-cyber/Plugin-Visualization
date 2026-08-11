@@ -13,7 +13,15 @@ describe('timeRange', () => {
     expect(parseTimeExpression('*', now)).toBe(now);
     expect(parseTimeExpression('*-8h', now)).toBe(now - 8 * 60 * 60 * 1000);
     expect(parseTimeExpression('*-30m', now)).toBe(now - 30 * 60 * 1000);
+    expect(parseTimeExpression('*-1mo', now)).toBe(Date.parse('2026-07-07T12:00:00.000Z'));
     expect(parseTimeExpression('2026-08-07T10:00:00.000Z', now)).toBe(Date.parse('2026-08-07T10:00:00.000Z'));
+  });
+
+  it('trata mês como período de calendário e limita o último dia', () => {
+    const marchLastDay = new Date(2026, 2, 31, 10, 30).getTime();
+    const februaryLastDay = new Date(2026, 1, 28, 10, 30).getTime();
+
+    expect(parseTimeExpression('*-1mo', marchLastDay)).toBe(februaryLastDay);
   });
 
   it('rejeita expressão e intervalo inválidos', () => {

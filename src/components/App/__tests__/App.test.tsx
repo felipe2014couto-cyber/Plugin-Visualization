@@ -4,7 +4,7 @@ import { createTheme } from '@grafana/data';
 import {
   checkPiConnection,
 } from '../../../pi';
-import { App } from '../App';
+import { App, VISUALIZATION_THEME_STORAGE_KEY } from '../App';
 
 jest.mock('@grafana/runtime', () => ({
   PluginPage: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -24,6 +24,10 @@ jest.mock('../../../pi', () => ({
 
 describe('App', () => {
   const checkPiConnectionMock = checkPiConnection as jest.MockedFunction<typeof checkPiConnection>;
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
 
   it('mostra o estado inicial de verificação', () => {
     checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
@@ -53,7 +57,7 @@ describe('App', () => {
 
     render(<App />);
 
-    expect(screen.getByTestId('pims-vision-header')).toHaveTextContent('PIMS Vision');
+    expect(screen.getByTestId('pims-vision-header')).toHaveTextContent('Visualization');
     expect(screen.getByTestId('pims-vision-assets-panel')).toHaveTextContent('Ativos');
     expect(screen.getByTestId('pi-point-search')).toBeInTheDocument();
     expect(screen.getByTestId('pims-vision-editor-area')).toContainElement(screen.getByTestId('display-editor'));
@@ -84,12 +88,38 @@ describe('App', () => {
     expect(toggle).toHaveAttribute('aria-label', 'Mostrar barra de ferramentas');
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(screen.queryByTestId('display-editor-toolbar')).toBeNull();
-    expect(toggle).toHaveStyle({ color: '#ffffff', background: '#173c63' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
 
     fireEvent.click(toggle);
 
     expect(assetsPanel).toHaveTextContent('PI System');
     expect(toggle).toHaveAttribute('aria-label', 'Ocultar barra de ferramentas');
     expect(screen.getByTestId('display-editor-toolbar')).toBeInTheDocument();
+  });
+
+  it('inicia no tema escuro e persiste a troca para o tema claro', () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+
+    expect(screen.getByTestId('pims-vision-home')).toHaveAttribute('data-visualization-theme', 'dark');
+    expect(screen.getByTestId('visualization-theme-dark')).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByTestId('visualization-theme-light'));
+
+    expect(screen.getByTestId('pims-vision-home')).toHaveAttribute('data-visualization-theme', 'light');
+    expect(localStorage.getItem(VISUALIZATION_THEME_STORAGE_KEY)).toBe('light');
+  });
+
+  it('restaura o tema persistido sem alterar a interface', () => {
+    localStorage.setItem(VISUALIZATION_THEME_STORAGE_KEY, 'light');
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+
+    expect(screen.getByTestId('pims-vision-home')).toHaveAttribute('data-visualization-theme', 'light');
+    expect(screen.getByTestId('pims-vision-assets-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('display-editor')).toBeInTheDocument();
+    expect(screen.getByTestId('time-range-bar')).toBeInTheDocument();
   });
 });

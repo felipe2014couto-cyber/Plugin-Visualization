@@ -1,0 +1,70 @@
+import React from 'react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { TrendPopup } from '../TrendPopup';
+import type { TrendSeriesViewState } from '../TrendElementView';
+
+beforeAll(() => {
+  const currentWindow = window as unknown as { PointerEvent?: typeof MouseEvent; MouseEvent: typeof MouseEvent };
+  if (typeof currentWindow.PointerEvent !== 'function') {
+    currentWindow.PointerEvent = class FakePointerEvent extends MouseEvent {
+      readonly pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 0;
+      }
+    } as unknown as typeof MouseEvent;
+  }
+});
+
+const seriesStates: TrendSeriesViewState[] = [
+  {
+    series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'A' }, color: '#6e9fff' },
+    runtimeState: { status: 'success', data: { pointName: 'A', points: [{ time: 1_000, value: 0 }, { time: 1_250, value: 3 }, { time: 1_500, value: 5 }, { time: 1_750, value: 8 }, { time: 2_000, value: 10 }] } },
+  },
+  {
+    series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'B' }, color: '#ff9830' },
+    runtimeState: { status: 'success', data: { pointName: 'B', points: [{ time: 1_000, value: 100 }, { time: 1_250, value: 125 }, { time: 1_500, value: 150 }, { time: 1_750, value: 175 }, { time: 2_000, value: 200 }] } },
+  },
+];
+
+describe('TrendPopup - escalas', () => {
+  it('inicia com escalas múltiplas, compartilha domínio na escala única e aceita limites configuráveis', () => {
+    render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
+
+    expect(screen.getByTestId('trend-popup-scale-multiple')).toHaveAttribute('aria-pressed', 'true');
+    const multiplePath = screen.getByTestId('trend-popup-line-0').getAttribute('d');
+
+    fireEvent.click(screen.getByTestId('trend-popup-scale-single'));
+    expect(screen.getByTestId('trend-popup-scale-single')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('trend-popup-line-0').getAttribute('d')).not.toBe(multiplePath);
+
+    fireEvent.click(screen.getByTestId('trend-popup-scale-configurable'));
+    expect(screen.getByTestId('trend-popup-scale-configuration')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-popup-line-0').getAttribute('d')).toBe(multiplePath);
+
+    const key = encodeURIComponent('ds|pims|A');
+    const maximumInput = screen.getByTestId(`trend-popup-scale-max-${key}`);
+    fireEvent.change(maximumInput, { target: { value: '100' } });
+    expect(maximumInput).toHaveValue(100);
+    expect(screen.getByTestId('trend-popup-line-0').getAttribute('d')).not.toBe(multiplePath);
+  });
+
+  it('aplica zoom por seleção retangular e desfaz com Ctrl+Z', () => {
+    render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
+    const originalPath = screen.getByTestId('trend-popup-line-0').getAttribute('d');
+    expect(screen.getByTestId('trend-popup-zoom-mode')).toHaveAttribute('aria-pressed', 'true');
+
+    const svg = screen.getByLabelText('Trend detalhada') as unknown as SVGSVGElement;
+    jest.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 800, width: 1600, height: 800, toJSON: () => ({}) });
+    const plot = screen.getByTestId('trend-popup-cursor-plot');
+    fireEvent.pointerDown(plot, { clientX: 300, clientY: 180, pointerId: 7 });
+    fireEvent.pointerMove(plot, { clientX: 1300, clientY: 600, pointerId: 7 });
+    expect(screen.getByTestId('trend-popup-zoom-selection')).toBeInTheDocument();
+    fireEvent.pointerUp(plot, { clientX: 1300, clientY: 600, pointerId: 7 });
+    expect(screen.queryByTestId('trend-popup-zoom-selection')).toBeNull();
+    expect(screen.getByTestId('trend-popup-line-0').getAttribute('d')).not.toBe(originalPath);
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(screen.getByTestId('trend-popup-line-0').getAttribute('d')).toBe(originalPath);
+  });
+});

@@ -123,7 +123,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     box-sizing: border-box;
     width: 100%;
     min-width: 0;
-    border-top: 1px solid #c0c7cf;
+    border-top: 1px solid var(--border-color);
     padding: 10px 12px;
   `,
   sectionHeader: css`
@@ -133,9 +133,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: ${theme.spacing(1)};
   `,
   title: css`font-size: 11px; font-weight: ${theme.typography.fontWeightMedium};`,
-  toggle: css`display: flex; align-items: center; gap: 4px; color: #52657a; font-size: 10px;`,
-  hint: css`margin: 7px 0; color: #64778b; font-size: 9px; line-height: 1.35;`,
-  addButton: css`width: 100%; min-height: 27px; padding: 3px 6px; border: 1px solid #aab4c0; border-radius: 0; background: #f4f5f6; color: #263c54; font-size: 10px;`,
+  toggle: css`display: flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 10px;`,
+  hint: css`margin: 7px 0; color: var(--text-secondary); font-size: 9px; line-height: 1.35;`,
+  addButton: css`width: 100%; min-height: 27px; padding: 3px 6px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-primary); font-size: 10px;`,
   rules: css`
     display: flex;
     flex-direction: column;
@@ -153,7 +153,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 100%;
     min-width: 0;
     max-width: 100%;
-    border: 1px solid #c0c7cf;
+    border: 1px solid var(--border-color);
+    background: var(--surface-secondary);
+    select, input { color: var(--text-primary); background: var(--input-bg); border-color: var(--border-color); }
     border-radius: 0;
     select, input {
       min-width: 0;
@@ -168,7 +170,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex-direction: column;
     gap: 3px;
     min-width: 0;
-    color: #52657a;
+    color: var(--text-secondary);
     font-size: 9px;
   `,
   colorField: css`
@@ -176,10 +178,10 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex-direction: column;
     gap: 3px;
     min-width: 0;
-    color: #52657a;
+    color: var(--text-secondary);
     font-size: 9px;
     input { width: 100%; padding: 2px; }
   `,
-  removeButton: css`grid-column: 1 / -1; width: 100%; max-width: 100%; min-height: 24px; padding: 2px 5px; border: 1px solid #b4bdc8; border-radius: 0; background: #eef0f2; color: #52657a; font-size: 9px;`,
+  removeButton: css`grid-column: 1 / -1; width: 100%; max-width: 100%; min-height: 24px; padding: 2px 5px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-secondary); font-size: 9px;`,
   invalid: css`grid-column: 1 / -1; color: ${theme.colors.warning.text}; font-size: 9px;`,
 });

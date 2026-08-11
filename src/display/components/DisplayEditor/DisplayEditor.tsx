@@ -24,6 +24,7 @@ import {
   addTrendSeries,
   appendTrend,
   createTrend,
+  getTrendSeries,
   TREND_TYPE,
   type TrendElement,
 } from '../../createTrend';
@@ -47,11 +48,13 @@ import { createPiPointBinding, isPiPointBinding, type PiPointBinding } from '../
 import type { PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 import { DisplaySurface } from './DisplaySurface';
+import { TrendPopup } from '../TrendPopup';
+import type { TrendSeriesViewState } from '../TrendElementView';
 import { ValuePropertiesPanel } from './ValuePropertiesPanel';
 import { ScalePropertiesPanel } from './ScalePropertiesPanel';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
-import type { DisplayTimeRange } from '../../../time/timeRange';
+import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
 import { updateMultistateConfig, type MultistateConfig } from '../../multistate';
 import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay } from '../../displayTransfer';
 import { editorReducer, initialEditorState, type EditorAction, type EditorState } from './editorState';
@@ -80,6 +83,8 @@ export interface DisplayEditorProps {
   dropSymbolType?: PiPointDropSymbolType;
   trendRefreshKey?: string;
   trendTimeRange?: DisplayTimeRange;
+  timeSelection?: DisplayTimeSelection;
+  onTimeSelectionChange?: (selection: DisplayTimeSelection) => void;
   showToolbar?: boolean;
 }
 
@@ -99,6 +104,14 @@ interface PiPointDragPreview {
   targetTrendId?: string;
 }
 
+interface TrendPopupState {
+  element: TrendElement;
+  seriesStates: readonly TrendSeriesViewState[];
+  loading: boolean;
+}
+
+const TREND_POPUP_MAX_DATA_POINTS = 500;
+
 export function DisplayEditor({
   document: displayDocument,
   onChange,
@@ -111,6 +124,8 @@ export function DisplayEditor({
   dropSymbolType = 'value',
   trendRefreshKey,
   trendTimeRange,
+  timeSelection,
+  onTimeSelectionChange,
   showToolbar = true,
 }: DisplayEditorProps) {
   const styles = useStyles2(getStyles);
@@ -127,6 +142,9 @@ export function DisplayEditor({
   const [, refreshHistory] = useState(0);
   const [importError, setImportError] = useState<string | null>(null);
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
+  const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
+  const trendPopupRequest = useRef(0);
+  const trendPopupRef = useRef<TrendPopupState | null>(null);
 
   useEffect(() => {
     documentRef.current = displayDocument;
@@ -617,9 +635,71 @@ export function DisplayEditor({
     }
   }, [dispatch, displayDocument.elements, state.selectedElementId]);
 
+  const handleTrendOpen = useCallback((element: TrendElement, seriesStates: readonly TrendSeriesViewState[]) => {
+    const requestId = trendPopupRequest.current + 1;
+    trendPopupRequest.current = requestId;
+    const initialState = { element, seriesStates, loading: !!loadRecordedTrend };
+    trendPopupRef.current = initialState;
+    setTrendPopup(initialState);
+    if (!loadRecordedTrend) {
+      return;
+    }
+    const series = getTrendSeries(element);
+    const applyResults = (results: Awaited<ReturnType<LoadTrendSeries>>) => {
+      if (trendPopupRequest.current !== requestId) {
+        return;
+      }
+      setTrendPopup((current) => {
+        if (!current || current.element.id !== element.id) {
+          return current;
+        }
+        const next = {
+          ...current,
+          loading: false,
+          seriesStates: current.seriesStates.map(({ series: trendSeries, runtimeState }) => {
+            const result = results[`${trendSeries.binding.dataSourceUid}\u0000${trendSeries.binding.serverPath}\u0000${trendSeries.binding.pointName}`];
+            return result?.status === 'success'
+              ? { series: trendSeries, runtimeState: { status: 'success' as const, data: result.series } }
+              : { series: trendSeries, runtimeState };
+          }),
+        };
+        trendPopupRef.current = next;
+        return next;
+      });
+    };
+    void loadRecordedTrend(series.map(({ binding }) => binding), applyResults, { maxDataPoints: TREND_POPUP_MAX_DATA_POINTS })
+      .then(applyResults)
+      .catch(() => {
+        if (trendPopupRequest.current === requestId) {
+          setTrendPopup((current) => {
+            const next = current ? { ...current, loading: false } : null;
+            trendPopupRef.current = next;
+            return next;
+          });
+        }
+      });
+  }, [loadRecordedTrend]);
+
+  const handleTrendPopupClose = useCallback(() => {
+    trendPopupRequest.current += 1;
+    trendPopupRef.current = null;
+    setTrendPopup(null);
+  }, []);
+
+  useEffect(() => {
+    const current = trendPopupRef.current;
+    if (!current) {
+      return;
+    }
+    const element = displayDocument.elements.find((candidate) => candidate.id === current.element.id);
+    if (element?.type === TREND_TYPE) {
+      handleTrendOpen(element as TrendElement, current.seriesStates);
+    }
+  }, [displayDocument.elements, handleTrendOpen, trendRefreshKey]);
+
   return (
     <div className={styles.container} data-testid="display-editor" onKeyDown={handleEditorKeyDown}>
-      <div className={styles.header}>
+      <div className={mode === 'edit' && showToolbar ? styles.header : styles.headerCompact}>
         <div className={styles.headerPrimary}>
           <div className={styles.displayLabel}>
             <span className={styles.displayLabelPrefix}>Display:</span>
@@ -708,10 +788,17 @@ export function DisplayEditor({
             loadValue={loadValue}
             loadValues={loadValues}
             loadTrend={loadTrend}
-            loadRecordedTrend={loadRecordedTrend}
             trendRefreshKey={trendRefreshKey}
             trendTimeRange={trendTimeRange}
+            onTrendOpen={handleTrendOpen}
           />
+          {displayDocument.elements.length === 0 && (
+            <div className={styles.emptyState} data-testid="display-empty-state">
+              <BarIcon />
+              <strong>Adicione um elemento</strong>
+              <span>para começar</span>
+            </div>
+          )}
           {piPointDragPreview && (
             <div
               className={piPointDragPreview.targetTrend
@@ -753,6 +840,16 @@ export function DisplayEditor({
           <ScalePropertiesPanel kind="Bar" {...getBarOptions(selectedBar.properties)} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
       </div>
+      {trendPopup && (
+        <TrendPopup
+          seriesStates={trendPopup.seriesStates}
+          timeRange={trendTimeRange}
+          timeSelection={timeSelection}
+          onTimeSelectionChange={onTimeSelectionChange}
+          loading={trendPopup.loading}
+          onClose={handleTrendPopupClose}
+        />
+      )}
     </div>
   );
 }
@@ -1000,26 +1097,44 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 100%;
     height: 100%;
     min-height: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: linear-gradient(115deg, var(--surface-primary), var(--surface-secondary));
   `,
   header: css`
     display: flex;
     flex-direction: column;
-    flex: 0 0 76px;
-    min-height: 76px;
-    border-bottom: 1px solid #1f334a;
-    background: #314a67;
+    flex: 0 0 94px;
+    min-height: 94px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--surface-primary);
+  `,
+  headerCompact: css`
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 68px;
+    min-height: 68px;
+    border-bottom: 1px solid var(--border-color);
+    background: transparent;
+
+    & > div:first-child {
+      flex-basis: 68px;
+      height: 68px;
+    }
   `,
   headerPrimary: css`
-    flex: 0 0 38px;
-    height: 38px;
+    flex: 0 0 47px;
+    height: 47px;
     box-sizing: border-box;
     display: flex;
     align-items: center;
     gap: ${theme.spacing(1.25)};
     padding: 0 ${theme.spacing(1.5)};
     min-width: 0;
-    color: #f1f4f8;
-    background: #314a67;
+    color: var(--text-primary);
+    background: transparent;
   `,
   displayLabel: css`
     display: flex;
@@ -1029,7 +1144,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     max-width: 36%;
   `,
   displayLabelPrefix: css`
-    color: #e2e8ef;
+    color: var(--text-secondary);
     font-size: 12px;
   `,
   modeControls: css`
@@ -1041,35 +1156,36 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 30px;
+    width: 48px;
+    height: 46px;
     padding: 0;
     border: 1px solid transparent;
-    border-radius: 0;
+    border-radius: 12px;
     background: transparent;
-    color: #dbe4ee;
+    color: var(--text-secondary);
     cursor: pointer;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-primary);
+      background: var(--button-hover);
     }
   `,
   modeButtonActive: css`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 30px;
+    width: 48px;
+    height: 46px;
     padding: 0;
-    border: 1px solid #e5a03d;
-    border-radius: 0;
-    background: #3c5c7e;
-    color: #ffffff;
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    background: var(--selection-bg);
+    color: var(--accent);
     cursor: pointer;
   `,
   toolbar: css`
-    flex: 0 0 38px;
-    height: 38px;
+    flex: 0 0 47px;
+    height: 47px;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -1077,8 +1193,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     min-width: 0;
     overflow-x: auto;
     padding: 0 ${theme.spacing(1.5)};
-    background: #405a73;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--surface-secondary);
+    border-top: 1px solid var(--border-subtle);
   `,
   toolbarGroup: css`
     display: flex;
@@ -1090,19 +1206,19 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    height: 30px;
+    height: 36px;
     flex: 0 0 auto;
     padding: 0 9px;
-    border: 1px solid rgba(110, 159, 255, 0.72);
-    border-radius: 0;
-    background: rgba(51, 91, 135, 0.46);
-    color: #e8f1fb;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    background: var(--selection-bg);
+    color: var(--accent);
     cursor: pointer;
     font-size: 12px;
 
     &:hover:not(:disabled) {
-      background: rgba(70, 120, 175, 0.7);
-      border-color: #9bc2ff;
+      background: var(--button-hover);
+      border-color: var(--accent-hover);
     }
 
     &:disabled {
@@ -1119,11 +1235,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 1px;
     height: 25px;
     flex: 0 0 1px;
-    background: rgba(222, 232, 241, 0.36);
+    background: var(--border-color);
   `,
   transferControls: css`
     display: flex;
-    gap: 3px;
+    gap: 10px;
     margin-left: auto;
   `,
   fileInput: css`display: none;`,
@@ -1137,22 +1253,22 @@ const getStyles = (theme: GrafanaTheme2) => ({
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: #ffffff;
-    font-size: 13px;
+    color: var(--text-primary);
+    font-size: 15px;
     font-weight: ${theme.typography.fontWeightMedium};
   `,
   iconButton: css`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 30px;
-    flex: 0 0 32px;
+    width: 44px;
+    height: 42px;
+    flex: 0 0 44px;
     padding: 0;
     border: 1px solid transparent;
-    border-radius: 0;
-    background: transparent;
-    color: #e2e9f0;
+    border-radius: 11px;
+    background: var(--button-bg);
+    color: var(--text-secondary);
     cursor: pointer;
 
     &:disabled {
@@ -1161,8 +1277,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
 
     &:hover:not(:disabled) {
-      border-color: rgba(255, 255, 255, 0.52);
-      background: rgba(255, 255, 255, 0.11);
+      color: var(--text-primary);
+      border-color: var(--border-color);
+      background: var(--button-hover);
     }
   `,
   surfaceWrapper: css`
@@ -1175,7 +1292,10 @@ const getStyles = (theme: GrafanaTheme2) => ({
     min-height: 0;
     overflow: hidden;
     padding: 0;
-    background: #1f1f1f;
+    background-color: var(--canvas-bg);
+    background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
+    background-size: 16px 16px;
+    border-top: 1px solid var(--border-subtle);
 
     & > svg {
       width: 100%;
@@ -1185,7 +1305,31 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   surfaceWrapperDragOver: css`
-    box-shadow: inset 0 0 0 3px #e59b37;
+    box-shadow: inset 0 0 0 3px var(--accent);
+  `,
+  emptyState: css`
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 300px;
+    height: 180px;
+    box-sizing: border-box;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-secondary);
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow);
+    pointer-events: none;
+
+    & svg { width: 52px; height: 52px; color: var(--text-muted); }
+    & strong { margin-top: 8px; color: var(--text-primary); font-size: 20px; }
+    & span { font-size: 16px; }
   `,
   piPointDragPreviewValid: css`
     position: absolute;

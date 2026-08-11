@@ -173,12 +173,14 @@ describe('DisplayEditor - histórico de edição', () => {
     fireEvent.click(screen.getByTestId('display-insert-trend'));
     const trendId = screen.getByTestId(/^display-element-/).getAttribute('data-element-id');
     await waitFor(() => expect(screen.getByTestId(`trend-plot-${trendId}`)).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('display-mode-view'));
     const plot = screen.getByTestId(`trend-plot-${trendId}`);
     fireEvent.pointerDown(plot, { clientX: 300, clientY: 180, pointerId: 1 });
     fireEvent.pointerUp(getSurface(), { clientX: 300, clientY: 180, pointerId: 1 });
     fireEvent.keyDown(getSurface(), { key: 'Delete' });
     expect(screen.queryByTestId(/^trend-cursor-/)).toBeNull();
 
+    fireEvent.click(screen.getByTestId('display-mode-edit'));
     fireEvent.click(screen.getByTestId('display-undo'));
     expect(screen.queryByTestId(/^display-element-/)).toBeNull();
   });

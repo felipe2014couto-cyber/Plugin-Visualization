@@ -10,9 +10,9 @@ export interface GaugeElementViewProps {
   runtimeState?: ValueRuntimeState;
 }
 
-const TRACK_COLOR = 'rgba(255, 255, 255, 0.18)';
+const TRACK_COLOR = 'var(--border-color, rgba(255, 255, 255, 0.18))';
 const FILL_COLOR = '#6e9fff';
-const TEXT_COLOR = 'rgba(255, 255, 255, 0.86)';
+const TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.86))';
 
 export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState }: GaugeElementViewProps) {
   const options = element.properties;
@@ -40,8 +40,9 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         y={element.y}
         width={element.width}
         height={element.height}
-        fill="rgba(255, 255, 255, 0.06)"
-        stroke="rgba(255, 255, 255, 0.35)"
+        rx={14}
+        fill="var(--element-bg, rgba(255, 255, 255, 0.06))"
+        stroke="var(--element-border, rgba(255, 255, 255, 0.35))"
         strokeWidth={1}
         data-testid={`gauge-background-${element.id}`}
         data-element-id={element.id}

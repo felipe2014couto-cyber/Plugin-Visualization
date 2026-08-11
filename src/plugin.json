@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
   "type": "app",
-  "name": "PIMS Vision",
+  "name": "Visualization",
   "id": "pims-vision-app",
   "info": {
     "keywords": ["app"],
@@ -10,8 +10,8 @@
       "name": "Pims"
     },
     "logos": {
-      "small": "img/logo.svg",
-      "large": "img/logo.svg"
+      "small": "img/logo-visualization.png",
+      "large": "img/logo-visualization.png"
     },
     "screenshots": [],
     "version": "0.1.0",
@@ -20,7 +20,7 @@
   "includes": [
     {
       "type": "page",
-      "name": "PIMS Vision",
+      "name": "Visualization",
       "path": "/a/%PLUGIN_ID%",
       "role": "Admin",
       "addToNav": true,

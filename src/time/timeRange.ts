@@ -16,6 +16,7 @@ const UNIT_MS: Record<string, number> = {
   h: 3_600_000,
   d: 86_400_000,
   w: 604_800_000,
+  mo: 2_592_000_000,
 };
 
 export function createDefaultTimeSelection(now = Date.now()): DisplayTimeSelection {
@@ -49,15 +50,38 @@ export function parseTimeExpression(expression: string, now = Date.now()): numbe
     return now;
   }
 
-  const relative = /^\*([+-])(\d+(?:\.\d+)?)(ms|s|m|h|d|w)$/.exec(normalized);
+  const relative = /^\*([+-])(\d+(?:\.\d+)?)(ms|s|m|h|d|w|mo)$/.exec(normalized);
   if (relative) {
     const amount = Number(relative[2]);
+    if (relative[3] === 'mo') {
+      if (!Number.isInteger(amount)) {
+        return undefined;
+      }
+      return shiftCalendarMonths(now, relative[1] === '-' ? -amount : amount);
+    }
     const delta = amount * UNIT_MS[relative[3]];
     return relative[1] === '-' ? now - delta : now + delta;
   }
 
   const absolute = Date.parse(expression.trim());
   return Number.isFinite(absolute) ? absolute : undefined;
+}
+
+function shiftCalendarMonths(timestamp: number, months: number): number {
+  const source = new Date(timestamp);
+  const targetMonth = source.getMonth() + months;
+  const targetYear = source.getFullYear() + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const lastDay = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+  return new Date(
+    targetYear,
+    normalizedMonth,
+    Math.min(source.getDate(), lastDay),
+    source.getHours(),
+    source.getMinutes(),
+    source.getSeconds(),
+    source.getMilliseconds(),
+  ).getTime();
 }
 
 export function shiftTimeSelection(
@@ -93,7 +117,7 @@ export function formatAbsoluteTime(timestamp: number): string {
 }
 
 export function formatRelativeDuration(duration: number): string {
-  for (const unit of ['w', 'd', 'h', 'm', 's'] as const) {
+  for (const unit of ['mo', 'w', 'd', 'h', 'm', 's'] as const) {
     if (duration >= UNIT_MS[unit] && duration % UNIT_MS[unit] === 0) {
       return `${duration / UNIT_MS[unit]}${unit}`;
     }

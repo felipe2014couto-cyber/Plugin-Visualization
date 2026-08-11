@@ -36,6 +36,7 @@ export interface PiPointSearchResult {
   webId?: string;
   path?: string;
   dataSourceUid?: string;
+  pointType?: string;
 }
 
 export interface PiPointValue {
@@ -145,10 +146,12 @@ export async function searchPiPoints(
     if (!name) {
       return [];
     }
+    const pointType = getMetricField(point, 'PointType');
     return [{
       name,
       webId: getMetricField(point, 'WebId'),
       path: getMetricField(point, 'Path'),
+      ...(pointType ? { pointType } : {}),
       dataSourceUid: dataSource.uid,
     }];
   });
@@ -238,6 +241,55 @@ export async function getPiTrendsHistoryForRange(
   return queryPiTrendsHistory(bindings, range, dataSourceSrv, 'plot', options);
 }
 
+export async function getPiTrendsPlotDataForRange(
+  bindings: readonly PiPointBinding[],
+  range: PiTrendTimeRange,
+  dataSourceSrvOrOptions: Pick<DataSourceSrv, 'get'> | PiTrendQueryOptions = getDataSourceSrv(),
+  explicitOptions: PiTrendQueryOptions = {},
+): Promise<Record<string, PiTrendSeriesResult>> {
+  const { dataSourceSrv, options } = resolveTrendQueryArguments(dataSourceSrvOrOptions, explicitOptions);
+  const uniqueBindings = deduplicateBindings(bindings);
+  const results: Record<string, PiTrendSeriesResult> = {};
+
+  if (!Number.isFinite(range.from) || !Number.isFinite(range.to) || range.from >= range.to) {
+    return Object.fromEntries(uniqueBindings.map((binding) => [
+      getBindingKey(binding),
+      { status: 'error', error: new Error('Período histórico inválido') } as PiTrendSeriesResult,
+    ]));
+  }
+
+  const tasks = uniqueBindings.map((binding) => async () => {
+    const key = getBindingKey(binding);
+    try {
+      if (!binding.webId) {
+        throw new Error('PlotData requer o WebID do PI Point');
+      }
+      const instance = await getResolvedPiDataSource(dataSourceSrv, {
+        uid: binding.dataSourceUid,
+        name: '',
+        type: PI_DATASOURCE_TYPE,
+      });
+      const resourceApi = instance as PiDataSourceResourceApi;
+      if (typeof resourceApi.getResource !== 'function') {
+        throw new Error('A Data Source PI não expõe o recurso PlotData');
+      }
+      const intervals = clampTrendMaxDataPoints(options.maxDataPoints);
+      const path = `/streams/${encodeURIComponent(binding.webId)}/plot?startTime=${encodeURIComponent(new Date(range.from).toISOString())}&endTime=${encodeURIComponent(new Date(range.to).toISOString())}&intervals=${intervals}`;
+      const response = await withTimeout(
+        resourceApi.getResource(path),
+        5_000,
+        `PlotData excedeu o tempo limite para ${binding.pointName}`,
+      );
+      results[key] = { status: 'success', series: normalizePlotDataResponse(response, binding.pointName) };
+    } catch (error) {
+      results[key] = { status: 'error', error: toError(error) };
+    }
+  });
+  await runQueryTasks(tasks);
+
+  return results;
+}
+
 export async function getPiTrendsPreviewForRange(
   bindings: readonly PiPointBinding[],
   range: PiTrendTimeRange,
@@ -288,7 +340,11 @@ async function queryPiTrendsHistory(
           throw new Error('A Data Source PI não expõe consulta histórica');
         }
 
-        const response = await resolveQueryResponse(instance.query(buildHistoricalTrendRequest(batch, range, mode, options)));
+        const response = await withTimeout(
+          resolveQueryResponse(instance.query(buildHistoricalTrendRequest(batch, range, mode, options))),
+          8_000,
+          `Consulta histórica excedeu o tempo limite para ${batch.map(({ pointName }) => pointName).join(', ')}`,
+        );
         Object.assign(results, normalizeTrendResponse(response, batch));
       } catch (error) {
         for (const binding of batch) {
@@ -534,6 +590,32 @@ function normalizeTrendFrame(frame: DataFrame, pointName: string): PiTrendSeries
   return { pointName, points };
 }
 
+function normalizePlotDataResponse(response: unknown, pointName: string): PiTrendSeries {
+  const items = response && typeof response === 'object' && Array.isArray((response as { Items?: unknown[] }).Items)
+    ? (response as { Items: unknown[] }).Items
+    : [];
+  const values = items.flatMap((item) => {
+    if (!item || typeof item !== 'object') {
+      return [];
+    }
+    const point = item as { Timestamp?: unknown; Value?: unknown };
+    const time = normalizeTrendTimestamp(point.Timestamp);
+    const value = point.Value;
+    return time === undefined || value === null || value === undefined ? [] : [{ time, value }];
+  });
+  const numericPoints = values.flatMap(({ time, value }) => (
+    typeof value === 'number' && Number.isFinite(value) ? [{ time, value }] : []
+  ));
+  if (numericPoints.length > 0) {
+    return { pointName, points: numericPoints.sort((left, right) => left.time - right.time) };
+  }
+  return {
+    pointName,
+    points: [],
+    states: values.map(({ time, value }) => ({ time, value: String(value) })).sort((left, right) => left.time - right.time),
+  };
+}
+
 function normalizeStateTrendFrame(
   pointName: string,
   times: unknown[],
@@ -754,12 +836,28 @@ function normalizeQuality(frame: DataFrame): Record<string, unknown> | undefined
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
-function getMetricField(value: MetricFindValue | undefined, field: 'text' | 'WebId' | 'Path'): string | undefined {
+function getMetricField(value: MetricFindValue | undefined, field: 'text' | 'WebId' | 'Path' | 'PointType'): string | undefined {
   if (!value) {
     return undefined;
   }
   const fieldValue = (value as MetricFindValue & Record<string, unknown>)[field];
   return typeof fieldValue === 'string' && fieldValue.length > 0 ? fieldValue : undefined;
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 function toPiDataSourceIdentity(dataSource: DataSourceInstanceSettings): PiDataSourceIdentity {
@@ -771,3 +869,7 @@ function toPiDataSourceIdentity(dataSource: DataSourceInstanceSettings): PiDataS
 }
 
 export type PiDataSourceApi = Pick<DataSourceApi, 'uid' | 'type' | 'testDatasource' | 'metricFindQuery' | 'query'>;
+
+interface PiDataSourceResourceApi extends PiDataSourceApi {
+  getResource(path: string): Promise<unknown>;
+}

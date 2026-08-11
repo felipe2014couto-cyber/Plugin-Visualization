@@ -11,6 +11,7 @@ describe('PI Point drag data', () => {
       webId: 'point-webid',
       path: '\\\\pims\\SINUSOID',
       dataSourceUid: 'ds',
+      pointType: 'String',
     };
 
     expect(PI_POINT_DRAG_MIME).toBe('application/x-pims-vision-pi-point');

@@ -1,4 +1,4 @@
-# PIMS Vision
+# Visualization
 
 App Plugin para criacao futura de displays industriais no Grafana.
 

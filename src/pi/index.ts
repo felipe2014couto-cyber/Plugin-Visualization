@@ -8,6 +8,7 @@ export {
   getPiTrendHistory,
   getPiTrendsHistory,
   getPiTrendsHistoryForRange,
+  getPiTrendsPlotDataForRange,
   getPiTrendsPreviewForRange,
   getPiTrendsRecordedHistoryForRange,
   TREND_QUERY_MAX_DATA_POINTS,

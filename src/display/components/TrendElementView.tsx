@@ -25,6 +25,7 @@ export interface TrendElementViewProps {
   ) => void;
   timeRange?: DisplayTimeRange;
   onDoubleClick?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
+  showBackground?: boolean;
 }
 
 export interface TrendSeriesViewState {
@@ -33,9 +34,9 @@ export interface TrendSeriesViewState {
 }
 
 const PLOT_MARGIN = { left: 86, right: 150, top: 30, bottom: 32 };
-const GRID_COLOR = 'rgba(255, 255, 255, 0.14)';
-const AXIS_COLOR = 'rgba(255, 255, 255, 0.45)';
-const TEXT_COLOR = 'rgba(255, 255, 255, 0.82)';
+const GRID_COLOR = 'var(--border-subtle, rgba(255, 255, 255, 0.14))';
+const AXIS_COLOR = 'var(--text-muted, rgba(255, 255, 255, 0.45))';
+const TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.82))';
 const LINE_COLOR = '#6e9fff';
 
 export function TrendElementView({
@@ -49,6 +50,7 @@ export function TrendElementView({
   onCursorPointerDown,
   timeRange,
   onDoubleClick,
+  showBackground = true,
 }: TrendElementViewProps) {
   const state = runtimeState ?? { status: 'loading' as const };
   const configuredSeries = getTrendSeries(element);
@@ -63,30 +65,45 @@ export function TrendElementView({
     cursorPointerDown,
     timeRange,
   );
+  const clipPathId = trendContentClipPathId(element.id);
 
   return (
     <g
       data-testid={`display-element-${element.id}`}
       data-element-id={element.id}
       data-element-type={element.type}
-      style={{ cursor: 'move' }}
+      style={{ cursor: cursorEnabled ? 'default' : 'move' }}
       onDoubleClick={(event) => onDoubleClick?.(event, element.id)}
     >
-      <rect
-        x={element.x}
-        y={element.y}
-        width={element.width}
-        height={element.height}
-        fill="rgba(255, 255, 255, 0.06)"
-        stroke="rgba(255, 255, 255, 0.35)"
-        strokeWidth={1}
-        data-testid={`trend-background-${element.id}`}
-        data-element-id={element.id}
-        pointerEvents="all"
-      />
-      {content}
+      <defs>
+        <clipPath id={clipPathId} clipPathUnits="userSpaceOnUse">
+          <rect x={element.x} y={element.y} width={element.width} height={element.height} rx={14} />
+        </clipPath>
+      </defs>
+      {showBackground && (
+        <rect
+          x={element.x}
+          y={element.y}
+          width={element.width}
+          height={element.height}
+          rx={14}
+          fill="var(--element-bg, rgba(255, 255, 255, 0.06))"
+          stroke="var(--element-border, rgba(255, 255, 255, 0.35))"
+          strokeWidth={1}
+          data-testid={`trend-background-${element.id}`}
+          data-element-id={element.id}
+          pointerEvents="all"
+        />
+      )}
+      <g clipPath={`url(#${clipPathId})`} data-testid={`trend-content-${element.id}`}>
+        {content}
+      </g>
     </g>
   );
+}
+
+function trendContentClipPathId(elementId: string): string {
+  return `trend-content-clip-${elementId.split('').map((character) => character.charCodeAt(0).toString(36)).join('-')}`;
 }
 
 function getTrendContent(
@@ -98,6 +115,7 @@ function getTrendContent(
   onCursorPointerDown: TrendElementViewProps['onCursorPointerDown'],
   timeRange: DisplayTimeRange | undefined,
 ): React.ReactNode {
+  const legendX = element.x + element.width - trendPlotRightMargin(element.width) + 12;
   const dataSeries = seriesStates.flatMap(({ series, runtimeState }) => {
     const data = runtimeState.status === 'success' || runtimeState.status === 'error'
       ? runtimeState.data
@@ -112,7 +130,7 @@ function getTrendContent(
   });
   const title = (
     <text
-      x={element.x + element.width - PLOT_MARGIN.right + 12}
+      x={legendX}
       y={element.y + 18}
       fill={TEXT_COLOR}
       fontSize={12}
@@ -128,7 +146,6 @@ function getTrendContent(
         const value = currentValue !== undefined
           ? formatNumber(currentValue)
           : currentState !== undefined ? currentState : '--';
-        const legendX = element.x + element.width - PLOT_MARGIN.right + 12;
         const legendY = element.y + 18 + index * 34;
         return (
           <React.Fragment key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}>
@@ -363,7 +380,7 @@ function MixedTrend({
   const stateLabels = [...new Set(states.map((state) => state.value))];
   const plotX = element.x + PLOT_MARGIN.left;
   const plotY = element.y + PLOT_MARGIN.top;
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - PLOT_MARGIN.right);
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - trendPlotRightMargin(element.width));
   const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
   const allTimes = [...numericPoints.map((point) => point.time), ...states.map((state) => state.time)];
   const firstTime = Math.min(...allTimes);
@@ -461,7 +478,7 @@ function DigitalTrend({
   const labels = [...new Set(allStates.map((state) => state.value))];
   const plotX = element.x + PLOT_MARGIN.left;
   const plotY = element.y + PLOT_MARGIN.top;
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - PLOT_MARGIN.right);
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - trendPlotRightMargin(element.width));
   const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
   const firstTime = Math.min(...allStates.map((state) => state.time));
   const lastTime = Math.max(...allStates.map((state) => state.time));
@@ -569,7 +586,7 @@ export function buildTrendChartForSeries(
 ): TrendChartModel {
   const plotX = element.x + PLOT_MARGIN.left;
   const plotY = element.y + PLOT_MARGIN.top;
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - PLOT_MARGIN.right);
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - trendPlotRightMargin(element.width));
   const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
   const points = seriesPoints.flat();
   const values = points.map((point) => point.value);
@@ -618,6 +635,10 @@ export function buildTrendChartForSeries(
     }),
     singlePoint: points.length === 1 ? { x: xFor(points[0].time), y: yFor(points[0].value) } : undefined,
   };
+}
+
+function trendPlotRightMargin(width: number): number {
+  return Math.max(PLOT_MARGIN.right, width * 0.3);
 }
 
 function trendPathForPoints(chart: TrendChartModel, points: readonly TrendPoint[]): string {

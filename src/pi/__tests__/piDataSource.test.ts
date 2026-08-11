@@ -16,6 +16,7 @@ function makeDataSourceSrv(options: {
   testDatasource?: () => Promise<unknown>;
   metricFindQuery?: (query: unknown, options: unknown) => Promise<unknown[]>;
   query?: (request: unknown) => Promise<unknown>;
+  getResource?: (path: string) => Promise<unknown>;
   instanceUid?: string;
   instanceType?: string;
 }) {
@@ -26,6 +27,7 @@ function makeDataSourceSrv(options: {
     testDatasource: options.testDatasource ?? (async () => undefined),
     metricFindQuery: options.metricFindQuery ?? (async () => []),
     query: options.query ?? (async () => ({ data: [] })),
+    getResource: options.getResource ?? (async () => ({})),
   }));
   return { getList, get } as unknown as Pick<DataSourceSrv, 'getList' | 'get'>;
 }
@@ -77,7 +79,7 @@ describe('PI data source integration', () => {
     const metricFindQuery = jest.fn()
       .mockResolvedValueOnce([{ text: 'pims', WebId: 'server-webid' }])
       .mockResolvedValueOnce([
-        { text: 'LFI_A268SV_TEMPERATURA_AMBIENTE', WebId: 'point-webid', Path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE' },
+        { text: 'LFI_A268SV_TEMPERATURA_AMBIENTE', WebId: 'point-webid', Path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE', PointType: 'Float32' },
       ]);
     const dataSourceSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ isDefault: true })],
@@ -90,6 +92,7 @@ describe('PI data source integration', () => {
         name: 'LFI_A268SV_TEMPERATURA_AMBIENTE',
         webId: 'point-webid',
         path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE',
+        pointType: 'Float32',
         dataSourceUid: 'pi-default',
       },
     ]);
@@ -456,6 +459,37 @@ describe('PI data source integration', () => {
     });
     expect((query.mock.calls[0][0] as { range: { from: { valueOf: () => number }; to: { valueOf: () => number } } }).range.from.valueOf()).toBe(from);
     expect((query.mock.calls[0][0] as { range: { from: { valueOf: () => number }; to: { valueOf: () => number } } }).range.to.valueOf()).toBe(to);
+  });
+
+  it('consulta PlotData pelo proxy do datasource usando o WebID da tag', async () => {
+    const getResource = jest.fn(async () => ({
+      Items: [
+        { Timestamp: '2026-08-05T12:00:00.000Z', Value: 10 },
+        { Timestamp: '2026-08-05T12:05:00.000Z', Value: 20 },
+      ],
+    }));
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      getResource,
+    });
+    const from = Date.parse('2026-08-05T12:00:00.000Z');
+    const to = Date.parse('2026-08-05T13:00:00.000Z');
+    const { getPiTrendsPlotDataForRange } = await import('../piDataSource');
+
+    await expect(getPiTrendsPlotDataForRange([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point/webid' },
+    ], { from, to }, dataSourceSrv, { maxDataPoints: 500 })).resolves.toEqual({
+      'pi-default\u0000pims\u0000SINUSOID': {
+        status: 'success',
+        series: {
+          pointName: 'SINUSOID',
+          points: [{ time: from, value: 10 }, { time: from + 5 * 60 * 1000, value: 20 }],
+        },
+      },
+    });
+    expect(getResource).toHaveBeenCalledWith(
+      '/streams/point%2Fwebid/plot?startTime=2026-08-05T12%3A00%3A00.000Z&endTime=2026-08-05T13%3A00%3A00.000Z&intervals=500',
+    );
   });
 
   it('usa interpolação adaptativa limitada pela resolução visual na prévia rápida do Trend', async () => {

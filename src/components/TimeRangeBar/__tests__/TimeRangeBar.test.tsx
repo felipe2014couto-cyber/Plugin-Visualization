@@ -42,4 +42,20 @@ describe('TimeRangeBar', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Período inválido');
     expect(screen.getByTestId('time-range-duration')).toHaveTextContent('8h');
   });
+
+  it('aplica os períodos rápidos e destaca a seleção', () => {
+    render(<Harness initial={createDefaultTimeSelection(now)} />);
+
+    expect(screen.queryByTestId('time-range-presets')).toBeNull();
+    fireEvent.click(screen.getByTestId('time-range-duration'));
+    expect(screen.getByTestId('time-range-duration')).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByTestId('time-range-preset-8h')).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByTestId('time-range-preset-1mo'));
+
+    expect(screen.getByTestId('time-range-start')).toHaveValue('*-1mo');
+    expect(screen.getByTestId('time-range-end')).toHaveValue('*');
+    expect(screen.getByTestId('time-range-duration')).toHaveTextContent('31d');
+    expect(screen.queryByTestId('time-range-presets')).toBeNull();
+    expect(screen.getByTestId('time-range-duration')).toHaveAttribute('aria-expanded', 'false');
+  });
 });

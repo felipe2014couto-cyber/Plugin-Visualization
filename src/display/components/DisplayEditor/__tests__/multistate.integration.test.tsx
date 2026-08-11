@@ -62,7 +62,7 @@ describe('Multistate no editor', () => {
     fireEvent.change(screen.getByTestId(`multistate-value-${ruleId}`), { target: { value: '' } });
     expect(screen.getByTestId(`multistate-value-${ruleId}`)).toHaveValue(20);
     expect(changes.at(-1)?.elements[0].properties.binding).toEqual({
-      dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID',
+      dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID', webId: 'webid',
     });
   });
 

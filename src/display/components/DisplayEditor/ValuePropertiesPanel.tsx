@@ -96,9 +96,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
   panel: css`
     flex: 0 0 232px;
     min-width: 0;
-    border-left: 1px solid #aeb7c3;
-    background: #e3e5e8;
-    color: ${theme.colors.text.primary};
+    border-left: 1px solid var(--border-color);
+    background: var(--panel-bg);
+    color: var(--text-primary);
     overflow: auto;
   `,
   panelHeader: css`
@@ -106,15 +106,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex-direction: column;
     gap: 3px;
     padding: 10px 12px;
-    border-bottom: 1px solid #c0c7cf;
-    background: #d3d9e2;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--panel-header-bg);
   `,
   title: css`
     font-size: 12px;
     font-weight: ${theme.typography.fontWeightMedium};
   `,
   pointName: css`
-    color: #52657a;
+    color: var(--text-secondary);
     font-size: 10px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -130,7 +130,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     flex-direction: column;
     gap: 3px;
-    color: #52657a;
+    color: var(--text-secondary);
     font-size: 10px;
 
     select,
@@ -139,26 +139,26 @@ const getStyles = (theme: GrafanaTheme2) => ({
       box-sizing: border-box;
       min-height: 27px;
       padding: 3px 6px;
-      border: 1px solid #aab4c0;
+      border: 1px solid var(--border-color);
       border-radius: 0;
-      background: #f4f5f6;
-      color: #263c54;
+      background: var(--input-bg);
+      color: var(--text-primary);
     }
 
     input[type='color'] {
       width: 100%;
       height: 27px;
       padding: 2px;
-      border: 1px solid #aab4c0;
+      border: 1px solid var(--border-color);
       border-radius: 0;
-      background: #f4f5f6;
+      background: var(--input-bg);
     }
   `,
   checkboxField: css`
     display: flex;
     align-items: center;
     gap: 6px;
-    color: #52657a;
+    color: var(--text-secondary);
     font-size: 10px;
   `,
 });

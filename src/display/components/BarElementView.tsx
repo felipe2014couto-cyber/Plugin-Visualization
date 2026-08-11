@@ -38,19 +38,20 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         y={element.y}
         width={element.width}
         height={element.height}
-        fill="rgba(255, 255, 255, 0.06)"
-        stroke="rgba(255, 255, 255, 0.35)"
+        rx={14}
+        fill="var(--element-bg, rgba(255, 255, 255, 0.06))"
+        stroke="var(--element-border, rgba(255, 255, 255, 0.35))"
         strokeWidth={1}
         data-testid={`bar-background-${element.id}`}
         data-element-id={element.id}
         pointerEvents="all"
       />
       {binding && isPiPointBinding(binding) && options.showTagName && (
-        <text x={element.x + element.width / 2} y={element.y + 18} textAnchor="middle" fill="rgba(255, 255, 255, 0.86)" fontSize={12} pointerEvents="none">
+        <text x={element.x + element.width / 2} y={element.y + 18} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={12} pointerEvents="none">
           {binding.pointName}
         </text>
       )}
-      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={3} fill="rgba(255, 255, 255, 0.12)" data-testid={`bar-track-${element.id}`} pointerEvents="none" />
+      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={3} fill="var(--border-color, rgba(255, 255, 255, 0.12))" data-testid={`bar-track-${element.id}`} pointerEvents="none" />
       {ratio !== undefined && (
         <rect
           x={horizontal ? plotX : plotX}
@@ -63,7 +64,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
           pointerEvents="none"
         />
       )}
-      <text x={element.x + element.width / 2} y={element.y + element.height - 12} textAnchor="middle" fill="rgba(255, 255, 255, 0.86)" fontSize={Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
+      <text x={element.x + element.width / 2} y={element.y + element.height - 12} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
         {options.showValue ? valueText : ''}
       </text>
       {!isValidScale(options.minimum, options.maximum) && (

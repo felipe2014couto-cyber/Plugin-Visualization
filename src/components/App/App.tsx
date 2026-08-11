@@ -13,6 +13,7 @@ import {
   getPiPointCurrentValue,
   getPiPointsCurrentValues,
   getPiTrendsHistoryForRange,
+  getPiTrendsPlotDataForRange,
   getPiTrendsPreviewForRange,
   getPiTrendsRecordedHistoryForRange,
   createProgressiveTrendLoader,
@@ -21,14 +22,28 @@ import {
   type ProgressiveTrendLoader,
 } from '../../pi';
 import { PiPointSearch } from '../../pi/PiPointSearch';
+import { isStatePiPointBinding } from '../../pi/piPointBinding';
 import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
 import { createDefaultTimeSelection } from '../../time/timeRange';
+import { PLUGIN_ASSET_BASE_URL } from '../../constants';
+
+export type VisualizationTheme = 'dark' | 'light';
+
+export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
+
+function getInitialTheme(): VisualizationTheme {
+  try {
+    return globalThis.localStorage?.getItem(VISUALIZATION_THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
+  } catch {
+    return 'dark';
+  }
+}
 
 export function App() {
   const styles = useStyles2(getStyles);
   const [document, setDocument] = useState(() =>
-    createDisplayDocument({ name: 'PIMS Vision' }),
+    createDisplayDocument({ name: 'Visualization' }),
   );
   const [piConnection, setPiConnection] = useState<PiConnectionState>({ status: 'checking' });
   const [selectedPiPoint, setSelectedPiPoint] = useState<PiPointSearchResult | null>(null);
@@ -36,6 +51,7 @@ export function App() {
   const [dropSymbolType, setDropSymbolType] = useState<PiPointDropSymbolType>('trend');
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
+  const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
   if (!progressiveTrendLoaderRef.current) {
     progressiveTrendLoaderRef.current = createProgressiveTrendLoader(
@@ -59,37 +75,55 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      globalThis.localStorage?.setItem(VISUALIZATION_THEME_STORAGE_KEY, visualizationTheme);
+    } catch {
+      // The selected theme still works for the current session when storage is unavailable.
+    }
+  }, [visualizationTheme]);
+
   const rangeFrom = timeSelection.range.from;
   const rangeTo = timeSelection.range.to;
   const loadTrend = useCallback<LoadTrendSeries>(
-    (bindings, publishUpdate, options) => progressiveTrendLoader(
-      bindings,
-      { from: rangeFrom, to: rangeTo },
-      publishUpdate,
-      options,
-    ),
+    async (bindings, publishUpdate, options) => {
+      const range = { from: rangeFrom, to: rangeTo };
+      const stateBindings = bindings.filter(isStatePiPointBinding);
+      const numericBindings = bindings.filter((binding) => !isStatePiPointBinding(binding));
+      const [plotDataResults, stateResults] = await Promise.all([
+        getPiTrendsPlotDataForRange(numericBindings, range, options),
+        getPiTrendsRecordedHistoryForRange(stateBindings, range, options),
+      ]);
+      const failedBindings = numericBindings.filter((binding) => plotDataResults[`${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`]?.status === 'error');
+      if (failedBindings.length === 0) {
+        return { ...plotDataResults, ...stateResults };
+      }
+      const fallbackResults = await progressiveTrendLoader(failedBindings, range, publishUpdate, options);
+      return { ...plotDataResults, ...stateResults, ...fallbackResults };
+    },
     [progressiveTrendLoader, rangeFrom, rangeTo],
-  );
-  const loadRecordedTrend = useCallback<LoadTrendSeries>(
-    (bindings, _publishUpdate, options) => getPiTrendsRecordedHistoryForRange(
-      bindings,
-      { from: rangeFrom, to: rangeTo },
-      options,
-    ),
-    [rangeFrom, rangeTo],
   );
   const hasPiConnection = piConnection.status === 'connected';
 
   return (
-    <div data-testid="pims-vision-home" className={styles.container}>
+    <div
+      data-testid="pims-vision-home"
+      data-visualization-theme={visualizationTheme}
+      className={`${styles.container} ${visualizationTheme === 'light' ? styles.themeLight : styles.themeDark}`}
+    >
       <header className={styles.header} data-testid="pims-vision-header">
-        <div className={styles.productMark} aria-hidden="true">
-          <span className={styles.productMarkTop} />
-          <span className={styles.productMarkBottom} />
-        </div>
-        <div className={styles.productName}>PIMS Vision</div>
+        <span
+          className={styles.productMark}
+          role="img"
+          aria-label="Aperam Visualization"
+        />
+        <div className={styles.productName}>Visualization</div>
         <div className={styles.displayContext}>Display operacional</div>
-        <div className={styles.connectionStatus} data-testid="pi-connection-status">
+        <div className={styles.themeSelector} role="group" aria-label="Tema visual">
+          <button type="button" className={visualizationTheme === 'dark' ? styles.themeButtonActive : styles.themeButton} aria-pressed={visualizationTheme === 'dark'} data-testid="visualization-theme-dark" onClick={() => setVisualizationTheme('dark')}>Escuro</button>
+          <button type="button" className={visualizationTheme === 'light' ? styles.themeButtonActive : styles.themeButton} aria-pressed={visualizationTheme === 'light'} data-testid="visualization-theme-light" onClick={() => setVisualizationTheme('light')}>Claro</button>
+        </div>
+        <div className={`${styles.connectionStatus} ${piConnection.status === 'connected' ? styles.connectionStatusConnected : ''}`} data-testid="pi-connection-status">
           {getConnectionLabel(piConnection)}
         </div>
       </header>
@@ -145,11 +179,13 @@ export function App() {
             loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
             loadValues={hasPiConnection ? getPiPointsCurrentValues : undefined}
             loadTrend={hasPiConnection ? loadTrend : undefined}
-            loadRecordedTrend={hasPiConnection ? loadRecordedTrend : undefined}
+            loadRecordedTrend={hasPiConnection ? loadTrend : undefined}
             showToolbar={isAssetsPanelOpen}
             dropSymbolType={dropSymbolType}
             trendRefreshKey={`${rangeFrom}:${rangeTo}`}
             trendTimeRange={{ from: rangeFrom, to: rangeTo }}
+            timeSelection={timeSelection}
+            onTimeSelectionChange={setTimeSelection}
           />
         </main>
       </div>
@@ -159,126 +195,231 @@ export function App() {
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({
+  themeDark: css`
+    color-scheme: dark;
+    --app-bg: #080f19;
+    --surface-primary: #111923;
+    --surface-secondary: #151e2a;
+    --surface-elevated: #18212d;
+    --panel-bg: #111923;
+    --panel-header-bg: #17212d;
+    --canvas-bg: #09121f;
+    --canvas-dot: rgba(116, 143, 174, 0.2);
+    --border-color: #2b394a;
+    --border-subtle: #202d3c;
+    --text-primary: #f1f2f5;
+    --text-secondary: #aeb3bf;
+    --text-muted: #7f8a9a;
+    --accent: #d33b91;
+    --accent-hover: #ed62ad;
+    --accent-contrast: #ffffff;
+    --input-bg: #0c1521;
+    --button-bg: #172231;
+    --button-hover: #223146;
+    --selection-bg: rgba(211, 59, 145, 0.18);
+    --focus-ring: rgba(237, 98, 173, 0.34);
+    --success: #4ade80;
+    --danger: #f87171;
+    --shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+    --brand-logo: url('${PLUGIN_ASSET_BASE_URL}/img/image.png');
+    --chart-band: rgba(255, 255, 255, 0.035);
+    --element-bg: rgba(22, 31, 43, 0.92);
+    --element-border: rgba(112, 132, 157, 0.42);
+    --top-header-bg: linear-gradient(110deg, #0b131e 0%, #111a25 100%);
+    --assets-header-bg: linear-gradient(105deg, rgba(156, 31, 119, 0.92), rgba(95, 26, 79, 0.8));
+    --assets-header-text: #ffffff;
+  `,
+  themeLight: css`
+    color-scheme: light;
+    --app-bg: #f2f5f9;
+    --surface-primary: #ffffff;
+    --surface-secondary: #f8fafc;
+    --surface-elevated: #ffffff;
+    --panel-bg: #ffffff;
+    --panel-header-bg: #f8fafc;
+    --canvas-bg: #f8fafc;
+    --canvas-dot: rgba(100, 116, 139, 0.16);
+    --border-color: #d7dee8;
+    --border-subtle: #e5e9f0;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --text-muted: #94a3b8;
+    --accent: #a82578;
+    --accent-hover: #c42e8d;
+    --accent-contrast: #ffffff;
+    --input-bg: #ffffff;
+    --button-bg: #f8fafc;
+    --button-hover: #eef3f8;
+    --selection-bg: rgba(168, 37, 120, 0.1);
+    --focus-ring: rgba(168, 37, 120, 0.24);
+    --success: #22c55e;
+    --danger: #dc2626;
+    --shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+    --brand-logo: url('${PLUGIN_ASSET_BASE_URL}/img/logo-visualization-header-light.png');
+    --chart-band: rgba(100, 116, 139, 0.055);
+    --element-bg: rgba(255, 255, 255, 0.96);
+    --element-border: rgba(100, 116, 139, 0.38);
+    --top-header-bg: #ffffff;
+    --assets-header-bg: var(--panel-header-bg);
+    --assets-header-text: var(--text-primary);
+  `,
   container: css`
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: calc(100vh - 40px);
+    height: calc(100dvh - 40px);
+    max-height: calc(100vh - 40px);
+    max-height: calc(100dvh - 40px);
     width: 100%;
     min-height: 0;
     box-sizing: border-box;
     overflow: hidden;
-    background: #d9dce2;
+    color: var(--text-primary);
+    background:
+      radial-gradient(circle at 55% 35%, rgba(31, 66, 101, 0.16), transparent 48%),
+      var(--app-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
   `,
   header: css`
-    flex: 0 0 38px;
-    min-height: 38px;
-    padding: 0 ${theme.spacing(1.5)};
+    flex: 0 0 76px;
+    min-height: 76px;
+    padding: 0 ${theme.spacing(3.5)};
     display: flex;
     align-items: center;
     gap: ${theme.spacing(1)};
     box-sizing: border-box;
-    color: #ffffff;
-    background: #09294a;
-    border-bottom: 1px solid #315273;
+    color: var(--text-primary);
+    background: var(--top-header-bg);
+    border-bottom: 1px solid var(--border-color);
   `,
   productMark: css`
-    position: relative;
-    width: 18px;
-    height: 18px;
-    flex: 0 0 18px;
-    border: 1px solid #d6e0eb;
-    background: #f4f6f8;
-  `,
-  productMarkTop: css`
-    position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 6px;
-    height: 4px;
-    border: 1px solid #e59b37;
-  `,
-  productMarkBottom: css`
-    position: absolute;
-    right: 3px;
-    bottom: 3px;
-    width: 6px;
-    height: 4px;
-    border: 1px solid #4f84c4;
+    width: 158px;
+    height: 68px;
+    flex: 0 0 158px;
+    background-image: var(--brand-logo);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
   `,
   productName: css`
-    font-size: 14px;
-    font-weight: ${theme.typography.fontWeightMedium};
-    letter-spacing: 0.01em;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   `,
-  displayContext: css`
-    color: rgba(255, 255, 255, 0.72);
+  displayContext: css`display: none;`,
+  themeSelector: css`
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    padding: 3px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: var(--surface-secondary);
+  `,
+  themeButton: css`
+    min-width: 62px;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+    font-size: 11px;
+    &:hover { color: var(--text-primary); background: var(--button-hover); }
+  `,
+  themeButtonActive: css`
+    min-width: 62px;
+    height: 32px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    color: var(--accent-contrast);
+    background: var(--accent);
+    cursor: pointer;
     font-size: 11px;
   `,
   workspace: css`
     display: flex;
     flex: 1;
     min-height: 0;
+    gap: 14px;
+    padding: 10px 10px 0;
+    box-sizing: border-box;
   `,
   assetsPanel: css`
     display: flex;
     flex: 0 0 24.5%;
     min-width: 320px;
     overflow: hidden;
-    border-right: 1px solid #aeb7c3;
-    background: #e3e5e8;
+    gap: 10px;
+    border: 0;
+    background: var(--app-bg);
   `,
   assetsPanelCollapsed: css`
     display: flex;
-    flex: 0 0 52px;
-    min-width: 52px;
+    flex: 0 0 74px;
+    min-width: 74px;
     overflow: hidden;
-    border-right: 1px solid #aeb7c3;
-    background: #e3e5e8;
+    border: 0;
+    background: var(--app-bg);
   `,
   assetsRail: css`
     display: flex;
     flex-direction: column;
     align-items: center;
-    flex: 0 0 52px;
-    gap: 2px;
-    padding-top: 8px;
-    color: #dce6f0;
-    background: #09294a;
-    border-right: 1px solid #1f4265;
+    flex: 0 0 74px;
+    gap: 10px;
+    padding-top: 10px;
+    color: var(--text-secondary);
+    background: var(--surface-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    overflow: hidden;
   `,
   assetsRailItem: css`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 50px;
-    height: 46px;
-    color: #dce6f0;
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--border-color);
+    border-radius: 13px;
+    background: var(--button-bg);
+    color: var(--text-secondary);
   `,
   assetsRailActive: css`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 50px;
-    height: 46px;
-    color: #ffffff;
-    background: #29466e;
-    border-left: 3px solid #29466e;
+    width: 48px;
+    height: 48px;
+    color: var(--accent);
+    background: var(--selection-bg);
+    border: 1px solid var(--accent);
+    border-radius: 13px;
+    box-shadow: 0 0 0 3px var(--focus-ring);
   `,
   assetsRailCollapsedToggle: css`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 50px;
-    height: 46px;
-    color: #ffffff;
-    background: #173c63;
-    border: 0;
-    border-left: 3px solid #173c63;
+    width: 48px;
+    height: 48px;
+    color: var(--accent);
+    background: var(--selection-bg);
+    border: 1px solid var(--accent);
+    border-radius: 13px;
     cursor: pointer;
 
     &:hover {
-      color: #ffffff;
-      background: #204b78;
+      color: var(--accent-hover);
+      background: var(--button-hover);
     }
   `,
   assetsBody: css`
@@ -288,18 +429,21 @@ const getStyles = (theme: GrafanaTheme2) => ({
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: var(--panel-bg);
   `,
   assetsHeader: css`
-    height: 42px;
+    height: 72px;
     box-sizing: border-box;
     display: flex;
     align-items: center;
     gap: ${theme.spacing(1.25)};
     padding: 0 ${theme.spacing(1.5)};
-    color: #ffffff;
-    background: #29466e;
-    border-bottom: 1px solid #29466e;
-    font-size: 16px;
+    color: var(--assets-header-text);
+    background: var(--assets-header-bg);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 18px;
     font-weight: ${theme.typography.fontWeightMedium};
   `,
   assetsIcon: css`
@@ -308,55 +452,55 @@ const getStyles = (theme: GrafanaTheme2) => ({
     justify-content: center;
     width: 20px;
     height: 20px;
-    color: #1e344b;
+    color: var(--assets-header-text);
   `,
   assetTools: css`
     display: flex;
     align-items: center;
     gap: 5px;
-    height: 76px;
+    height: 78px;
     padding: 0 ${theme.spacing(1.5)};
-    border-bottom: 1px solid #c3c9d1;
-    background: #52677c;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--surface-secondary);
   `,
   assetTool: css`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 36px;
+    width: 46px;
+    height: 44px;
     padding: 0;
-    color: #ffffff;
+    color: var(--text-secondary);
     border: 1px solid transparent;
-    border-radius: 0;
-    background: transparent;
+    border-radius: 12px;
+    background: var(--button-bg);
     cursor: pointer;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: rgba(255, 255, 255, 0.38);
+      color: var(--text-primary);
+      background: var(--button-hover);
+      border-color: var(--border-color);
     }
   `,
   assetToolActive: css`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 38px;
-    height: 36px;
+    width: 46px;
+    height: 44px;
     padding: 0;
-    color: #ffffff;
-    background: #092f56;
-    border: 1px solid #e59b37;
-    border-radius: 0;
+    color: var(--accent);
+    background: var(--selection-bg);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
     cursor: pointer;
   `,
   assetsSectionLabel: css`
     padding: ${theme.spacing(1.5, 1.5, 0.5)};
-    color: #50657c;
-    font-size: 10px;
+    color: var(--text-secondary);
+    font-size: 13px;
     font-weight: ${theme.typography.fontWeightMedium};
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.01em;
   `,
   editorArea: css`
     display: flex;
@@ -365,14 +509,25 @@ const getStyles = (theme: GrafanaTheme2) => ({
     min-height: 0;
   `,
   connectionStatus: css`
-    margin-left: auto;
-    color: rgba(255, 255, 255, 0.82);
-    font-size: 10px;
+    color: var(--text-secondary);
+    font-size: 13px;
     white-space: nowrap;
+  `,
+  connectionStatusConnected: css`
+    &::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.16);
+    }
   `,
   viewHint: css`
     margin: ${theme.spacing(1.5)};
-    color: #50657c;
+    color: var(--text-secondary);
     font-size: 11px;
     line-height: 1.45;
   `,

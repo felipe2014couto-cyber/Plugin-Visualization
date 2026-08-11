@@ -197,6 +197,7 @@ describe('DisplayEditor - drop de PI Point', () => {
         dataSourceUid: 'ds',
         serverPath: 'pims',
         pointName: 'SINUSOID',
+        webId: 'point-webid',
       }]));
     },
   );
@@ -218,7 +219,7 @@ describe('DisplayEditor - drop de PI Point', () => {
 
     await waitFor(() => expect(loadValues).toHaveBeenCalledTimes(1));
     expect(loadValues).toHaveBeenCalledWith([{
-      dataSourceUid: 'ds', serverPath: 'pims', pointName: 'NEW_TAG',
+      dataSourceUid: 'ds', serverPath: 'pims', pointName: 'NEW_TAG', webId: 'new-web-id',
     }]);
   });
 

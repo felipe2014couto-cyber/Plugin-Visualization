@@ -37,6 +37,19 @@ describe('ValueElement', () => {
       .toBeUndefined();
     expect(createPiPointBinding({
       dataSourceUid: 'resolved-datasource',
+      name: 'STATE',
+      path: '\\\\pims\\STATE',
+      webId: 'state-web-id',
+      pointType: 'String',
+    })).toEqual({
+      dataSourceUid: 'resolved-datasource',
+      serverPath: 'pims',
+      pointName: 'STATE',
+      webId: 'state-web-id',
+      pointType: 'String',
+    });
+    expect(createPiPointBinding({
+      dataSourceUid: 'resolved-datasource',
       name: 'SINUSOID',
       path: '\\\\pims\\SINUSOID',
     })).toEqual({ dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'SINUSOID' });

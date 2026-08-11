@@ -21,7 +21,6 @@ import { isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBindin
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer } from '../../runtime/valueRuntime';
 import {
   getTrendSeriesConsumerId,
-  trendMaxDataPointsForWidth,
   useTrendRuntime,
   type LoadTrendSeries,
   type TrendRuntimeConsumer,
@@ -48,6 +47,10 @@ const ELEMENT_STROKE = '#6e9fff';
 const SELECTION_STROKE = '#6e9fff';
 const HANDLE_FILL = '#ffffff';
 const HANDLE_STROKE = '#6e9fff';
+const DEFAULT_SURFACE_BACKGROUND = '#1f1f1f';
+const themedDefaultSurface = css`
+  fill: var(--canvas-bg);
+`;
 
 interface CursorSelection {
   trendElementId: string;
@@ -70,9 +73,9 @@ export interface DisplaySurfaceProps {
   loadValue?: (binding: PiPointBinding) => Promise<PiPointValue>;
   loadValues?: LoadCurrentValues;
   loadTrend?: LoadTrendSeries;
-  loadRecordedTrend?: LoadTrendSeries;
   trendRefreshKey?: string;
   trendTimeRange?: DisplayTimeRange;
+  onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[]) => void;
 }
 
 function trySetPointerCapture(target: Element, pointerId: number): void {
@@ -115,9 +118,9 @@ export function DisplaySurface({
   loadValue,
   loadValues,
   loadTrend,
-  loadRecordedTrend,
   trendRefreshKey,
   trendTimeRange,
+  onTrendOpen,
 }: DisplaySurfaceProps) {
   const { surface, elements } = displayDocument;
   const cursorEnabled = !editable;
@@ -126,8 +129,6 @@ export function DisplaySurface({
   const [cursorsByTrend, setCursorsByTrend] = useState<Record<string, TrendCursor[]>>({});
   const [selectedCursor, setSelectedCursor] = useState<CursorSelection | null>(null);
   const [cursorDrag, setCursorDrag] = useState<CursorDrag | null>(null);
-  const [recordedTrendStates, setRecordedTrendStates] = useState<Record<string, PiTrendSeriesResult>>({});
-  const recordedRequests = useRef(new Set<string>());
 
   const valueConsumers: ValueRuntimeConsumer[] = elements.flatMap((element) => (
     (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE)
@@ -177,44 +178,21 @@ export function DisplaySurface({
   ), []);
   const trendRuntimeStates = useTrendRuntime(trendConsumers, loadTrend ?? fallbackTrendLoader, trendRefreshKey);
 
-  useEffect(() => {
-    setRecordedTrendStates({});
-    recordedRequests.current.clear();
-  }, [trendRefreshKey]);
-
   const handleTrendDoubleClick = useCallback((
     event: React.MouseEvent<SVGGElement>,
     elementId: string,
   ) => {
-    if (editable || !loadRecordedTrend || recordedRequests.current.has(elementId)) {
+    if (editable || !onTrendOpen) {
       return;
     }
     const element = elements.find((candidate) => candidate.id === elementId);
     if (!element || element.type !== TREND_TYPE) {
       return;
     }
-    const series = getTrendSeries(element as TrendElement);
-    if (series.length === 0) {
-      return;
-    }
     event.preventDefault();
     event.stopPropagation();
-    recordedRequests.current.add(elementId);
-    const bindings = series.map(({ binding }) => binding);
-    void loadRecordedTrend(bindings, undefined, {
-      maxDataPoints: trendMaxDataPointsForWidth(element.width),
-    }).then((results) => {
-      setRecordedTrendStates((current) => ({
-        ...current,
-        ...Object.fromEntries(series.flatMap(({ binding }) => {
-          const result = results[`${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`];
-          return result ? [[getTrendSeriesConsumerId(elementId, binding), result]] : [];
-        })),
-      }));
-    }).finally(() => {
-      recordedRequests.current.delete(elementId);
-    });
-  }, [editable, elements, loadRecordedTrend]);
+    onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, trendRuntimeStates));
+  }, [editable, elements, onTrendOpen, trendRuntimeStates]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
@@ -269,10 +247,13 @@ export function DisplaySurface({
     }
     const cursor: TrendCursor = { id: `cursor-${nextCursorId.current}`, time };
     nextCursorId.current += 1;
-    setCursorsByTrend((current) => ({
-      ...current,
-      [elementId]: [...(current[elementId] ?? []), cursor],
-    }));
+    setCursorsByTrend((current) => {
+      const next = { ...current };
+      for (const trendElement of elements.filter((candidate) => candidate.type === TREND_TYPE)) {
+        next[trendElement.id] = [...(next[trendElement.id] ?? []), cursor];
+      }
+      return next;
+    });
     setSelectedCursor({ trendElementId: elementId, cursorId: cursor.id });
     svg.focus();
   }, [cursorDrag, editable, elements, trendRuntimeStates]);
@@ -312,7 +293,8 @@ export function DisplaySurface({
       }
 
       const target = e.target as Element;
-      const elementId = target.getAttribute('data-element-id');
+      const elementId = target.getAttribute('data-element-id')
+        ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
       const handleAttr = target.getAttribute('data-resize-handle');
 
       trySetPointerCapture(svg, e.pointerId);
@@ -365,15 +347,12 @@ export function DisplaySurface({
         if (time === undefined) {
           return;
         }
-        setCursorsByTrend((current) => {
-          const cursors = current[cursorDrag.trendElementId] ?? [];
-          return {
-            ...current,
-            [cursorDrag.trendElementId]: cursors.map((cursor) => (
-              cursor.id === cursorDrag.cursorId ? { ...cursor, time } : cursor
-            )),
-          };
-        });
+        setCursorsByTrend((current) => Object.fromEntries(
+          Object.entries(current).map(([trendElementId, cursors]) => [
+            trendElementId,
+            cursors.map((cursor) => cursor.id === cursorDrag.cursorId ? { ...cursor, time } : cursor),
+          ]),
+        ));
         return;
       }
       if (!editable) {
@@ -416,15 +395,12 @@ export function DisplaySurface({
     event.preventDefault();
     event.stopPropagation();
     const cursorToRemove = selectedCursor;
-    setCursorsByTrend((current) => {
-      const remaining = (current[cursorToRemove.trendElementId] ?? [])
-        .filter((cursor) => cursor.id !== cursorToRemove.cursorId);
-      if (remaining.length === 0) {
-        const { [cursorToRemove.trendElementId]: _removed, ...next } = current;
-        return next;
-      }
-      return { ...current, [cursorToRemove.trendElementId]: remaining };
-    });
+    setCursorsByTrend((current) => Object.fromEntries(
+      Object.entries(current).flatMap(([trendElementId, cursors]) => {
+        const remaining = cursors.filter((cursor) => cursor.id !== cursorToRemove.cursorId);
+        return remaining.length > 0 ? [[trendElementId, remaining]] : [];
+      }),
+    ));
     setSelectedCursor(null);
   }, [editable, selectedCursor]);
 
@@ -458,14 +434,31 @@ export function DisplaySurface({
       onPointerCancel={handleSvgPointerEnd}
       onKeyDown={handleSurfaceKeyDown}
     >
+      <defs>
+        <pattern id="visualization-editor-grid" width="16" height="16" patternUnits="userSpaceOnUse">
+          <circle cx="1" cy="1" r="1" fill="var(--canvas-dot)" />
+        </pattern>
+      </defs>
       <rect
         x={0}
         y={0}
         width={surface.width}
         height={surface.height}
         fill={surface.backgroundColor}
+        className={surface.backgroundColor.toLowerCase() === DEFAULT_SURFACE_BACKGROUND ? themedDefaultSurface : undefined}
         data-testid="display-surface-background"
       />
+      {editable && (
+        <rect
+          x={0}
+          y={0}
+          width={surface.width}
+          height={surface.height}
+          fill="url(#visualization-editor-grid)"
+          pointerEvents="none"
+          data-testid="display-surface-grid"
+        />
+      )}
 
       {elements.map((element) => {
         if (element.type === VALUE_TYPE && isPiPointBinding(element.properties.binding)) {
@@ -497,15 +490,7 @@ export function DisplaySurface({
         }
         if (element.type === TREND_TYPE) {
           const trendElement = element as unknown as TrendElement;
-          const seriesStates = getTrendSeriesStates(trendElement, trendRuntimeStates).map(({ series, runtimeState }) => {
-            const recordedResult = recordedTrendStates[getTrendSeriesConsumerId(element.id, series.binding)];
-            return {
-              series,
-              runtimeState: recordedResult?.status === 'success'
-                ? { status: 'success' as const, data: recordedResult.series }
-                : runtimeState,
-            };
-          });
+          const seriesStates = getTrendSeriesStates(trendElement, trendRuntimeStates);
           if (seriesStates.length === 0) {
             return null;
           }
@@ -516,7 +501,7 @@ export function DisplaySurface({
               seriesStates={seriesStates}
               cursors={cursorsByTrend[element.id] ?? []}
               cursorEnabled={cursorEnabled}
-              selectedCursorId={cursorEnabled && selectedCursor?.trendElementId === element.id ? selectedCursor.cursorId : null}
+              selectedCursorId={cursorEnabled ? selectedCursor?.cursorId ?? null : null}
               onPlotPointerDown={cursorEnabled ? handleTrendPlotPointerDown : undefined}
               onCursorPointerDown={cursorEnabled ? handleTrendCursorPointerDown : undefined}
               timeRange={trendTimeRange}

@@ -1,4 +1,4 @@
-# PIMS Vision
+# Visualization
 
 App Plugin para criacao futura de displays industriais no Grafana.
 
@@ -35,7 +35,7 @@ funcionando. Nenhuma funcionalidade de negocio foi implementada.
 
 ## Identidade do plugin
 
-- name: `PIMS Vision`
+- name: `Visualization`
 - id: `pims-vision-app`
 - type: `app`
 - grafanaDependency: `>=9.3.16`

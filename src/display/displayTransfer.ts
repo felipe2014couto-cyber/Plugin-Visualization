@@ -46,7 +46,7 @@ export function parseImportedDisplay(input: string): DisplayDocument {
     throw new DisplayImportError('Arquivo de Display inválido.');
   }
   if (!isRecord(parsed) || parsed.format !== DISPLAY_EXPORT_FORMAT) {
-    throw new DisplayImportError('Este arquivo não é um Display PIMS Vision compatível.');
+    throw new DisplayImportError('Este arquivo não é um Display Visualization compatível.');
   }
   if (parsed.version !== DISPLAY_EXPORT_VERSION) {
     throw new DisplayImportError('Versão do arquivo não suportada.');
@@ -143,7 +143,13 @@ function portableBinding(input: unknown): PiPointBinding {
   if (!isRecord(input) || !isNonEmptyString(input.dataSourceUid) || !isNonEmptyString(input.serverPath) || !isNonEmptyString(input.pointName)) {
     throw new DisplayImportError('Arquivo de Display inválido.');
   }
-  return { dataSourceUid: input.dataSourceUid, serverPath: input.serverPath, pointName: input.pointName };
+  return {
+    dataSourceUid: input.dataSourceUid,
+    serverPath: input.serverPath,
+    pointName: input.pointName,
+    ...(isNonEmptyString(input.webId) ? { webId: input.webId } : {}),
+    ...(isNonEmptyString(input.pointType) ? { pointType: input.pointType } : {}),
+  };
 }
 
 function portableOptionalBinding(input: unknown): { binding?: PiPointBinding } {

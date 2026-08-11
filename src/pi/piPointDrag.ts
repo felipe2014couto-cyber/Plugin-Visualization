@@ -21,6 +21,7 @@ export function parsePiPointDragData(value: string): PiPointSearchResult | undef
       ...(typeof candidate.webId === 'string' ? { webId: candidate.webId } : {}),
       ...(typeof candidate.path === 'string' ? { path: candidate.path } : {}),
       ...(typeof candidate.dataSourceUid === 'string' ? { dataSourceUid: candidate.dataSourceUid } : {}),
+      ...(typeof candidate.pointType === 'string' ? { pointType: candidate.pointType } : {}),
     };
   } catch {
     return undefined;

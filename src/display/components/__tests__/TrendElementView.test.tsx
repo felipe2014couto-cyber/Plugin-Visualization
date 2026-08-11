@@ -125,6 +125,62 @@ describe('TrendElementView', () => {
     expect(screen.getByTestId('trend-line-trend-1').getAttribute('d')).not.toBe(firstPath);
   });
 
+  it('recorta nomes e demais conteúdos no limite do Trend', () => {
+    const longNameElement = {
+      ...element,
+      width: 220,
+      properties: {
+        series: [{ binding: { ...binding, pointName: 'ACI_A60_SOBREVELOCIDADE_MUITO_LONGA' }, color: '#6e9fff' }],
+      },
+    };
+    const { rerender } = render(
+      <svg>
+        <TrendElementView
+          element={longNameElement}
+          runtimeState={{ status: 'success', data: { pointName: 'ACI_A60_SOBREVELOCIDADE_MUITO_LONGA', points: [{ time: 1_000, value: 1 }, { time: 2_000, value: 2 }] } }}
+        />
+      </svg>,
+    );
+
+    const content = screen.getByTestId('trend-content-trend-1');
+    const clipPath = content.getAttribute('clip-path');
+    expect(clipPath).toMatch(/^url\(#trend-content-clip-/);
+    const clipRect = document.querySelector(`${clipPath!.slice(4, -1)} rect`);
+    expect(clipRect).toHaveAttribute('width', '220');
+
+    rerender(
+      <svg>
+        <TrendElementView
+          element={{ ...longNameElement, width: 520 }}
+          runtimeState={{ status: 'success', data: { pointName: 'ACI_A60_SOBREVELOCIDADE_MUITO_LONGA', points: [{ time: 1_000, value: 1 }, { time: 2_000, value: 2 }] } }}
+        />
+      </svg>,
+    );
+
+    expect(document.querySelector(`${screen.getByTestId('trend-content-trend-1').getAttribute('clip-path')!.slice(4, -1)} rect`)).toHaveAttribute('width', '520');
+  });
+
+  it('amplia a área disponível para a legenda quando o Trend é esticado', () => {
+    const longNameElement = {
+      ...element,
+      width: 1000,
+      properties: {
+        series: [{ binding: { ...binding, pointName: 'LFI_RB1_UNID_LAVAGEM1_UM' }, color: '#6e9fff' }],
+      },
+    };
+    render(
+      <svg>
+        <TrendElementView
+          element={longNameElement}
+          runtimeState={{ status: 'success', data: { pointName: 'LFI_RB1_UNID_LAVAGEM1_UM', points: [{ time: 1_000, value: 1 }, { time: 2_000, value: 2 }] } }}
+        />
+      </svg>,
+    );
+
+    expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveAttribute('x', '722');
+    expect(screen.getByTestId('trend-plot-trend-1')).toHaveAttribute('width', '614');
+  });
+
   it('mantém no eixo X todo o período solicitado mesmo com dados apenas recentes', () => {
     const to = Date.parse('2026-08-07T14:00:00.000Z');
     const from = to - 2 * 24 * 60 * 60 * 1000;

@@ -128,6 +128,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex-direction: column;
     min-height: 0;
     padding: ${theme.spacing(0.75, 1.5, 1.5)};
+    color: var(--text-secondary);
   `,
   form: css`
     display: flex;
@@ -136,9 +137,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: 5px;
   `,
   label: css`
-    color: #50657c;
-    font-size: 11px;
-    font-weight: ${theme.typography.fontWeightMedium};
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   `,
   inputRow: css`
     display: flex;
@@ -151,16 +158,16 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 100%;
     box-sizing: border-box;
     padding: ${theme.spacing(0.5, 0.75)};
-    border: 1px solid #a8b2be;
+    border: 1px solid var(--border-color);
     border-right: 0;
     border-radius: 0;
     outline: none;
-    background: #f4f5f6;
-    color: #21364d;
+    background: var(--input-bg) !important;
+    color: var(--text-primary) !important;
 
     &:focus {
-      border-color: #3978aa;
-      box-shadow: inset 0 0 0 1px #3978aa;
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--focus-ring);
     }
   `,
   button: css`
@@ -170,14 +177,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 34px;
     flex: 0 0 34px;
     padding: 0;
-    border: 1px solid #a8b2be;
+    border: 1px solid var(--border-color);
     border-radius: 0;
-    background: #c6ccd4;
-    color: #294762;
+    background: var(--button-bg) !important;
+    color: var(--text-secondary) !important;
     cursor: pointer;
 
     &:hover:not(:disabled) {
-      background: #b5c0cc;
+      color: var(--text-primary);
+      background: var(--button-hover);
     }
 
     &:disabled {
@@ -191,30 +199,30 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: 0;
     overflow: auto;
     list-style: none;
-    border-top: 1px solid #c4cad1;
+    border-top: 1px solid var(--border-color);
   `,
   result: css`
     width: 100%;
     padding: 7px 8px;
     border: 0;
-    border-bottom: 1px solid #cbd0d7;
+    border-bottom: 1px solid var(--border-subtle);
     border-radius: 0;
     background: transparent;
-    color: #1d5aa6;
+    color: var(--accent);
     text-align: left;
     cursor: grab;
 
     &:hover {
-      background: #d2e3f6;
+      background: var(--button-hover);
     }
   `,
   resultSelected: css`
     width: 100%;
     padding: 7px 8px;
-    border: 1px solid #4d8ce0;
+    border: 1px solid var(--accent);
     border-radius: 0;
-    background: #b8d2fb;
-    color: #173c70;
+    background: var(--selection-bg);
+    color: var(--accent);
     text-align: left;
     cursor: grab;
   `,

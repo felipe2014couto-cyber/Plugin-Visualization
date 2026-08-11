@@ -125,7 +125,7 @@ describe('DisplayEditor - cursores de Trend', () => {
     expect(loadTrend).toHaveBeenCalledTimes(1);
   });
 
-  it('isola cursores por Trend e preserva timestamp durante resize sem query', async () => {
+  it('sincroniza cursores entre Trends e preserva timestamp durante resize sem query', async () => {
     const loadTrend = createLoader();
     render(<Harness document={makeDocument(true)} loadTrend={loadTrend} />);
     await waitFor(() => expect(screen.getByTestId('trend-line-trend-b')).toBeInTheDocument());
@@ -133,19 +133,29 @@ describe('DisplayEditor - cursores de Trend', () => {
     fireEvent.click(screen.getByTestId('display-mode-view'));
     fireEvent.pointerDown(screen.getByTestId('trend-plot-trend-a'), { clientX: 300, clientY: 180, pointerId: 1 });
     fireEvent.pointerUp(getSurface(), { clientX: 300, clientY: 180, pointerId: 1 });
+    expect(screen.getByTestId('trend-cursor-trend-b-cursor-1')).toBeInTheDocument();
     fireEvent.pointerDown(screen.getByTestId('trend-plot-trend-b'), { clientX: 400, clientY: 500, pointerId: 2 });
     fireEvent.pointerUp(getSurface(), { clientX: 400, clientY: 500, pointerId: 2 });
     expect(screen.getByTestId('trend-cursor-trend-a-cursor-1')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-cursor-trend-a-cursor-2')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-cursor-trend-b-cursor-1')).toBeInTheDocument();
     expect(screen.getByTestId('trend-cursor-trend-b-cursor-2')).toBeInTheDocument();
+    const beforeDragA = screen.getByTestId('trend-cursor-line-trend-a-cursor-1').getAttribute('x1');
+    const beforeDragB = screen.getByTestId('trend-cursor-line-trend-b-cursor-1').getAttribute('x1');
+    fireEvent.pointerDown(screen.getByTestId('trend-cursor-hit-trend-a-cursor-1'), { clientX: 300, clientY: 180, pointerId: 3 });
+    fireEvent.pointerMove(getSurface(), { clientX: 500, clientY: 180, pointerId: 3 });
+    fireEvent.pointerUp(getSurface(), { clientX: 500, clientY: 180, pointerId: 3 });
+    expect(screen.getByTestId('trend-cursor-line-trend-a-cursor-1').getAttribute('x1')).not.toBe(beforeDragA);
+    expect(screen.getByTestId('trend-cursor-line-trend-b-cursor-1').getAttribute('x1')).not.toBe(beforeDragB);
     const beforeResize = screen.getByTestId('trend-cursor-line-trend-a-cursor-1').getAttribute('x1');
 
     fireEvent.click(screen.getByTestId('display-mode-edit'));
     expect(screen.queryByTestId(/^trend-cursor-/)).toBeNull();
-    fireEvent.pointerDown(screen.getByTestId('trend-background-trend-a'), { clientX: 110, clientY: 110, pointerId: 3 });
-    fireEvent.pointerUp(getSurface(), { clientX: 110, clientY: 110, pointerId: 3 });
-    fireEvent.pointerDown(screen.getByTestId('display-resize-handle-mr'), { clientX: 620, clientY: 240, pointerId: 4 });
-    fireEvent.pointerMove(getSurface(), { clientX: 720, clientY: 240, pointerId: 4 });
-    fireEvent.pointerUp(getSurface(), { clientX: 720, clientY: 240, pointerId: 4 });
+    fireEvent.pointerDown(screen.getByTestId('trend-background-trend-a'), { clientX: 110, clientY: 110, pointerId: 4 });
+    fireEvent.pointerUp(getSurface(), { clientX: 110, clientY: 110, pointerId: 4 });
+    fireEvent.pointerDown(screen.getByTestId('display-resize-handle-mr'), { clientX: 620, clientY: 240, pointerId: 5 });
+    fireEvent.pointerMove(getSurface(), { clientX: 720, clientY: 240, pointerId: 5 });
+    fireEvent.pointerUp(getSurface(), { clientX: 720, clientY: 240, pointerId: 5 });
 
     fireEvent.click(screen.getByTestId('display-mode-view'));
     expect(screen.getByTestId('trend-cursor-trend-b-cursor-2')).toBeInTheDocument();

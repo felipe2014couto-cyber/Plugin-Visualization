@@ -2,12 +2,16 @@ export interface PiPointBinding {
   dataSourceUid: string;
   serverPath: string;
   pointName: string;
+  webId?: string;
+  pointType?: string;
 }
 
 export interface PiPointIdentityInput {
   dataSourceUid?: string;
   name?: string;
   path?: string;
+  webId?: string;
+  pointType?: string;
 }
 
 export function createPiPointBinding(input: PiPointIdentityInput): PiPointBinding | undefined {
@@ -32,7 +36,20 @@ export function createPiPointBinding(input: PiPointIdentityInput): PiPointBindin
     return undefined;
   }
 
-  return { dataSourceUid, serverPath, pointName };
+  const webId = input.webId?.trim();
+  const pointType = input.pointType?.trim();
+  return {
+    dataSourceUid,
+    serverPath,
+    pointName,
+    ...(webId ? { webId } : {}),
+    ...(pointType ? { pointType } : {}),
+  };
+}
+
+export function isStatePiPointBinding(binding: PiPointBinding): boolean {
+  const pointType = binding.pointType?.trim().toLocaleLowerCase();
+  return pointType === 'string' || pointType === 'digital';
 }
 
 export function isPiPointBinding(value: unknown): value is PiPointBinding {
