@@ -27,6 +27,7 @@ import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
+import { loadPimsVisionDashboard, savePimsVisionDashboard } from '../../grafana/dashboardPersistence';
 
 export type VisualizationTheme = 'dark' | 'light';
 
@@ -52,6 +53,8 @@ export function App() {
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
   const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
+  const [dashboardUid, setDashboardUid] = useState<string>();
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
   if (!progressiveTrendLoaderRef.current) {
     progressiveTrendLoaderRef.current = createProgressiveTrendLoader(
@@ -69,6 +72,31 @@ export function App() {
         setPiConnection(connection);
       }
     });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const uid = new URLSearchParams(globalThis.location?.search ?? '').get('dashboardUid');
+    if (!uid) {
+      return;
+    }
+
+    let active = true;
+    loadPimsVisionDashboard(uid)
+      .then((savedDocument) => {
+        if (active && savedDocument) {
+          setDocument(savedDocument);
+          setDashboardUid(uid);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSaveState('error');
+        }
+      });
 
     return () => {
       active = false;
@@ -104,6 +132,26 @@ export function App() {
     [progressiveTrendLoader, rangeFrom, rangeTo],
   );
   const hasPiConnection = piConnection.status === 'connected';
+  const handleSaveDashboard = useCallback(async () => {
+    const name = globalThis.prompt?.('Nome do dashboard', document.name);
+    if (name === null) {
+      return;
+    }
+
+    const documentToSave = { ...document, name: name?.trim() || document.name };
+    setDocument(documentToSave);
+    setSaveState('saving');
+    try {
+      const saved = await savePimsVisionDashboard(documentToSave, dashboardUid);
+      setDashboardUid(saved.uid);
+      const savedUrl = new URL(globalThis.location.href);
+      savedUrl.searchParams.set('dashboardUid', saved.uid);
+      globalThis.history?.replaceState(null, '', `${savedUrl.pathname}${savedUrl.search}`);
+      setSaveState('saved');
+    } catch {
+      setSaveState('error');
+    }
+  }, [dashboardUid, document]);
 
   return (
     <div
@@ -119,12 +167,30 @@ export function App() {
         />
         <div className={styles.productName}>Visualization</div>
         <div className={styles.displayContext}>Display operacional</div>
-        <div className={styles.themeSelector} role="group" aria-label="Tema visual">
-          <button type="button" className={visualizationTheme === 'dark' ? styles.themeButtonActive : styles.themeButton} aria-pressed={visualizationTheme === 'dark'} data-testid="visualization-theme-dark" onClick={() => setVisualizationTheme('dark')}>Escuro</button>
-          <button type="button" className={visualizationTheme === 'light' ? styles.themeButtonActive : styles.themeButton} aria-pressed={visualizationTheme === 'light'} data-testid="visualization-theme-light" onClick={() => setVisualizationTheme('light')}>Claro</button>
-        </div>
-        <div className={`${styles.connectionStatus} ${piConnection.status === 'connected' ? styles.connectionStatusConnected : ''}`} data-testid="pi-connection-status">
-          {getConnectionLabel(piConnection)}
+        <div className={styles.headerActions}>
+          <div className={styles.headerConnectionRow}>
+            <div className={styles.themeSelector} role="group" aria-label="Tema visual">
+              <button type="button" className={visualizationTheme === 'dark' ? styles.themeButtonActive : styles.themeButton} aria-pressed={visualizationTheme === 'dark'} data-testid="visualization-theme-dark" onClick={() => setVisualizationTheme('dark')}>Escuro</button>
+              <button type="button" className={visualizationTheme === 'light' ? styles.themeButtonActive : styles.themeButton} aria-pressed={visualizationTheme === 'light'} data-testid="visualization-theme-light" onClick={() => setVisualizationTheme('light')}>Claro</button>
+            </div>
+            <div className={`${styles.connectionStatus} ${piConnection.status === 'connected' ? styles.connectionStatusConnected : ''}`} data-testid="pi-connection-status">
+              {getConnectionLabel(piConnection)}
+            </div>
+          </div>
+          <div className={styles.headerSaveRow}>
+            <button
+              type="button"
+              className={styles.saveButton}
+              data-testid="pims-vision-save-dashboard"
+              disabled={saveState === 'saving'}
+              onClick={handleSaveDashboard}
+            >{saveState === 'saving' ? 'Salvando...' : 'Salvar dashboard'}</button>
+            {saveState !== 'idle' && (
+              <span className={saveState === 'error' ? styles.saveError : styles.saveStatus} role="status">
+                {saveState === 'saved' ? 'Salvo no Grafana' : saveState === 'error' ? 'Não foi possível salvar' : ''}
+              </span>
+            )}
+          </div>
         </div>
       </header>
       <div className={styles.workspace}>
@@ -308,11 +374,50 @@ const getStyles = (theme: GrafanaTheme2) => ({
     white-space: nowrap;
   `,
   displayContext: css`display: none;`,
+  headerActions: css`
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    margin-left: auto;
+  `,
+  headerConnectionRow: css`
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  `,
+  headerSaveRow: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  `,
+  saveButton: css`
+    height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    color: var(--accent-contrast);
+    background: var(--accent);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    &:hover:not(:disabled) { background: var(--accent-hover); }
+    &:disabled { opacity: 0.65; cursor: wait; }
+  `,
+  saveStatus: css`
+    color: var(--success);
+    font-size: 12px;
+    white-space: nowrap;
+  `,
+  saveError: css`
+    color: var(--danger);
+    font-size: 12px;
+    white-space: nowrap;
+  `,
   themeSelector: css`
     display: flex;
     align-items: center;
     gap: 2px;
-    margin-left: auto;
     padding: 3px;
     border: 1px solid var(--border-color);
     border-radius: 10px;
