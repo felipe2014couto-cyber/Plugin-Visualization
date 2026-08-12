@@ -633,7 +633,9 @@ function getTrendPoints(
   runtimeStates: ReadonlyMap<string, TrendRuntimeState>,
 ) {
   const points = getTrendSeriesStates(element, runtimeStates)
-    .flatMap(({ runtimeState }) => runtimeState.data?.points ?? [])
+    .flatMap(({ runtimeState }) => runtimeState.data?.points
+      ?? runtimeState.data?.states?.map((state) => ({ time: state.time, value: 0 }))
+      ?? [])
     .sort((left, right) => left.time - right.time);
   return points.length > 0 ? points : undefined;
 }
