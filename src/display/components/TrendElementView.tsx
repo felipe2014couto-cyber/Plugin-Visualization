@@ -183,7 +183,16 @@ function getTrendContent(
   }
 
   if (dataSeries.length === 0 && stateSeries.length > 0) {
-    return <>{visual.title && <TrendTitle element={element} visual={visual} />}{title}<DigitalTrend element={element} series={stateSeries} timeRange={timeRange} /></>;
+    return <>{visual.title && <TrendTitle element={element} visual={visual} />}{title}<DigitalTrend
+      element={element}
+      series={stateSeries}
+      cursors={cursors}
+      selectedCursorId={selectedCursorId}
+      onPlotPointerDown={onPlotPointerDown}
+      onCursorPointerDown={onCursorPointerDown}
+      onCursorDoubleClick={onCursorDoubleClick}
+      timeRange={timeRange}
+    /></>;
   }
 
   if (dataSeries.length === 0 && seriesStates.some(({ runtimeState }) => runtimeState.status === 'loading')) {
@@ -491,10 +500,20 @@ function MixedTrend({
 function DigitalTrend({
   element,
   series,
+  cursors,
+  selectedCursorId,
+  onPlotPointerDown,
+  onCursorPointerDown,
+  onCursorDoubleClick,
   timeRange,
 }: {
   element: TrendElement;
   series: Array<{ series: TrendSeries; states: TrendStatePoint[] }>;
+  cursors: readonly TrendCursor[];
+  selectedCursorId: string | null;
+  onPlotPointerDown: TrendElementViewProps['onPlotPointerDown'];
+  onCursorPointerDown: TrendElementViewProps['onCursorPointerDown'];
+  onCursorDoubleClick: TrendElementViewProps['onCursorDoubleClick'];
   timeRange: DisplayTimeRange | undefined;
 }) {
   const allStates = series.flatMap((item) => item.states);
@@ -520,6 +539,19 @@ function DigitalTrend({
   const xFor = (time: number) => plotX + ((Math.max(domainStart, Math.min(domainEnd, time)) - domainStart)
     / Math.max(1, domainEnd - domainStart)) * plotWidth;
   const xTicks = [0, 1, 2].map((index) => domainStart + ((domainEnd - domainStart) * index) / 2);
+  const chart: TrendChartModel = {
+    plotX,
+    plotY,
+    plotWidth,
+    plotHeight,
+    domainStart,
+    domainEnd,
+    domainMin: 0,
+    domainMax: 1,
+    path: '',
+    yTicks: [],
+    xTicks: [],
+  };
 
   return (
     <>
@@ -531,6 +563,7 @@ function DigitalTrend({
         fill="rgba(0, 0, 0, 0.12)"
         data-testid={`trend-state-plot-${element.id}`}
         pointerEvents="all"
+        onPointerDown={onPlotPointerDown ? (event) => onPlotPointerDown(event, element.id, chart) : undefined}
       />
       {labels.map((_label, index) => {
         const y = yFor(labels[index]);
@@ -564,8 +597,39 @@ function DigitalTrend({
           {trendSeries.marker === 'square' && states.map((state, markerIndex) => <rect key={`${state.time}-${markerIndex}`} x={xFor(state.time) - 3} y={yFor(state.value) - 3} width={6} height={6} fill={trendSeries.color || LINE_COLOR} pointerEvents="none" />)}
         </React.Fragment>
       ))}
+      {cursors.map((cursor) => {
+        const x = xFor(cursor.time);
+        const selected = cursor.id === selectedCursorId;
+        const labelAnchor = x > plotX + plotWidth / 2 ? 'end' : 'start';
+        const labelX = labelAnchor === 'end' ? x - 4 : x + 4;
+        const values = series.flatMap(({ series: trendSeries, states }) => {
+          const state = resolveTrendCursorState(states, cursor.time);
+          return state === undefined ? [] : [{ name: trendSeries.legendLabel || trendSeries.binding.pointName, value: state, color: trendSeries.color || LINE_COLOR }];
+        });
+        if (values.length === 0) return null;
+        return <g key={cursor.id} data-testid={`trend-cursor-${element.id}-${cursor.id}`}>
+          <line x1={x} y1={plotY} x2={x} y2={plotY + plotHeight} stroke="var(--trend-cursor, #ffffff)" strokeWidth={selected ? 2 : 1} pointerEvents="none" />
+          <line
+            x1={x} y1={plotY} x2={x} y2={plotY + plotHeight} stroke="transparent" strokeWidth={18}
+            style={onCursorPointerDown ? { cursor: 'ew-resize' } : undefined}
+            data-testid={`trend-cursor-hit-${element.id}-${cursor.id}`}
+            onPointerDown={onCursorPointerDown ? (event) => onCursorPointerDown(event, element.id, cursor, chart) : undefined}
+            onDoubleClick={onCursorDoubleClick ? (event) => onCursorDoubleClick(event, element.id, cursor) : undefined}
+          />
+          <text x={labelX} y={plotY + 12} textAnchor={labelAnchor} fill="var(--trend-cursor, #ffffff)" fontSize={AXIS_FONT_SIZE} pointerEvents="none">
+            <tspan x={labelX} y={plotY + 12}>{formatCursorTime(cursor.time)}</tspan>
+            {values.map(({ name, value, color }, index) => <tspan key={name} x={labelX} y={plotY + 12 + (index + 1) * 18} fill={color}>{name} {value}</tspan>)}
+          </text>
+        </g>;
+      })}
     </>
   );
+}
+
+function resolveTrendCursorState(states: readonly TrendStatePoint[], time: number): string | undefined {
+  const ordered = [...states].filter((state) => Number.isFinite(state.time)).sort((left, right) => left.time - right.time);
+  if (ordered.length === 0 || time < ordered[0].time || time > ordered[ordered.length - 1].time) return undefined;
+  return [...ordered].reverse().find((state) => state.time <= time)?.value;
 }
 
 function digitalTrendPath(
