@@ -77,6 +77,8 @@ export interface DisplaySurfaceProps {
   trendTimeRange?: DisplayTimeRange;
   onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[]) => void;
   onTrendContextMenu?: (element: TrendElement) => void;
+  zoom?: number;
+  viewCenter?: Point;
 }
 
 function trySetPointerCapture(target: Element, pointerId: number): void {
@@ -123,6 +125,8 @@ export function DisplaySurface({
   trendTimeRange,
   onTrendOpen,
   onTrendContextMenu,
+  zoom = 1,
+  viewCenter,
 }: DisplaySurfaceProps) {
   const { surface, elements } = displayDocument;
   const cursorEnabled = !editable;
@@ -447,13 +451,17 @@ export function DisplaySurface({
         height: selectedElement.height,
       })
     : [];
+  const viewportWidth = surface.width / zoom;
+  const viewportHeight = surface.height / zoom;
+  const viewportX = (viewCenter?.x ?? surface.width / 2) - viewportWidth / 2;
+  const viewportY = (viewCenter?.y ?? surface.height / 2) - viewportHeight / 2;
 
   return (
     <svg
       ref={svgRef}
       width={surface.width}
       height={surface.height}
-      viewBox={`0 0 ${surface.width} ${surface.height}`}
+      viewBox={`${viewportX} ${viewportY} ${viewportWidth} ${viewportHeight}`}
       xmlns="http://www.w3.org/2000/svg"
       className={css`
         display: block;
@@ -475,20 +483,20 @@ export function DisplaySurface({
         </pattern>
       </defs>
       <rect
-        x={0}
-        y={0}
-        width={surface.width}
-        height={surface.height}
+        x={viewportX}
+        y={viewportY}
+        width={viewportWidth}
+        height={viewportHeight}
         fill={surface.backgroundColor}
         className={surface.backgroundColor.toLowerCase() === DEFAULT_SURFACE_BACKGROUND ? themedDefaultSurface : undefined}
         data-testid="display-surface-background"
       />
       {editable && (
         <rect
-          x={0}
-          y={0}
-          width={surface.width}
-          height={surface.height}
+          x={viewportX}
+          y={viewportY}
+          width={viewportWidth}
+          height={viewportHeight}
           fill="url(#visualization-editor-grid)"
           pointerEvents="none"
           data-testid="display-surface-grid"

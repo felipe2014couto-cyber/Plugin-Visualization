@@ -251,7 +251,7 @@ describe('DisplayEditor - drop de PI Point', () => {
     expect(readDocument().elements[0].properties.series).toHaveLength(3);
   });
 
-  it('adiciona a tag à Trend sob o ponteiro independentemente do tipo de criação selecionado', () => {
+  it('não adiciona uma tag à Trend quando o modo de criação não é Trend', () => {
     render(<Harness type="value" withExistingTrend />);
     mockSurfaceBounds({ left: 100, top: 50, width: 1600, height: 600 });
     const trendBackground = screen.getByTestId('trend-background-existing-trend');
@@ -259,16 +259,12 @@ describe('DisplayEditor - drop de PI Point', () => {
     fireDragEvent(trendBackground, 'dragover', createDataTransfer(), 550, 100);
     const preview = screen.getByTestId('pi-point-drag-preview');
     expect(preview).toHaveAttribute('data-valid', 'true');
-    expect(preview).toHaveAttribute('data-target-trend', 'true');
-    expect(preview).toHaveTextContent('SINUSOID');
-    expect(preview).toHaveStyle({ width: '88px', height: '64px' });
-    expect(screen.getByTestId('display-selection-bounding-box')).toBeInTheDocument();
-    expect(screen.getByTestId('display-resize-handle-tl')).toBeInTheDocument();
+    expect(preview).not.toHaveAttribute('data-target-trend', 'true');
     fireDragEvent(trendBackground, 'drop', createDataTransfer(), 550, 100);
 
-    expect(readDocument().elements).toHaveLength(1);
-    expect(screen.getByTestId(/^display-element-/)).toHaveAttribute('data-element-type', 'trend');
-    expect(readDocument().elements[0].properties.series).toHaveLength(2);
+    expect(readDocument().elements).toHaveLength(2);
+    expect(readDocument().elements[0].properties.series).toHaveLength(1);
+    expect(screen.getAllByTestId(/^display-element-/)[1]).toHaveAttribute('data-element-type', 'value');
   });
 
   it('reconhece a Trend pelo alvo real do evento mesmo sem elementFromPoint', () => {
