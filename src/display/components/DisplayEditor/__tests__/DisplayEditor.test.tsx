@@ -66,8 +66,8 @@ describe('DisplayEditor', () => {
     render(<DisplayEditor document={doc} />);
 
     expect(screen.getByTestId('display-editor-toolbar')).toContainElement(screen.getByTestId('display-undo'));
-    expect(screen.getByTestId('display-editor-toolbar')).toContainElement(screen.getByTestId('display-insert-gauge'));
+    expect(screen.getByTestId('display-editor-toolbar')).toContainElement(screen.getByLabelText('Arrastar como Gauge'));
     expect(screen.getByTitle('Exportar Display')).toBeInTheDocument();
-    expect(screen.getByTitle('Inserir Barra')).toBeInTheDocument();
+    expect(screen.getByTitle('Arrastar como Barra')).toBeInTheDocument();
   });
 });

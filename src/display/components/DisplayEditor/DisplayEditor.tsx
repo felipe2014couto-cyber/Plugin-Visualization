@@ -3,7 +3,6 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import type { DisplayDocument } from '../../displayDocument';
-import { appendDisplayElement, createRectangle } from '../../createRectangle';
 import {
   createDisplayHistory,
   hasRedo,
@@ -25,8 +24,11 @@ import {
   appendTrend,
   createTrend,
   getTrendSeries,
+  getTrendVisualOptions,
   TREND_TYPE,
   type TrendElement,
+  updateTrendSeriesOptions,
+  updateTrendVisualOptions,
 } from '../../createTrend';
 import {
   appendGauge,
@@ -52,6 +54,7 @@ import { TrendPopup } from '../TrendPopup';
 import type { TrendSeriesViewState } from '../TrendElementView';
 import { ValuePropertiesPanel } from './ValuePropertiesPanel';
 import { ScalePropertiesPanel } from './ScalePropertiesPanel';
+import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
@@ -81,6 +84,7 @@ export interface DisplayEditorProps {
   loadTrend?: LoadTrendSeries;
   loadRecordedTrend?: LoadTrendSeries;
   dropSymbolType?: PiPointDropSymbolType;
+  onDropSymbolTypeChange?: (type: PiPointDropSymbolType) => void;
   trendRefreshKey?: string;
   trendTimeRange?: DisplayTimeRange;
   timeSelection?: DisplayTimeSelection;
@@ -122,6 +126,7 @@ export function DisplayEditor({
   loadTrend,
   loadRecordedTrend,
   dropSymbolType = 'value',
+  onDropSymbolTypeChange,
   trendRefreshKey,
   trendTimeRange,
   timeSelection,
@@ -143,6 +148,7 @@ export function DisplayEditor({
   const [importError, setImportError] = useState<string | null>(null);
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
+  const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
   const trendPopupRequest = useRef(0);
   const trendPopupRef = useRef<TrendPopupState | null>(null);
 
@@ -291,106 +297,6 @@ export function DisplayEditor({
     dispatch({ type: 'END_INTERACTION' });
   }, [commitDocument, dispatch]);
 
-  const handleInsertRectangle = useCallback(() => {
-    const currentDocument = documentRef.current;
-    const rectangle = createRectangle({
-      surface: currentDocument.surface,
-      existingIds: currentDocument.elements.map((element) => element.id),
-    });
-    if (!onChangeRef.current) {
-      return;
-    }
-    commitDocument(appendDisplayElement(currentDocument, rectangle));
-    dispatch({ type: 'SELECT', elementId: rectangle.id });
-  }, [commitDocument, dispatch]);
-
-  const handleInsertValue = useCallback(() => {
-    if (!selectedPiPoint) {
-      return;
-    }
-    const binding = createPiPointBinding(selectedPiPoint);
-    if (!binding) {
-      return;
-    }
-
-    const currentDocument = documentRef.current;
-    const value = createValue({
-      binding,
-      surface: currentDocument.surface,
-      existingIds: currentDocument.elements.map((element) => element.id),
-    });
-    if (!onChangeRef.current) {
-      return;
-    }
-    commitDocument(appendValue(currentDocument, value));
-    dispatch({ type: 'SELECT', elementId: value.id });
-  }, [commitDocument, dispatch, selectedPiPoint]);
-
-  const handleInsertTrend = useCallback(() => {
-    if (!selectedPiPoint) {
-      return;
-    }
-    const binding = createPiPointBinding(selectedPiPoint);
-    if (!binding) {
-      return;
-    }
-
-    const currentDocument = documentRef.current;
-    const trend = createTrend({
-      binding,
-      surface: currentDocument.surface,
-      existingIds: currentDocument.elements.map((element) => element.id),
-    });
-    if (!onChangeRef.current) {
-      return;
-    }
-    commitDocument(appendTrend(currentDocument, trend));
-    dispatch({ type: 'SELECT', elementId: trend.id });
-  }, [commitDocument, dispatch, selectedPiPoint]);
-
-  const handleAddPiPointToSelectedTrend = useCallback(() => {
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    const selectedElementId = stateRef.current.selectedElementId;
-    if (!binding || !selectedElementId || !onChangeRef.current) {
-      return;
-    }
-    const selectedTrend = documentRef.current.elements.find((element) => (
-      element.id === selectedElementId && element.type === TREND_TYPE
-    ));
-    if (!selectedTrend) {
-      return;
-    }
-    commitDocument(addTrendSeries(documentRef.current, selectedTrend.id, binding));
-  }, [commitDocument, selectedPiPoint]);
-
-  const handleInsertGauge = useCallback(() => {
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    if (selectedPiPoint && !binding) {
-      return;
-    }
-    const currentDocument = documentRef.current;
-    const gauge = createGauge({ binding, surface: currentDocument.surface, existingIds: currentDocument.elements.map((element) => element.id) });
-    if (!onChangeRef.current) {
-      return;
-    }
-    commitDocument(appendGauge(currentDocument, gauge));
-    dispatch({ type: 'SELECT', elementId: gauge.id });
-  }, [commitDocument, dispatch, selectedPiPoint]);
-
-  const handleInsertBar = useCallback(() => {
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    if (selectedPiPoint && !binding) {
-      return;
-    }
-    const currentDocument = documentRef.current;
-    const bar = createBar({ binding, surface: currentDocument.surface, existingIds: currentDocument.elements.map((element) => element.id) });
-    if (!onChangeRef.current) {
-      return;
-    }
-    commitDocument(appendBar(currentDocument, bar));
-    dispatch({ type: 'SELECT', elementId: bar.id });
-  }, [commitDocument, dispatch, selectedPiPoint]);
-
   const handlePiPointDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     if (mode !== 'edit' || !onChangeRef.current || !Array.from(event.dataTransfer.types).includes(PI_POINT_DRAG_MIME)) {
       return;
@@ -507,6 +413,7 @@ export function DisplayEditor({
       onModeChange?.(nextMode);
       if (nextMode === 'view') {
         dispatch({ type: 'CLEAR_SELECTION' });
+        setOptionsTrendId(null);
       }
     },
     [dispatch, onModeChange],
@@ -550,12 +457,6 @@ export function DisplayEditor({
     )) as ValueElement | undefined
     : undefined;
 
-  const selectedTrend = mode === 'edit' && state.selectedElementId
-    ? displayDocument.elements.find((element) => (
-      element.id === state.selectedElementId && element.type === TREND_TYPE
-    )) as TrendElement | undefined
-    : undefined;
-
   const handleValueVisualChange = useCallback((patch: Partial<ValueVisualOptions>) => {
     const selectedId = stateRef.current.selectedElementId;
     if (!selectedId || !onChangeRef.current) {
@@ -584,6 +485,15 @@ export function DisplayEditor({
   const handleBarChange = useCallback((patch: Parameters<typeof updateBarOptions>[2]) => {
     commitDocument(updateBarOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
+  const optionsTrend = optionsTrendId
+    ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
+    : undefined;
+  const handleTrendVisualChange = useCallback((patch: Parameters<typeof updateTrendVisualOptions>[2]) => {
+    if (optionsTrendId) commitDocument(updateTrendVisualOptions(documentRef.current, optionsTrendId, patch));
+  }, [commitDocument, optionsTrendId]);
+  const handleTrendSeriesChange = useCallback((key: string, patch: Parameters<typeof updateTrendSeriesOptions>[3]) => {
+    if (optionsTrendId) commitDocument(updateTrendSeriesOptions(documentRef.current, optionsTrendId, key, patch));
+  }, [commitDocument, optionsTrendId]);
 
   const handleDeleteSelectedElement = useCallback(() => {
     if (mode !== 'edit') {
@@ -699,7 +609,7 @@ export function DisplayEditor({
 
   return (
     <div className={styles.container} data-testid="display-editor" onKeyDown={handleEditorKeyDown}>
-      <div className={mode === 'edit' && showToolbar ? styles.header : styles.headerCompact}>
+      <div className={styles.header}>
         <div className={styles.headerPrimary}>
           <div className={styles.displayLabel}>
             <span className={styles.displayLabelPrefix}>Display:</span>
@@ -731,6 +641,21 @@ export function DisplayEditor({
               <EyeIcon />
             </button>
           </div>
+          {mode === 'edit' && showToolbar && (
+            <div className={styles.toolbar} data-testid="display-editor-toolbar">
+              <div className={styles.toolbarGroup} aria-label="Histórico">
+                <button type="button" title="Desfazer" className={styles.iconButton} data-testid="display-undo" aria-label="Desfazer" disabled={!hasUndo(historyRef.current)} onClick={handleUndo}><UndoIcon /></button>
+                <button type="button" title="Refazer" className={styles.iconButton} data-testid="display-redo" aria-label="Refazer" disabled={!hasRedo(historyRef.current)} onClick={handleRedo}><RedoIcon /></button>
+              </div>
+              <span className={styles.toolbarDivider} aria-hidden="true" />
+              <div className={styles.toolbarGroup} aria-label="Símbolo ao arrastar">
+                <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} aria-pressed={dropSymbolType === 'trend'} onClick={() => onDropSymbolTypeChange?.('trend')}><TrendIcon /></button>
+                <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} aria-pressed={dropSymbolType === 'value'} onClick={() => onDropSymbolTypeChange?.('value')}><ValueIcon /></button>
+                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} aria-pressed={dropSymbolType === 'gauge'} onClick={() => onDropSymbolTypeChange?.('gauge')}><GaugeIcon /></button>
+                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} aria-pressed={dropSymbolType === 'bar'} onClick={() => onDropSymbolTypeChange?.('bar')}><BarIcon /></button>
+              </div>
+            </div>
+          )}
           <div className={styles.transferControls} data-testid="display-transfer-controls">
             <button type="button" title="Exportar Display" aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" onClick={handleExport}>
               <ExportIcon />
@@ -741,31 +666,6 @@ export function DisplayEditor({
             <input ref={importInputRef} type="file" accept="application/json,.json,.pims-vision.json" data-testid="display-import-input" className={styles.fileInput} onChange={handleImportFile} />
           </div>
         </div>
-        {mode === 'edit' && showToolbar && (
-          <div className={styles.toolbar} data-testid="display-editor-toolbar">
-            <div className={styles.toolbarGroup} aria-label="Histórico">
-              <button type="button" title="Desfazer" className={styles.iconButton} data-testid="display-undo" aria-label="Desfazer" disabled={!hasUndo(historyRef.current)} onClick={handleUndo}><UndoIcon /></button>
-              <button type="button" title="Refazer" className={styles.iconButton} data-testid="display-redo" aria-label="Refazer" disabled={!hasRedo(historyRef.current)} onClick={handleRedo}><RedoIcon /></button>
-            </div>
-            <span className={styles.toolbarDivider} aria-hidden="true" />
-            <div className={styles.toolbarGroup} aria-label="Símbolos">
-              <button
-                type="button"
-                title="Adicionar tag à Trend selecionada"
-                aria-label="Adicionar tag à Trend selecionada"
-                className={styles.addTrendSeriesButton}
-                data-testid="display-add-tag-to-selected-trend"
-                disabled={!selectedTrend || !createPiPointBinding(selectedPiPoint ?? {})}
-                onClick={handleAddPiPointToSelectedTrend}
-              ><AddTagIcon /><span>Adicionar tag</span></button>
-              <button type="button" title="Inserir retângulo" aria-label="Inserir retângulo" className={styles.iconButton} data-testid="display-insert-rectangle" onClick={handleInsertRectangle}><RectangleIcon /></button>
-              <button type="button" title="Inserir Value" aria-label="Inserir Value" className={styles.iconButton} data-testid="display-insert-value" disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={handleInsertValue}><ValueIcon /></button>
-              <button type="button" title="Inserir Gauge" aria-label="Inserir Gauge" className={styles.iconButton} data-testid="display-insert-gauge" onClick={handleInsertGauge}><GaugeIcon /></button>
-              <button type="button" title="Inserir Barra" aria-label="Inserir Barra" className={styles.iconButton} data-testid="display-insert-bar" onClick={handleInsertBar}><BarIcon /></button>
-              <button type="button" title="Inserir Trend" aria-label="Inserir Trend" className={styles.iconButton} data-testid="display-insert-trend" disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={handleInsertTrend}><TrendIcon /></button>
-            </div>
-          </div>
-        )}
       </div>
       {importError && <div className={styles.importError} role="alert" data-testid="display-import-error">{importError}</div>}
       <div className={styles.workspace}>
@@ -791,6 +691,7 @@ export function DisplayEditor({
             trendRefreshKey={trendRefreshKey}
             trendTimeRange={trendTimeRange}
             onTrendOpen={handleTrendOpen}
+            onTrendContextMenu={(trend) => setOptionsTrendId(trend.id)}
           />
           {displayDocument.elements.length === 0 && (
             <div className={styles.emptyState} data-testid="display-empty-state">
@@ -839,10 +740,12 @@ export function DisplayEditor({
         {selectedBar && (
           <ScalePropertiesPanel kind="Bar" {...getBarOptions(selectedBar.properties)} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
+        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
         <TrendPopup
           seriesStates={trendPopup.seriesStates}
+          visualOptions={getTrendVisualOptions(trendPopup.element)}
           timeRange={trendTimeRange}
           timeSelection={timeSelection}
           onTimeSelectionChange={onTimeSelectionChange}
@@ -1105,28 +1008,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   header: css`
     display: flex;
-    flex-direction: column;
-    flex: 0 0 94px;
-    min-height: 94px;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--surface-primary);
-  `,
-  headerCompact: css`
-    display: flex;
-    flex-direction: column;
     flex: 0 0 68px;
     min-height: 68px;
     border-bottom: 1px solid var(--border-color);
-    background: transparent;
-
-    & > div:first-child {
-      flex-basis: 68px;
-      height: 68px;
-    }
+    background: var(--surface-primary);
   `,
   headerPrimary: css`
-    flex: 0 0 47px;
-    height: 47px;
+    flex: 1 1 auto;
+    height: 100%;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -1184,17 +1073,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
     cursor: pointer;
   `,
   toolbar: css`
-    flex: 0 0 47px;
-    height: 47px;
-    box-sizing: border-box;
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
+    height: 100%;
+    box-sizing: border-box;
     gap: 7px;
     min-width: 0;
     overflow-x: auto;
-    padding: 0 ${theme.spacing(1.5)};
-    background: var(--surface-secondary);
-    border-top: 1px solid var(--border-subtle);
+    padding: 0 ${theme.spacing(1)};
   `,
   toolbarGroup: css`
     display: flex;
@@ -1236,6 +1123,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
     height: 25px;
     flex: 0 0 1px;
     background: var(--border-color);
+  `,
+  symbolModeButton: css`
+    display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 42px; padding: 0;
+    border: 1px solid transparent; border-radius: 11px; background: var(--button-bg); color: var(--text-secondary); cursor: pointer;
+    &:hover { color: var(--text-primary); background: var(--button-hover); border-color: var(--border-color); }
+  `,
+  symbolModeButtonActive: css`
+    display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 42px; padding: 0;
+    border: 1px solid var(--accent); border-radius: 11px; background: var(--selection-bg); color: var(--accent); cursor: pointer;
   `,
   transferControls: css`
     display: flex;
@@ -1428,16 +1324,8 @@ function TagIcon() {
   return <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 12.4 11.4 4H20v8.6L11.6 21 3 12.4Zm13-5.9a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z" /></svg>;
 }
 
-function AddTagIcon() {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 12.4 11.4 4H20v8.6L11.6 21 3 12.4Z" /><circle cx="16" cy="8" r="1" fill="currentColor" stroke="none" /><path d="M18 15v6M15 18h6" /></svg>;
-}
-
 function RedoIcon() {
   return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m15 7 5 5-5 5" /><path d="M19 12h-8a6 6 0 0 0-6 6" /></svg>;
-}
-
-function RectangleIcon() {
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="6" width="16" height="12" /><path d="M7 9h10M7 15h10" opacity="0.45" /></svg>;
 }
 
 function ValueIcon() {

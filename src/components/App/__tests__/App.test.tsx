@@ -44,7 +44,7 @@ describe('App', () => {
     expect(screen.getByTestId('display-editor')).toBeInTheDocument();
     expect(screen.getByTestId('display-surface')).toBeInTheDocument();
     expect(screen.getByTestId('display-mode-edit')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('display-insert-rectangle')).toBeInTheDocument();
+    expect(screen.getByLabelText('Arrastar como Trend')).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByTestId('pi-connection-status')).toHaveTextContent(
         'PI System: Data Source indisponível',

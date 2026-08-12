@@ -4,6 +4,7 @@ import { TimeRangeBar } from '../../components/TimeRangeBar';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../time/timeRange';
 import type { TrendSeriesViewState } from './TrendElementView';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
+import { DEFAULT_TREND_VISUAL_OPTIONS, type TrendVisualOptions } from '../createTrend';
 
 export interface TrendPopupProps {
   seriesStates: readonly TrendSeriesViewState[];
@@ -11,6 +12,7 @@ export interface TrendPopupProps {
   timeSelection?: DisplayTimeSelection;
   onTimeSelectionChange?: (selection: DisplayTimeSelection) => void;
   loading?: boolean;
+  visualOptions?: TrendVisualOptions;
   onClose: () => void;
 }
 
@@ -18,6 +20,9 @@ const POPUP_WIDTH = 1600;
 const POPUP_HEIGHT = 800;
 const SCALE_INTERVALS = 10;
 const MAX_NAMED_STATE_LABELS = 8;
+const POPUP_AXIS_FONT_SIZE = 15;
+const POPUP_LEGEND_LINE_HEIGHT = 19;
+const POPUP_LEGEND_ITEM_HEIGHT = 46;
 type PopupScaleMode = 'single' | 'multiple' | 'configurable';
 type PopupCustomScales = Record<string, { min: string; max: string }>;
 interface PopupZoom {
@@ -27,10 +32,10 @@ interface PopupZoom {
   bottomRatio: number;
 }
 
-export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelectionChange, loading = false, onClose }: TrendPopupProps) {
+export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelectionChange, loading = false, visualOptions = DEFAULT_TREND_VISUAL_OPTIONS, onClose }: TrendPopupProps) {
   const [scaleMode, setScaleMode] = useState<PopupScaleMode>('multiple');
   const [customScales, setCustomScales] = useState<PopupCustomScales>({});
-  const [cursorMode, setCursorMode] = useState(false);
+  const [cursorMode, setCursorMode] = useState(true);
   const [zoomMode, setZoomMode] = useState(true);
   const [zoomHistory, setZoomHistory] = useState<PopupZoom[]>([]);
   const [cursors, setCursors] = useState<TrendCursor[]>([]);
@@ -138,7 +143,6 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
             title="Adicionar e mover cursores"
             onClick={() => {
               setCursorMode((enabled) => !enabled);
-              setZoomMode(false);
             }}
           >
             <TrendToolIcon kind="cursor" /><span>Cursores</span>
@@ -150,7 +154,6 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
             data-testid="trend-popup-zoom-mode"
             onClick={() => {
               setZoomMode((enabled) => !enabled);
-              setCursorMode(false);
             }}
           >
             <TrendToolIcon kind="zoom" /><span>Zoom</span>
@@ -220,6 +223,7 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
               scaleMode={scaleMode}
               customScales={customScales}
               zoom={zoomHistory.at(-1)}
+              visualOptions={visualOptions}
               zoomEnabled={zoomMode}
               onApplyZoom={(zoom) => setZoomHistory((current) => [...current, zoom])}
               cursorEnabled={cursorMode}
@@ -227,7 +231,6 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
               selectedCursorId={selectedCursorId}
               cursorDrag={cursorDrag}
               onActivateCursor={(time) => {
-                setCursorMode(true);
                 addCursor(time);
               }}
               onSelectCursor={setSelectedCursorId}
@@ -252,6 +255,7 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
 }
 
 interface PopupChartProps extends Pick<TrendPopupProps, 'seriesStates' | 'timeRange'> {
+  visualOptions: TrendVisualOptions;
   scaleMode: PopupScaleMode;
   customScales: PopupCustomScales;
   zoom?: PopupZoom;
@@ -275,6 +279,7 @@ function PopupChart({
   scaleMode,
   customScales,
   zoom,
+  visualOptions,
   zoomEnabled,
   onApplyZoom,
   cursorEnabled,
@@ -296,7 +301,7 @@ function PopupChart({
   }, [zoomEnabled]);
   const series = seriesStates.flatMap(({ series: configured, runtimeState }) => {
     const data = runtimeState.status === 'success' || runtimeState.status === 'error' ? runtimeState.data : undefined;
-    return data ? [{ key: popupSeriesKey(configured), name: configured.binding.pointName, color: configured.color, data }] : [];
+    return data ? [{ key: popupSeriesKey(configured), name: configured.legendLabel || configured.binding.pointName, color: configured.color, lineWidth: configured.lineWidth ?? 2, lineStyle: configured.lineStyle ?? 'solid', marker: configured.marker ?? 'none', data }] : [];
   });
   const allTimes = series.flatMap(({ data }) => [
     ...data.points.map((point) => point.time),
@@ -357,7 +362,8 @@ function PopupChart({
           const right = Math.max(zoomDrag.start.x, end.x);
           const top = Math.min(zoomDrag.start.y, end.y);
           const bottom = Math.max(zoomDrag.start.y, end.y);
-          if (right - left >= 8 && bottom - top >= 8) {
+          const isZoomSelection = right - left >= 8 && bottom - top >= 8;
+          if (isZoomSelection) {
             const from = domainStart + ((left - plot.x) / plot.width) * (domainEnd - domainStart);
             const to = domainStart + ((right - plot.x) / plot.width) * (domainEnd - domainStart);
             const topRatio = (top - plot.y) / plot.height;
@@ -371,6 +377,8 @@ function PopupChart({
               topRatio: currentTop + topRatio * currentSpan,
               bottomRatio: currentTop + bottomRatio * currentSpan,
             });
+          } else if (cursorEnabled) {
+            onActivateCursor(pointerTime(event));
           }
           setZoomDrag(null);
           return;
@@ -384,20 +392,21 @@ function PopupChart({
         onEndCursorDrag();
       }}
     >
-      {Array.from({ length: SCALE_INTERVALS + 1 }, (_, index) => index).map((index) => {
-        const y = plot.y + (plot.height * index) / SCALE_INTERVALS;
+      {visualOptions.title && <text x={plot.x + plot.width / 2} y={plot.y + 18} textAnchor="middle" fill="var(--text-primary)" fontSize={visualOptions.fontSize} fontFamily={visualOptions.fontFamily}>{visualOptions.title}</text>}
+      {Array.from({ length: visualOptions.scaleIntervals + 1 }, (_, index) => index).map((index) => {
+        const y = plot.y + (plot.height * index) / visualOptions.scaleIntervals;
         return (
           <g key={index}>
-            {index < SCALE_INTERVALS && index % 2 === 1 && <rect x={plot.x} y={y} width={plot.width} height={plot.height / SCALE_INTERVALS} fill="var(--chart-band)" />}
+            {index < visualOptions.scaleIntervals && index % 2 === 1 && <rect x={plot.x} y={y} width={plot.width} height={plot.height / visualOptions.scaleIntervals} fill="var(--chart-band)" />}
             <line x1={plot.x} y1={y} x2={plot.x + plot.width} y2={y} stroke="var(--border-subtle)" />
             {axisSeries.map(({ color, scale, name, data, stateLabels }, seriesIndex) => {
               const axisValue = data.points.length > 0
-                ? formatValue(scale.max - scale.step * index)
+                ? formatValue(scale.max - ((scale.max - scale.min) * index) / visualOptions.scaleIntervals, visualOptions.numberFormat)
                 : stateLabels.length > MAX_NAMED_STATE_LABELS
-                  ? formatValue((stateLabels.length - 1) * (1 - index / SCALE_INTERVALS))
+                  ? formatValue((stateLabels.length - 1) * (1 - index / visualOptions.scaleIntervals), visualOptions.numberFormat)
                   : undefined;
               return axisValue !== undefined ? (
-                <text key={name} x={8 + seriesIndex * 38} y={y + 4} textAnchor="start" fill={color} fontSize={10}>
+                <text key={name} x={8 + seriesIndex * 38} y={y + 5} textAnchor="start" fill={color} fontSize={POPUP_AXIS_FONT_SIZE}>
                   {axisValue}
                 </text>
               ) : null;
@@ -413,7 +422,7 @@ function PopupChart({
             y={stateY(label, stateLabels, plot) + 4}
             textAnchor="start"
             fill={color}
-            fontSize={10}
+            fontSize={POPUP_AXIS_FONT_SIZE}
           >
             {label}
           </text>
@@ -424,10 +433,10 @@ function PopupChart({
       {xTicks.map((time) => (
         <g key={time}>
           <line x1={xFor(time)} y1={plot.y + plot.height} x2={xFor(time)} y2={plot.y + plot.height - 6} stroke="var(--text-secondary)" />
-          <text x={xFor(time)} y={plot.y + plot.height + 18} textAnchor="middle" fill="var(--text-primary)" fontSize={11}>{formatAxisTime(time, timeSpan)}</text>
+          <text x={xFor(time)} y={plot.y + plot.height + 20} textAnchor="middle" fill="var(--text-primary)" fontSize={POPUP_AXIS_FONT_SIZE}>{formatAxisTime(time, timeSpan)}</text>
         </g>
       ))}
-      {scaledSeries.map(({ name, color, data, scale, stateLabels }, index) => {
+      {scaledSeries.map(({ name, color, lineWidth, lineStyle, marker, data, scale, stateLabels }, index) => {
         const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
         const path = points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${yFor(point.value, scale)}`).join(' ');
         const currentValue = points.at(-1)?.value;
@@ -436,11 +445,14 @@ function PopupChart({
         const currentState = states.at(-1)?.value;
         return (
           <React.Fragment key={name}>
-            {path && <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" data-testid={`trend-popup-line-${index}`} />}
-            {statePath && <path d={statePath} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="miter" data-testid={`trend-popup-state-line-${index}`} />}
-            <text x={legendX} y={34 + index * 38} fill={color} fontSize={12}>
+            {path && <path d={path} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="round" strokeLinecap="round" data-testid={`trend-popup-line-${index}`} />}
+            {visualOptions.showRegression && points.length > 1 && <path d={popupRegressionPath(points, xFor, (value) => yFor(value, scale))} fill="none" stroke={color} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} />}
+            {statePath && <path d={statePath} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="miter" data-testid={`trend-popup-state-line-${index}`} />}
+            {marker === 'circle' && points.map((point) => <circle key={point.time} cx={xFor(point.time)} cy={yFor(point.value, scale)} r={3} fill={color} />)}
+            {marker === 'square' && points.map((point) => <rect key={point.time} x={xFor(point.time) - 3} y={yFor(point.value, scale) - 3} width={6} height={6} fill={color} />)}
+            <text x={legendX} y={36 + index * POPUP_LEGEND_ITEM_HEIGHT} fill={color} fontSize={visualOptions.fontSize} fontFamily={visualOptions.fontFamily}>
               <tspan x={legendX}>{name}</tspan>
-              <tspan x={legendX} dy={15}>{currentValue !== undefined ? formatValue(currentValue) : currentState ?? '--'}</tspan>
+              <tspan x={legendX} dy={POPUP_LEGEND_LINE_HEIGHT}>{currentValue !== undefined ? formatValue(currentValue, visualOptions.numberFormat) : currentState ?? '--'}</tspan>
             </text>
           </React.Fragment>
         );
@@ -462,14 +474,6 @@ function PopupChart({
           setZoomDrag({ pointerId: event.pointerId, start: point, current: point });
           event.currentTarget.ownerSVGElement?.focus();
         } : undefined}
-        onDoubleClick={(event) => {
-          if (zoomEnabled) {
-            return;
-          }
-          event.preventDefault();
-          onActivateCursor(pointerTime(event));
-          event.currentTarget.ownerSVGElement?.focus();
-        }}
       />
       {zoomDrag && (
         <rect
@@ -512,7 +516,7 @@ function PopupChart({
         const labelBoxX = labelAnchor === 'end' ? labelX - labelWidth : labelX - 4;
         return (
           <g key={cursor.id} data-testid={`trend-popup-cursor-${cursor.id}`}>
-            <line x1={x} y1={plot.y} x2={x} y2={plot.y + plot.height} stroke={selected ? '#f2cc0c' : '#ff9830'} strokeWidth={2} pointerEvents="none" data-testid={`trend-popup-cursor-line-${cursor.id}`} />
+            <line x1={x} y1={plot.y} x2={x} y2={plot.y + plot.height} stroke="var(--trend-cursor, #ffffff)" strokeWidth={selected ? 2 : 1} pointerEvents="none" data-testid={`trend-popup-cursor-line-${cursor.id}`} />
             <rect x={labelBoxX} y={plot.y + 2} width={labelWidth} height={labelHeight} fill="var(--canvas-bg)" fillOpacity={0.92} stroke="var(--border-color)" pointerEvents="none" />
             <line
               x1={x}
@@ -538,7 +542,7 @@ function PopupChart({
                 onRemoveCursor(cursor.id);
               } : undefined}
             />
-            <text x={labelX} y={plot.y + 13} textAnchor={labelAnchor} fill={selected ? '#f2cc0c' : '#ff9830'} fontSize={10} fontWeight={600} pointerEvents="none" data-testid={`trend-popup-cursor-label-${cursor.id}`}>
+            <text x={labelX} y={plot.y + 13} textAnchor={labelAnchor} fill="var(--trend-cursor, #ffffff)" fontSize={10} fontWeight={600} pointerEvents="none" data-testid={`trend-popup-cursor-label-${cursor.id}`}>
               {formatCursorDate(cursor.time)}
             </text>
             {readings.map((reading, index) => (
@@ -641,8 +645,21 @@ function digitalPopupPath(
   return `${path} H ${xFor(domainEnd)}`;
 }
 
-function formatValue(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+function formatValue(value: number, format: TrendVisualOptions['numberFormat'] = 'automatic'): string {
+  if (format === 'integer') return String(Math.round(value));
+  if (format === 'oneDecimal') return value.toFixed(1);
+  if (format === 'twoDecimals') return value.toFixed(2);
+  return Number.isInteger(value) ? String(value) : value.toFixed(3);
+}
+
+function popupRegressionPath(points: ReadonlyArray<{ time: number; value: number }>, xFor: (time: number) => number, yFor: (value: number) => number): string {
+  const meanTime = points.reduce((sum, point) => sum + point.time, 0) / points.length;
+  const meanValue = points.reduce((sum, point) => sum + point.value, 0) / points.length;
+  const variance = points.reduce((sum, point) => sum + (point.time - meanTime) ** 2, 0);
+  const slope = variance === 0 ? 0 : points.reduce((sum, point) => sum + (point.time - meanTime) * (point.value - meanValue), 0) / variance;
+  const first = points[0]; const last = points[points.length - 1];
+  const predict = (time: number) => meanValue + slope * (time - meanTime);
+  return `M ${xFor(first.time)} ${yFor(predict(first.time))} L ${xFor(last.time)} ${yFor(predict(last.time))}`;
 }
 
 interface ValueScale {
@@ -840,54 +857,54 @@ const styles = {
   chartToolbar: css`
     display: flex;
     align-items: center;
-    height: 88px;
-    flex: 0 0 88px;
-    gap: 10px;
-    padding: 8px 12px;
+    height: 62px;
+    flex: 0 0 62px;
+    gap: 7px;
+    padding: 6px 10px;
     border-bottom: 1px solid var(--border-color);
   `,
   trendTool: css`
     display: inline-flex;
-    flex: 0 1 150px;
-    min-width: 105px;
-    height: 70px;
+    flex: 0 1 126px;
+    min-width: 96px;
+    height: 48px;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    padding: 6px 10px;
+    gap: 2px;
+    padding: 4px 8px;
     border: 1px solid var(--border-color);
-    border-radius: 15px;
+    border-radius: 10px;
     color: var(--text-secondary);
     background: var(--button-bg);
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     white-space: nowrap;
 
     &:hover:not(:disabled) { color: var(--text-primary); border-color: var(--accent-hover); }
     &:disabled { cursor: default; opacity: 0.38; }
-    svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+    svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   `,
   trendToolActive: css`
     display: inline-flex;
-    flex: 0 1 150px;
-    min-width: 105px;
-    height: 70px;
+    flex: 0 1 126px;
+    min-width: 96px;
+    height: 48px;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    padding: 6px 10px;
+    gap: 2px;
+    padding: 4px 8px;
     border: 1px solid var(--accent);
-    border-radius: 15px;
+    border-radius: 10px;
     color: var(--text-primary);
     background: var(--selection-bg);
     box-shadow: inset 0 0 0 2px var(--focus-ring);
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     white-space: nowrap;
 
-    svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+    svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; }
   `,
   scaleConfiguration: css`
     display: flex;

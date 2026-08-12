@@ -9,18 +9,45 @@ export const TREND_TYPE = 'trend' as const;
 export interface TrendSeries {
   binding: PiPointBinding;
   color: string;
+  legendLabel?: string;
+  lineWidth?: number;
+  lineStyle?: TrendLineStyle;
+  marker?: TrendMarker;
 }
+
+export type TrendLineStyle = 'solid' | 'dashed' | 'dotted';
+export type TrendMarker = 'none' | 'circle' | 'square';
+export type TrendNumberFormat = 'automatic' | 'integer' | 'oneDecimal' | 'twoDecimals';
+
+export interface TrendVisualOptions {
+  title: string;
+  showRegression: boolean;
+  numberFormat: TrendNumberFormat;
+  scaleIntervals: 2 | 5 | 10;
+  fontFamily: string;
+  fontSize: number;
+}
+
+export const DEFAULT_TREND_VISUAL_OPTIONS: TrendVisualOptions = {
+  title: '',
+  showRegression: false,
+  numberFormat: 'automatic',
+  scaleIntervals: 10,
+  fontFamily: 'Arial',
+  fontSize: 16,
+};
 
 export interface TrendProperties extends Record<string, unknown> {
   /** Legacy single-series contract, read for backwards compatibility only. */
   binding?: PiPointBinding;
   series?: TrendSeries[];
+  visual?: Partial<TrendVisualOptions>;
 }
 
 export type TrendElement = DisplayElement<typeof TREND_TYPE, TrendProperties>;
 
-const DEFAULT_TREND_WIDTH = 520;
-const DEFAULT_TREND_HEIGHT = 280;
+const DEFAULT_TREND_WIDTH = 1100;
+const DEFAULT_TREND_HEIGHT = 460;
 export const TREND_SERIES_COLORS = [
   '#6e9fff',
   '#ff9830',
@@ -113,6 +140,37 @@ export function getTrendSeries(element: Pick<TrendElement, 'properties'>): Trend
     : [];
 }
 
+export function getTrendVisualOptions(element: Pick<TrendElement, 'properties'>): TrendVisualOptions {
+  const visual = element.properties.visual ?? {};
+  return {
+    title: typeof visual.title === 'string' ? visual.title : DEFAULT_TREND_VISUAL_OPTIONS.title,
+    showRegression: visual.showRegression === true,
+    numberFormat: visual.numberFormat === 'integer' || visual.numberFormat === 'oneDecimal' || visual.numberFormat === 'twoDecimals'
+      ? visual.numberFormat
+      : 'automatic',
+    scaleIntervals: visual.scaleIntervals === 2 || visual.scaleIntervals === 5 || visual.scaleIntervals === 10 ? visual.scaleIntervals : 10,
+    fontFamily: typeof visual.fontFamily === 'string' && visual.fontFamily.trim() ? visual.fontFamily : 'Arial',
+    fontSize: typeof visual.fontSize === 'number' && Number.isFinite(visual.fontSize) ? Math.max(10, Math.min(24, visual.fontSize)) : 16,
+  };
+}
+
+export function updateTrendVisualOptions(document: DisplayDocument, elementId: string, patch: Partial<TrendVisualOptions>): DisplayDocument {
+  return updateTrendElement(document, elementId, (element) => ({
+    ...element,
+    properties: { ...element.properties, visual: { ...getTrendVisualOptions(element), ...patch } },
+  }));
+}
+
+export function updateTrendSeriesOptions(document: DisplayDocument, elementId: string, bindingKey: string, patch: Partial<Omit<TrendSeries, 'binding'>>): DisplayDocument {
+  return updateTrendElement(document, elementId, (element) => ({
+    ...element,
+    properties: {
+      ...element.properties,
+      series: getTrendSeries(element).map((series) => trendBindingKey(series.binding) === bindingKey ? { ...series, ...patch } : series),
+    },
+  }));
+}
+
 export function addTrendSeries(
   document: DisplayDocument,
   elementId: string,
@@ -158,8 +216,18 @@ function deduplicateTrendSeries(series: readonly TrendSeries[]): TrendSeries[] {
   for (const item of series) {
     const key = trendBindingKey(item.binding);
     if (!unique.has(key)) {
-      unique.set(key, { binding: { ...item.binding }, color: item.color });
+      unique.set(key, { ...item, binding: { ...item.binding } });
     }
   }
   return [...unique.values()];
+}
+
+function updateTrendElement(document: DisplayDocument, elementId: string, update: (element: TrendElement) => TrendElement): DisplayDocument {
+  const index = document.elements.findIndex((element) => element.id === elementId && element.type === TREND_TYPE);
+  if (index < 0) {
+    return document;
+  }
+  const elements = [...document.elements];
+  elements[index] = update(elements[index] as TrendElement);
+  return { ...document, elements };
 }

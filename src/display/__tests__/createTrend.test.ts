@@ -21,8 +21,8 @@ describe('TrendElement', () => {
     expect(trend).toMatchObject({
       id: 'trend-1',
       type: TREND_TYPE,
-      width: 520,
-      height: 280,
+      width: 1100,
+      height: 460,
       properties: { series: [{ binding, color: '#6e9fff' }] },
     });
     expect(trend.x).toBeGreaterThanOrEqual(0);

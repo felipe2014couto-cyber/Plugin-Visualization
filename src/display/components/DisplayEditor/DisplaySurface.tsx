@@ -76,6 +76,7 @@ export interface DisplaySurfaceProps {
   trendRefreshKey?: string;
   trendTimeRange?: DisplayTimeRange;
   onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[]) => void;
+  onTrendContextMenu?: (element: TrendElement) => void;
 }
 
 function trySetPointerCapture(target: Element, pointerId: number): void {
@@ -121,6 +122,7 @@ export function DisplaySurface({
   trendRefreshKey,
   trendTimeRange,
   onTrendOpen,
+  onTrendContextMenu,
 }: DisplaySurfaceProps) {
   const { surface, elements } = displayDocument;
   const cursorEnabled = !editable;
@@ -129,6 +131,15 @@ export function DisplaySurface({
   const [cursorsByTrend, setCursorsByTrend] = useState<Record<string, TrendCursor[]>>({});
   const [selectedCursor, setSelectedCursor] = useState<CursorSelection | null>(null);
   const [cursorDrag, setCursorDrag] = useState<CursorDrag | null>(null);
+
+  useEffect(() => {
+    if (!editable) {
+      return;
+    }
+    setCursorsByTrend({});
+    setSelectedCursor(null);
+    setCursorDrag(null);
+  }, [editable]);
 
   const valueConsumers: ValueRuntimeConsumer[] = elements.flatMap((element) => (
     (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE)
@@ -193,6 +204,13 @@ export function DisplaySurface({
     event.stopPropagation();
     onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, trendRuntimeStates));
   }, [editable, elements, onTrendOpen, trendRuntimeStates]);
+  const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
+    const element = elements.find((candidate) => candidate.id === elementId);
+    if (!element || element.type !== TREND_TYPE) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onTrendContextMenu?.(element as TrendElement);
+  }, [elements, onTrendContextMenu]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
@@ -277,6 +295,30 @@ export function DisplaySurface({
     setCursorDrag({ trendElementId: elementId, cursorId: cursor.id, pointerId: event.pointerId });
     svg.focus();
   }, [editable]);
+
+  const removeTrendCursor = useCallback((cursorId: string) => {
+    setCursorsByTrend((current) => Object.fromEntries(
+      Object.entries(current).flatMap(([trendElementId, cursors]) => {
+        const remaining = cursors.filter((cursor) => cursor.id !== cursorId);
+        return remaining.length > 0 ? [[trendElementId, remaining]] : [];
+      }),
+    ));
+    setSelectedCursor((current) => current?.cursorId === cursorId ? null : current);
+    setCursorDrag((current) => current?.cursorId === cursorId ? null : current);
+  }, []);
+
+  const handleTrendCursorDoubleClick = useCallback((
+    event: React.MouseEvent<SVGLineElement>,
+    _elementId: string,
+    cursor: TrendCursor,
+  ) => {
+    if (editable) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    removeTrendCursor(cursor.id);
+  }, [editable, removeTrendCursor]);
 
   const selectedElement = selectedElementId
     ? getElementById(displayDocument, selectedElementId) ?? null
@@ -394,15 +436,8 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
-    const cursorToRemove = selectedCursor;
-    setCursorsByTrend((current) => Object.fromEntries(
-      Object.entries(current).flatMap(([trendElementId, cursors]) => {
-        const remaining = cursors.filter((cursor) => cursor.id !== cursorToRemove.cursorId);
-        return remaining.length > 0 ? [[trendElementId, remaining]] : [];
-      }),
-    ));
-    setSelectedCursor(null);
-  }, [editable, selectedCursor]);
+    removeTrendCursor(selectedCursor.cursorId);
+  }, [editable, removeTrendCursor, selectedCursor]);
 
   const handlePositions = selectedElement
     ? getResizeHandlePositions({
@@ -504,8 +539,10 @@ export function DisplaySurface({
               selectedCursorId={cursorEnabled ? selectedCursor?.cursorId ?? null : null}
               onPlotPointerDown={cursorEnabled ? handleTrendPlotPointerDown : undefined}
               onCursorPointerDown={cursorEnabled ? handleTrendCursorPointerDown : undefined}
+              onCursorDoubleClick={cursorEnabled ? handleTrendCursorDoubleClick : undefined}
               timeRange={trendTimeRange}
               onDoubleClick={handleTrendDoubleClick}
+              onContextMenu={handleTrendContextMenu}
             />
           );
         }

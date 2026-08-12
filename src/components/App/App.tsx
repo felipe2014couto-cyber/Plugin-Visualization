@@ -152,12 +152,6 @@ export function App() {
                 <span className={styles.assetsIcon} aria-hidden="true"><CubeIcon /></span>
                 <span>Ativos</span>
               </div>
-              <div className={styles.assetTools} role="group" aria-label="Símbolo criado ao arrastar">
-                <button type="button" className={dropSymbolType === 'trend' ? styles.assetToolActive : styles.assetTool} title="Arrastar como Trend" aria-label="Arrastar como Trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => setDropSymbolType('trend')}><TrendIcon /></button>
-                <button type="button" className={dropSymbolType === 'value' ? styles.assetToolActive : styles.assetTool} title="Arrastar como Value" aria-label="Arrastar como Value" aria-pressed={dropSymbolType === 'value'} onClick={() => setDropSymbolType('value')}><ValueIcon /></button>
-                <button type="button" className={dropSymbolType === 'gauge' ? styles.assetToolActive : styles.assetTool} title="Arrastar como Gauge" aria-label="Arrastar como Gauge" aria-pressed={dropSymbolType === 'gauge'} onClick={() => setDropSymbolType('gauge')}><GaugeIcon /></button>
-                <button type="button" className={dropSymbolType === 'bar' ? styles.assetToolActive : styles.assetTool} title="Arrastar como Barra" aria-label="Arrastar como Barra" aria-pressed={dropSymbolType === 'bar'} onClick={() => setDropSymbolType('bar')}><BarIcon /></button>
-              </div>
               <div className={styles.assetsSectionLabel}>PI System</div>
               {editorMode === 'edit' ? (
                 <PiPointSearch
@@ -182,6 +176,7 @@ export function App() {
             loadRecordedTrend={hasPiConnection ? loadTrend : undefined}
             showToolbar={isAssetsPanelOpen}
             dropSymbolType={dropSymbolType}
+            onDropSymbolTypeChange={setDropSymbolType}
             trendRefreshKey={`${rangeFrom}:${rangeTo}`}
             trendTimeRange={{ from: rangeFrom, to: rangeTo }}
             timeSelection={timeSelection}
@@ -208,6 +203,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     --border-color: #2b394a;
     --border-subtle: #202d3c;
     --text-primary: #f1f2f5;
+    --trend-cursor: #ffffff;
     --text-secondary: #aeb3bf;
     --text-muted: #7f8a9a;
     --accent: #d33b91;
@@ -242,6 +238,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     --border-color: #d7dee8;
     --border-subtle: #e5e9f0;
     --text-primary: #1e293b;
+    --trend-cursor: #000000;
     --text-secondary: #64748b;
     --text-muted: #94a3b8;
     --accent: #a82578;
@@ -454,47 +451,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     height: 20px;
     color: var(--assets-header-text);
   `,
-  assetTools: css`
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    height: 78px;
-    padding: 0 ${theme.spacing(1.5)};
-    border-bottom: 1px solid var(--border-color);
-    background: var(--surface-secondary);
-  `,
-  assetTool: css`
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 46px;
-    height: 44px;
-    padding: 0;
-    color: var(--text-secondary);
-    border: 1px solid transparent;
-    border-radius: 12px;
-    background: var(--button-bg);
-    cursor: pointer;
-
-    &:hover {
-      color: var(--text-primary);
-      background: var(--button-hover);
-      border-color: var(--border-color);
-    }
-  `,
-  assetToolActive: css`
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 46px;
-    height: 44px;
-    padding: 0;
-    color: var(--accent);
-    background: var(--selection-bg);
-    border: 1px solid var(--accent);
-    border-radius: 12px;
-    cursor: pointer;
-  `,
   assetsSectionLabel: css`
     padding: ${theme.spacing(1.5, 1.5, 0.5)};
     color: var(--text-secondary);
@@ -553,22 +509,6 @@ function CubeIcon() {
     <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z" />
     <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
   </svg>;
-}
-
-function TrendIcon() {
-  return <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" /><path d="m6 16 4-5 3 3 5-7" /></svg>;
-}
-
-function ValueIcon() {
-  return <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><text x="12" y="15" fill="currentColor" stroke="none" fontSize="8" textAnchor="middle">123</text></svg>;
-}
-
-function GaugeIcon() {
-  return <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 17a8 8 0 1 1 16 0" /><path d="m12 13 4-4" /><path d="M7 18h10" /></svg>;
-}
-
-function BarIcon() {
-  return <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M5 19V9M10 19V5M15 19v-7M20 19V3" /><path d="M3 20h19" /></svg>;
 }
 
 function getConnectionLabel(connection: PiConnectionState): string {

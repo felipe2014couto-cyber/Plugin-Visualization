@@ -1,5 +1,5 @@
 import React from 'react';
-import { getTrendSeries, type TrendElement, type TrendSeries } from '../createTrend';
+import { getTrendSeries, getTrendVisualOptions, type TrendElement, type TrendSeries } from '../createTrend';
 import type { PiTrendSeries, TrendPoint, TrendStatePoint } from '../../pi/piDataSource';
 import type { TrendRuntimeState } from '../runtime/trendRuntime';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
@@ -23,8 +23,14 @@ export interface TrendElementViewProps {
     cursor: TrendCursor,
     chart: TrendChartModel,
   ) => void;
+  onCursorDoubleClick?: (
+    event: React.MouseEvent<SVGLineElement>,
+    elementId: string,
+    cursor: TrendCursor,
+  ) => void;
   timeRange?: DisplayTimeRange;
   onDoubleClick?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
+  onContextMenu?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
   showBackground?: boolean;
 }
 
@@ -38,6 +44,7 @@ const GRID_COLOR = 'var(--border-subtle, rgba(255, 255, 255, 0.14))';
 const AXIS_COLOR = 'var(--text-muted, rgba(255, 255, 255, 0.45))';
 const TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.82))';
 const LINE_COLOR = '#6e9fff';
+const AXIS_FONT_SIZE = 16;
 
 export function TrendElementView({
   element,
@@ -48,12 +55,15 @@ export function TrendElementView({
   selectedCursorId = null,
   onPlotPointerDown,
   onCursorPointerDown,
+  onCursorDoubleClick,
   timeRange,
   onDoubleClick,
+  onContextMenu,
   showBackground = true,
 }: TrendElementViewProps) {
   const state = runtimeState ?? { status: 'loading' as const };
   const configuredSeries = getTrendSeries(element);
+  const visual = getTrendVisualOptions(element);
   const resolvedSeriesStates = seriesStates ?? configuredSeries.slice(0, 1).map((series) => ({ series, runtimeState: state }));
   const cursorPointerDown = cursorEnabled ? onCursorPointerDown : undefined;
   const content = getTrendContent(
@@ -63,7 +73,9 @@ export function TrendElementView({
     cursorEnabled ? selectedCursorId : null,
     cursorEnabled ? onPlotPointerDown : undefined,
     cursorPointerDown,
+    cursorEnabled ? onCursorDoubleClick : undefined,
     timeRange,
+    visual,
   );
   const clipPathId = trendContentClipPathId(element.id);
 
@@ -74,6 +86,7 @@ export function TrendElementView({
       data-element-type={element.type}
       style={{ cursor: cursorEnabled ? 'default' : 'move' }}
       onDoubleClick={(event) => onDoubleClick?.(event, element.id)}
+      onContextMenu={(event) => onContextMenu?.(event, element.id)}
     >
       <defs>
         <clipPath id={clipPathId} clipPathUnits="userSpaceOnUse">
@@ -113,8 +126,11 @@ function getTrendContent(
   selectedCursorId: string | null,
   onPlotPointerDown: TrendElementViewProps['onPlotPointerDown'],
   onCursorPointerDown: TrendElementViewProps['onCursorPointerDown'],
+  onCursorDoubleClick: TrendElementViewProps['onCursorDoubleClick'],
   timeRange: DisplayTimeRange | undefined,
+  visual: ReturnType<typeof getTrendVisualOptions>,
 ): React.ReactNode {
+  const formatValue = (value: number) => formatNumber(value, visual.numberFormat);
   const legendX = element.x + element.width - trendPlotRightMargin(element.width) + 12;
   const dataSeries = seriesStates.flatMap(({ series, runtimeState }) => {
     const data = runtimeState.status === 'success' || runtimeState.status === 'error'
@@ -133,7 +149,8 @@ function getTrendContent(
       x={legendX}
       y={element.y + 18}
       fill={TEXT_COLOR}
-      fontSize={12}
+      fontSize={visual.fontSize}
+      fontFamily={visual.fontFamily}
       data-testid={`trend-title-${element.id}`}
       pointerEvents="none"
     >
@@ -144,15 +161,15 @@ function getTrendContent(
         const currentValue = data?.points.at(-1)?.value;
         const currentState = data?.states?.at(-1)?.value;
         const value = currentValue !== undefined
-          ? formatNumber(currentValue)
+          ? formatValue(currentValue)
           : currentState !== undefined ? currentState : '--';
-        const legendY = element.y + 18 + index * 34;
+        const legendY = element.y + 26 + index * 54;
         return (
           <React.Fragment key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}>
             <tspan x={legendX} y={legendY} fill={series.color} data-testid={`trend-legend-${element.id}-${index}`}>
-              {series.binding.pointName}
+              {series.legendLabel || series.binding.pointName}
             </tspan>
-            <tspan x={legendX} y={legendY + 14} fill={series.color} data-testid={`trend-legend-value-${element.id}-${index}`}>
+            <tspan x={legendX} y={legendY + 23} fill={series.color} data-testid={`trend-legend-value-${element.id}-${index}`}>
               {value}
             </tspan>
           </React.Fragment>
@@ -162,11 +179,11 @@ function getTrendContent(
   );
 
   if (dataSeries.length > 0 && stateSeries.length > 0) {
-    return <>{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} /></>;
+    return <>{visual.title && <TrendTitle element={element} visual={visual} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} /></>;
   }
 
   if (dataSeries.length === 0 && stateSeries.length > 0) {
-    return <>{title}<DigitalTrend element={element} series={stateSeries} timeRange={timeRange} /></>;
+    return <>{visual.title && <TrendTitle element={element} visual={visual} />}{title}<DigitalTrend element={element} series={stateSeries} timeRange={timeRange} /></>;
   }
 
   if (dataSeries.length === 0 && seriesStates.some(({ runtimeState }) => runtimeState.status === 'loading')) {
@@ -185,7 +202,7 @@ function getTrendContent(
   const chart = buildTrendChartForSeries(element, drawableSeries.map(({ data }) => data.points), timeRange);
   return (
     <>
-      {title}
+      {visual.title && <TrendTitle element={element} visual={visual} />}{title}
       <rect
         x={chart.plotX}
         y={chart.plotY}
@@ -206,8 +223,8 @@ function getTrendContent(
             stroke={GRID_COLOR}
             strokeWidth={1}
           />
-          <text x={chart.plotX - 6} y={tick.y + 4} textAnchor="end" fill={TEXT_COLOR} fontSize={10}>
-            {formatNumber(tick.value)}
+          <text x={chart.plotX - 6} y={tick.y + 4} textAnchor="end" fill={TEXT_COLOR} fontSize={AXIS_FONT_SIZE}>
+            {formatValue(tick.value)}
           </text>
         </g>
       ))}
@@ -238,7 +255,7 @@ function getTrendContent(
           y={chart.plotY + chart.plotHeight + 18}
           textAnchor="middle"
           fill={TEXT_COLOR}
-          fontSize={10}
+          fontSize={AXIS_FONT_SIZE}
           pointerEvents="none"
         >
           {formatAxisTime(tick.time, chart.domainEnd - chart.domainStart)}
@@ -253,12 +270,16 @@ function getTrendContent(
               d={path}
               fill="none"
               stroke={series.color || LINE_COLOR}
-              strokeWidth={2}
+              strokeWidth={series.lineWidth ?? 2}
+              strokeDasharray={series.lineStyle === 'dashed' ? '8 5' : series.lineStyle === 'dotted' ? '2 4' : undefined}
               strokeLinejoin="round"
               strokeLinecap="round"
               data-testid={index === 0 ? `trend-line-${element.id}` : `trend-line-${element.id}-${index}`}
               pointerEvents="none"
             />
+            {visual.showRegression && data.points.length > 1 && <path d={trendRegressionPath(chart, data.points)} fill="none" stroke={series.color || LINE_COLOR} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} pointerEvents="none" />}
+            {series.marker === 'circle' && data.points.map((point) => { const position = trendPointForValue(chart, point); return <circle key={point.time} cx={position.x} cy={position.y} r={3} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
+            {series.marker === 'square' && data.points.map((point) => { const position = trendPointForValue(chart, point); return <rect key={point.time} x={position.x - 3} y={position.y - 3} width={6} height={6} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
             {singlePoint && (
               <circle
                 cx={singlePoint.x}
@@ -275,7 +296,7 @@ function getTrendContent(
       {cursors.map((cursor) => {
         const values = drawableSeries.flatMap(({ series, data }) => {
           const value = resolveTrendCursorValue(data.points, cursor.time);
-          return value === undefined ? [] : [{ pointName: series.binding.pointName, value }];
+          return value === undefined ? [] : [{ pointName: series.binding.pointName, value, color: series.color || LINE_COLOR }];
         });
         if (values.length === 0) {
           return null;
@@ -291,7 +312,7 @@ function getTrendContent(
               y1={chart.plotY}
               x2={x}
               y2={chart.plotY + chart.plotHeight}
-              stroke={selected ? '#f2cc0c' : '#ff9830'}
+              stroke="var(--trend-cursor, #ffffff)"
               strokeWidth={selected ? 2 : 1}
               pointerEvents="none"
               data-testid={`trend-cursor-line-${element.id}-${cursor.id}`}
@@ -302,41 +323,39 @@ function getTrendContent(
               x2={x}
               y2={chart.plotY + chart.plotHeight}
               stroke="transparent"
-              strokeWidth={12}
+              strokeWidth={18}
               style={onCursorPointerDown ? { cursor: 'ew-resize' } : undefined}
               data-testid={`trend-cursor-hit-${element.id}-${cursor.id}`}
               aria-label={`Selecionar cursor ${formatCursorTime(cursor.time)}`}
               onPointerDown={onCursorPointerDown ? (event) => onCursorPointerDown(event, element.id, cursor, chart) : undefined}
+              onDoubleClick={onCursorDoubleClick ? (event) => onCursorDoubleClick(event, element.id, cursor) : undefined}
             />
             <text
               x={labelX}
               y={chart.plotY + 12}
               textAnchor={labelAnchor}
-              fill={selected ? '#f2cc0c' : '#ff9830'}
-              fontSize={10}
+              fill="var(--trend-cursor, #ffffff)"
+              fontSize={AXIS_FONT_SIZE}
               pointerEvents="none"
               data-testid={`trend-cursor-label-${element.id}-${cursor.id}`}
             >
-              {formatCursorTime(cursor.time)} {values.map(({ pointName, value }) => `${pointName} ${formatNumber(value)}`).join('  ')}
+              <tspan x={labelX} y={chart.plotY + 12}>{formatCursorTime(cursor.time)}</tspan>
+              {values.map(({ pointName, value, color }, index) => (
+                <tspan key={pointName} x={labelX} y={chart.plotY + 12 + (index + 1) * 18} fill={color}>
+                  {pointName} {formatValue(value)}
+                </tspan>
+              ))}
             </text>
           </g>
         );
       })}
-      {seriesStates.some(({ runtimeState }) => runtimeState.status === 'error') && (
-        <text
-          x={element.x + element.width - 10}
-          y={element.y + 18}
-          textAnchor="end"
-          fill="#f2cc0c"
-          fontSize={10}
-          data-testid={`trend-refresh-error-${element.id}`}
-          pointerEvents="none"
-        >
-          erro de atualização
-        </text>
-      )}
     </>
   );
+}
+
+function TrendTitle({ element, visual }: { element: TrendElement; visual: ReturnType<typeof getTrendVisualOptions> }) {
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - trendPlotRightMargin(element.width));
+  return <text x={element.x + PLOT_MARGIN.left + plotWidth / 2} y={element.y + 20} textAnchor="middle" fill={TEXT_COLOR} fontSize={visual.fontSize} fontFamily={visual.fontFamily} pointerEvents="none">{visual.title}</text>;
 }
 
 function TrendMessage({
@@ -419,34 +438,38 @@ function MixedTrend({
         return (
           <g key={label} pointerEvents="none">
             <line x1={plotX} y1={y} x2={plotX + plotWidth} y2={y} stroke={GRID_COLOR} strokeWidth={1} />
-            <text x={stateAxisX - 6} y={y + 4} textAnchor="end" fill={stateSeries[0]?.series.color || LINE_COLOR} fontSize={10}>{index}</text>
+            <text x={stateAxisX - 6} y={y + 4} textAnchor="end" fill={stateSeries[0]?.series.color || LINE_COLOR} fontSize={AXIS_FONT_SIZE}>{index}</text>
           </g>
         );
       })}
       <line x1={stateAxisX} y1={plotY} x2={stateAxisX} y2={plotY + plotHeight} stroke={stateSeries[0]?.series.color || AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
       <line x1={plotX} y1={plotY} x2={plotX} y2={plotY + plotHeight} stroke={numericSeries[0]?.series.color || AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
       {numericTicks.map((value) => (
-        <text key={value} x={plotX - 6} y={numericY(value) + 4} textAnchor="end" fill={numericSeries[0]?.series.color || TEXT_COLOR} fontSize={10} pointerEvents="none">
+        <text key={value} x={plotX - 6} y={numericY(value) + 4} textAnchor="end" fill={numericSeries[0]?.series.color || TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
           {formatNumber(value)}
         </text>
       ))}
       <line x1={plotX} y1={plotY + plotHeight} x2={plotX + plotWidth} y2={plotY + plotHeight} stroke={AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
       {xTicks.map((time) => (
-        <text key={time} x={xFor(time)} y={plotY + plotHeight + 18} textAnchor="middle" fill={TEXT_COLOR} fontSize={10} pointerEvents="none">
+        <text key={time} x={xFor(time)} y={plotY + plotHeight + 18} textAnchor="middle" fill={TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
           {formatAxisTime(time, domainEnd - domainStart)}
         </text>
       ))}
       {stateSeries.map(({ series, states: points }, index) => (
-        <path
-          key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}
-          d={digitalTrendPath(points, domainEnd, xFor, stateY)}
-          fill="none"
-          stroke={series.color || LINE_COLOR}
-          strokeWidth={2}
-          strokeLinejoin="round"
-          data-testid={index === 0 ? `trend-state-line-${element.id}` : `trend-state-line-${element.id}-${index}`}
-          pointerEvents="none"
-        />
+        <React.Fragment key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}>
+          <path
+            d={digitalTrendPath(points, domainEnd, xFor, stateY)}
+            fill="none"
+            stroke={series.color || LINE_COLOR}
+            strokeWidth={series.lineWidth ?? 2}
+            strokeDasharray={series.lineStyle === 'dashed' ? '8 5' : series.lineStyle === 'dotted' ? '2 4' : undefined}
+            strokeLinejoin="round"
+            data-testid={index === 0 ? `trend-state-line-${element.id}` : `trend-state-line-${element.id}-${index}`}
+            pointerEvents="none"
+          />
+          {series.marker === 'circle' && points.map((state, markerIndex) => <circle key={`${state.time}-${markerIndex}`} cx={xFor(state.time)} cy={stateY(state.value)} r={3} fill={series.color || LINE_COLOR} pointerEvents="none" />)}
+          {series.marker === 'square' && points.map((state, markerIndex) => <rect key={`${state.time}-${markerIndex}`} x={xFor(state.time) - 3} y={stateY(state.value) - 3} width={6} height={6} fill={series.color || LINE_COLOR} pointerEvents="none" />)}
+        </React.Fragment>
       ))}
       {numericSeries.map(({ series, data }, index) => (
         <path
@@ -514,28 +537,32 @@ function DigitalTrend({
         return (
           <g key={labels[index]} pointerEvents="none">
             <line x1={plotX} y1={y} x2={plotX + plotWidth} y2={y} stroke={GRID_COLOR} strokeWidth={1} />
-            <text x={plotX - 6} y={y + 4} textAnchor="end" fill={TEXT_COLOR} fontSize={10}>{index}</text>
+            <text x={plotX - 6} y={y + 4} textAnchor="end" fill={TEXT_COLOR} fontSize={AXIS_FONT_SIZE}>{index}</text>
           </g>
         );
       })}
       <line x1={plotX} y1={plotY} x2={plotX} y2={plotY + plotHeight} stroke={AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
       <line x1={plotX} y1={plotY + plotHeight} x2={plotX + plotWidth} y2={plotY + plotHeight} stroke={AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
       {xTicks.map((time) => (
-        <text key={time} x={xFor(time)} y={plotY + plotHeight + 18} textAnchor="middle" fill={TEXT_COLOR} fontSize={10} pointerEvents="none">
+        <text key={time} x={xFor(time)} y={plotY + plotHeight + 18} textAnchor="middle" fill={TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
           {formatAxisTime(time, domainEnd - domainStart)}
         </text>
       ))}
       {series.map(({ series: trendSeries, states }, index) => (
-        <path
-          key={`${trendSeries.binding.dataSourceUid}:${trendSeries.binding.serverPath}:${trendSeries.binding.pointName}`}
-          d={digitalTrendPath(states, domainEnd, xFor, yFor)}
-          fill="none"
-          stroke={trendSeries.color || LINE_COLOR}
-          strokeWidth={2}
-          strokeLinejoin="round"
-          data-testid={index === 0 ? `trend-state-line-${element.id}` : `trend-state-line-${element.id}-${index}`}
-          pointerEvents="none"
-        />
+        <React.Fragment key={`${trendSeries.binding.dataSourceUid}:${trendSeries.binding.serverPath}:${trendSeries.binding.pointName}`}>
+          <path
+            d={digitalTrendPath(states, domainEnd, xFor, yFor)}
+            fill="none"
+            stroke={trendSeries.color || LINE_COLOR}
+            strokeWidth={trendSeries.lineWidth ?? 2}
+            strokeDasharray={trendSeries.lineStyle === 'dashed' ? '8 5' : trendSeries.lineStyle === 'dotted' ? '2 4' : undefined}
+            strokeLinejoin="round"
+            data-testid={index === 0 ? `trend-state-line-${element.id}` : `trend-state-line-${element.id}-${index}`}
+            pointerEvents="none"
+          />
+          {trendSeries.marker === 'circle' && states.map((state, markerIndex) => <circle key={`${state.time}-${markerIndex}`} cx={xFor(state.time)} cy={yFor(state.value)} r={3} fill={trendSeries.color || LINE_COLOR} pointerEvents="none" />)}
+          {trendSeries.marker === 'square' && states.map((state, markerIndex) => <rect key={`${state.time}-${markerIndex}`} x={xFor(state.time) - 3} y={yFor(state.value) - 3} width={6} height={6} fill={trendSeries.color || LINE_COLOR} pointerEvents="none" />)}
+        </React.Fragment>
       ))}
     </>
   );
@@ -615,6 +642,7 @@ export function buildTrendChartForSeries(
   const yFor = (value: number) => plotY + ((domainMax - value) / Math.max(1e-12, domainMax - domainMin)) * plotHeight;
   const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(point.time)} ${yFor(point.value)}`).join(' ');
 
+  const intervals = getTrendVisualOptions(element).scaleIntervals;
   return {
     plotX,
     plotY,
@@ -625,8 +653,8 @@ export function buildTrendChartForSeries(
     domainMin,
     domainMax,
     path,
-    yTicks: [0, 1, 2].map((index) => {
-      const value = domainMax - ((domainMax - domainMin) * index) / 2;
+    yTicks: Array.from({ length: intervals + 1 }, (_, index) => index).map((index) => {
+      const value = domainMax - ((domainMax - domainMin) * index) / intervals;
       return { value, y: yFor(value) };
     }),
     xTicks: [0, 1, 2].map((index) => {
@@ -666,7 +694,20 @@ export function trendXForTime(chart: TrendChartModel, time: number): number {
   return chart.plotX + ((boundedTime - chart.domainStart) / (chart.domainEnd - chart.domainStart)) * chart.plotWidth;
 }
 
-function formatNumber(value: number): string {
+function trendRegressionPath(chart: TrendChartModel, points: readonly TrendPoint[]): string {
+  const meanX = points.reduce((sum, point) => sum + point.time, 0) / points.length;
+  const meanY = points.reduce((sum, point) => sum + point.value, 0) / points.length;
+  const variance = points.reduce((sum, point) => sum + (point.time - meanX) ** 2, 0);
+  const slope = variance === 0 ? 0 : points.reduce((sum, point) => sum + (point.time - meanX) * (point.value - meanY), 0) / variance;
+  const valueAt = (time: number) => meanY + slope * (time - meanX);
+  const yFor = (value: number) => chart.plotY + ((chart.domainMax - value) / Math.max(1e-12, chart.domainMax - chart.domainMin)) * chart.plotHeight;
+  return `M ${chart.plotX} ${yFor(valueAt(chart.domainStart))} L ${chart.plotX + chart.plotWidth} ${yFor(valueAt(chart.domainEnd))}`;
+}
+
+function formatNumber(value: number, format: 'automatic' | 'integer' | 'oneDecimal' | 'twoDecimals' = 'automatic'): string {
+  if (format === 'integer') return String(Math.round(value));
+  if (format === 'oneDecimal') return value.toFixed(1);
+  if (format === 'twoDecimals') return value.toFixed(2);
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 

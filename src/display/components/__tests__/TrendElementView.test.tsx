@@ -110,8 +110,8 @@ describe('TrendElementView', () => {
     expect(screen.getByTestId('trend-line-trend-1')).toBeInTheDocument();
     expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveTextContent('SINUSOID');
     expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveTextContent('FLOW');
-    expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveAttribute('y', '38');
-    expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveAttribute('y', '72');
+    expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveAttribute('y', '46');
+    expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveAttribute('y', '100');
   });
 
   it('redesenha a geometria do gráfico sem alterar os dados', () => {
@@ -209,8 +209,8 @@ describe('TrendElementView', () => {
       </svg>,
     );
 
-    expect(screen.getByTestId('trend-cursor-line-trend-1-cursor-1')).toHaveAttribute('stroke', '#f2cc0c');
-    expect(screen.getByTestId('trend-cursor-hit-trend-1-cursor-1')).toHaveAttribute('stroke-width', '12');
+    expect(screen.getByTestId('trend-cursor-line-trend-1-cursor-1')).toHaveAttribute('stroke', 'var(--trend-cursor, #ffffff)');
+    expect(screen.getByTestId('trend-cursor-hit-trend-1-cursor-1')).toHaveAttribute('stroke-width', '18');
     expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('3');
   });
 
@@ -259,6 +259,6 @@ describe('TrendElementView', () => {
     expect(screen.getByTestId('trend-legend-value-trend-1-1')).toHaveTextContent('20');
     expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('SINUSOID 1');
     expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('OTHER 15');
-    expect(screen.getByTestId('trend-refresh-error-trend-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('trend-refresh-error-trend-1')).toBeNull();
   });
 });

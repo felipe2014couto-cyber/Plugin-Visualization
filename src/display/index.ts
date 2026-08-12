@@ -82,11 +82,14 @@ export {
   appendTrend,
   createTrend,
   getTrendSeries,
+  getTrendVisualOptions,
+  updateTrendVisualOptions,
+  updateTrendSeriesOptions,
   trendBindingKey,
   TREND_SERIES_COLORS,
   TREND_TYPE,
 } from './createTrend';
-export type { CreateTrendOptions, TrendElement, TrendProperties, TrendSeries } from './createTrend';
+export type { CreateTrendOptions, TrendElement, TrendProperties, TrendSeries, TrendVisualOptions, TrendLineStyle, TrendMarker, TrendNumberFormat } from './createTrend';
 
 export type { PiPointBinding } from '../pi/piPointBinding';
 

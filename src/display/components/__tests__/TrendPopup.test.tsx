@@ -67,4 +67,21 @@ describe('TrendPopup - escalas', () => {
     fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
     expect(screen.getByTestId('trend-popup-line-0').getAttribute('d')).toBe(originalPath);
   });
+
+  it('cria cursores com clique simples mesmo com zoom habilitado e os remove com duplo clique', () => {
+    render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
+    const svg = screen.getByLabelText('Trend detalhada') as unknown as SVGSVGElement;
+    jest.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 800, width: 1600, height: 800, toJSON: () => ({}) });
+    const plot = screen.getByTestId('trend-popup-cursor-plot');
+
+    fireEvent.pointerDown(plot, { clientX: 800, clientY: 400, pointerId: 9 });
+    fireEvent.pointerUp(plot, { clientX: 800, clientY: 400, pointerId: 9 });
+
+    const cursor = screen.getByTestId('trend-popup-cursor-popup-cursor-1');
+    expect(cursor).toBeInTheDocument();
+    expect(screen.queryByTestId('trend-popup-zoom-selection')).toBeNull();
+
+    fireEvent.doubleClick(screen.getByTestId('trend-popup-cursor-hit-popup-cursor-1'));
+    expect(screen.queryByTestId('trend-popup-cursor-popup-cursor-1')).toBeNull();
+  });
 });
