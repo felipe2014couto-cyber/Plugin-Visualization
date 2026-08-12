@@ -1468,7 +1468,7 @@ function ValueIcon() {
 }
 
 function RectangleIcon() {
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="6" width="16" height="12" /><circle cx="12" cy="12" r="4" /></svg>;
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="6" width="16" height="12" /></svg>;
 }
 
 function GaugeIcon() {

@@ -102,6 +102,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
       border: 1px solid var(--border-color);
       border-radius: 0;
       background: var(--input-bg);
+      color: var(--text-primary);
+      color-scheme: inherit;
+    }
+
+    select option {
+      background: var(--input-bg);
+      color: var(--text-primary);
     }
   `,
   binding: css`color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere;`,
