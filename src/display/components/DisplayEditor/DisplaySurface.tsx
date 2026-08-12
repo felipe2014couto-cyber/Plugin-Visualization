@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import type { DisplayDocument } from '../../displayDocument';
-import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE } from '../../createRectangle';
+import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE, type RectangleElement } from '../../createRectangle';
 import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
 import { BAR_TYPE, type BarElement } from '../../createBar';
@@ -18,7 +18,8 @@ import {
 import type { PiPointValue, PiPointValueResult, PiTrendSeriesResult } from '../../../pi/piDataSource';
 import type { DisplayTimeRange } from '../../../time/timeRange';
 import { isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBinding';
-import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer } from '../../runtime/valueRuntime';
+import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
+import { getMultistateColor } from '../../multistate';
 import {
   getTrendSeriesConsumerId,
   useTrendRuntime,
@@ -146,7 +147,7 @@ export function DisplaySurface({
   }, [editable]);
 
   const valueConsumers: ValueRuntimeConsumer[] = elements.flatMap((element) => (
-    (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE)
+    (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE)
       && isPiPointBinding(element.properties.binding)
       ? [{ elementId: element.id, binding: element.properties.binding }]
       : []
@@ -210,7 +211,9 @@ export function DisplaySurface({
   }, [editable, elements, onTrendOpen, trendRuntimeStates]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
     const element = elements.find((candidate) => candidate.id === elementId);
-    if (!element || element.type !== TREND_TYPE) return;
+    if (!element || element.type !== TREND_TYPE) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     onTrendContextMenu?.(element as TrendElement);
@@ -554,6 +557,9 @@ export function DisplaySurface({
             />
           );
         }
+        if (element.type === RECTANGLE_TYPE) {
+          return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
+        }
         return (
           <rect
             key={element.id}
@@ -646,4 +652,28 @@ function getElementStroke(element: DisplayDocument['elements'][number]): string 
   }
   const stroke = element.properties.stroke;
   return typeof stroke === 'string' ? stroke : DEFAULT_RECTANGLE_PROPERTIES.stroke;
+}
+
+function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRuntimeState) {
+  const baseFill = getElementFill(element);
+  const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
+  const fill = getMultistateColor(value, element.properties.multistate, baseFill);
+  const common = {
+    key: element.id,
+    fill,
+    stroke: getElementStroke(element),
+    strokeWidth: 1,
+    'data-testid': `display-element-${element.id}`,
+    'data-element-id': element.id,
+    'data-element-type': element.type,
+    'data-shape': element.properties.shape ?? 'rectangle',
+    style: { cursor: 'move' },
+  };
+  if (element.properties.shape === 'ellipse') {
+    return <ellipse {...common} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} />;
+  }
+  if (element.properties.shape === 'triangle') {
+    return <polygon {...common} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} />;
+  }
+  return <rect {...common} x={element.x} y={element.y} width={element.width} height={element.height} />;
 }

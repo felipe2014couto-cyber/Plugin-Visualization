@@ -13,12 +13,27 @@ const point: PiPointSearchResult = {
   name: 'SINUSOID', path: '\\\\pims\\SINUSOID', webId: 'webid', dataSourceUid: 'ds',
 };
 
-function Harness({ initial, onChange }: { initial?: DisplayDocument; onChange?: (document: DisplayDocument) => void }) {
+function Harness({ initial, onChange, loadValue }: { initial?: DisplayDocument; onChange?: (document: DisplayDocument) => void; loadValue?: () => Promise<{ value: unknown }> }) {
   const [document, setDocument] = useState<DisplayDocument>(() => initial ?? createDisplayDocument({ name: 'Multistate' }));
-  return <DisplayEditor document={document} onChange={(next) => { setDocument(next); onChange?.(next); }} selectedPiPoint={point} />;
+  return <DisplayEditor document={document} onChange={(next) => { setDocument(next); onChange?.(next); }} selectedPiPoint={point} loadValue={loadValue} />;
 }
 
 describe('Multistate no editor', () => {
+  it('aplica Multistate a uma forma geométrica vinculada ao PI Point', async () => {
+    const loadValue = jest.fn().mockResolvedValue({ value: 85 });
+    render(<Harness loadValue={loadValue} />);
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    fireEvent.change(screen.getByTestId('geometric-shape-type'), { target: { value: 'ellipse' } });
+    fireEvent.click(screen.getByTestId('multistate-enabled'));
+    fireEvent.click(screen.getByTestId('multistate-add-rule'));
+    const ruleId = screen.getByTestId(/^multistate-rule-/).getAttribute('data-testid')?.replace('multistate-rule-', '') as string;
+    fireEvent.change(screen.getByTestId(`multistate-operator-${ruleId}`), { target: { value: 'gte' } });
+    fireEvent.change(screen.getByTestId(`multistate-value-${ruleId}`), { target: { value: '80' } });
+    fireEvent.change(screen.getByTestId(`multistate-color-${ruleId}`), { target: { value: '#00ff00' } });
+    expect(await screen.findByTestId(/^display-element-/)).toHaveAttribute('data-shape', 'ellipse');
+    expect(await screen.findByTestId(/^display-element-/)).toHaveAttribute('fill', '#00ff00');
+  });
+
   it('habilita, adiciona, edita e remove regra com histórico', () => {
     render(<Harness />);
     fireEvent.click(screen.getByTestId('display-insert-value'));

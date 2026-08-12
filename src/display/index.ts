@@ -35,6 +35,7 @@ export type {
   CreateRectangleOptions,
   RectangleElement,
   RectangleProperties,
+  GeometricShape,
 } from './createRectangle';
 
 export { appendValue, createValue, VALUE_TYPE } from './createValue';

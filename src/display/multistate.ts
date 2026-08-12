@@ -75,7 +75,7 @@ export function updateMultistateConfig(
 ): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => {
-    if (element.id !== elementId || !['value', 'gauge', 'bar'].includes(element.type)) {
+    if (element.id !== elementId || !['value', 'gauge', 'bar', 'rectangle'].includes(element.type)) {
       return element;
     }
     changed = true;

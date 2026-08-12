@@ -111,6 +111,11 @@ function portableElement(input: unknown): DisplayElement {
         properties: {
           fill: typeof input.properties.fill === 'string' ? input.properties.fill : DEFAULT_RECTANGLE_PROPERTIES.fill,
           stroke: typeof input.properties.stroke === 'string' ? input.properties.stroke : DEFAULT_RECTANGLE_PROPERTIES.stroke,
+          shape: input.properties.shape === 'ellipse' || input.properties.shape === 'triangle'
+            ? input.properties.shape
+            : 'rectangle',
+          ...portableOptionalBinding(input.properties.binding),
+          ...portableMultistate(input.properties.multistate),
         },
       };
     case VALUE_TYPE:

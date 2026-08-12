@@ -2,12 +2,19 @@ import type { DisplayDocument } from './displayDocument';
 import type { DisplayElement } from './displayElement';
 import type { DisplaySurface } from './displaySurface';
 import { generateId } from './ids';
+import type { PiPointBinding } from '../pi/piPointBinding';
+import type { MultistateConfig } from './multistate';
 
 export const RECTANGLE_TYPE = 'rectangle' as const;
+
+export type GeometricShape = 'rectangle' | 'ellipse' | 'triangle';
 
 export type RectangleProperties = Record<string, unknown> & {
   fill: string;
   stroke: string;
+  shape: GeometricShape;
+  binding?: PiPointBinding;
+  multistate?: MultistateConfig;
 };
 
 export type RectangleElement = DisplayElement<typeof RECTANGLE_TYPE, RectangleProperties>;
@@ -15,6 +22,7 @@ export type RectangleElement = DisplayElement<typeof RECTANGLE_TYPE, RectanglePr
 export const DEFAULT_RECTANGLE_PROPERTIES: RectangleProperties = {
   fill: 'rgba(110, 159, 255, 0.15)',
   stroke: '#6e9fff',
+  shape: 'rectangle',
 };
 
 const DEFAULT_RECTANGLE_WIDTH = 240;
@@ -27,6 +35,8 @@ export interface CreateRectangleOptions {
   width?: number;
   height?: number;
   properties?: Partial<RectangleProperties>;
+  binding?: PiPointBinding;
+  multistate?: MultistateConfig;
   surface?: DisplaySurface;
   existingIds?: readonly string[];
   generateId?: () => string;
@@ -58,6 +68,8 @@ export function createRectangle(options: CreateRectangleOptions = {}): Rectangle
     properties: {
       ...DEFAULT_RECTANGLE_PROPERTIES,
       ...options.properties,
+      ...(options.binding ? { binding: { ...options.binding } } : {}),
+      ...(options.multistate ? { multistate: options.multistate } : {}),
     },
   };
 }

@@ -47,6 +47,8 @@ import {
   type BarElement,
 } from '../../createBar';
 import {
+  appendDisplayElement,
+  createRectangle,
   DEFAULT_RECTANGLE_PROPERTIES,
   RECTANGLE_TYPE,
   updateRectangleProperties,
@@ -312,6 +314,43 @@ export function DisplayEditor({
     dispatch({ type: 'END_INTERACTION' });
   }, [commitDocument, dispatch]);
 
+  const handleInsertRectangle = useCallback(() => {
+    const currentDocument = documentRef.current;
+    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+    const element = createRectangle({
+      binding,
+      surface: currentDocument.surface,
+      existingIds: currentDocument.elements.map(({ id }) => id),
+    });
+    if (!onChangeRef.current) {
+      return;
+    }
+    commitDocument(appendDisplayElement(currentDocument, element));
+    dispatch({ type: 'SELECT', elementId: element.id });
+  }, [commitDocument, dispatch, selectedPiPoint]);
+
+  const handleInsertBoundElement = useCallback((type: PiPointDropSymbolType) => {
+    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+    if ((type === 'value' || type === 'trend') && !binding) {
+      return;
+    }
+    const currentDocument = documentRef.current;
+    const options = { binding: binding!, surface: currentDocument.surface, existingIds: currentDocument.elements.map(({ id }) => id) };
+    const element = type === 'value' ? createValue(options)
+      : type === 'trend' ? createTrend(options)
+        : type === 'gauge' ? createGauge({ ...options, binding })
+          : createBar({ ...options, binding });
+    const next = type === 'value' ? appendValue(currentDocument, element as ValueElement)
+      : type === 'trend' ? appendTrend(currentDocument, element as TrendElement)
+        : type === 'gauge' ? appendGauge(currentDocument, element as GaugeElement)
+          : appendBar(currentDocument, element as BarElement);
+    if (!onChangeRef.current) {
+      return;
+    }
+    commitDocument(next);
+    dispatch({ type: 'SELECT', elementId: element.id });
+  }, [commitDocument, dispatch, selectedPiPoint]);
+
   const handlePiPointDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     if (mode !== 'edit' || !onChangeRef.current || !Array.from(event.dataTransfer.types).includes(PI_POINT_DRAG_MIME)) {
       return;
@@ -518,10 +557,14 @@ export function DisplayEditor({
     ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
     : undefined;
   const handleTrendVisualChange = useCallback((patch: Parameters<typeof updateTrendVisualOptions>[2]) => {
-    if (optionsTrendId) commitDocument(updateTrendVisualOptions(documentRef.current, optionsTrendId, patch));
+    if (optionsTrendId) {
+      commitDocument(updateTrendVisualOptions(documentRef.current, optionsTrendId, patch));
+    }
   }, [commitDocument, optionsTrendId]);
   const handleTrendSeriesChange = useCallback((key: string, patch: Parameters<typeof updateTrendSeriesOptions>[3]) => {
-    if (optionsTrendId) commitDocument(updateTrendSeriesOptions(documentRef.current, optionsTrendId, key, patch));
+    if (optionsTrendId) {
+      commitDocument(updateTrendSeriesOptions(documentRef.current, optionsTrendId, key, patch));
+    }
   }, [commitDocument, optionsTrendId]);
 
   const handleDeleteSelectedElement = useCallback(() => {
@@ -705,6 +748,14 @@ export function DisplayEditor({
                 <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} aria-pressed={dropSymbolType === 'gauge'} onClick={() => onDropSymbolTypeChange?.('gauge')}><GaugeIcon /></button>
                 <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} aria-pressed={dropSymbolType === 'bar'} onClick={() => onDropSymbolTypeChange?.('bar')}><BarIcon /></button>
               </div>
+              <span className={styles.toolbarDivider} aria-hidden="true" />
+              <div className={styles.toolbarGroup} aria-label="Inserir elementos">
+                <button type="button" title="Inserir forma geométrica" aria-label="Inserir forma geométrica" className={styles.iconButton} data-testid="display-insert-rectangle" onClick={handleInsertRectangle}><RectangleIcon /></button>
+                <button type="button" title="Inserir Value" aria-label="Inserir Value" className={styles.iconButton} data-testid="display-insert-value" disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => handleInsertBoundElement('value')}><ValueIcon /></button>
+                <button type="button" title="Inserir Gauge" aria-label="Inserir Gauge" className={styles.iconButton} data-testid="display-insert-gauge" onClick={() => handleInsertBoundElement('gauge')}><GaugeIcon /></button>
+                <button type="button" title="Inserir Barra" aria-label="Inserir Barra" className={styles.iconButton} data-testid="display-insert-bar" onClick={() => handleInsertBoundElement('bar')}><BarIcon /></button>
+                <button type="button" title="Inserir Trend" aria-label="Inserir Trend" className={styles.iconButton} data-testid="display-insert-trend" disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => handleInsertBoundElement('trend')}><TrendIcon /></button>
+              </div>
             </div>
           )}
           <div className={styles.transferControls} data-testid="display-transfer-controls">
@@ -799,7 +850,15 @@ export function DisplayEditor({
           <ScalePropertiesPanel kind="Bar" {...getBarOptions(selectedBar.properties)} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedRectangle && (
-          <RectanglePropertiesPanel fill={selectedRectangle.properties.fill ?? DEFAULT_RECTANGLE_PROPERTIES.fill} stroke={selectedRectangle.properties.stroke ?? DEFAULT_RECTANGLE_PROPERTIES.stroke} onChange={handleRectangleChange} />
+          <RectanglePropertiesPanel
+            fill={selectedRectangle.properties.fill ?? DEFAULT_RECTANGLE_PROPERTIES.fill}
+            stroke={selectedRectangle.properties.stroke ?? DEFAULT_RECTANGLE_PROPERTIES.stroke}
+            shape={selectedRectangle.properties.shape ?? 'rectangle'}
+            pointName={isPiPointBinding(selectedRectangle.properties.binding) ? selectedRectangle.properties.binding.pointName : undefined}
+            multistate={selectedRectangle.properties.multistate}
+            onChange={handleRectangleChange}
+            onMultistateChange={handleMultistateChange}
+          />
         )}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onClose={() => setOptionsTrendId(null)} />}
       </div>
@@ -1413,6 +1472,10 @@ function ZoomFitIcon() {
 
 function ValueIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M8 9h8M8 12h8M8 15h5" /></svg>;
+}
+
+function RectangleIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="6" width="16" height="12" /><circle cx="12" cy="12" r="4" /></svg>;
 }
 
 function GaugeIcon() {

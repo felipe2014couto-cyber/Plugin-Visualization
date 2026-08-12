@@ -3,21 +3,36 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import type { RectangleProperties } from '../../createRectangle';
+import type { MultistateConfig } from '../../multistate';
+import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 
 export interface RectanglePropertiesPanelProps {
   fill: string;
   stroke: string;
+  shape: RectangleProperties['shape'];
+  pointName?: string;
   onChange: (patch: Partial<RectangleProperties>) => void;
+  multistate?: MultistateConfig;
+  onMultistateChange: (config: MultistateConfig) => void;
 }
 
-export function RectanglePropertiesPanel({ fill, stroke, onChange }: RectanglePropertiesPanelProps) {
+export function RectanglePropertiesPanel({ fill, stroke, shape, pointName, onChange, multistate, onMultistateChange }: RectanglePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   return (
     <aside className={styles.panel} data-testid="rectangle-properties-panel" aria-label="Configuração do Rectangle">
       <div className={styles.header}>
-        <span className={styles.title}>Rectangle</span>
+        <span className={styles.title}>Forma geométrica</span>
       </div>
       <div className={styles.fields}>
+        <label className={styles.field}>
+          <span>Forma</span>
+          <select value={shape} data-testid="geometric-shape-type" onChange={(event) => onChange({ shape: event.target.value as RectangleProperties['shape'] })}>
+            <option value="rectangle">Retângulo</option>
+            <option value="ellipse">Elipse</option>
+            <option value="triangle">Triângulo</option>
+          </select>
+        </label>
+        {pointName && <div className={styles.binding}>PI Point: {pointName}</div>}
         <label className={styles.field}>
           <span>Preenchimento</span>
           <input type="color" value={toColorInputValue(fill)} onChange={(event) => onChange({ fill: event.target.value })} data-testid="rectangle-fill" />
@@ -27,6 +42,11 @@ export function RectanglePropertiesPanel({ fill, stroke, onChange }: RectanglePr
           <input type="color" value={toColorInputValue(stroke)} onChange={(event) => onChange({ stroke: event.target.value })} data-testid="rectangle-stroke" />
         </label>
       </div>
+      {pointName ? (
+        <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />
+      ) : (
+        <div className={styles.hint}>Selecione um PI Point antes de inserir a forma para habilitar o Multistate.</div>
+      )}
     </aside>
   );
 }
@@ -75,7 +95,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--text-secondary);
     font-size: 10px;
 
-    input[type='color'] {
+    input[type='color'], select {
       width: 100%;
       height: 27px;
       padding: 2px;
@@ -84,4 +104,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
       background: var(--input-bg);
     }
   `,
+  binding: css`color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere;`,
+  hint: css`border-top: 1px solid var(--border-color); padding: 10px 12px; color: var(--text-secondary); font-size: 9px; line-height: 1.4;`,
 });
