@@ -6,6 +6,7 @@ export interface ScaleVisualOptions {
   showValue: boolean;
   showTagName: boolean;
   decimals: number | null;
+  color: string;
 }
 
 export const DEFAULT_SCALE_OPTIONS: ScaleVisualOptions = {
@@ -14,6 +15,7 @@ export const DEFAULT_SCALE_OPTIONS: ScaleVisualOptions = {
   showValue: true,
   showTagName: true,
   decimals: null,
+  color: '#6e9fff',
 };
 
 export function normalizeScaleOptions(
@@ -28,7 +30,14 @@ export function normalizeScaleOptions(
     decimals: typeof decimals === 'number' && Number.isInteger(decimals) && decimals >= 0 && decimals <= 10
       ? decimals
       : DEFAULT_SCALE_OPTIONS.decimals,
+    color: typeof options?.color === 'string' && isValidHexColor(options.color)
+      ? options.color
+      : DEFAULT_SCALE_OPTIONS.color,
   };
+}
+
+function isValidHexColor(value: string): boolean {
+  return /^#[0-9a-f]{3,8}$/i.test(value.trim());
 }
 
 export function getScaleRatio(value: number, minimum: number, maximum: number): number | undefined {

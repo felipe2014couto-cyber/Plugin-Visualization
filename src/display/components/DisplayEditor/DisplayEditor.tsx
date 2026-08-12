@@ -46,6 +46,12 @@ import {
   updateBarOptions,
   type BarElement,
 } from '../../createBar';
+import {
+  DEFAULT_RECTANGLE_PROPERTIES,
+  RECTANGLE_TYPE,
+  updateRectangleProperties,
+  type RectangleElement,
+} from '../../createRectangle';
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBinding';
 import type { PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
@@ -54,6 +60,7 @@ import { TrendPopup } from '../TrendPopup';
 import type { TrendSeriesViewState } from '../TrendElementView';
 import { ValuePropertiesPanel } from './ValuePropertiesPanel';
 import { ScalePropertiesPanel } from './ScalePropertiesPanel';
+import { RectanglePropertiesPanel } from './RectanglePropertiesPanel';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
@@ -479,11 +486,17 @@ export function DisplayEditor({
   const selectedBar = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === BAR_TYPE) as BarElement | undefined
     : undefined;
+  const selectedRectangle = mode === 'edit' && state.selectedElementId
+    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === RECTANGLE_TYPE) as RectangleElement | undefined
+    : undefined;
   const handleGaugeChange = useCallback((patch: Parameters<typeof updateGaugeOptions>[2]) => {
     commitDocument(updateGaugeOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
   const handleBarChange = useCallback((patch: Parameters<typeof updateBarOptions>[2]) => {
     commitDocument(updateBarOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
+  }, [commitDocument]);
+  const handleRectangleChange = useCallback((patch: Parameters<typeof updateRectangleProperties>[2]) => {
+    commitDocument(updateRectangleProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
   const optionsTrend = optionsTrendId
     ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
@@ -739,6 +752,9 @@ export function DisplayEditor({
         )}
         {selectedBar && (
           <ScalePropertiesPanel kind="Bar" {...getBarOptions(selectedBar.properties)} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
+        )}
+        {selectedRectangle && (
+          <RectanglePropertiesPanel fill={selectedRectangle.properties.fill ?? DEFAULT_RECTANGLE_PROPERTIES.fill} stroke={selectedRectangle.properties.stroke ?? DEFAULT_RECTANGLE_PROPERTIES.stroke} onChange={handleRectangleChange} />
         )}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onClose={() => setOptionsTrendId(null)} />}
       </div>

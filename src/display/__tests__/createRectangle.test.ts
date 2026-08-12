@@ -4,6 +4,7 @@ import {
   createRectangle,
   DEFAULT_RECTANGLE_PROPERTIES,
   RECTANGLE_TYPE,
+  updateRectangleProperties,
   type DisplayElement,
 } from '../index';
 
@@ -42,6 +43,31 @@ describe('createRectangle', () => {
     });
 
     expect(rectangle.id).toBe('new-id');
+  });
+});
+
+describe('updateRectangleProperties', () => {
+  it('atualiza apenas fill e stroke do Rectangle alvo', () => {
+    const document = createDisplayDocument({ name: 'Test' });
+    const first = createRectangle({ id: 'first' });
+    const second = createRectangle({ id: 'second' });
+    document.elements = [first, second];
+
+    const next = updateRectangleProperties(document, 'second', { fill: '#ff0000', stroke: '#00ff00' });
+
+    expect(next.elements[0].properties).toEqual(first.properties);
+    expect(next.elements[1].id).toBe('second');
+    expect(next.elements[1].properties.fill).toBe('#ff0000');
+    expect(next.elements[1].properties.stroke).toBe('#00ff00');
+    expect(document.elements[1].properties).toEqual(second.properties);
+  });
+
+  it('não altera o documento quando nada corresponde ao alvo', () => {
+    const document = createDisplayDocument({ name: 'Test' });
+    const rectangle = createRectangle({ id: 'only' });
+    document.elements = [rectangle];
+
+    expect(updateRectangleProperties(document, 'missing', { fill: '#ff0000' })).toBe(document);
   });
 });
 

@@ -17,7 +17,19 @@ describe('scaleOptions', () => {
       showValue: true,
       showTagName: true,
       decimals: null,
+      color: '#6e9fff',
     });
+  });
+
+  it('usa a cor base padrão quando ausente ou inválida', () => {
+    expect(normalizeScaleOptions()).toMatchObject({ color: '#6e9fff' });
+    expect(normalizeScaleOptions({ color: 'red' }).color).toBe('#6e9fff');
+    expect(normalizeScaleOptions({ color: '#123456' }).color).toBe('#123456');
+  });
+
+  it('preserva cor hexadecimal válida', () => {
+    expect(normalizeScaleOptions({ color: '#ff9830' })).toMatchObject({ color: '#ff9830' });
+    expect(normalizeScaleOptions({ color: '#abc' })).toMatchObject({ color: '#abc' });
   });
 
   it('formata valor sem alterar o valor original', () => {

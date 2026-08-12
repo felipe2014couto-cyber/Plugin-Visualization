@@ -29,6 +29,7 @@ export {
   createRectangle,
   DEFAULT_RECTANGLE_PROPERTIES,
   RECTANGLE_TYPE,
+  updateRectangleProperties,
 } from './createRectangle';
 export type {
   CreateRectangleOptions,

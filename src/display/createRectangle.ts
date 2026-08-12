@@ -71,3 +71,26 @@ export function appendDisplayElement(
     elements: [...document.elements, element],
   };
 }
+
+export function updateRectangleProperties(
+  document: DisplayDocument,
+  elementId: string,
+  patch: Partial<RectangleProperties>,
+): DisplayDocument {
+  let changed = false;
+  const elements = document.elements.map((element) => {
+    if (element.id !== elementId || element.type !== RECTANGLE_TYPE) {
+      return element;
+    }
+    changed = true;
+    return {
+      ...element,
+      properties: {
+        ...DEFAULT_RECTANGLE_PROPERTIES,
+        ...element.properties,
+        ...patch,
+      },
+    } as RectangleElement;
+  });
+  return changed ? { ...document, elements } : document;
+}

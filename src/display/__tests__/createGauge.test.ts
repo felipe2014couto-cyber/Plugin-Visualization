@@ -10,6 +10,31 @@ describe('GaugeElement', () => {
     expect(createGauge({ id: 'placeholder' }).properties.binding).toBeUndefined();
   });
 
+  it('usa a cor base padrão quando ausente', () => {
+    const gauge = createGauge({ id: 'gauge-default', binding });
+    expect(getGaugeOptions(gauge.properties).color).toBe('#6e9fff');
+  });
+
+  it('preserva e normaliza a cor base configurada', () => {
+    const gauge = createGauge({ id: 'gauge-color', binding, options: { color: '#ff9830' } });
+    expect(gauge.properties.color).toBe('#ff9830');
+    expect(getGaugeOptions({ minimum: 0, maximum: 100, color: 'not-a-color' }).color).toBe('#6e9fff');
+    expect(getGaugeOptions({ minimum: 0, maximum: 100 }).color).toBe('#6e9fff');
+  });
+
+  it('atualiza a cor base sem alterar demais opções', () => {
+    const document = createDisplayDocument({ id: 'display' });
+    const gauge = createGauge({ id: 'gauge-1', binding, options: { minimum: 10, maximum: 90, decimals: 2, color: '#6e9fff' } });
+    const next = updateGaugeOptions(appendGauge(document, gauge), gauge.id, { color: '#73bf69' });
+    expect(next.elements[0].properties).toMatchObject({
+      binding,
+      minimum: 10,
+      maximum: 90,
+      decimals: 2,
+      color: '#73bf69',
+    });
+  });
+
   it('anexa e atualiza apenas as opções do Gauge', () => {
     const document = createDisplayDocument({ id: 'display' });
     const gauge = createGauge({ id: 'gauge-1', binding });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { isPiPointBinding } from '../../pi/piPointBinding';
-import type { GaugeElement } from '../createGauge';
+import { getGaugeOptions, type GaugeElement } from '../createGauge';
 import { formatScaleValue, getScaleRatio } from '../scaleOptions';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
 import { getMultistateColor } from '../multistate';
@@ -11,7 +11,6 @@ export interface GaugeElementViewProps {
 }
 
 const TRACK_COLOR = 'var(--border-color, rgba(255, 255, 255, 0.18))';
-const FILL_COLOR = '#6e9fff';
 const TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.86))';
 
 export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState }: GaugeElementViewProps) {
@@ -26,7 +25,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const radius = Math.max(1, Math.min(element.width * 0.38, element.height * 0.42));
   const track = arcPath(cx, cy, radius);
   const valueText = getValueText(binding, runtimeState, numericValue, options.decimals);
-  const activeColor = getMultistateColor(numericValue, options.multistate, FILL_COLOR);
+  const activeColor = getMultistateColor(numericValue, options.multistate, getGaugeOptions(element.properties).color);
 
   return (
     <g

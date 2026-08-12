@@ -1,6 +1,6 @@
 import React from 'react';
 import { isPiPointBinding } from '../../pi/piPointBinding';
-import type { BarElement } from '../createBar';
+import { getBarOptions, type BarElement } from '../createBar';
 import { formatScaleValue, getScaleRatio } from '../scaleOptions';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
 import { getMultistateColor } from '../multistate';
@@ -24,7 +24,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, runtimeState, value, options.decimals);
-  const activeColor = getMultistateColor(value, options.multistate, '#6e9fff');
+  const activeColor = getMultistateColor(value, options.multistate, getBarOptions(element.properties).color);
 
   return (
     <g

@@ -13,6 +13,7 @@ export interface ScalePropertiesPanelProps {
   showValue: boolean;
   showTagName: boolean;
   decimals: number | null;
+  color: string;
   orientation?: BarOrientation;
   onChange: (patch: {
     minimum?: number;
@@ -20,6 +21,7 @@ export interface ScalePropertiesPanelProps {
     showValue?: boolean;
     showTagName?: boolean;
     decimals?: number | null;
+    color?: string;
     orientation?: BarOrientation;
   }) => void;
   multistate?: MultistateConfig;
@@ -33,6 +35,7 @@ export function ScalePropertiesPanel({
   showValue,
   showTagName,
   decimals,
+  color,
   orientation,
   onChange,
   multistate,
@@ -45,6 +48,10 @@ export function ScalePropertiesPanel({
         <span className={styles.title}>{kind}</span>
       </div>
       <div className={styles.fields}>
+        <label className={styles.field}>
+          <span>Cor</span>
+          <input type="color" value={color} onChange={(event) => onChange({ color: event.target.value })} data-testid={`${kind.toLowerCase()}-color`} />
+        </label>
         <label className={styles.field}>
           <span>Mínimo</span>
           <input type="number" value={minimum} onChange={(event) => onChange({ minimum: Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-minimum`} />
@@ -123,6 +130,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
       border-radius: 0;
       background: var(--input-bg);
       color: var(--text-primary);
+    }
+
+    input[type='color'] {
+      height: 27px;
+      padding: 2px;
     }
   `,
   checkbox: css`
