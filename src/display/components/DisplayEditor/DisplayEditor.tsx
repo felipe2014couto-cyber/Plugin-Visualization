@@ -122,6 +122,9 @@ interface TrendPopupState {
 }
 
 const TREND_POPUP_MAX_DATA_POINTS = 500;
+const DISPLAY_ZOOM_MIN = 0.1;
+const DISPLAY_ZOOM_MAX = 5;
+const DISPLAY_ZOOM_STEP = 0.1;
 
 export function DisplayEditor({
   document: displayDocument,
@@ -156,6 +159,11 @@ export function DisplayEditor({
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
+  const [surfaceZoom, setSurfaceZoom] = useState(1);
+  const [surfaceViewCenter, setSurfaceViewCenter] = useState({
+    x: displayDocument.surface.width / 2,
+    y: displayDocument.surface.height / 2,
+  });
   const trendPopupRequest = useRef(0);
   const trendPopupRef = useRef<TrendPopupState | null>(null);
 
@@ -312,13 +320,18 @@ export function DisplayEditor({
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
     const svg = event.currentTarget.querySelector('svg');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
-    const targetTrend = resolveTrendDropTarget(
-      documentRef.current,
-      event.target,
-      event.clientX,
-      event.clientY,
-      point,
-    );
+    // Soltar uma PI Point sobre uma Trend só acrescenta uma série quando o
+    // modo de criação selecionado também for Trend. Nos demais modos, o drop
+    // mantém o comportamento de criar o novo símbolo escolhido.
+    const targetTrend = dropSymbolType === 'trend'
+      ? resolveTrendDropTarget(
+        documentRef.current,
+        event.target,
+        event.clientX,
+        event.clientY,
+        point,
+      )
+      : undefined;
     const preview = svg && pointResult
       ? createPiPointDragPreview(
         svg,
@@ -330,6 +343,7 @@ export function DisplayEditor({
         dropSymbolType,
         pointResult,
         targetTrend,
+        dropSymbolType === 'trend',
       )
       : undefined;
     event.dataTransfer.dropEffect = preview?.valid ? 'copy' : 'none';
@@ -363,13 +377,15 @@ export function DisplayEditor({
     const svg = event.currentTarget.querySelector('svg');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
     const currentDocument = documentRef.current;
-    const targetTrend = resolveTrendDropTarget(
-      currentDocument,
-      event.target,
-      event.clientX,
-      event.clientY,
-      point,
-    );
+    const targetTrend = dropSymbolType === 'trend'
+      ? resolveTrendDropTarget(
+        currentDocument,
+        event.target,
+        event.clientX,
+        event.clientY,
+        point,
+      )
+      : undefined;
     if (!binding || (!point && !targetTrend)) {
       return;
     }
@@ -609,6 +625,28 @@ export function DisplayEditor({
     setTrendPopup(null);
   }, []);
 
+  const handleZoomFit = useCallback(() => {
+    const elements = documentRef.current.elements;
+    const surface = documentRef.current.surface;
+    if (elements.length === 0) {
+      setSurfaceZoom(1);
+      setSurfaceViewCenter({ x: surface.width / 2, y: surface.height / 2 });
+      return;
+    }
+    const left = Math.min(...elements.map((element) => element.x));
+    const top = Math.min(...elements.map((element) => element.y));
+    const right = Math.max(...elements.map((element) => element.x + element.width));
+    const bottom = Math.max(...elements.map((element) => element.y + element.height));
+    const padding = 1.12;
+    const zoom = Math.max(DISPLAY_ZOOM_MIN, Math.min(
+      DISPLAY_ZOOM_MAX,
+      surface.width / Math.max(1, (right - left) * padding),
+      surface.height / Math.max(1, (bottom - top) * padding),
+    ));
+    setSurfaceZoom(Number(zoom.toFixed(2)));
+    setSurfaceViewCenter({ x: (left + right) / 2, y: (top + bottom) / 2 });
+  }, []);
+
   useEffect(() => {
     const current = trendPopupRef.current;
     if (!current) {
@@ -670,6 +708,11 @@ export function DisplayEditor({
             </div>
           )}
           <div className={styles.transferControls} data-testid="display-transfer-controls">
+            <div className={styles.zoomControls} role="group" aria-label="Zoom do display">
+              <button type="button" title="Ampliar" aria-label="Ampliar" className={styles.iconButton} data-testid="display-zoom-in" disabled={surfaceZoom >= DISPLAY_ZOOM_MAX} onClick={() => setSurfaceZoom((zoom) => Math.min(DISPLAY_ZOOM_MAX, Number((zoom + DISPLAY_ZOOM_STEP).toFixed(1))))}><ZoomInIcon /></button>
+              <button type="button" title="Reduzir" aria-label="Reduzir" className={styles.iconButton} data-testid="display-zoom-out" disabled={surfaceZoom <= DISPLAY_ZOOM_MIN} onClick={() => setSurfaceZoom((zoom) => Math.max(DISPLAY_ZOOM_MIN, Number((zoom - DISPLAY_ZOOM_STEP).toFixed(1))))}><ZoomOutIcon /></button>
+              <button type="button" title="Ajustar à tela" aria-label="Ajustar à tela" className={styles.iconButton} data-testid="display-zoom-fit" onClick={handleZoomFit}><ZoomFitIcon /></button>
+            </div>
             <button type="button" title="Exportar Display" aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" onClick={handleExport}>
               <ExportIcon />
             </button>
@@ -705,6 +748,8 @@ export function DisplayEditor({
             trendTimeRange={trendTimeRange}
             onTrendOpen={handleTrendOpen}
             onTrendContextMenu={(trend) => setOptionsTrendId(trend.id)}
+            zoom={surfaceZoom}
+            viewCenter={surfaceViewCenter}
           />
           {displayDocument.elements.length === 0 && (
             <div className={styles.emptyState} data-testid="display-empty-state">
@@ -856,11 +901,14 @@ function createPiPointDragPreview(
   symbolType: PiPointDropSymbolType,
   pointResult: PiPointSearchResult,
   trendAtClientPoint?: TrendElement,
+  allowTrendTarget = true,
 ): PiPointDragPreview {
   const binding = createPiPointBinding(pointResult);
   const point = binding ? getDropPoint(svg, clientX, clientY, document) : undefined;
   const prototype = binding ? createDropPreviewElement(symbolType, binding, document) : undefined;
-  const targetTrend = trendAtClientPoint ?? (point ? findTrendAtPoint(document, point) : undefined);
+  const targetTrend = allowTrendTarget
+    ? trendAtClientPoint ?? (point ? findTrendAtPoint(document, point) : undefined)
+    : undefined;
   // The drop handler clamps the element to the surface bounds, so every
   // pointer position inside the display is a valid placement.
   const valid = !!binding && !!prototype && (!!point || !!targetTrend);
@@ -1151,8 +1199,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   transferControls: css`
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
     margin-left: auto;
+  `,
+  zoomControls: css`
+    display: flex;
+    gap: 3px;
+    padding-right: 8px;
+    border-right: 1px solid var(--border-color);
   `,
   fileInput: css`display: none;`,
   importError: css`
@@ -1342,6 +1397,18 @@ function TagIcon() {
 
 function RedoIcon() {
   return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m15 7 5 5-5 5" /><path d="M19 12h-8a6 6 0 0 0-6 6" /></svg>;
+}
+
+function ZoomInIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="M10 7v6M7 10h6m7 7-5.5-5.5" /></svg>;
+}
+
+function ZoomOutIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="M7 10h6m7 7-5.5-5.5" /></svg>;
+}
+
+function ZoomFitIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /><rect x="8" y="8" width="8" height="8" /></svg>;
 }
 
 function ValueIcon() {

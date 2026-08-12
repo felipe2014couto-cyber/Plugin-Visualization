@@ -16,7 +16,7 @@ export interface TrendPopupProps {
   onClose: () => void;
 }
 
-const POPUP_WIDTH = 1600;
+const POPUP_WIDTH = 2400;
 const POPUP_HEIGHT = 800;
 const SCALE_INTERVALS = 10;
 const MAX_NAMED_STATE_LABELS = 8;
@@ -329,7 +329,7 @@ function PopupChart({
     ? [scaledSeries.find(({ data }) => data.points.length > 0), ...scaledSeries.filter(({ data }) => data.points.length === 0)].filter((item): item is typeof scaledSeries[number] => item !== undefined).slice(0, 4)
     : scaledSeries.slice(0, 4);
   const plotX = Math.max(46, 8 + axisSeries.length * 38);
-  const plot = { x: plotX, y: 20, width: 1468 - plotX, height: 724 };
+  const plot = { x: plotX, y: 20, width: POPUP_WIDTH - 132 - plotX, height: 724 };
   const legendX = plot.x + plot.width + 14;
   const timeSpan = Math.max(1, domainEnd - domainStart);
   const xFor = (time: number) => plot.x + ((time - domainStart) / timeSpan) * plot.width;
@@ -649,7 +649,7 @@ function formatValue(value: number, format: TrendVisualOptions['numberFormat'] =
   if (format === 'integer') return String(Math.round(value));
   if (format === 'oneDecimal') return value.toFixed(1);
   if (format === 'twoDecimals') return value.toFixed(2);
-  return Number.isInteger(value) ? String(value) : value.toFixed(3);
+  return Math.abs(value) < 1 ? value.toFixed(1) : String(Math.round(value));
 }
 
 function popupRegressionPath(points: ReadonlyArray<{ time: number; value: number }>, xFor: (time: number) => number, yFor: (value: number) => number): string {
@@ -674,6 +674,9 @@ function createNiceScale(values: number[]): ValueScale {
   }
   let min = Math.min(...values);
   let max = Math.max(...values);
+  if (min >= 0 && max <= 1) {
+    return { min: 0, max: 1, step: 0.1 };
+  }
   if (min >= 0 && min <= max * 0.25) {
     min = 0;
   }

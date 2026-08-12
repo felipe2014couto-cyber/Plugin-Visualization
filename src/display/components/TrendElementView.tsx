@@ -622,8 +622,9 @@ export function buildTrendChartForSeries(
   const valuePadding = valueMin === valueMax
     ? Math.max(Math.abs(valueMin) * 0.05, 1)
     : (valueMax - valueMin) * 0.05;
-  const domainMin = valueMin - valuePadding;
-  const domainMax = valueMax + valuePadding;
+  const useUnitScale = valueMin >= 0 && valueMax <= 1;
+  const domainMin = useUnitScale ? 0 : valueMin - valuePadding;
+  const domainMax = useUnitScale ? 1 : valueMax + valuePadding;
   const hasRequestedRange = timeRange
     && Number.isFinite(timeRange.from)
     && Number.isFinite(timeRange.to)
@@ -708,7 +709,7 @@ function formatNumber(value: number, format: 'automatic' | 'integer' | 'oneDecim
   if (format === 'integer') return String(Math.round(value));
   if (format === 'oneDecimal') return value.toFixed(1);
   if (format === 'twoDecimals') return value.toFixed(2);
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  return Math.abs(value) < 1 ? value.toFixed(1) : String(Math.round(value));
 }
 
 function formatAxisTime(time: number, span: number): string {

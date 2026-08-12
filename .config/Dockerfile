@@ -69,4 +69,6 @@ RUN if [ "${development}" = "true" ]; then \
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+COPY pims-vision-dashboard-redirect.js /usr/share/grafana/public/pims-vision-dashboard-redirect.js
+RUN sed -i '/<\/head>/i\    <script src="[[.AppSubUrl]]/public/pims-vision-dashboard-redirect.js"></script>' /usr/share/grafana/public/views/index.html
 ENTRYPOINT ["/entrypoint.sh"]
