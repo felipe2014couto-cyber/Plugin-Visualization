@@ -218,6 +218,9 @@ export function DisplaySurface({
     onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, trendRuntimeStates), cursorsByTrend[element.id] ?? []);
   }, [cursorsByTrend, editable, elements, onTrendOpen, trendRuntimeStates]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
+    if (!editable) {
+      return;
+    }
     const element = elements.find((candidate) => candidate.id === elementId);
     if (!element || element.type !== TREND_TYPE) {
       return;
@@ -225,7 +228,7 @@ export function DisplaySurface({
     event.preventDefault();
     event.stopPropagation();
     onTrendContextMenu?.(element as TrendElement);
-  }, [elements, onTrendContextMenu]);
+  }, [editable, elements, onTrendContextMenu]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
