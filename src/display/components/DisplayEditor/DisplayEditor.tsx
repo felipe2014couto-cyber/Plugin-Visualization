@@ -247,9 +247,12 @@ export function DisplayEditor({
     },
     [dispatch],
   );
+  const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
+    dispatch({ type: 'SELECT_MANY', elementIds, additive });
+  }, [dispatch]);
 
   const handleStartDrag = useCallback(
-    (elementId: string, pointer: Point) => {
+    (elementId: string, pointer: Point, selectedIds: string[] = [elementId]) => {
       const el = getElementById(documentRef.current, elementId);
       if (!el) {
         return;
@@ -260,6 +263,12 @@ export function DisplayEditor({
         elementId,
         pointer,
         originalGeometry: { x: el.x, y: el.y, width: el.width, height: el.height },
+        originalGeometries: Object.fromEntries(
+          selectedIds.map((id) => {
+            const selected = getElementById(documentRef.current, id);
+            return selected ? [id, { x: selected.x, y: selected.y, width: selected.width, height: selected.height }] : [];
+          }).filter((entry): entry is [string, ElementGeometry] => entry.length > 0),
+        ),
       });
     },
     [dispatch],
@@ -305,7 +314,17 @@ export function DisplayEditor({
       );
     }
 
-    publishDocument(updateElementGeometry(documentRef.current, interaction.elementId, newGeometry));
+    if (interaction.kind === 'dragging') {
+      const dx = newGeometry.x - interaction.originalGeometry.x;
+      const dy = newGeometry.y - interaction.originalGeometry.y;
+      let nextDocument = documentRef.current;
+      Object.entries(interaction.originalGeometries).forEach(([id, geometry]) => {
+        nextDocument = updateElementGeometry(nextDocument, id, { x: geometry.x + dx, y: geometry.y + dy });
+      });
+      publishDocument(nextDocument);
+    } else {
+      publishDocument(updateElementGeometry(documentRef.current, interaction.elementId, newGeometry));
+    }
   }, [publishDocument]);
 
   const handlePointerEnd = useCallback(() => {
@@ -801,7 +820,9 @@ export function DisplayEditor({
             document={displayDocument}
             editable={mode === 'edit'}
             selectedElementId={mode === 'edit' ? state.selectedElementId : null}
+            selectedElementIds={mode === 'edit' ? state.selectedElementIds : []}
             onSelect={handleSelect}
+            onSelectMany={handleSelectMany}
             onStartDrag={handleStartDrag}
             onStartResize={handleStartResize}
             onPointerMove={handlePointerMove}
