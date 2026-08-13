@@ -357,6 +357,18 @@ export function DisplayEditor({
     dispatch({ type: 'SELECT', elementId: element.id });
   }, [commitDocument, dispatch]);
 
+  const reorderSelected = useCallback((direction: 'front' | 'back') => {
+    const selectedIds = new Set(stateRef.current.selectedElementIds);
+    if (selectedIds.size === 0) {
+      return;
+    }
+    const current = documentRef.current.elements;
+    const selected = current.filter((element) => selectedIds.has(element.id));
+    const remaining = current.filter((element) => !selectedIds.has(element.id));
+    const elements = direction === 'front' ? [...remaining, ...selected] : [...selected, ...remaining];
+    commitDocument({ ...documentRef.current, elements });
+  }, [commitDocument]);
+
   const handleImageFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = '';
@@ -821,6 +833,11 @@ export function DisplayEditor({
                 <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertBoundElement('gauge'); }}><GaugeIcon /></button>
                 <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBoundElement('bar'); }}><BarIcon /></button>
                 <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('trend'); handleInsertBoundElement('trend'); }}><TrendIcon /></button>
+              </div>
+              <span className={styles.toolbarDivider} aria-hidden="true" />
+              <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
+                <button type="button" title="Trazer para frente" aria-label="Trazer para frente" className={styles.iconButton} data-testid="display-bring-front" disabled={state.selectedElementIds.length === 0} onClick={() => reorderSelected('front')}><BringFrontIcon /></button>
+                <button type="button" title="Enviar para trás" aria-label="Enviar para trás" className={styles.iconButton} data-testid="display-send-back" disabled={state.selectedElementIds.length === 0} onClick={() => reorderSelected('back')}><SendBackIcon /></button>
               </div>
             </div>
           )}
@@ -1581,6 +1598,14 @@ function TextIcon() {
 
 function ImageIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="14" /><circle cx="9" cy="10" r="1.5" /><path d="m5 17 4-4 3 3 2-2 5 4" /></svg>;
+}
+
+function BringFrontIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="7" y="4" width="12" height="12" /><path d="M5 8v11h11M10 7l3-3 3 3" /></svg>;
+}
+
+function SendBackIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="5" y="8" width="12" height="12" /><path d="M8 5h11v11M13 17l-3 3-3-3" /></svg>;
 }
 
 function GaugeIcon() {
