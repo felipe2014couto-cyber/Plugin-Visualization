@@ -197,6 +197,7 @@ function portableTrendSeries(properties: Record<string, unknown>): TrendSeries[]
         color: typeof input.color === 'string' && input.color.trim().length > 0
           ? input.color
           : trendSeriesColor(index),
+        ...(input.primaryScale === true ? { primaryScale: true } : {}),
       });
     }
   });
