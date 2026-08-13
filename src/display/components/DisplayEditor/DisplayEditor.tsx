@@ -358,14 +358,18 @@ export function DisplayEditor({
   }, [commitDocument, dispatch]);
 
   const reorderSelected = useCallback((direction: 'front' | 'back') => {
-    const selectedIds = new Set(stateRef.current.selectedElementIds);
-    if (selectedIds.size === 0) {
+    const selectedId = stateRef.current.selectedElementId;
+    if (!selectedId) {
       return;
     }
     const current = documentRef.current.elements;
-    const selected = current.filter((element) => selectedIds.has(element.id));
-    const remaining = current.filter((element) => !selectedIds.has(element.id));
-    const elements = direction === 'front' ? [...remaining, ...selected] : [...selected, ...remaining];
+    const index = current.findIndex((element) => element.id === selectedId);
+    const targetIndex = direction === 'front' ? index + 1 : index - 1;
+    if (index < 0 || targetIndex < 0 || targetIndex >= current.length) {
+      return;
+    }
+    const elements = [...current];
+    [elements[index], elements[targetIndex]] = [elements[targetIndex], elements[index]];
     commitDocument({ ...documentRef.current, elements });
   }, [commitDocument]);
 
@@ -836,8 +840,8 @@ export function DisplayEditor({
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
-                <button type="button" title="Trazer para frente" aria-label="Trazer para frente" className={styles.iconButton} data-testid="display-bring-front" disabled={state.selectedElementIds.length === 0} onClick={() => reorderSelected('front')}><BringFrontIcon /></button>
-                <button type="button" title="Enviar para trás" aria-label="Enviar para trás" className={styles.iconButton} data-testid="display-send-back" disabled={state.selectedElementIds.length === 0} onClick={() => reorderSelected('back')}><SendBackIcon /></button>
+                <button type="button" title="Trazer uma camada para frente" aria-label="Trazer uma camada para frente" className={styles.iconButton} data-testid="display-bring-front" disabled={state.selectedElementId === null} onClick={() => reorderSelected('front')}><BringFrontIcon /></button>
+                <button type="button" title="Enviar uma camada para trás" aria-label="Enviar uma camada para trás" className={styles.iconButton} data-testid="display-send-back" disabled={state.selectedElementId === null} onClick={() => reorderSelected('back')}><SendBackIcon /></button>
               </div>
             </div>
           )}
