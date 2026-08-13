@@ -370,14 +370,15 @@ export function DisplaySurface({
           onSelectMany([elementId], true);
           return;
         }
-        if (!multiSelectionRef.current) {
+        const preserveSelection = multiSelectionRef.current && selectedElementIds.includes(elementId);
+        if (!preserveSelection) {
+          multiSelectionRef.current = false;
           onSelectMany([elementId]);
         }
-        onSelectMany([elementId]);
         onStartDrag(
           elementId,
           svgPointFromEvent(svg, e.clientX, e.clientY),
-          multiSelectionRef.current && selectedElementIds.includes(elementId) ? selectedElementIds : [elementId],
+          preserveSelection ? selectedElementIds : [elementId],
         );
         return;
       }
@@ -390,7 +391,7 @@ export function DisplaySurface({
         setSelectionBox({ start: point, current: point });
       }
     },
-    [editable, onSelectMany, onStartDrag, onStartResize],
+    [editable, onSelect, onSelectMany, onStartDrag, onStartResize, selectedElementIds],
   );
 
   const handleSvgPointerMove = useCallback(
