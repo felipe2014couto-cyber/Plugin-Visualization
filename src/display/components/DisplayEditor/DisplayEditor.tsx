@@ -357,7 +357,7 @@ export function DisplayEditor({
 
   const handleInsertBoundElement = useCallback((type: PiPointDropSymbolType) => {
     const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    if ((type === 'value' || type === 'trend') && !binding) {
+    if (!binding) {
       return;
     }
     const currentDocument = documentRef.current;
@@ -785,8 +785,8 @@ export function DisplayEditor({
                 <button type="button" title="Inserir forma geométrica" aria-label="Inserir forma geométrica" className={styles.iconButton} data-testid="display-insert-rectangle" onClick={handleInsertRectangle}><RectangleIcon /></button>
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
                 <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('value'); handleInsertBoundElement('value'); }}><ValueIcon /></button>
-                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertBoundElement('gauge'); }}><GaugeIcon /></button>
-                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBoundElement('bar'); }}><BarIcon /></button>
+                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertBoundElement('gauge'); }}><GaugeIcon /></button>
+                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBoundElement('bar'); }}><BarIcon /></button>
                 <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('trend'); handleInsertBoundElement('trend'); }}><TrendIcon /></button>
               </div>
             </div>
