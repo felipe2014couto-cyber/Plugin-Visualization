@@ -55,7 +55,7 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
   </aside>;
 }
 const getStyles = (theme: GrafanaTheme2) => ({ panel: css`
-  width: 230px; flex: 0 0 230px; overflow:hidden; padding:8px 12px; box-sizing:border-box; color:var(--text-primary); background:var(--surface-primary); border-left:1px solid var(--border-color); font-size:11px;
+  width: 230px; flex: 0 0 230px; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; scrollbar-gutter:stable; padding:8px 12px; box-sizing:border-box; color:var(--text-primary); background:var(--surface-primary); border-left:1px solid var(--border-color); font-size:11px;
   label { display:flex; flex-direction:column; gap:2px; margin:4px 0; color:var(--text-secondary); } input, select { height:25px; min-height:25px; box-sizing:border-box; color:var(--text-primary); background:var(--input-bg); border:1px solid var(--border-color); } input[type='color'] { padding:2px; } input[type='range'] { accent-color:var(--accent); }`,
   heading: css`display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; strong { font-size:14px; } button { width:24px; height:24px; border:1px solid var(--border-color); border-radius:4px; color:var(--text-secondary); background:var(--button-bg); font-size:20px; line-height:18px; cursor:pointer; } button:hover { color:var(--text-primary); background:var(--button-hover); }`,
   fontHeading: css`display:block; margin:7px 0 3px; font-size:13px;`,
