@@ -58,7 +58,7 @@ describe('ValueElementView', () => {
     const text = screen.getByTestId('display-value-value-3');
     expect(text).toHaveAttribute('fill', '#ff0000');
     expect(text).toHaveAttribute('font-size', '24');
-    expect(text).toHaveAttribute('text-anchor', 'right');
+    expect(text).toHaveAttribute('text-anchor', 'end');
   });
 
   it('aplica somente a cor do primeiro estado correspondente e preserva o valor', async () => {
