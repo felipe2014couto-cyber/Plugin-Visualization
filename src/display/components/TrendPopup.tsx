@@ -33,7 +33,7 @@ interface PopupZoom {
 }
 
 export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelectionChange, loading = false, visualOptions = DEFAULT_TREND_VISUAL_OPTIONS, onClose }: TrendPopupProps) {
-  const [scaleMode, setScaleMode] = useState<PopupScaleMode>(visualOptions.scaleMode);
+  const [scaleMode, setScaleMode] = useState<PopupScaleMode>(visualOptions.scaleMode === 'configurable' ? 'configurable' : 'individual');
   const [customScales, setCustomScales] = useState<PopupCustomScales>({});
   const [cursorMode, setCursorMode] = useState(true);
   const [zoomMode, setZoomMode] = useState(true);
@@ -43,7 +43,7 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
   const [cursorDrag, setCursorDrag] = useState<{ id: string; pointerId: number } | null>(null);
   const nextCursorId = useRef(1);
 
-  useEffect(() => setScaleMode(visualOptions.scaleMode), [visualOptions.scaleMode]);
+  useEffect(() => setScaleMode(visualOptions.scaleMode === 'configurable' ? 'configurable' : 'individual'), [visualOptions.scaleMode]);
 
   useEffect(() => {
     const previousBodyOverflow = document.body.style.overflow;
@@ -131,8 +131,8 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
           <button type="button" className={scaleMode === 'single' ? styles.trendToolActive : styles.trendTool} aria-pressed={scaleMode === 'single'} data-testid="trend-popup-scale-single" onClick={() => setScaleMode('single')}>
             <TrendToolIcon kind="single" /><span>Escala única</span>
           </button>
-          <button type="button" className={scaleMode === 'multiple' ? styles.trendToolActive : styles.trendTool} aria-pressed={scaleMode === 'multiple'} data-testid="trend-popup-scale-multiple" onClick={() => setScaleMode('multiple')}>
-            <TrendToolIcon kind="multiple" /><span>Múltiplas escalas</span>
+          <button type="button" className={scaleMode === 'individual' || scaleMode === 'multiple' || scaleMode === 'configurable' ? styles.trendToolActive : styles.trendTool} aria-pressed={scaleMode !== 'single'} data-testid="trend-popup-scale-multiple" onClick={() => setScaleMode('individual')}>
+            <TrendToolIcon kind="multiple" /><span>Individual por série</span>
           </button>
           <button type="button" className={scaleMode === 'configurable' ? styles.trendToolActive : styles.trendTool} aria-pressed={scaleMode === 'configurable'} data-testid="trend-popup-scale-configurable" onClick={activateConfigurableScale}>
             <TrendToolIcon kind="configurable" /><span>Escala configurável</span>
@@ -316,12 +316,18 @@ function PopupChart({
   const primaryAutomaticScale = primaryItem ? createNiceScale(primaryItem.data.points.map(({ value }) => value)) : sharedScale;
   const primaryScale = scaleMode === 'single'
     ? sharedScale
-    : scaleMode === 'configurable' && primaryItem
+      : scaleMode === 'configurable' && primaryItem
       ? applyCustomScale(primaryAutomaticScale, customScales[primaryItem.key])
       : primaryAutomaticScale;
   const scaledSeries = series.map((item) => {
     const automaticScale = createNiceScale(item.data.points.map((point) => point.value));
-    const modeScale = item.data.points.length === 0 ? automaticScale : primaryScale;
+    const modeScale = item.data.points.length === 0
+      ? automaticScale
+      : scaleMode === 'single'
+        ? sharedScale
+        : scaleMode === 'configurable' && customScales[item.key]
+          ? applyCustomScale(automaticScale, customScales[item.key])
+          : automaticScale;
     return {
       ...item,
       scale: applyZoomScale(modeScale, zoom),

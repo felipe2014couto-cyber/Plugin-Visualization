@@ -180,7 +180,7 @@ function getTrendContent(
   );
 
   if (dataSeries.length > 0 && stateSeries.length > 0) {
-    return <>{visual.title && <TrendTitle element={element} visual={visual} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} /></>;
+    return <>{visual.title && <TrendTitle element={element} visual={visual} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} individualScale={visual.scaleMode !== 'single'} /></>;
   }
 
   if (dataSeries.length === 0 && stateSeries.length > 0) {
@@ -211,7 +211,8 @@ function getTrendContent(
   const drawableSeries = dataSeries.filter(({ data }) => data.points.length > 0);
   const primary = drawableSeries.find(({ series }) => series.primaryScale === true) ?? drawableSeries[0];
   const timeChart = buildTrendChartForSeries(element, drawableSeries.map(({ data }) => data.points), timeRange);
-  const scaleChart = visual.scaleMode === 'single'
+  const individualScale = visual.scaleMode === 'individual' || visual.scaleMode === 'configurable' || visual.scaleMode === 'multiple';
+  const scaleChart = !individualScale
     ? timeChart
     : primary ? buildTrendChartForSeries(element, [primary.data.points], timeRange) : timeChart;
   const configuredMin = visual.scaleMode === 'configurable' ? primary?.series.scaleMin : undefined;
@@ -227,6 +228,10 @@ function getTrendContent(
       return { value, y: scaleChart.plotY + ((safeDomain.domainMax - value) / (safeDomain.domainMax - safeDomain.domainMin)) * scaleChart.plotHeight };
     }),
   };
+  const seriesCharts = new Map(drawableSeries.map(({ series, data }) => [
+    trendBindingKey(series.binding),
+    individualScale ? buildTrendChartForSeries(element, [data.points], timeRange) : chart,
+  ]));
   return (
     <>
       {visual.title && <TrendTitle element={element} visual={visual} />}{title}
@@ -300,8 +305,9 @@ function getTrendContent(
         </text>
       ))}
       {drawableSeries.map(({ series, data }, index) => {
-        const path = trendPathForPoints(chart, data.points);
-        const singlePoint = data.points.length === 1 ? trendPointForValue(chart, data.points[0]) : undefined;
+        const seriesChart = seriesCharts.get(trendBindingKey(series.binding)) ?? chart;
+        const path = trendPathForPoints(seriesChart, data.points);
+        const singlePoint = data.points.length === 1 ? trendPointForValue(seriesChart, data.points[0]) : undefined;
         return (
           <React.Fragment key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}>
             <path
@@ -315,9 +321,9 @@ function getTrendContent(
               data-testid={index === 0 ? `trend-line-${element.id}` : `trend-line-${element.id}-${index}`}
               pointerEvents="none"
             />
-            {visual.showRegression && data.points.length > 1 && <path d={trendRegressionPath(chart, data.points)} fill="none" stroke={series.color || LINE_COLOR} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} pointerEvents="none" />}
-            {series.marker === 'circle' && data.points.map((point) => { const position = trendPointForValue(chart, point); return <circle key={point.time} cx={position.x} cy={position.y} r={3} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
-            {series.marker === 'square' && data.points.map((point) => { const position = trendPointForValue(chart, point); return <rect key={point.time} x={position.x - 3} y={position.y - 3} width={6} height={6} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
+            {visual.showRegression && data.points.length > 1 && <path d={trendRegressionPath(seriesChart, data.points)} fill="none" stroke={series.color || LINE_COLOR} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} pointerEvents="none" />}
+            {series.marker === 'circle' && data.points.map((point) => { const position = trendPointForValue(seriesChart, point); return <circle key={point.time} cx={position.x} cy={position.y} r={3} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
+            {series.marker === 'square' && data.points.map((point) => { const position = trendPointForValue(seriesChart, point); return <rect key={point.time} x={position.x - 3} y={position.y - 3} width={6} height={6} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
             {singlePoint && (
               <circle
                 cx={singlePoint.x}
@@ -426,11 +432,13 @@ function MixedTrend({
   numericSeries,
   stateSeries,
   timeRange,
+  individualScale,
 }: {
   element: TrendElement;
   numericSeries: Array<{ series: TrendSeries; data: PiTrendSeries }>;
   stateSeries: Array<{ series: TrendSeries; states: TrendStatePoint[] }>;
   timeRange: DisplayTimeRange | undefined;
+  individualScale: boolean;
 }) {
   const allNumericPoints = numericSeries.flatMap(({ data }) => data.points);
   const primaryNumeric = numericSeries.find(({ series }) => series.primaryScale === true) ?? numericSeries[0];
@@ -461,7 +469,15 @@ function MixedTrend({
   const domainMax = numericMax + numericPadding;
   const xFor = (time: number) => plotX + ((Math.max(domainStart, Math.min(domainEnd, time)) - domainStart)
     / Math.max(1, domainEnd - domainStart)) * plotWidth;
-  const numericY = (value: number) => plotY + ((domainMax - value) / Math.max(1e-12, domainMax - domainMin)) * plotHeight;
+  const numericScaleFor = (series: { data: PiTrendSeries }) => {
+    if (!individualScale) return { min: domainMin, max: domainMax };
+    const values = series.data.points.map((point) => point.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const padding = min === max ? Math.max(Math.abs(min) * 0.05, 1) : (max - min) * 0.05;
+    return { min: min - padding, max: max + padding };
+  };
+  const numericY = (value: number, scale = { min: domainMin, max: domainMax }) => plotY + ((scale.max - value) / Math.max(1e-12, scale.max - scale.min)) * plotHeight;
   const stateY = (value: string) => {
     const index = Math.max(0, stateLabels.indexOf(value));
     return plotY + (1 - index / Math.max(1, stateLabels.length - 1)) * plotHeight;
@@ -511,10 +527,12 @@ function MixedTrend({
           {series.marker === 'square' && points.map((state, markerIndex) => <rect key={`${state.time}-${markerIndex}`} x={xFor(state.time) - 3} y={stateY(state.value) - 3} width={6} height={6} fill={series.color || LINE_COLOR} pointerEvents="none" />)}
         </React.Fragment>
       ))}
-      {numericSeries.map(({ series, data }, index) => (
+      {numericSeries.map(({ series, data }, index) => {
+        const seriesScale = numericScaleFor({ data });
+        return (
         <path
           key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}
-          d={data.points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${numericY(point.value)}`).join(' ')}
+          d={data.points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${numericY(point.value, seriesScale)}`).join(' ')}
           fill="none"
           stroke={series.color || LINE_COLOR}
           strokeWidth={2}
@@ -523,7 +541,8 @@ function MixedTrend({
           data-testid={index === 0 ? `trend-line-${element.id}` : `trend-line-${element.id}-${index}`}
           pointerEvents="none"
         />
-      ))}
+        );
+      })}
     </>
   );
 }

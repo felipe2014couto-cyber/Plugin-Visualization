@@ -21,7 +21,7 @@ export interface TrendSeries {
 export type TrendLineStyle = 'solid' | 'dashed' | 'dotted';
 export type TrendMarker = 'none' | 'circle' | 'square';
 export type TrendNumberFormat = 'automatic' | 'integer' | 'oneDecimal' | 'twoDecimals';
-export type TrendScaleMode = 'single' | 'multiple' | 'configurable';
+export type TrendScaleMode = 'single' | 'individual' | 'multiple' | 'configurable';
 
 export interface TrendVisualOptions {
   title: string;
@@ -155,7 +155,7 @@ export function getTrendVisualOptions(element: Pick<TrendElement, 'properties'>)
       ? visual.numberFormat
       : 'automatic',
     scaleIntervals: visual.scaleIntervals === 2 || visual.scaleIntervals === 5 || visual.scaleIntervals === 10 ? visual.scaleIntervals : 10,
-    scaleMode: visual.scaleMode === 'configurable' ? 'configurable' : 'single',
+    scaleMode: visual.scaleMode === 'individual' || visual.scaleMode === 'configurable' ? visual.scaleMode : 'single',
     fontFamily: typeof visual.fontFamily === 'string' && visual.fontFamily.trim() ? visual.fontFamily : 'Arial',
     fontSize: typeof visual.fontSize === 'number' && Number.isFinite(visual.fontSize) ? Math.max(10, Math.min(24, visual.fontSize)) : 16,
   };
