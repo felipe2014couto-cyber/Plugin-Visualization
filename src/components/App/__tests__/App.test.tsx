@@ -6,8 +6,11 @@ import {
 } from '../../../pi';
 import { App, VISUALIZATION_THEME_STORAGE_KEY } from '../App';
 
+const mockGetBackendSrv = jest.fn();
+
 jest.mock('@grafana/runtime', () => ({
   PluginPage: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  getBackendSrv: () => ({ get: mockGetBackendSrv }),
 }));
 
 jest.mock('@grafana/ui', () => ({
@@ -27,20 +30,31 @@ describe('App', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    mockGetBackendSrv.mockImplementation((url: string) => {
+      if (url === '/api/user') {
+        return Promise.resolve({ id: 1, login: 'admin' });
+      }
+      if (url.startsWith('/api/search?type=dash-folder')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve({});
+    });
   });
 
-  it('mostra o estado inicial de verificação', () => {
+  it('mostra o estado inicial de verificação da sessão', () => {
+    mockGetBackendSrv.mockReturnValue(new Promise(() => undefined));
     checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
 
     render(<App />);
 
-    expect(screen.getByTestId('pi-connection-status')).toHaveTextContent('PI System: Verificando');
+    expect(screen.getByTestId('pims-vision-auth-gate')).toHaveTextContent('Verificando acesso');
   });
 
   it('mantém o editor disponível quando a Data Source PI falha', async () => {
     checkPiConnectionMock.mockResolvedValue({ status: 'error' });
     render(<App />);
 
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
     expect(screen.getByTestId('display-editor')).toBeInTheDocument();
     expect(screen.getByTestId('display-surface')).toBeInTheDocument();
     expect(screen.getByTestId('display-mode-edit')).toHaveAttribute('aria-pressed', 'true');
@@ -52,10 +66,11 @@ describe('App', () => {
     );
   });
 
-  it('organiza a pesquisa PI em Ativos ao lado da área do editor', () => {
+  it('organiza a pesquisa PI em Ativos ao lado da área do editor', async () => {
     checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
 
     render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
 
     expect(screen.getByTestId('pims-vision-header')).toHaveTextContent('Visualization');
     expect(screen.getByTestId('pims-vision-assets-panel')).toHaveTextContent('Ativos');
@@ -66,14 +81,14 @@ describe('App', () => {
     expect(screen.getByTestId('time-range-end')).toHaveValue('*');
     expect(screen.getByRole('button', { name: 'Arrastar como Trend' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Ocultar barra de ferramentas' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Arrastar como Barra' }));
-    expect(screen.getByRole('button', { name: 'Arrastar como Barra' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Arrastar como Barra' })).toBeDisabled();
   });
 
-  it('recolhe e reabre o painel lateral ao alternar o ícone do cubo', () => {
+  it('recolhe e reabre o painel lateral ao alternar o ícone do cubo', async () => {
     checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
 
     render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
 
     const toggle = screen.getByTestId('pims-vision-toggle-assets-panel');
     const assetsPanel = screen.getByTestId('pims-vision-assets-panel');
@@ -97,10 +112,11 @@ describe('App', () => {
     expect(screen.getByTestId('display-editor-toolbar')).toBeInTheDocument();
   });
 
-  it('inicia no tema escuro e persiste a troca para o tema claro', () => {
+  it('inicia no tema escuro e persiste a troca para o tema claro', async () => {
     checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
 
     render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
 
     expect(screen.getByTestId('pims-vision-home')).toHaveAttribute('data-visualization-theme', 'dark');
     expect(screen.getByTestId('visualization-theme-dark')).toHaveAttribute('aria-pressed', 'true');
@@ -111,11 +127,12 @@ describe('App', () => {
     expect(localStorage.getItem(VISUALIZATION_THEME_STORAGE_KEY)).toBe('light');
   });
 
-  it('restaura o tema persistido sem alterar a interface', () => {
+  it('restaura o tema persistido sem alterar a interface', async () => {
     localStorage.setItem(VISUALIZATION_THEME_STORAGE_KEY, 'light');
     checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
 
     render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
 
     expect(screen.getByTestId('pims-vision-home')).toHaveAttribute('data-visualization-theme', 'light');
     expect(screen.getByTestId('pims-vision-assets-panel')).toBeInTheDocument();

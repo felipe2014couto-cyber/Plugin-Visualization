@@ -27,11 +27,20 @@ import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
-import { loadPimsVisionDashboard, savePimsVisionDashboard } from '../../grafana/dashboardPersistence';
+import {
+  hasDashboardTitleConflict,
+  isGrafanaUserAuthenticated,
+  loadPimsVisionDashboard,
+  loadPimsVisionFolders,
+  savePimsVisionDashboard,
+  type GrafanaDashboardFolder,
+} from '../../grafana/dashboardPersistence';
 
 export type VisualizationTheme = 'dark' | 'light';
 
 export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
+
+type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
 
 function getInitialTheme(): VisualizationTheme {
   try {
@@ -43,6 +52,7 @@ function getInitialTheme(): VisualizationTheme {
 
 export function App() {
   const styles = useStyles2(getStyles);
+  const [authenticationState, setAuthenticationState] = useState<AuthenticationState>('checking');
   const [document, setDocument] = useState(() =>
     createDisplayDocument({ name: 'Visualization' }),
   );
@@ -54,6 +64,14 @@ export function App() {
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
   const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
   const [dashboardUid, setDashboardUid] = useState<string>();
+  const [folders, setFolders] = useState<GrafanaDashboardFolder[]>([]);
+  const [selectedFolderUid, setSelectedFolderUid] = useState('');
+  const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [saveFolderUid, setSaveFolderUid] = useState('');
+  const [saveFolderSearch, setSaveFolderSearch] = useState('');
+  const [expandedFolderUids, setExpandedFolderUids] = useState<string[]>([]);
+  const [saveValidationError, setSaveValidationError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
   if (!progressiveTrendLoaderRef.current) {
@@ -67,9 +85,9 @@ export function App() {
   useEffect(() => {
     let active = true;
 
-    checkPiConnection().then((connection) => {
+    isGrafanaUserAuthenticated().then((authenticated) => {
       if (active) {
-        setPiConnection(connection);
+        setAuthenticationState(authenticated ? 'authenticated' : 'unauthenticated');
       }
     });
 
@@ -79,6 +97,51 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (authenticationState !== 'authenticated') {
+      return;
+    }
+
+    let active = true;
+    loadPimsVisionFolders()
+      .then((availableFolders) => {
+        if (active) {
+          setFolders(availableFolders);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setFolders([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authenticationState]);
+
+  useEffect(() => {
+    if (authenticationState !== 'authenticated') {
+      return;
+    }
+
+    let active = true;
+
+    checkPiConnection().then((connection) => {
+      if (active) {
+        setPiConnection(connection);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [authenticationState]);
+
+  useEffect(() => {
+    if (authenticationState !== 'authenticated') {
+      return;
+    }
+
     const uid = new URLSearchParams(globalThis.location?.search ?? '').get('dashboardUid');
     if (!uid) {
       return;
@@ -88,8 +151,9 @@ export function App() {
     loadPimsVisionDashboard(uid)
       .then((savedDocument) => {
         if (active && savedDocument) {
-          setDocument(savedDocument);
+          setDocument(savedDocument.document);
           setDashboardUid(uid);
+          setSelectedFolderUid(savedDocument.folderUid);
         }
       })
       .catch(() => {
@@ -101,7 +165,7 @@ export function App() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [authenticationState]);
 
   useEffect(() => {
     try {
@@ -132,18 +196,38 @@ export function App() {
     [progressiveTrendLoader, rangeFrom, rangeTo],
   );
   const hasPiConnection = piConnection.status === 'connected';
-  const handleSaveDashboard = useCallback(async () => {
-    const name = globalThis.prompt?.('Nome do dashboard', document.name);
-    if (name === null) {
+  const openSaveDialog = useCallback(() => {
+    setSaveName(document.name);
+    setSaveFolderUid(selectedFolderUid);
+    setSaveFolderSearch('');
+    setSaveValidationError('');
+    setSaveState('idle');
+    setIsSaveDialogOpen(true);
+  }, [document.name, selectedFolderUid]);
+
+  const handleSaveDashboard = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = saveName.trim();
+    if (!title) {
+      setSaveValidationError('Informe um nome para o dashboard.');
       return;
     }
 
-    const documentToSave = { ...document, name: name?.trim() || document.name };
-    setDocument(documentToSave);
     setSaveState('saving');
     try {
-      const saved = await savePimsVisionDashboard(documentToSave, dashboardUid);
+      if (await hasDashboardTitleConflict(title, saveFolderUid, dashboardUid)) {
+        setSaveValidationError('Já existe um dashboard com esse nome nesta pasta.');
+        setSaveState('idle');
+        return;
+      }
+
+      const documentToSave = { ...document, name: title };
+      setDocument(documentToSave);
+      const saved = await savePimsVisionDashboard(documentToSave, dashboardUid, saveFolderUid);
       setDashboardUid(saved.uid);
+      setSelectedFolderUid(saveFolderUid);
+      setIsSaveDialogOpen(false);
+      setSaveValidationError('');
       const savedUrl = new URL(globalThis.location.href);
       savedUrl.searchParams.set('dashboardUid', saved.uid);
       globalThis.history?.replaceState(null, '', `${savedUrl.pathname}${savedUrl.search}`);
@@ -151,7 +235,27 @@ export function App() {
     } catch {
       setSaveState('error');
     }
-  }, [dashboardUid, document]);
+  }, [dashboardUid, document, saveFolderUid, saveName]);
+
+  if (authenticationState !== 'authenticated') {
+    const loginUrl = `/login?redirect=${encodeURIComponent(globalThis.location?.href ?? '')}`;
+    return (
+      <div className={styles.authGate} data-testid="pims-vision-auth-gate">
+        <div className={styles.authCard}>
+          <span className={styles.productMark} role="img" aria-label="Aperam Visualization" />
+          <h1>{authenticationState === 'checking' ? 'Verificando acesso' : 'Login necessário'}</h1>
+          <p>
+            {authenticationState === 'checking'
+              ? 'Verificando sua sessão no Grafana...'
+              : 'Faça login no Grafana para acessar o Visualization.'}
+          </p>
+          {authenticationState === 'unauthenticated' && (
+            <a className={styles.loginButton} href={loginUrl}>Entrar no Grafana</a>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -183,7 +287,7 @@ export function App() {
               className={styles.saveButton}
               data-testid="pims-vision-save-dashboard"
               disabled={saveState === 'saving'}
-              onClick={handleSaveDashboard}
+              onClick={openSaveDialog}
             >{saveState === 'saving' ? 'Salvando...' : 'Salvar dashboard'}</button>
             {saveState !== 'idle' && (
               <span className={saveState === 'error' ? styles.saveError : styles.saveStatus} role="status">
@@ -193,6 +297,68 @@ export function App() {
           </div>
         </div>
       </header>
+      {isSaveDialogOpen && (
+        <div className={styles.dialogBackdrop} role="presentation">
+          <form className={styles.saveDialog} role="dialog" aria-modal="true" aria-labelledby="save-dashboard-title" onSubmit={handleSaveDashboard}>
+            <h2 id="save-dashboard-title">Salvar dashboard</h2>
+            <label className={styles.dialogLabel} htmlFor="save-dashboard-name">Nome do dashboard</label>
+            <input
+              id="save-dashboard-name"
+              className={styles.dialogInput}
+              value={saveName}
+              autoFocus
+              onChange={(event) => {
+                setSaveName(event.target.value);
+                setSaveValidationError('');
+              }}
+            />
+            <label className={styles.dialogLabel} htmlFor="save-dashboard-folder-search">Pasta</label>
+            <input
+              id="save-dashboard-folder-search"
+              className={styles.dialogInput}
+              value={saveFolderSearch}
+              placeholder="Buscar pastas"
+              onChange={(event) => {
+                setSaveFolderSearch(event.target.value);
+              }}
+            />
+            <FolderPicker
+              folders={folders}
+              search={saveFolderSearch}
+              selectedFolderUid={saveFolderUid}
+              expandedFolderUids={expandedFolderUids}
+              classes={{
+                tree: styles.folderTree,
+                row: styles.folderRow,
+                rowSelected: styles.folderRowSelected,
+                toggle: styles.folderToggle,
+                indent: styles.folderIndent,
+                empty: styles.folderEmpty,
+              }}
+              onSelect={(folderUid) => {
+                setSaveFolderUid(folderUid);
+                setSaveValidationError('');
+              }}
+              onToggle={(folderUid) => setExpandedFolderUids((current) => (
+                current.includes(folderUid)
+                  ? current.filter((uid) => uid !== folderUid)
+                  : [...current, folderUid]
+              ))}
+            />
+            {saveValidationError && <span className={styles.dialogError} role="alert">{saveValidationError}</span>}
+            <div className={styles.dialogActions}>
+              <button
+                type="button"
+                className={styles.dialogCancelButton}
+                onClick={() => setIsSaveDialogOpen(false)}
+              >Cancelar</button>
+              <button type="submit" className={styles.dialogSaveButton} disabled={saveState === 'saving'}>
+                {saveState === 'saving' ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       <div className={styles.workspace}>
         <aside
           className={isAssetsPanelOpen ? styles.assetsPanel : styles.assetsPanelCollapsed}
@@ -251,6 +417,89 @@ export function App() {
         </main>
       </div>
       <TimeRangeBar selection={timeSelection} onChange={setTimeSelection} />
+    </div>
+  );
+}
+
+interface FolderPickerProps {
+  folders: GrafanaDashboardFolder[];
+  search: string;
+  selectedFolderUid: string;
+  expandedFolderUids: string[];
+  classes: {
+    tree: string;
+    row: string;
+    rowSelected: string;
+    toggle: string;
+    indent: string;
+    empty: string;
+  };
+  onSelect: (folderUid: string) => void;
+  onToggle: (folderUid: string) => void;
+}
+
+function FolderPicker({
+  folders,
+  search,
+  selectedFolderUid,
+  expandedFolderUids,
+  classes,
+  onSelect,
+  onToggle,
+}: FolderPickerProps) {
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const foldersByParent = new Map<string, GrafanaDashboardFolder[]>();
+  folders.forEach((folder) => {
+    const parentUid = folder.parentFolderUid ?? '';
+    const siblings = foldersByParent.get(parentUid) ?? [];
+    siblings.push(folder);
+    foldersByParent.set(parentUid, siblings);
+  });
+  foldersByParent.forEach((siblings) => siblings.sort((first, second) => first.title.localeCompare(second.title)));
+
+  if (normalizedSearch) {
+    const matches = folders.filter((folder) => folder.title.toLocaleLowerCase().includes(normalizedSearch));
+    return (
+      <div className={classes.tree} role="tree" aria-label="Pastas disponíveis">
+        {matches.length === 0 ? (
+          <span className={classes.empty}>Nenhuma pasta encontrada.</span>
+        ) : matches.map((folder) => (
+          <button
+            key={folder.uid}
+            type="button"
+            className={selectedFolderUid === folder.uid ? classes.rowSelected : classes.row}
+            role="treeitem"
+            aria-selected={selectedFolderUid === folder.uid}
+            onClick={() => onSelect(folder.uid)}
+          >{folder.title}</button>
+        ))}
+      </div>
+    );
+  }
+
+  const renderChildren = (parentUid: string, depth: number): React.ReactNode => (
+    (foldersByParent.get(parentUid) ?? []).map((folder) => {
+      const children = foldersByParent.get(folder.uid) ?? [];
+      const isExpanded = expandedFolderUids.includes(folder.uid);
+      return (
+        <React.Fragment key={folder.uid}>
+          <div className={selectedFolderUid === folder.uid ? classes.rowSelected : classes.row} role="treeitem" aria-level={depth + 1} aria-selected={selectedFolderUid === folder.uid}>
+            <span className={classes.indent} style={{ width: `${depth * 16}px` }} />
+            {children.length > 0 ? (
+              <button type="button" className={classes.toggle} aria-label={`${isExpanded ? 'Fechar' : 'Abrir'} ${folder.title}`} aria-expanded={isExpanded} onClick={() => onToggle(folder.uid)}>{isExpanded ? '⌄' : '›'}</button>
+            ) : <span className={classes.toggle} aria-hidden="true" />}
+            <button type="button" className={classes.row} onClick={() => onSelect(folder.uid)}>{folder.title}</button>
+          </div>
+          {isExpanded && renderChildren(folder.uid, depth + 1)}
+        </React.Fragment>
+      );
+    })
+  );
+
+  return (
+    <div className={classes.tree} role="tree" aria-label="Pastas disponíveis">
+      <button type="button" className={selectedFolderUid === '' ? classes.rowSelected : classes.row} role="treeitem" aria-selected={selectedFolderUid === ''} onClick={() => onSelect('')}>Geral</button>
+      {renderChildren('', 0)}
     </div>
   );
 }
@@ -325,6 +574,43 @@ const getStyles = (theme: GrafanaTheme2) => ({
     --top-header-bg: #ffffff;
     --assets-header-bg: var(--panel-header-bg);
     --assets-header-text: var(--text-primary);
+  `,
+  authGate: css`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 24px;
+    box-sizing: border-box;
+    color: #f1f2f5;
+    background: #080f19;
+  `,
+  authCard: css`
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: min(420px, 100%);
+    padding: 32px;
+    box-sizing: border-box;
+    border: 1px solid #2b394a;
+    border-radius: 12px;
+    background: #111923;
+    text-align: center;
+
+    h1 { margin: 8px 0; font-size: 22px; }
+    p { margin: 0 0 20px; color: #aeb3bf; line-height: 1.5; }
+  `,
+  loginButton: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 0 16px;
+    border-radius: 8px;
+    color: #ffffff;
+    background: #d33b91;
+    text-decoration: none;
+    font-weight: 600;
   `,
   container: css`
     display: flex;
@@ -413,6 +699,147 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--danger);
     font-size: 12px;
     white-space: nowrap;
+  `,
+  dialogBackdrop: css`
+    position: fixed;
+    z-index: 10;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: rgba(3, 8, 15, 0.72);
+  `,
+  saveDialog: css`
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(440px, 100%);
+    padding: 24px;
+    box-sizing: border-box;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    color: var(--text-primary);
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow);
+
+    h2 { margin: 0 0 10px; font-size: 18px; }
+  `,
+  dialogLabel: css`
+    margin-top: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+  `,
+  dialogInput: css`
+    width: 100%;
+    min-height: 38px;
+    padding: 0 10px;
+    box-sizing: border-box;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    outline: none;
+    color: var(--text-primary);
+    background: var(--input-bg);
+
+    &:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--focus-ring); }
+  `,
+  folderTree: css`
+    display: flex;
+    flex-direction: column;
+    max-height: 210px;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    background: var(--input-bg);
+  `,
+  folderRow: css`
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    width: 100%;
+    padding: 0 10px;
+    box-sizing: border-box;
+    border: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    font-size: 12px;
+
+    &:hover { background: var(--button-hover); }
+  `,
+  folderRowSelected: css`
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    width: 100%;
+    padding: 0 10px;
+    box-sizing: border-box;
+    border: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-primary);
+    background: var(--selection-bg);
+    box-shadow: inset 3px 0 0 var(--accent);
+    cursor: pointer;
+    text-align: left;
+    font-size: 12px;
+  `,
+  folderToggle: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 24px;
+    width: 24px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+    font-size: 18px;
+  `,
+  folderIndent: css`
+    display: inline-block;
+    flex: 0 0 auto;
+  `,
+  folderEmpty: css`
+    padding: 12px;
+    color: var(--text-secondary);
+    font-size: 12px;
+  `,
+  dialogError: css`
+    margin-top: 4px;
+    color: var(--danger);
+    font-size: 12px;
+    line-height: 1.4;
+  `,
+  dialogActions: css`
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+  `,
+  dialogCancelButton: css`
+    min-height: 34px;
+    padding: 0 13px;
+    border: 1px solid var(--border-color);
+    border-radius: 7px;
+    color: var(--text-primary);
+    background: var(--button-bg);
+    cursor: pointer;
+  `,
+  dialogSaveButton: css`
+    min-height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--accent);
+    border-radius: 7px;
+    color: var(--accent-contrast);
+    background: var(--accent);
+    cursor: pointer;
+    font-weight: 600;
+    &:disabled { opacity: 0.65; cursor: wait; }
   `,
   themeSelector: css`
     display: flex;

@@ -22,7 +22,7 @@
       "type": "page",
       "name": "Visualization",
       "path": "/a/%PLUGIN_ID%",
-      "role": "Admin",
+      "role": "Viewer",
       "addToNav": true,
       "defaultNav": true
     }

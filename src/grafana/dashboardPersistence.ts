@@ -9,6 +9,9 @@ interface GrafanaDashboardResponse {
   dashboard?: {
     pimsVision?: DisplayDocument;
   };
+  meta?: {
+    folderUid?: string;
+  };
 }
 
 interface SaveDashboardResponse {
@@ -16,24 +19,90 @@ interface SaveDashboardResponse {
   url: string;
 }
 
-export async function loadPimsVisionDashboard(uid: string): Promise<DisplayDocument | undefined> {
+export interface GrafanaDashboardFolder {
+  id: number;
+  uid: string;
+  title: string;
+  parentFolderUid?: string;
+}
+
+interface GrafanaSearchResult {
+  id: number;
+  uid: string;
+  title: string;
+  type: 'dash-folder' | 'dash-db';
+  folderUid?: string;
+  parentFolderUid?: string;
+}
+
+export interface LoadedPimsVisionDashboard {
+  document: DisplayDocument;
+  folderUid: string;
+}
+
+export async function isGrafanaUserAuthenticated(): Promise<boolean> {
+  try {
+    const user = await getBackendSrv().get<{ id?: number; login?: string }>('/api/user');
+    return Boolean(user.id && user.id > 0 && user.login && user.login.toLocaleLowerCase() !== 'anonymous');
+  } catch {
+    return false;
+  }
+}
+
+export async function loadPimsVisionFolders(): Promise<GrafanaDashboardFolder[]> {
+  const results = await getBackendSrv().get<GrafanaSearchResult[]>('/api/search?type=dash-folder&limit=5000');
+  return results
+    .filter((result) => result.type === 'dash-folder')
+    .map(({ id, uid, title, parentFolderUid }) => ({ id, uid, title, parentFolderUid }))
+    .sort((first, second) => first.title.localeCompare(second.title));
+}
+
+export async function loadPimsVisionDashboard(uid: string): Promise<LoadedPimsVisionDashboard | undefined> {
   const response = await getBackendSrv().get<GrafanaDashboardResponse>(`/api/dashboards/uid/${encodeURIComponent(uid)}`);
-  return response.dashboard?.pimsVision;
+  const savedDocument = response.dashboard?.pimsVision;
+  return savedDocument
+    ? { document: savedDocument, folderUid: response.meta?.folderUid ?? '' }
+    : undefined;
+}
+
+export async function hasDashboardTitleConflict(
+  title: string,
+  folderUid: string,
+  dashboardUid?: string,
+): Promise<boolean> {
+  const query = new URLSearchParams({
+    type: 'dash-db',
+    folderUIDs: folderUid,
+    limit: '5000',
+    query: title,
+  });
+  const results = await getBackendSrv().get<GrafanaSearchResult[]>(`/api/search?${query.toString()}`);
+  const normalizedTitle = normalizeDashboardTitle(title);
+
+  return results.some((result) => (
+    result.type === 'dash-db'
+      && normalizeDashboardTitle(result.title) === normalizedTitle
+      && result.uid !== dashboardUid
+      && (result.folderUid ?? '') === folderUid
+  ));
 }
 
 export async function savePimsVisionDashboard(
   document: DisplayDocument,
   dashboardUid?: string,
+  folderUid = '',
 ): Promise<SaveDashboardResponse> {
   const title = document.name.trim() || 'Visualization';
   const firstSave = await getBackendSrv().post<SaveDashboardResponse>('/api/dashboards/db', {
     dashboard: createDashboardModel(document, title, dashboardUid),
+    folderUid,
     overwrite: Boolean(dashboardUid),
   });
 
   const uid = firstSave.uid;
   return getBackendSrv().post<SaveDashboardResponse>('/api/dashboards/db', {
     dashboard: createDashboardModel(document, title, uid),
+    folderUid,
     overwrite: true,
   });
 }
@@ -59,4 +128,8 @@ function createDashboardModel(document: DisplayDocument, title: string, uid?: st
       },
     }],
   };
+}
+
+function normalizeDashboardTitle(title: string): string {
+  return title.trim().toLocaleLowerCase();
 }
