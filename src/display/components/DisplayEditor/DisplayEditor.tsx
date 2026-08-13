@@ -357,14 +357,14 @@ export function DisplayEditor({
     dispatch({ type: 'SELECT', elementId: element.id });
   }, [commitDocument, dispatch]);
 
-  const reorderSelected = useCallback((direction: 'front' | 'back') => {
+  const reorderSelected = useCallback((direction: 'front' | 'back', all = false) => {
     const selectedId = stateRef.current.selectedElementId;
     if (!selectedId) {
       return;
     }
     const current = documentRef.current.elements;
     const index = current.findIndex((element) => element.id === selectedId);
-    const targetIndex = direction === 'front' ? index + 1 : index - 1;
+    const targetIndex = direction === 'front' ? (all ? current.length - 1 : index + 1) : (all ? 0 : index - 1);
     if (index < 0 || targetIndex < 0 || targetIndex >= current.length) {
       return;
     }
@@ -842,6 +842,8 @@ export function DisplayEditor({
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
                 <button type="button" title="Trazer uma camada para frente" aria-label="Trazer uma camada para frente" className={styles.iconButton} data-testid="display-bring-front" disabled={state.selectedElementId === null} onClick={() => reorderSelected('front')}><BringFrontIcon /></button>
                 <button type="button" title="Enviar uma camada para trás" aria-label="Enviar uma camada para trás" className={styles.iconButton} data-testid="display-send-back" disabled={state.selectedElementId === null} onClick={() => reorderSelected('back')}><SendBackIcon /></button>
+                <button type="button" title="Trazer tudo para frente" aria-label="Trazer tudo para frente" className={styles.iconButton} data-testid="display-bring-all-front" disabled={state.selectedElementId === null} onClick={() => reorderSelected('front', true)}><BringAllFrontIcon /></button>
+                <button type="button" title="Enviar tudo para trás" aria-label="Enviar tudo para trás" className={styles.iconButton} data-testid="display-send-all-back" disabled={state.selectedElementId === null} onClick={() => reorderSelected('back', true)}><SendAllBackIcon /></button>
               </div>
             </div>
           )}
@@ -1610,6 +1612,14 @@ function BringFrontIcon() {
 
 function SendBackIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="5" y="8" width="12" height="12" /><path d="M8 5h11v11M13 17l-3 3-3-3" /></svg>;
+}
+
+function BringAllFrontIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 8V4h4M4 4l5 5M20 16v4h-4M20 20l-5-5" /><rect x="8" y="8" width="10" height="10" /></svg>;
+}
+
+function SendAllBackIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M20 8V4h-4M20 4l-5 5M4 16v4h4M4 20l5-5" /><rect x="6" y="6" width="10" height="10" /></svg>;
 }
 
 function GaugeIcon() {
