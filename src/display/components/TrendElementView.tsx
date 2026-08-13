@@ -1,5 +1,5 @@
 import React from 'react';
-import { getTrendSeries, getTrendVisualOptions, type TrendElement, type TrendSeries } from '../createTrend';
+import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendSeries } from '../createTrend';
 import type { PiTrendSeries, TrendPoint, TrendStatePoint } from '../../pi/piDataSource';
 import type { TrendRuntimeState } from '../runtime/trendRuntime';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
@@ -255,6 +255,18 @@ function getTrendContent(
           </text>
         </g>
       ))}
+      {visual.scaleMode === 'configurable' && drawableSeries
+        .filter(({ series }) => series !== primary?.series && (Number.isFinite(series.scaleMin) || Number.isFinite(series.scaleMax)))
+        .map(({ series }, index) => {
+          const labelX = chart.plotX + chart.plotWidth + 6;
+          const labelY = chart.plotY + 14 + index * 28;
+          return (
+            <g key={`configured-scale-${trendBindingKey(series.binding)}`} fill={series.color} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
+              {Number.isFinite(series.scaleMax) && <text x={labelX} y={labelY} textAnchor="start">Máx {formatValue(series.scaleMax as number)}</text>}
+              {Number.isFinite(series.scaleMin) && <text x={labelX} y={chart.plotY + chart.plotHeight - 6 - index * 28} textAnchor="start">Mín {formatValue(series.scaleMin as number)}</text>}
+            </g>
+          );
+        })}
       <line
         x1={chart.plotX}
         y1={chart.plotY}

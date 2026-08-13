@@ -303,7 +303,7 @@ function PopupChart({
   }, [zoomEnabled]);
   const series = seriesStates.flatMap(({ series: configured, runtimeState }) => {
     const data = runtimeState.status === 'success' || runtimeState.status === 'error' ? runtimeState.data : undefined;
-    return data ? [{ key: popupSeriesKey(configured), name: configured.legendLabel || configured.binding.pointName, color: configured.color, primaryScale: configured.primaryScale === true, lineWidth: configured.lineWidth ?? 2, lineStyle: configured.lineStyle ?? 'solid', marker: configured.marker ?? 'none', data }] : [];
+    return data ? [{ key: popupSeriesKey(configured), name: configured.legendLabel || configured.binding.pointName, color: configured.color, primaryScale: configured.primaryScale === true, scaleMin: configured.scaleMin, scaleMax: configured.scaleMax, lineWidth: configured.lineWidth ?? 2, lineStyle: configured.lineStyle ?? 'solid', marker: configured.marker ?? 'none', data }] : [];
   });
   const allTimes = series.flatMap(({ data }) => [
     ...data.points.map((point) => point.time),
@@ -439,6 +439,14 @@ function PopupChart({
           <text x={xFor(time)} y={plot.y + plot.height + 20} textAnchor="middle" fill="var(--text-primary)" fontSize={POPUP_AXIS_FONT_SIZE}>{formatAxisTime(time, timeSpan)}</text>
         </g>
       ))}
+      {visualOptions.scaleMode === 'configurable' && scaledSeries
+        .filter(({ primaryScale, data }) => !primaryScale && data.points.length > 0)
+        .map(({ key, color, scaleMin, scaleMax }, index) => (
+          <g key={`configured-popup-scale-${key}`} fill={color} fontSize={POPUP_AXIS_FONT_SIZE} pointerEvents="none">
+            {Number.isFinite(scaleMax) && <text x={plot.x + plot.width + 8} y={plot.y + 18 + index * 28}>Máx {formatValue(scaleMax as number, visualOptions.numberFormat)}</text>}
+            {Number.isFinite(scaleMin) && <text x={plot.x + plot.width + 8} y={plot.y + plot.height - 8 - index * 28}>Mín {formatValue(scaleMin as number, visualOptions.numberFormat)}</text>}
+          </g>
+        ))}
       {scaledSeries.map(({ name, color, lineWidth, lineStyle, marker, data, scale, stateLabels }, index) => {
         const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
         const path = points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${yFor(point.value, scale)}`).join(' ');
