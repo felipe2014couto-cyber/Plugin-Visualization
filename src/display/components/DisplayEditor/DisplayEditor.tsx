@@ -425,8 +425,7 @@ export function DisplayEditor({
         point,
       )
       : undefined;
-    const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
-    if (!binding || (!point && !targetTrend && !targetShape)) {
+    if (!binding || (!point && !targetTrend)) {
       return;
     }
     event.preventDefault();
@@ -434,12 +433,6 @@ export function DisplayEditor({
     if (targetTrend) {
       commitDocument(addTrendSeries(currentDocument, targetTrend.id, binding));
       dispatch({ type: 'SELECT', elementId: targetTrend.id });
-      return;
-    }
-
-    if (targetShape) {
-      commitDocument(updateRectangleProperties(currentDocument, targetShape.id, { binding }));
-      dispatch({ type: 'SELECT', elementId: targetShape.id });
       return;
     }
     const createOptions = {
@@ -1021,34 +1014,6 @@ function findTrendAtPoint(document: DisplayDocument, point: Point): TrendElement
     && point.y <= element.y + element.height
   ));
   return topmostElement?.type === TREND_TYPE ? topmostElement as TrendElement : undefined;
-}
-
-function resolveGeometricDropTarget(
-  document: DisplayDocument,
-  eventTarget: EventTarget | null,
-  point: Point | undefined,
-): RectangleElement | undefined {
-  const shapeNode = eventTarget instanceof Element
-    ? eventTarget.closest('[data-element-id][data-element-type="rectangle"]')
-    : null;
-  const elementId = shapeNode?.getAttribute('data-element-id');
-  if (elementId) {
-    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === RECTANGLE_TYPE);
-    if (element) {
-      return element as RectangleElement;
-    }
-  }
-  if (!point) {
-    return undefined;
-  }
-  const topmostElement = [...document.elements].reverse().find((element) => (
-    element.type === RECTANGLE_TYPE
-      && point.x >= element.x
-      && point.x <= element.x + element.width
-      && point.y >= element.y
-      && point.y <= element.y + element.height
-  ));
-  return topmostElement as RectangleElement | undefined;
 }
 
 function findTrendAtClientPoint(

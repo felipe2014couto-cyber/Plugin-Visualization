@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { createDisplayDocument, createRectangle, createTrend, createValue, type DisplayDocument } from '../../../index';
+import { createDisplayDocument, createTrend, createValue, type DisplayDocument } from '../../../index';
 import { PI_POINT_DRAG_MIME, serializePiPointDragData } from '../../../../pi/piPointDrag';
 import { PiPointSearch } from '../../../../pi/PiPointSearch';
 import { searchPiPoints, type PiPointSearchResult } from '../../../../pi/piDataSource';
@@ -30,14 +30,12 @@ function Harness({
   loadTrend = () => new Promise(() => undefined),
   withExistingValue = false,
   withExistingTrend = false,
-  withExistingShape = false,
 }: {
   type: PiPointDropSymbolType;
   loadValues?: LoadCurrentValues;
   loadTrend?: LoadTrendSeries;
   withExistingValue?: boolean;
   withExistingTrend?: boolean;
-  withExistingShape?: boolean;
 }) {
   const [document, setDocument] = useState<DisplayDocument>(() => {
     const initial = createDisplayDocument({ name: 'Drop' });
@@ -53,16 +51,6 @@ function Harness({
       initial.elements = [createTrend({
         id: 'existing-trend',
         binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'EXISTING' },
-        surface: initial.surface,
-        x: 0,
-        y: 0,
-        width: 100,
-        height: 100,
-      })];
-    }
-    if (withExistingShape) {
-      initial.elements = [createRectangle({
-        id: 'existing-shape',
         surface: initial.surface,
         x: 0,
         y: 0,
@@ -277,24 +265,6 @@ describe('DisplayEditor - drop de PI Point', () => {
     expect(readDocument().elements).toHaveLength(2);
     expect(readDocument().elements[0].properties.series).toHaveLength(1);
     expect(screen.getAllByTestId(/^display-element-/)[1]).toHaveAttribute('data-element-type', 'value');
-  });
-
-  it('vincula a PI Point à forma geométrica ao soltar a tag dentro dela', async () => {
-    const loadValues: LoadCurrentValues = jest.fn(async (bindings) => Object.fromEntries(bindings.map((binding) => [
-      `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`,
-      { status: 'success' as const, value: { value: 42 } },
-    ])));
-    render(<Harness type="value" withExistingShape loadValues={loadValues} />);
-    mockSurfaceBounds();
-    const shape = screen.getByTestId('display-element-existing-shape');
-    fireDragEvent(shape, 'drop', createDataTransfer(), 150, 100);
-
-    await waitFor(() => expect(readDocument().elements).toHaveLength(1));
-    const shapeProperties = readDocument().elements[0].properties as Record<string, unknown>;
-    expect(shapeProperties.binding).toEqual({
-      dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid',
-    });
-    expect(screen.getByTestId('display-element-existing-shape')).toHaveAttribute('data-element-type', 'rectangle');
   });
 
   it('reconhece a Trend pelo alvo real do evento mesmo sem elementFromPoint', () => {
