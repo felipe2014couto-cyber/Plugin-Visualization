@@ -316,9 +316,7 @@ export function DisplayEditor({
 
   const handleInsertRectangle = useCallback(() => {
     const currentDocument = documentRef.current;
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
     const element = createRectangle({
-      binding,
       surface: currentDocument.surface,
       existingIds: currentDocument.elements.map(({ id }) => id),
     });
@@ -327,7 +325,7 @@ export function DisplayEditor({
     }
     commitDocument(appendDisplayElement(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-  }, [commitDocument, dispatch, selectedPiPoint]);
+  }, [commitDocument, dispatch]);
 
   const handleInsertBoundElement = useCallback((type: PiPointDropSymbolType) => {
     const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
