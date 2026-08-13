@@ -13,6 +13,7 @@ export interface TrendSeries {
   lineWidth?: number;
   lineStyle?: TrendLineStyle;
   marker?: TrendMarker;
+  primaryScale?: boolean;
 }
 
 export type TrendLineStyle = 'solid' | 'dashed' | 'dotted';
@@ -166,7 +167,9 @@ export function updateTrendSeriesOptions(document: DisplayDocument, elementId: s
     ...element,
     properties: {
       ...element.properties,
-      series: getTrendSeries(element).map((series) => trendBindingKey(series.binding) === bindingKey ? { ...series, ...patch } : series),
+      series: getTrendSeries(element).map((series) => trendBindingKey(series.binding) === bindingKey
+        ? { ...series, ...patch }
+        : patch.primaryScale === true ? { ...series, primaryScale: false } : series),
     },
   }));
 }

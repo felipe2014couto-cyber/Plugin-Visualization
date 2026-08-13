@@ -20,6 +20,8 @@ import type { DisplayTimeRange } from '../../../time/timeRange';
 import { isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBinding';
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
 import { getMultistateColor } from '../../multistate';
+import { TEXT_TYPE, type TextElement } from '../../createText';
+import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import {
   getTrendSeriesConsumerId,
   useTrendRuntime,
@@ -66,8 +68,10 @@ export interface DisplaySurfaceProps {
   document: DisplayDocument;
   editable: boolean;
   selectedElementId: string | null;
+  selectedElementIds: string[];
   onSelect: (elementId: string | null) => void;
-  onStartDrag: (elementId: string, pointer: Point) => void;
+  onSelectMany: (elementIds: string[], additive?: boolean) => void;
+  onStartDrag: (elementId: string, pointer: Point, selectedIds?: string[]) => void;
   onStartResize: (elementId: string, handle: ResizeHandle, pointer: Point) => void;
   onPointerMove: (pointer: Point) => void;
   onPointerEnd: () => void;
@@ -114,7 +118,9 @@ export function DisplaySurface({
   document: displayDocument,
   editable,
   selectedElementId,
+  selectedElementIds,
   onSelect,
+  onSelectMany,
   onStartDrag,
   onStartResize,
   onPointerMove,
@@ -136,6 +142,8 @@ export function DisplaySurface({
   const [cursorsByTrend, setCursorsByTrend] = useState<Record<string, TrendCursor[]>>({});
   const [selectedCursor, setSelectedCursor] = useState<CursorSelection | null>(null);
   const [cursorDrag, setCursorDrag] = useState<CursorDrag | null>(null);
+  const [selectionBox, setSelectionBox] = useState<{ start: Point; current: Point } | null>(null);
+  const multiSelectionRef = useRef(false);
 
   useEffect(() => {
     if (!editable) {
@@ -358,16 +366,33 @@ export function DisplaySurface({
       }
 
       if (elementId) {
+        if (e.ctrlKey || e.metaKey) {
+          multiSelectionRef.current = true;
+          onSelectMany([elementId], true);
+          return;
+        }
+        const preserveSelection = multiSelectionRef.current && selectedElementIds.includes(elementId);
+        if (!preserveSelection) {
+          multiSelectionRef.current = false;
+          onSelectMany([elementId]);
+        }
         onStartDrag(
           elementId,
           svgPointFromEvent(svg, e.clientX, e.clientY),
+          preserveSelection ? selectedElementIds : [elementId],
         );
         return;
       }
 
-      onSelect(null);
+      if (e.ctrlKey || e.metaKey) {
+        onSelectMany([], true);
+      } else {
+        onSelect(null);
+        const point = svgPointFromEvent(svg, e.clientX, e.clientY);
+        setSelectionBox({ start: point, current: point });
+      }
     },
-    [editable, onSelect, onStartDrag, onStartResize],
+    [editable, onSelect, onSelectMany, onStartDrag, onStartResize, selectedElementIds],
   );
 
   const handleSvgPointerMove = useCallback(
@@ -407,12 +432,17 @@ export function DisplaySurface({
       if (!editable) {
         return;
       }
+      if (selectionBox) {
+        const point = svgPointFromEvent(svg, e.clientX, e.clientY);
+        setSelectionBox((current) => current ? { ...current, current: point } : current);
+        return;
+      }
       if (!hasPointerCapture(svg, e.pointerId)) {
         return;
       }
       onPointerMove(svgPointFromEvent(svg, e.clientX, e.clientY));
     },
-    [cursorDrag, editable, elements, onPointerMove, trendRuntimeStates, trendTimeRange],
+    [cursorDrag, editable, elements, onPointerMove, selectionBox, trendRuntimeStates, trendTimeRange],
   );
 
   const handleSvgPointerEnd = useCallback(
@@ -431,10 +461,24 @@ export function DisplaySurface({
       if (!editable) {
         return;
       }
+      if (selectionBox) {
+        const box = normalizeSelectionBox(selectionBox.start, selectionBox.current);
+        if (box.width > 2 || box.height > 2) {
+          const ids = elements.filter((element) => intersectsSelection(element, box)).map((element) => element.id);
+          onSelectMany(ids);
+          multiSelectionRef.current = ids.length > 1;
+        } else {
+          onSelect(null);
+          multiSelectionRef.current = false;
+        }
+        setSelectionBox(null);
+        tryReleasePointerCapture(svg, e.pointerId);
+        return;
+      }
       tryReleasePointerCapture(svg, e.pointerId);
       onPointerEnd();
     },
-    [cursorDrag, editable, onPointerEnd],
+    [cursorDrag, editable, elements, onPointerEnd, onSelect, onSelectMany, selectionBox],
   );
 
   const handleSurfaceKeyDown = useCallback((event: React.KeyboardEvent<SVGSVGElement>) => {
@@ -560,6 +604,16 @@ export function DisplaySurface({
         if (element.type === RECTANGLE_TYPE) {
           return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
         }
+        if (element.type === TEXT_TYPE) {
+          const textElement = element as TextElement;
+          const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
+          const x = textElement.properties.textAlign === 'left' ? textElement.x + 4 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 4 : textElement.x + textElement.width / 2;
+          return <text key={element.id} x={x} y={element.y + element.height / 2} fill={textElement.properties.color} fontSize={textElement.properties.fontSize} textAnchor={anchor} dominantBaseline="middle" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>{textElement.properties.text}</text>;
+        }
+        if (element.type === IMAGE_TYPE) {
+          const image = element as ImageElement;
+          return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }} />;
+        }
         return (
           <rect
             key={element.id}
@@ -578,6 +632,26 @@ export function DisplaySurface({
         );
       })}
 
+      {selectionBox && (() => {
+        const box = normalizeSelectionBox(selectionBox.start, selectionBox.current);
+        return <rect x={box.x} y={box.y} width={box.width} height={box.height} fill="rgba(110, 159, 255, 0.12)" stroke={SELECTION_STROKE} strokeDasharray="4 2" data-testid="display-selection-box" pointerEvents="none" />;
+      })()}
+      {selectedElementIds.filter((id) => id !== selectedElement?.id).map((id) => {
+        const element = elements.find((candidate) => candidate.id === id);
+        if (!element) {
+          return null;
+        }
+        const positions = getResizeHandlePositions(element);
+        return (
+          <g key={id} data-testid={`display-selection-overlay-${id}`}>
+            <rect x={element.x - 1} y={element.y - 1} width={element.width + 2} height={element.height + 2} fill="none" stroke={SELECTION_STROKE} strokeWidth={1} strokeDasharray="4 2" data-testid={`display-selection-box-${id}`} pointerEvents="none" />
+            {positions.map((pos) => {
+              const rect = getResizeHandleRect(pos, HANDLE_SIZE);
+              return <rect key={pos.handle} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={1} data-testid={`display-resize-handle-${id}-${pos.handle}`} data-element-id={id} data-resize-handle={pos.handle} style={{ cursor: getHandleCursor(pos.handle) }} />;
+            })}
+          </g>
+        );
+      })}
       {selectedElement && (
         <g data-testid="display-selection-overlay">
           <rect
@@ -678,4 +752,13 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
     return <polygon {...common} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} />;
   }
   return <rect {...common} x={element.x} y={element.y} width={element.width} height={element.height} />;
+}
+
+function normalizeSelectionBox(start: Point, current: Point) {
+  return { x: Math.min(start.x, current.x), y: Math.min(start.y, current.y), width: Math.abs(current.x - start.x), height: Math.abs(current.y - start.y) };
+}
+
+function intersectsSelection(element: DisplayDocument['elements'][number], box: ReturnType<typeof normalizeSelectionBox>): boolean {
+  return element.x < box.x + box.width && element.x + element.width > box.x
+    && element.y < box.y + box.height && element.y + element.height > box.y;
 }

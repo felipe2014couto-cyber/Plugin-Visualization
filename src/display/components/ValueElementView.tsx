@@ -52,6 +52,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const visual = getValueVisualOptions(element.properties);
   const color = getMultistateColor(getRuntimeValue(runtimeState ?? state), element.properties.multistate, visual.color);
   const textX = getTextX(element, visual.textAlign);
+  const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
   return (
     <g
       data-testid={`display-element-${element.id}`}
@@ -77,7 +78,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
         y={element.y + element.height / 2}
         fill={color}
         fontSize={visual.fontSize}
-        textAnchor={visual.textAlign}
+        textAnchor={textAnchor}
         dominantBaseline="middle"
         data-testid={`display-value-${element.id}`}
         data-element-id={element.id}

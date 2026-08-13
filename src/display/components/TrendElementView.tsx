@@ -131,14 +131,15 @@ function getTrendContent(
   visual: ReturnType<typeof getTrendVisualOptions>,
 ): React.ReactNode {
   const formatValue = (value: number) => formatNumber(value, visual.numberFormat);
+  const orderedSeriesStates = [...seriesStates].sort((a, b) => Number(b.series.primaryScale === true) - Number(a.series.primaryScale === true));
   const legendX = element.x + element.width - trendPlotRightMargin(element.width) + 12;
-  const dataSeries = seriesStates.flatMap(({ series, runtimeState }) => {
+  const dataSeries = orderedSeriesStates.flatMap(({ series, runtimeState }) => {
     const data = runtimeState.status === 'success' || runtimeState.status === 'error'
       ? runtimeState.data
       : undefined;
     return data && data.points.length > 0 ? [{ series, data }] : [];
   });
-  const stateSeries = seriesStates.flatMap(({ series, runtimeState }) => {
+  const stateSeries = orderedSeriesStates.flatMap(({ series, runtimeState }) => {
     const data = runtimeState.status === 'success' || runtimeState.status === 'error'
       ? runtimeState.data
       : undefined;
@@ -154,7 +155,7 @@ function getTrendContent(
       data-testid={`trend-title-${element.id}`}
       pointerEvents="none"
     >
-      {seriesStates.map(({ series, runtimeState }, index) => {
+      {orderedSeriesStates.map(({ series, runtimeState }, index) => {
         const data = runtimeState.status === 'success' || runtimeState.status === 'error'
           ? runtimeState.data
           : undefined;
@@ -209,6 +210,8 @@ function getTrendContent(
 
   const drawableSeries = dataSeries.filter(({ data }) => data.points.length > 0);
   const chart = buildTrendChartForSeries(element, drawableSeries.map(({ data }) => data.points), timeRange);
+  const primary = drawableSeries.find(({ series }) => series.primaryScale === true) ?? drawableSeries[0];
+  const primaryChart = primary ? buildTrendChartForSeries(element, [primary.data.points], timeRange) : chart;
   return (
     <>
       {visual.title && <TrendTitle element={element} visual={visual} />}{title}
@@ -237,6 +240,10 @@ function getTrendContent(
           </text>
         </g>
       ))}
+      {primaryChart.yTicks.map((tick) => (
+        <text key={`right-y-${tick.value}`} x={chart.plotX + chart.plotWidth + 6} y={tick.y + 4} textAnchor="start" fill={primary?.series.color || TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">{formatValue(tick.value)}</text>
+      ))}
+      <line x1={chart.plotX + chart.plotWidth} y1={chart.plotY} x2={chart.plotX + chart.plotWidth} y2={chart.plotY + chart.plotHeight} stroke={primary?.series.color || AXIS_COLOR} strokeWidth={1} data-testid={`trend-right-y-axis-${element.id}`} pointerEvents="none" />
       <line
         x1={chart.plotX}
         y1={chart.plotY}

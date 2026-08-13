@@ -31,6 +31,10 @@ export {
   RECTANGLE_TYPE,
   updateRectangleProperties,
 } from './createRectangle';
+export { appendText, createText, DEFAULT_TEXT_PROPERTIES, TEXT_TYPE, updateTextProperties } from './createText';
+export type { CreateTextOptions, TextAlign, TextElement, TextProperties } from './createText';
+export { appendImage, createImage, IMAGE_TYPE } from './createImage';
+export type { CreateImageOptions, ImageElement, ImageProperties } from './createImage';
 export type {
   CreateRectangleOptions,
   RectangleElement,

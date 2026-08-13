@@ -95,6 +95,18 @@ describe('DisplayEditor - inserção de Rectangle', () => {
     expect(screen.getAllByTestId(/^display-resize-handle-/)).toHaveLength(8);
   });
 
+  it('não vincula automaticamente a PI Point selecionada ao inserir uma forma', () => {
+    const selectedPiPoint: PiPointSearchResult = {
+      name: 'SINUSOID', path: '\\\\pims\\SINUSOID', webId: 'webid', dataSourceUid: 'ds',
+    };
+    render(<Harness initial={makeDocument()} selectedPiPoint={selectedPiPoint} />);
+
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+
+    expect(screen.queryByTestId('multistate-properties')).toBeNull();
+    expect(screen.getByTestId('rectangle-properties-panel')).toBeInTheDocument();
+  });
+
   it('permite inserir dois Rectangles com IDs distintos', () => {
     render(<Harness initial={makeDocument()} />);
 

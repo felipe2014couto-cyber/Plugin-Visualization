@@ -63,6 +63,9 @@ import type { TrendSeriesViewState } from '../TrendElementView';
 import { ValuePropertiesPanel } from './ValuePropertiesPanel';
 import { ScalePropertiesPanel } from './ScalePropertiesPanel';
 import { RectanglePropertiesPanel } from './RectanglePropertiesPanel';
+import { TextPropertiesPanel } from './TextPropertiesPanel';
+import { appendImage, createImage } from '../../createImage';
+import { appendText, createText, TEXT_TYPE, updateTextProperties, type TextElement } from '../../createText';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
@@ -156,6 +159,7 @@ export function DisplayEditor({
   const expectedDocumentRef = useRef<DisplayDocument | null>(null);
   const pendingTransactionRef = useRef<PendingDocumentTransaction | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [, refreshHistory] = useState(0);
   const [importError, setImportError] = useState<string | null>(null);
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
@@ -245,9 +249,12 @@ export function DisplayEditor({
     },
     [dispatch],
   );
+  const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
+    dispatch({ type: 'SELECT_MANY', elementIds, additive });
+  }, [dispatch]);
 
   const handleStartDrag = useCallback(
-    (elementId: string, pointer: Point) => {
+    (elementId: string, pointer: Point, selectedIds: string[] = [elementId]) => {
       const el = getElementById(documentRef.current, elementId);
       if (!el) {
         return;
@@ -258,6 +265,12 @@ export function DisplayEditor({
         elementId,
         pointer,
         originalGeometry: { x: el.x, y: el.y, width: el.width, height: el.height },
+        originalGeometries: Object.fromEntries(
+          selectedIds.map((id) => {
+            const selected = getElementById(documentRef.current, id);
+            return selected ? [id, { x: selected.x, y: selected.y, width: selected.width, height: selected.height }] : [];
+          }).filter((entry): entry is [string, ElementGeometry] => entry.length > 0),
+        ),
       });
     },
     [dispatch],
@@ -303,7 +316,17 @@ export function DisplayEditor({
       );
     }
 
-    publishDocument(updateElementGeometry(documentRef.current, interaction.elementId, newGeometry));
+    if (interaction.kind === 'dragging') {
+      const dx = newGeometry.x - interaction.originalGeometry.x;
+      const dy = newGeometry.y - interaction.originalGeometry.y;
+      let nextDocument = documentRef.current;
+      Object.entries(interaction.originalGeometries).forEach(([id, geometry]) => {
+        nextDocument = updateElementGeometry(nextDocument, id, { x: geometry.x + dx, y: geometry.y + dy });
+      });
+      publishDocument(nextDocument);
+    } else {
+      publishDocument(updateElementGeometry(documentRef.current, interaction.elementId, newGeometry));
+    }
   }, [publishDocument]);
 
   const handlePointerEnd = useCallback(() => {
@@ -316,9 +339,7 @@ export function DisplayEditor({
 
   const handleInsertRectangle = useCallback(() => {
     const currentDocument = documentRef.current;
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
     const element = createRectangle({
-      binding,
       surface: currentDocument.surface,
       existingIds: currentDocument.elements.map(({ id }) => id),
     });
@@ -327,11 +348,63 @@ export function DisplayEditor({
     }
     commitDocument(appendDisplayElement(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-  }, [commitDocument, dispatch, selectedPiPoint]);
+  }, [commitDocument, dispatch]);
+
+  const handleInsertText = useCallback(() => {
+    const currentDocument = documentRef.current;
+    const element = createText({ surface: currentDocument.surface, existingIds: currentDocument.elements.map(({ id }) => id) });
+    commitDocument(appendText(currentDocument, element));
+    dispatch({ type: 'SELECT', elementId: element.id });
+  }, [commitDocument, dispatch]);
+
+  const reorderSelected = useCallback((direction: 'front' | 'back', all = false) => {
+    const selectedId = stateRef.current.selectedElementId;
+    if (!selectedId) {
+      return;
+    }
+    const current = documentRef.current.elements;
+    const index = current.findIndex((element) => element.id === selectedId);
+    const targetIndex = direction === 'front' ? (all ? current.length - 1 : index + 1) : (all ? 0 : index - 1);
+    if (index < 0 || targetIndex < 0 || targetIndex >= current.length) {
+      return;
+    }
+    const elements = [...current];
+    [elements[index], elements[targetIndex]] = [elements[targetIndex], elements[index]];
+    commitDocument({ ...documentRef.current, elements });
+  }, [commitDocument]);
+
+  const handleImageFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) {
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setImportError('A imagem não pode ultrapassar 1 MB.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setImportError('Selecione um arquivo de imagem válido.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        return;
+      }
+      const currentDocument = documentRef.current;
+      const element = createImage({ src: reader.result, alt: file.name, surface: currentDocument.surface, existingIds: currentDocument.elements.map(({ id }) => id) });
+      commitDocument(appendImage(currentDocument, element));
+      dispatch({ type: 'SELECT', elementId: element.id });
+      setImportError(null);
+    };
+    reader.onerror = () => setImportError('Não foi possível ler a imagem.');
+    reader.readAsDataURL(file);
+  }, [commitDocument, dispatch]);
 
   const handleInsertBoundElement = useCallback((type: PiPointDropSymbolType) => {
     const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    if ((type === 'value' || type === 'trend') && !binding) {
+    if (!binding) {
       return;
     }
     const currentDocument = documentRef.current;
@@ -425,7 +498,8 @@ export function DisplayEditor({
         point,
       )
       : undefined;
-    if (!binding || (!point && !targetTrend)) {
+    const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
+    if (!binding || (!point && !targetTrend && !targetShape)) {
       return;
     }
     event.preventDefault();
@@ -433,6 +507,12 @@ export function DisplayEditor({
     if (targetTrend) {
       commitDocument(addTrendSeries(currentDocument, targetTrend.id, binding));
       dispatch({ type: 'SELECT', elementId: targetTrend.id });
+      return;
+    }
+
+    if (targetShape) {
+      commitDocument(updateRectangleProperties(currentDocument, targetShape.id, { binding }));
+      dispatch({ type: 'SELECT', elementId: targetShape.id });
       return;
     }
     const createOptions = {
@@ -544,6 +624,9 @@ export function DisplayEditor({
   const selectedRectangle = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === RECTANGLE_TYPE) as RectangleElement | undefined
     : undefined;
+  const selectedText = mode === 'edit' && state.selectedElementId
+    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TEXT_TYPE) as TextElement | undefined
+    : undefined;
   const handleGaugeChange = useCallback((patch: Parameters<typeof updateGaugeOptions>[2]) => {
     commitDocument(updateGaugeOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
@@ -552,6 +635,9 @@ export function DisplayEditor({
   }, [commitDocument]);
   const handleRectangleChange = useCallback((patch: Parameters<typeof updateRectangleProperties>[2]) => {
     commitDocument(updateRectangleProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
+  }, [commitDocument]);
+  const handleTextChange = useCallback((patch: Parameters<typeof updateTextProperties>[2]) => {
+    commitDocument(updateTextProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
   const optionsTrend = optionsTrendId
     ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
@@ -744,10 +830,20 @@ export function DisplayEditor({
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Inserir elementos">
                 <button type="button" title="Inserir forma geométrica" aria-label="Inserir forma geométrica" className={styles.iconButton} data-testid="display-insert-rectangle" onClick={handleInsertRectangle}><RectangleIcon /></button>
+                <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
+                <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
+                <input ref={imageInputRef} type="file" accept="image/*" data-testid="display-image-input" className={styles.fileInput} onChange={handleImageFile} />
                 <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('value'); handleInsertBoundElement('value'); }}><ValueIcon /></button>
-                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertBoundElement('gauge'); }}><GaugeIcon /></button>
-                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBoundElement('bar'); }}><BarIcon /></button>
+                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertBoundElement('gauge'); }}><GaugeIcon /></button>
+                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBoundElement('bar'); }}><BarIcon /></button>
                 <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('trend'); handleInsertBoundElement('trend'); }}><TrendIcon /></button>
+              </div>
+              <span className={styles.toolbarDivider} aria-hidden="true" />
+              <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
+                <button type="button" title="Trazer uma camada para frente" aria-label="Trazer uma camada para frente" className={styles.iconButton} data-testid="display-bring-front" disabled={state.selectedElementId === null} onClick={() => reorderSelected('front')}><BringFrontIcon /></button>
+                <button type="button" title="Enviar uma camada para trás" aria-label="Enviar uma camada para trás" className={styles.iconButton} data-testid="display-send-back" disabled={state.selectedElementId === null} onClick={() => reorderSelected('back')}><SendBackIcon /></button>
+                <button type="button" title="Trazer tudo para frente" aria-label="Trazer tudo para frente" className={styles.iconButton} data-testid="display-bring-all-front" disabled={state.selectedElementId === null} onClick={() => reorderSelected('front', true)}><BringAllFrontIcon /></button>
+                <button type="button" title="Enviar tudo para trás" aria-label="Enviar tudo para trás" className={styles.iconButton} data-testid="display-send-all-back" disabled={state.selectedElementId === null} onClick={() => reorderSelected('back', true)}><SendAllBackIcon /></button>
               </div>
             </div>
           )}
@@ -780,7 +876,9 @@ export function DisplayEditor({
             document={displayDocument}
             editable={mode === 'edit'}
             selectedElementId={mode === 'edit' ? state.selectedElementId : null}
+            selectedElementIds={mode === 'edit' ? state.selectedElementIds : []}
             onSelect={handleSelect}
+            onSelectMany={handleSelectMany}
             onStartDrag={handleStartDrag}
             onStartResize={handleStartResize}
             onPointerMove={handlePointerMove}
@@ -853,6 +951,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
+        {selectedText && <TextPropertiesPanel properties={selectedText.properties} onChange={handleTextChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
@@ -1014,6 +1113,34 @@ function findTrendAtPoint(document: DisplayDocument, point: Point): TrendElement
     && point.y <= element.y + element.height
   ));
   return topmostElement?.type === TREND_TYPE ? topmostElement as TrendElement : undefined;
+}
+
+function resolveGeometricDropTarget(
+  document: DisplayDocument,
+  eventTarget: EventTarget | null,
+  point: Point | undefined,
+): RectangleElement | undefined {
+  const shapeNode = eventTarget instanceof Element
+    ? eventTarget.closest('[data-element-id][data-element-type="rectangle"]')
+    : null;
+  const elementId = shapeNode?.getAttribute('data-element-id');
+  if (elementId) {
+    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === RECTANGLE_TYPE);
+    if (element) {
+      return element as RectangleElement;
+    }
+  }
+  if (!point) {
+    return undefined;
+  }
+  const topmostElement = [...document.elements].reverse().find((element) => (
+    element.type === RECTANGLE_TYPE
+      && point.x >= element.x
+      && point.x <= element.x + element.width
+      && point.y >= element.y
+      && point.y <= element.y + element.height
+  ));
+  return topmostElement as RectangleElement | undefined;
 }
 
 function findTrendAtClientPoint(
@@ -1469,6 +1596,30 @@ function ValueIcon() {
 
 function RectangleIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="6" width="16" height="12" /></svg>;
+}
+
+function TextIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M5 5h14M12 5v14M8 19h8" /></svg>;
+}
+
+function ImageIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="14" /><circle cx="9" cy="10" r="1.5" /><path d="m5 17 4-4 3 3 2-2 5 4" /></svg>;
+}
+
+function BringFrontIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="7" y="4" width="12" height="12" /><path d="M5 8v11h11M10 7l3-3 3 3" /></svg>;
+}
+
+function SendBackIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="5" y="8" width="12" height="12" /><path d="M8 5h11v11M13 17l-3 3-3-3" /></svg>;
+}
+
+function BringAllFrontIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M4 8V4h4M4 4l5 5M20 16v4h-4M20 20l-5-5" /><rect x="8" y="8" width="10" height="10" /></svg>;
+}
+
+function SendAllBackIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M20 8V4h-4M20 4l-5 5M4 16v4h4M4 20l5-5" /><rect x="6" y="6" width="10" height="10" /></svg>;
 }
 
 function GaugeIcon() {
