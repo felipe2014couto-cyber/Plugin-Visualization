@@ -25,6 +25,7 @@ import {
   createTrend,
   getTrendSeries,
   getTrendVisualOptions,
+  removeTrendSeries,
   TREND_TYPE,
   type TrendElement,
   updateTrendSeriesOptions,
@@ -652,6 +653,11 @@ export function DisplayEditor({
       commitDocument(updateTrendSeriesOptions(documentRef.current, optionsTrendId, key, patch));
     }
   }, [commitDocument, optionsTrendId]);
+  const handleTrendSeriesRemove = useCallback((key: string) => {
+    if (optionsTrendId) {
+      commitDocument(removeTrendSeries(documentRef.current, optionsTrendId, key));
+    }
+  }, [commitDocument, optionsTrendId]);
 
   const handleDeleteSelectedElement = useCallback(() => {
     if (mode !== 'edit') {
@@ -952,7 +958,7 @@ export function DisplayEditor({
           />
         )}
         {selectedText && <TextPropertiesPanel properties={selectedText.properties} onChange={handleTextChange} />}
-        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onClose={() => setOptionsTrendId(null)} />}
+        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
         <TrendPopup

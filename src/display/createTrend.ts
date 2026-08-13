@@ -180,6 +180,18 @@ export function updateTrendSeriesOptions(document: DisplayDocument, elementId: s
   }));
 }
 
+export function removeTrendSeries(document: DisplayDocument, elementId: string, bindingKey: string): DisplayDocument {
+  return updateTrendElement(document, elementId, (element) => {
+    const series = getTrendSeries(element);
+    if (series.length <= 1) return element;
+    const remaining = series.filter((item) => trendBindingKey(item.binding) !== bindingKey);
+    if (remaining.length > 0 && !remaining.some((item) => item.primaryScale === true)) {
+      remaining[0] = { ...remaining[0], primaryScale: true };
+    }
+    return { ...element, properties: { ...element.properties, series: remaining } };
+  });
+}
+
 export function addTrendSeries(
   document: DisplayDocument,
   elementId: string,

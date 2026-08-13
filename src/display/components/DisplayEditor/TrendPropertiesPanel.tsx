@@ -4,10 +4,11 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendLineStyle, type TrendMarker, type TrendNumberFormat, type TrendScaleMode } from '../../createTrend';
 
-export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onClose }: {
+export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onSeriesRemove, onClose }: {
   element: TrendElement;
   onVisualChange: (patch: Partial<ReturnType<typeof getTrendVisualOptions>>) => void;
   onSeriesChange: (key: string, patch: { color?: string; legendLabel?: string; lineWidth?: number; lineStyle?: TrendLineStyle; marker?: TrendMarker; primaryScale?: boolean; scaleMin?: number; scaleMax?: number }) => void;
+  onSeriesRemove: (key: string) => void;
   onClose: () => void;
 }) {
   const styles = useStyles2(getStyles);
@@ -37,7 +38,8 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
     <label>Título<input value={visual.title} onChange={(e) => onVisualChange({ title: e.currentTarget.value })} placeholder="Título do gráfico" /></label>
     <label>Rótulo da legenda<input value={selected.legendLabel ?? selected.binding.pointName} onChange={(e) => onSeriesChange(selectedKey, { legendLabel: e.currentTarget.value })} /></label>
     <label>Cor<input type="color" value={selected.color} onChange={(e) => onSeriesChange(selectedKey, { color: e.currentTarget.value })} /></label>
-    <label>Espessura<input type="range" min="1" max="8" value={selected.lineWidth ?? 2} onChange={(e) => onSeriesChange(selectedKey, { lineWidth: Number(e.currentTarget.value) })} /></label>
+    <label>Espessura <span className={styles.rangeValue}>{selected.lineWidth ?? 2}</span><input type="range" min="1" max="8" value={selected.lineWidth ?? 2} onChange={(e) => onSeriesChange(selectedKey, { lineWidth: Number(e.currentTarget.value) })} /></label>
+    <button type="button" className={styles.removeButton} disabled={series.length <= 1} onClick={() => onSeriesRemove(selectedKey)}>Excluir tag selecionada</button>
     <label>Estilo<select value={selected.lineStyle ?? 'solid'} onChange={(e) => onSeriesChange(selectedKey, { lineStyle: e.currentTarget.value as TrendLineStyle })}><option value="solid">Sólido</option><option value="dashed">Tracejado</option><option value="dotted">Pontilhado</option></select></label>
     <label>Marcador<select value={selected.marker ?? 'none'} onChange={(e) => onSeriesChange(selectedKey, { marker: e.currentTarget.value as TrendMarker })}><option value="none">Nenhum</option><option value="circle">Círculo</option><option value="square">Quadrado</option></select></label>
     {series.length > 1 && <label className={styles.check}><input type="checkbox" checked={selected.primaryScale === true} onChange={(e) => onSeriesChange(selectedKey, { primaryScale: e.currentTarget.checked })} />★ Escala principal (esquerda)</label>}
@@ -58,5 +60,7 @@ const getStyles = (theme: GrafanaTheme2) => ({ panel: css`
   width: 230px; flex: 0 0 230px; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; scrollbar-gutter:stable; padding:8px 12px; box-sizing:border-box; color:var(--text-primary); background:var(--surface-primary); border-left:1px solid var(--border-color); font-size:11px;
   label { display:flex; flex-direction:column; gap:2px; margin:4px 0; color:var(--text-secondary); } input, select { height:25px; min-height:25px; box-sizing:border-box; color:var(--text-primary); background:var(--input-bg); border:1px solid var(--border-color); } input[type='color'] { padding:2px; } input[type='range'] { accent-color:var(--accent); }`,
   heading: css`display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; strong { font-size:14px; } button { width:24px; height:24px; border:1px solid var(--border-color); border-radius:4px; color:var(--text-secondary); background:var(--button-bg); font-size:20px; line-height:18px; cursor:pointer; } button:hover { color:var(--text-primary); background:var(--button-hover); }`,
+  removeButton: css`width:100%; min-height:26px; margin:3px 0 6px; border:1px solid var(--border-color); border-radius:3px; color:var(--text-primary); background:var(--button-bg); cursor:pointer; &:disabled { opacity:0.5; cursor:not-allowed; }`,
+  rangeValue: css`float:right; color:var(--text-primary); font-weight:600;`,
   fontHeading: css`display:block; margin:7px 0 3px; font-size:13px;`,
   check: css`flex-direction:row !important; align-items:center; input { width:14px; height:14px; min-height:14px; }` });
