@@ -2,12 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
-import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendLineStyle, type TrendMarker, type TrendNumberFormat } from '../../createTrend';
+import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendLineStyle, type TrendMarker, type TrendNumberFormat, type TrendScaleMode } from '../../createTrend';
 
 export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onClose }: {
   element: TrendElement;
   onVisualChange: (patch: Partial<ReturnType<typeof getTrendVisualOptions>>) => void;
-  onSeriesChange: (key: string, patch: { color?: string; legendLabel?: string; lineWidth?: number; lineStyle?: TrendLineStyle; marker?: TrendMarker; primaryScale?: boolean }) => void;
+  onSeriesChange: (key: string, patch: { color?: string; legendLabel?: string; lineWidth?: number; lineStyle?: TrendLineStyle; marker?: TrendMarker; primaryScale?: boolean; scaleMin?: number; scaleMax?: number }) => void;
   onClose: () => void;
 }) {
   const styles = useStyles2(getStyles);
@@ -43,6 +43,11 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
     {series.length > 1 && <label className={styles.check}><input type="checkbox" checked={selected.primaryScale === true} onChange={(e) => onSeriesChange(selectedKey, { primaryScale: e.currentTarget.checked })} />★ Escala principal (esquerda)</label>}
     <label className={styles.check}><input type="checkbox" checked={visual.showRegression} onChange={(e) => onVisualChange({ showRegression: e.currentTarget.checked })} />Linha de regressão</label>
     <label>Formato<select value={visual.numberFormat} onChange={(e) => onVisualChange({ numberFormat: e.currentTarget.value as TrendNumberFormat })}><option value="automatic">Automático</option><option value="integer">Inteiro</option><option value="oneDecimal">1 decimal</option><option value="twoDecimals">2 decimais</option></select></label>
+    <label>Escala<select value={visual.scaleMode} onChange={(e) => onVisualChange({ scaleMode: e.currentTarget.value as TrendScaleMode })}><option value="single">Escala única</option><option value="multiple">Escala principal (esquerda)</option><option value="configurable">Escala configurável</option></select></label>
+    {visual.scaleMode === 'configurable' && <>
+      <label>Mínimo da escala<input type="number" value={selected.scaleMin ?? ''} onChange={(e) => onSeriesChange(selectedKey, { scaleMin: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) })} /></label>
+      <label>Máximo da escala<input type="number" value={selected.scaleMax ?? ''} onChange={(e) => onSeriesChange(selectedKey, { scaleMax: e.currentTarget.value === '' ? undefined : Number(e.currentTarget.value) })} /></label>
+    </>}
     <label>Intervalo de escala<select value={visual.scaleIntervals} onChange={(e) => onVisualChange({ scaleIntervals: Number(e.currentTarget.value) as 2 | 5 | 10 })}><option value={2}>2 intervalos</option><option value={5}>5 intervalos</option><option value={10}>10 intervalos (Padrão)</option></select></label>
     <strong className={styles.fontHeading}>Fonte</strong>
     <label>Nome<select value={visual.fontFamily} onChange={(e) => onVisualChange({ fontFamily: e.currentTarget.value })}><option>Arial</option><option>Verdana</option><option>Tahoma</option></select></label>

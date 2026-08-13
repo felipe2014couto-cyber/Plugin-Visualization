@@ -14,17 +14,21 @@ export interface TrendSeries {
   lineStyle?: TrendLineStyle;
   marker?: TrendMarker;
   primaryScale?: boolean;
+  scaleMin?: number;
+  scaleMax?: number;
 }
 
 export type TrendLineStyle = 'solid' | 'dashed' | 'dotted';
 export type TrendMarker = 'none' | 'circle' | 'square';
 export type TrendNumberFormat = 'automatic' | 'integer' | 'oneDecimal' | 'twoDecimals';
+export type TrendScaleMode = 'single' | 'multiple' | 'configurable';
 
 export interface TrendVisualOptions {
   title: string;
   showRegression: boolean;
   numberFormat: TrendNumberFormat;
   scaleIntervals: 2 | 5 | 10;
+  scaleMode: TrendScaleMode;
   fontFamily: string;
   fontSize: number;
 }
@@ -34,6 +38,7 @@ export const DEFAULT_TREND_VISUAL_OPTIONS: TrendVisualOptions = {
   showRegression: false,
   numberFormat: 'automatic',
   scaleIntervals: 10,
+  scaleMode: 'multiple',
   fontFamily: 'Arial',
   fontSize: 16,
 };
@@ -150,6 +155,7 @@ export function getTrendVisualOptions(element: Pick<TrendElement, 'properties'>)
       ? visual.numberFormat
       : 'automatic',
     scaleIntervals: visual.scaleIntervals === 2 || visual.scaleIntervals === 5 || visual.scaleIntervals === 10 ? visual.scaleIntervals : 10,
+    scaleMode: visual.scaleMode === 'single' || visual.scaleMode === 'configurable' ? visual.scaleMode : 'multiple',
     fontFamily: typeof visual.fontFamily === 'string' && visual.fontFamily.trim() ? visual.fontFamily : 'Arial',
     fontSize: typeof visual.fontSize === 'number' && Number.isFinite(visual.fontSize) ? Math.max(10, Math.min(24, visual.fontSize)) : 16,
   };

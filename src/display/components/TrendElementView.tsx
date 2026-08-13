@@ -211,12 +211,21 @@ function getTrendContent(
   const drawableSeries = dataSeries.filter(({ data }) => data.points.length > 0);
   const primary = drawableSeries.find(({ series }) => series.primaryScale === true) ?? drawableSeries[0];
   const timeChart = buildTrendChartForSeries(element, drawableSeries.map(({ data }) => data.points), timeRange);
-  const scaleChart = primary ? buildTrendChartForSeries(element, [primary.data.points], timeRange) : timeChart;
+  const scaleChart = visual.scaleMode === 'single'
+    ? timeChart
+    : primary ? buildTrendChartForSeries(element, [primary.data.points], timeRange) : timeChart;
+  const configuredMin = visual.scaleMode === 'configurable' ? primary?.series.scaleMin : undefined;
+  const configuredMax = visual.scaleMode === 'configurable' ? primary?.series.scaleMax : undefined;
+  const domainMin = Number.isFinite(configuredMin) ? configuredMin as number : scaleChart.domainMin;
+  const domainMax = Number.isFinite(configuredMax) ? configuredMax as number : scaleChart.domainMax;
+  const safeDomain = domainMax > domainMin ? { domainMin, domainMax } : { domainMin: scaleChart.domainMin, domainMax: scaleChart.domainMax };
   const chart = {
     ...timeChart,
-    domainMin: scaleChart.domainMin,
-    domainMax: scaleChart.domainMax,
-    yTicks: scaleChart.yTicks,
+    ...safeDomain,
+    yTicks: scaleChart.yTicks.map((_, index) => {
+      const value = safeDomain.domainMax - ((safeDomain.domainMax - safeDomain.domainMin) * index) / Math.max(1, scaleChart.yTicks.length - 1);
+      return { value, y: scaleChart.plotY + ((safeDomain.domainMax - value) / (safeDomain.domainMax - safeDomain.domainMin)) * scaleChart.plotHeight };
+    }),
   };
   return (
     <>

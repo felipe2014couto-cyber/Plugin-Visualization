@@ -4,7 +4,7 @@ import { TimeRangeBar } from '../../components/TimeRangeBar';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../time/timeRange';
 import type { TrendSeriesViewState } from './TrendElementView';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
-import { DEFAULT_TREND_VISUAL_OPTIONS, type TrendVisualOptions } from '../createTrend';
+import { DEFAULT_TREND_VISUAL_OPTIONS, type TrendScaleMode, type TrendVisualOptions } from '../createTrend';
 
 export interface TrendPopupProps {
   seriesStates: readonly TrendSeriesViewState[];
@@ -23,7 +23,7 @@ const MAX_NAMED_STATE_LABELS = 8;
 const POPUP_AXIS_FONT_SIZE = 15;
 const POPUP_LEGEND_LINE_HEIGHT = 19;
 const POPUP_LEGEND_ITEM_HEIGHT = 46;
-type PopupScaleMode = 'single' | 'multiple' | 'configurable';
+type PopupScaleMode = TrendScaleMode;
 type PopupCustomScales = Record<string, { min: string; max: string }>;
 interface PopupZoom {
   from: number;
@@ -33,7 +33,7 @@ interface PopupZoom {
 }
 
 export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelectionChange, loading = false, visualOptions = DEFAULT_TREND_VISUAL_OPTIONS, onClose }: TrendPopupProps) {
-  const [scaleMode, setScaleMode] = useState<PopupScaleMode>('multiple');
+  const [scaleMode, setScaleMode] = useState<PopupScaleMode>(visualOptions.scaleMode);
   const [customScales, setCustomScales] = useState<PopupCustomScales>({});
   const [cursorMode, setCursorMode] = useState(true);
   const [zoomMode, setZoomMode] = useState(true);
@@ -42,6 +42,8 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
   const [selectedCursorId, setSelectedCursorId] = useState<string | null>(null);
   const [cursorDrag, setCursorDrag] = useState<{ id: string; pointerId: number } | null>(null);
   const nextCursorId = useRef(1);
+
+  useEffect(() => setScaleMode(visualOptions.scaleMode), [visualOptions.scaleMode]);
 
   useEffect(() => {
     const previousBodyOverflow = document.body.style.overflow;
@@ -98,7 +100,7 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
       const next = { ...current };
       for (const { series, automaticScale } of configurableSeries) {
         const key = popupSeriesKey(series);
-        next[key] ??= { min: formatValue(automaticScale.min), max: formatValue(automaticScale.max) };
+        next[key] ??= { min: formatValue(Number.isFinite(series.scaleMin) ? series.scaleMin as number : automaticScale.min), max: formatValue(Number.isFinite(series.scaleMax) ? series.scaleMax as number : automaticScale.max) };
       }
       return next;
     });
@@ -301,7 +303,7 @@ function PopupChart({
   }, [zoomEnabled]);
   const series = seriesStates.flatMap(({ series: configured, runtimeState }) => {
     const data = runtimeState.status === 'success' || runtimeState.status === 'error' ? runtimeState.data : undefined;
-    return data ? [{ key: popupSeriesKey(configured), name: configured.legendLabel || configured.binding.pointName, color: configured.color, lineWidth: configured.lineWidth ?? 2, lineStyle: configured.lineStyle ?? 'solid', marker: configured.marker ?? 'none', data }] : [];
+    return data ? [{ key: popupSeriesKey(configured), name: configured.legendLabel || configured.binding.pointName, color: configured.color, primaryScale: configured.primaryScale === true, lineWidth: configured.lineWidth ?? 2, lineStyle: configured.lineStyle ?? 'solid', marker: configured.marker ?? 'none', data }] : [];
   });
   const allTimes = series.flatMap(({ data }) => [
     ...data.points.map((point) => point.time),
@@ -310,24 +312,25 @@ function PopupChart({
   const domainStart = zoom?.from ?? timeRange?.from ?? Math.min(...allTimes);
   const domainEnd = zoom?.to ?? timeRange?.to ?? Math.max(...allTimes);
   const sharedScale = createNiceScale(series.flatMap(({ data }) => data.points.map(({ value }) => value)));
+  const primaryItem = series.find((item) => item.primaryScale && item.data.points.length > 0) ?? series.find((item) => item.data.points.length > 0);
+  const primaryAutomaticScale = primaryItem ? createNiceScale(primaryItem.data.points.map(({ value }) => value)) : sharedScale;
+  const primaryScale = scaleMode === 'single'
+    ? sharedScale
+    : scaleMode === 'configurable' && primaryItem
+      ? applyCustomScale(primaryAutomaticScale, customScales[primaryItem.key])
+      : primaryAutomaticScale;
   const scaledSeries = series.map((item) => {
     const automaticScale = createNiceScale(item.data.points.map((point) => point.value));
-    const modeScale = item.data.points.length === 0
-      ? automaticScale
-      : scaleMode === 'single'
-        ? sharedScale
-        : scaleMode === 'configurable'
-          ? applyCustomScale(automaticScale, customScales[item.key])
-          : automaticScale;
+    const modeScale = item.data.points.length === 0 ? automaticScale : primaryScale;
     return {
       ...item,
       scale: applyZoomScale(modeScale, zoom),
       stateLabels: [...new Set((item.data.states ?? []).map(({ value }) => value))],
     };
   });
-  const axisSeries = scaleMode === 'single'
-    ? [scaledSeries.find(({ data }) => data.points.length > 0), ...scaledSeries.filter(({ data }) => data.points.length === 0)].filter((item): item is typeof scaledSeries[number] => item !== undefined).slice(0, 4)
-    : scaledSeries.slice(0, 4);
+  const axisSeries = [scaledSeries.find(({ data }) => data.points.length > 0), ...scaledSeries.filter(({ data }) => data.points.length === 0)]
+    .filter((item): item is typeof scaledSeries[number] => item !== undefined)
+    .slice(0, 4);
   const plotX = Math.max(46, 8 + axisSeries.length * 38);
   const plot = { x: plotX, y: 20, width: POPUP_WIDTH - 132 - plotX, height: 724 };
   const legendX = plot.x + plot.width + 14;
