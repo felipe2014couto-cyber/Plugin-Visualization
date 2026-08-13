@@ -38,7 +38,7 @@ export const DEFAULT_TREND_VISUAL_OPTIONS: TrendVisualOptions = {
   showRegression: false,
   numberFormat: 'automatic',
   scaleIntervals: 10,
-  scaleMode: 'multiple',
+  scaleMode: 'single',
   fontFamily: 'Arial',
   fontSize: 16,
 };
@@ -155,7 +155,7 @@ export function getTrendVisualOptions(element: Pick<TrendElement, 'properties'>)
       ? visual.numberFormat
       : 'automatic',
     scaleIntervals: visual.scaleIntervals === 2 || visual.scaleIntervals === 5 || visual.scaleIntervals === 10 ? visual.scaleIntervals : 10,
-    scaleMode: visual.scaleMode === 'single' || visual.scaleMode === 'configurable' ? visual.scaleMode : 'multiple',
+    scaleMode: visual.scaleMode === 'configurable' ? 'configurable' : 'single',
     fontFamily: typeof visual.fontFamily === 'string' && visual.fontFamily.trim() ? visual.fontFamily : 'Arial',
     fontSize: typeof visual.fontSize === 'number' && Number.isFinite(visual.fontSize) ? Math.max(10, Math.min(24, visual.fontSize)) : 16,
   };
@@ -204,6 +204,7 @@ export function addTrendSeries(
     ...element,
     properties: {
       ...currentProperties,
+      visual: { ...getTrendVisualOptions(element), scaleMode: 'single' },
       series: [...series, { binding: { ...binding }, color: trendSeriesColor(series.length) }],
     },
   };
