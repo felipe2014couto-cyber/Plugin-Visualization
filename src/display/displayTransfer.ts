@@ -14,6 +14,7 @@ import {
 import type { DisplayDocument } from './displayDocument';
 import type { DisplayElement } from './displayElement';
 import type { PiPointBinding } from '../pi/piPointBinding';
+import { DEFAULT_TEXT_PROPERTIES, TEXT_TYPE } from './createText';
 
 export const DISPLAY_EXPORT_FORMAT = 'pims-vision-display';
 export const DISPLAY_EXPORT_VERSION = 1;
@@ -104,6 +105,13 @@ function portableElement(input: unknown): DisplayElement {
     height: input.height as number,
   };
   switch (input.type) {
+    case TEXT_TYPE:
+      return { ...base, type: TEXT_TYPE, properties: {
+        text: typeof input.properties.text === 'string' ? input.properties.text : DEFAULT_TEXT_PROPERTIES.text,
+        color: typeof input.properties.color === 'string' ? input.properties.color : DEFAULT_TEXT_PROPERTIES.color,
+        fontSize: isFiniteNumber(input.properties.fontSize) ? Math.max(8, Math.min(120, input.properties.fontSize)) : DEFAULT_TEXT_PROPERTIES.fontSize,
+        textAlign: input.properties.textAlign === 'left' || input.properties.textAlign === 'right' ? input.properties.textAlign : 'center',
+      } };
     case RECTANGLE_TYPE:
       return {
         ...base,
