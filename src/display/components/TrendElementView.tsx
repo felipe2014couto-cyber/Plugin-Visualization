@@ -209,9 +209,15 @@ function getTrendContent(
   }
 
   const drawableSeries = dataSeries.filter(({ data }) => data.points.length > 0);
-  const chart = buildTrendChartForSeries(element, drawableSeries.map(({ data }) => data.points), timeRange);
   const primary = drawableSeries.find(({ series }) => series.primaryScale === true) ?? drawableSeries[0];
-  const primaryChart = primary ? buildTrendChartForSeries(element, [primary.data.points], timeRange) : chart;
+  const timeChart = buildTrendChartForSeries(element, drawableSeries.map(({ data }) => data.points), timeRange);
+  const scaleChart = primary ? buildTrendChartForSeries(element, [primary.data.points], timeRange) : timeChart;
+  const chart = {
+    ...timeChart,
+    domainMin: scaleChart.domainMin,
+    domainMax: scaleChart.domainMax,
+    yTicks: scaleChart.yTicks,
+  };
   return (
     <>
       {visual.title && <TrendTitle element={element} visual={visual} />}{title}
@@ -240,10 +246,6 @@ function getTrendContent(
           </text>
         </g>
       ))}
-      {primaryChart.yTicks.map((tick) => (
-        <text key={`right-y-${tick.value}`} x={chart.plotX + chart.plotWidth + 6} y={tick.y + 4} textAnchor="start" fill={primary?.series.color || TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">{formatValue(tick.value)}</text>
-      ))}
-      <line x1={chart.plotX + chart.plotWidth} y1={chart.plotY} x2={chart.plotX + chart.plotWidth} y2={chart.plotY + chart.plotHeight} stroke={primary?.series.color || AXIS_COLOR} strokeWidth={1} data-testid={`trend-right-y-axis-${element.id}`} pointerEvents="none" />
       <line
         x1={chart.plotX}
         y1={chart.plotY}
@@ -410,14 +412,16 @@ function MixedTrend({
   stateSeries: Array<{ series: TrendSeries; states: TrendStatePoint[] }>;
   timeRange: DisplayTimeRange | undefined;
 }) {
-  const numericPoints = numericSeries.flatMap(({ data }) => data.points);
+  const allNumericPoints = numericSeries.flatMap(({ data }) => data.points);
+  const primaryNumeric = numericSeries.find(({ series }) => series.primaryScale === true) ?? numericSeries[0];
+  const numericPoints = primaryNumeric?.data.points ?? [];
   const states = stateSeries.flatMap(({ states: points }) => points);
   const stateLabels = [...new Set(states.map((state) => state.value))];
   const plotX = element.x + PLOT_MARGIN.left;
   const plotY = element.y + PLOT_MARGIN.top;
   const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - trendPlotRightMargin(element.width));
   const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
-  const allTimes = [...numericPoints.map((point) => point.time), ...states.map((state) => state.time)];
+  const allTimes = [...allNumericPoints.map((point) => point.time), ...states.map((state) => state.time)];
   const firstTime = Math.min(...allTimes);
   const lastTime = Math.max(...allTimes);
   const hasRequestedRange = timeRange
@@ -459,9 +463,9 @@ function MixedTrend({
         );
       })}
       <line x1={stateAxisX} y1={plotY} x2={stateAxisX} y2={plotY + plotHeight} stroke={stateSeries[0]?.series.color || AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
-      <line x1={plotX} y1={plotY} x2={plotX} y2={plotY + plotHeight} stroke={numericSeries[0]?.series.color || AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
+      <line x1={plotX} y1={plotY} x2={plotX} y2={plotY + plotHeight} stroke={primaryNumeric?.series.color || AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
       {numericTicks.map((value) => (
-        <text key={value} x={plotX - 6} y={numericY(value) + 4} textAnchor="end" fill={numericSeries[0]?.series.color || TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
+        <text key={value} x={plotX - 6} y={numericY(value) + 4} textAnchor="end" fill={primaryNumeric?.series.color || TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
           {formatNumber(value)}
         </text>
       ))}
