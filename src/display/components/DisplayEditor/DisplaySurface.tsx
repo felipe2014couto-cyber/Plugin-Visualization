@@ -633,7 +633,19 @@ export function DisplaySurface({
       })()}
       {selectedElementIds.filter((id) => id !== selectedElement?.id).map((id) => {
         const element = elements.find((candidate) => candidate.id === id);
-        return element ? <rect key={id} x={element.x - 1} y={element.y - 1} width={element.width + 2} height={element.height + 2} fill="none" stroke={SELECTION_STROKE} strokeDasharray="4 2" data-testid={`display-selection-box-${id}`} pointerEvents="none" /> : null;
+        if (!element) {
+          return null;
+        }
+        const positions = getResizeHandlePositions(element);
+        return (
+          <g key={id} data-testid={`display-selection-overlay-${id}`}>
+            <rect x={element.x - 1} y={element.y - 1} width={element.width + 2} height={element.height + 2} fill="none" stroke={SELECTION_STROKE} strokeWidth={1} strokeDasharray="4 2" data-testid={`display-selection-box-${id}`} pointerEvents="none" />
+            {positions.map((pos) => {
+              const rect = getResizeHandleRect(pos, HANDLE_SIZE);
+              return <rect key={pos.handle} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={1} data-testid={`display-resize-handle-${id}-${pos.handle}`} data-element-id={id} data-resize-handle={pos.handle} style={{ cursor: getHandleCursor(pos.handle) }} />;
+            })}
+          </g>
+        );
       })}
       {selectedElement && (
         <g data-testid="display-selection-overlay">
