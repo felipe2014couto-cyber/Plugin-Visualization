@@ -443,8 +443,8 @@ function PopupChart({
         .filter(({ primaryScale, data }) => !primaryScale && data.points.length > 0)
         .map(({ key, color, scaleMin, scaleMax }, index) => (
           <g key={`configured-popup-scale-${key}`} fill={color} fontSize={POPUP_AXIS_FONT_SIZE} pointerEvents="none">
-            {Number.isFinite(scaleMax) && <text x={plot.x + plot.width + 8} y={plot.y + 18 + index * 28}>Máx {formatValue(scaleMax as number, visualOptions.numberFormat)}</text>}
-            {Number.isFinite(scaleMin) && <text x={plot.x + plot.width + 8} y={plot.y + plot.height - 8 - index * 28}>Mín {formatValue(scaleMin as number, visualOptions.numberFormat)}</text>}
+            {Number.isFinite(scaleMax) && <text x={plot.x + 8 + index * 64} y={plot.y + 18}>{formatValue(scaleMax as number, visualOptions.numberFormat)}</text>}
+            {Number.isFinite(scaleMin) && <text x={plot.x + 8 + index * 64} y={plot.y + plot.height - 8}>{formatValue(scaleMin as number, visualOptions.numberFormat)}</text>}
           </g>
         ))}
       {scaledSeries.map(({ name, color, lineWidth, lineStyle, marker, data, scale, stateLabels }, index) => {
