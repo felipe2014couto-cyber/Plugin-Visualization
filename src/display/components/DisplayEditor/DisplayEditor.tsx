@@ -68,6 +68,7 @@ import { TextPropertiesPanel } from './TextPropertiesPanel';
 import { appendImage, createImage } from '../../createImage';
 import { appendText, createText, TEXT_TYPE, updateTextProperties, type TextElement } from '../../createText';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
+import type { TrendCursor } from '../../runtime/trendCursor';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
@@ -125,6 +126,7 @@ interface TrendPopupState {
   element: TrendElement;
   seriesStates: readonly TrendSeriesViewState[];
   loading: boolean;
+  cursors: readonly TrendCursor[];
 }
 
 const TREND_POPUP_MAX_DATA_POINTS = 500;
@@ -709,10 +711,10 @@ export function DisplayEditor({
     }
   }, [dispatch, displayDocument.elements, state.selectedElementId]);
 
-  const handleTrendOpen = useCallback((element: TrendElement, seriesStates: readonly TrendSeriesViewState[]) => {
+  const handleTrendOpen = useCallback((element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors: readonly TrendCursor[] = []) => {
     const requestId = trendPopupRequest.current + 1;
     trendPopupRequest.current = requestId;
-    const initialState = { element, seriesStates, loading: !!loadRecordedTrend };
+    const initialState = { element, seriesStates, cursors, loading: !!loadRecordedTrend };
     trendPopupRef.current = initialState;
     setTrendPopup(initialState);
     if (!loadRecordedTrend) {
@@ -789,7 +791,7 @@ export function DisplayEditor({
     }
     const element = displayDocument.elements.find((candidate) => candidate.id === current.element.id);
     if (element?.type === TREND_TYPE) {
-      handleTrendOpen(element as TrendElement, current.seriesStates);
+    handleTrendOpen(element as TrendElement, current.seriesStates, current.cursors);
     }
   }, [displayDocument.elements, handleTrendOpen, trendRefreshKey]);
 
@@ -963,6 +965,7 @@ export function DisplayEditor({
       {trendPopup && (
         <TrendPopup
           seriesStates={trendPopup.seriesStates}
+          initialCursors={trendPopup.cursors}
           visualOptions={getTrendVisualOptions(trendPopup.element)}
           timeRange={trendTimeRange}
           timeSelection={timeSelection}

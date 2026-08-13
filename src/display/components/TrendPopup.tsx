@@ -13,6 +13,7 @@ export interface TrendPopupProps {
   onTimeSelectionChange?: (selection: DisplayTimeSelection) => void;
   loading?: boolean;
   visualOptions?: TrendVisualOptions;
+  initialCursors?: readonly TrendCursor[];
   onClose: () => void;
 }
 
@@ -23,6 +24,7 @@ const MAX_NAMED_STATE_LABELS = 8;
 const POPUP_AXIS_FONT_SIZE = 15;
 const POPUP_LEGEND_LINE_HEIGHT = 19;
 const POPUP_LEGEND_ITEM_HEIGHT = 46;
+const EMPTY_TREND_CURSORS: readonly TrendCursor[] = [];
 type PopupScaleMode = TrendScaleMode;
 type PopupCustomScales = Record<string, { min: string; max: string }>;
 interface PopupZoom {
@@ -32,18 +34,18 @@ interface PopupZoom {
   bottomRatio: number;
 }
 
-export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelectionChange, loading = false, visualOptions = DEFAULT_TREND_VISUAL_OPTIONS, onClose }: TrendPopupProps) {
+export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelectionChange, loading = false, visualOptions = DEFAULT_TREND_VISUAL_OPTIONS, initialCursors = EMPTY_TREND_CURSORS, onClose }: TrendPopupProps) {
   const [scaleMode, setScaleMode] = useState<PopupScaleMode>(visualOptions.scaleMode === 'configurable' ? 'configurable' : 'individual');
-  const [customScales, setCustomScales] = useState<PopupCustomScales>({});
+  const [customScales, setCustomScales] = useState<PopupCustomScales>(() => getInitialCustomScales(seriesStates));
   const [cursorMode, setCursorMode] = useState(true);
   const [zoomMode, setZoomMode] = useState(true);
   const [zoomHistory, setZoomHistory] = useState<PopupZoom[]>([]);
-  const [cursors, setCursors] = useState<TrendCursor[]>([]);
+  const [cursors, setCursors] = useState<TrendCursor[]>(() => [...initialCursors]);
   const [selectedCursorId, setSelectedCursorId] = useState<string | null>(null);
   const [cursorDrag, setCursorDrag] = useState<{ id: string; pointerId: number } | null>(null);
   const nextCursorId = useRef(1);
 
-  useEffect(() => setScaleMode(visualOptions.scaleMode === 'configurable' ? 'configurable' : 'individual'), [visualOptions.scaleMode]);
+  useEffect(() => setCursors([...initialCursors]), [initialCursors]);
 
   useEffect(() => {
     const previousBodyOverflow = document.body.style.overflow;
@@ -254,6 +256,16 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
       )}
     </section>
   );
+}
+
+function getInitialCustomScales(seriesStates: readonly TrendSeriesViewState[]): PopupCustomScales {
+  return Object.fromEntries(seriesStates.map(({ series }) => {
+    const key = popupSeriesKey(series);
+    return [key, {
+      min: Number.isFinite(series.scaleMin) ? formatValue(series.scaleMin as number) : '',
+      max: Number.isFinite(series.scaleMax) ? formatValue(series.scaleMax as number) : '',
+    }];
+  }));
 }
 
 interface PopupChartProps extends Pick<TrendPopupProps, 'seriesStates' | 'timeRange'> {

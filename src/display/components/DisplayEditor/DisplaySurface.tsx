@@ -80,7 +80,7 @@ export interface DisplaySurfaceProps {
   loadTrend?: LoadTrendSeries;
   trendRefreshKey?: string;
   trendTimeRange?: DisplayTimeRange;
-  onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[]) => void;
+  onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors?: readonly TrendCursor[]) => void;
   onTrendContextMenu?: (element: TrendElement) => void;
   zoom?: number;
   viewCenter?: Point;
@@ -215,8 +215,8 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
-    onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, trendRuntimeStates));
-  }, [editable, elements, onTrendOpen, trendRuntimeStates]);
+    onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, trendRuntimeStates), cursorsByTrend[element.id] ?? []);
+  }, [cursorsByTrend, editable, elements, onTrendOpen, trendRuntimeStates]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
     const element = elements.find((candidate) => candidate.id === elementId);
     if (!element || element.type !== TREND_TYPE) {
