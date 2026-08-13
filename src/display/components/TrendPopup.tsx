@@ -312,13 +312,6 @@ function PopupChart({
   const domainStart = zoom?.from ?? timeRange?.from ?? Math.min(...allTimes);
   const domainEnd = zoom?.to ?? timeRange?.to ?? Math.max(...allTimes);
   const sharedScale = createNiceScale(series.flatMap(({ data }) => data.points.map(({ value }) => value)));
-  const primaryItem = series.find((item) => item.primaryScale && item.data.points.length > 0) ?? series.find((item) => item.data.points.length > 0);
-  const primaryAutomaticScale = primaryItem ? createNiceScale(primaryItem.data.points.map(({ value }) => value)) : sharedScale;
-  const primaryScale = scaleMode === 'single'
-    ? sharedScale
-      : scaleMode === 'configurable' && primaryItem
-      ? applyCustomScale(primaryAutomaticScale, customScales[primaryItem.key])
-      : primaryAutomaticScale;
   const scaledSeries = series.map((item) => {
     const automaticScale = createNiceScale(item.data.points.map((point) => point.value));
     const modeScale = item.data.points.length === 0

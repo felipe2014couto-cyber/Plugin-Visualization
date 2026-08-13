@@ -228,10 +228,25 @@ function getTrendContent(
       return { value, y: scaleChart.plotY + ((safeDomain.domainMax - value) / (safeDomain.domainMax - safeDomain.domainMin)) * scaleChart.plotHeight };
     }),
   };
-  const seriesCharts = new Map(drawableSeries.map(({ series, data }) => [
-    trendBindingKey(series.binding),
-    individualScale ? buildTrendChartForSeries(element, [data.points], timeRange) : chart,
-  ]));
+  const seriesCharts = new Map(drawableSeries.map(({ series, data }) => {
+    const baseChart = individualScale ? buildTrendChartForSeries(element, [data.points], timeRange) : chart;
+    if (visual.scaleMode !== 'configurable') {
+      return [trendBindingKey(series.binding), baseChart] as const;
+    }
+    const min = Number.isFinite(series.scaleMin) ? series.scaleMin as number : baseChart.domainMin;
+    const max = Number.isFinite(series.scaleMax) ? series.scaleMax as number : baseChart.domainMax;
+    if (!(max > min)) return [trendBindingKey(series.binding), baseChart] as const;
+    const yFor = (value: number) => baseChart.plotY + ((max - value) / (max - min)) * baseChart.plotHeight;
+    return [trendBindingKey(series.binding), {
+      ...baseChart,
+      domainMin: min,
+      domainMax: max,
+      yTicks: baseChart.yTicks.map((_, index) => {
+        const value = max - ((max - min) * index) / Math.max(1, baseChart.yTicks.length - 1);
+        return { value, y: yFor(value) };
+      }),
+    }] as const;
+  }));
   return (
     <>
       {visual.title && <TrendTitle element={element} visual={visual} />}{title}
