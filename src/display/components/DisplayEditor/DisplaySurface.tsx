@@ -21,6 +21,7 @@ import { isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBindin
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
 import { getMultistateColor } from '../../multistate';
 import { TEXT_TYPE, type TextElement } from '../../createText';
+import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import {
   getTrendSeriesConsumerId,
   useTrendRuntime,
@@ -608,6 +609,10 @@ export function DisplaySurface({
           const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
           const x = textElement.properties.textAlign === 'left' ? textElement.x + 4 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 4 : textElement.x + textElement.width / 2;
           return <text key={element.id} x={x} y={element.y + element.height / 2} fill={textElement.properties.color} fontSize={textElement.properties.fontSize} textAnchor={anchor} dominantBaseline="middle" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>{textElement.properties.text}</text>;
+        }
+        if (element.type === IMAGE_TYPE) {
+          const image = element as ImageElement;
+          return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }} />;
         }
         return (
           <rect

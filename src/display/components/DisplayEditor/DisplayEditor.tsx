@@ -64,6 +64,7 @@ import { ValuePropertiesPanel } from './ValuePropertiesPanel';
 import { ScalePropertiesPanel } from './ScalePropertiesPanel';
 import { RectanglePropertiesPanel } from './RectanglePropertiesPanel';
 import { TextPropertiesPanel } from './TextPropertiesPanel';
+import { appendImage, createImage } from '../../createImage';
 import { appendText, createText, TEXT_TYPE, updateTextProperties, type TextElement } from '../../createText';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
@@ -158,6 +159,7 @@ export function DisplayEditor({
   const expectedDocumentRef = useRef<DisplayDocument | null>(null);
   const pendingTransactionRef = useRef<PendingDocumentTransaction | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [, refreshHistory] = useState(0);
   const [importError, setImportError] = useState<string | null>(null);
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
@@ -353,6 +355,35 @@ export function DisplayEditor({
     const element = createText({ surface: currentDocument.surface, existingIds: currentDocument.elements.map(({ id }) => id) });
     commitDocument(appendText(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
+  }, [commitDocument, dispatch]);
+
+  const handleImageFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) {
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setImportError('A imagem não pode ultrapassar 1 MB.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setImportError('Selecione um arquivo de imagem válido.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') {
+        return;
+      }
+      const currentDocument = documentRef.current;
+      const element = createImage({ src: reader.result, alt: file.name, surface: currentDocument.surface, existingIds: currentDocument.elements.map(({ id }) => id) });
+      commitDocument(appendImage(currentDocument, element));
+      dispatch({ type: 'SELECT', elementId: element.id });
+      setImportError(null);
+    };
+    reader.onerror = () => setImportError('Não foi possível ler a imagem.');
+    reader.readAsDataURL(file);
   }, [commitDocument, dispatch]);
 
   const handleInsertBoundElement = useCallback((type: PiPointDropSymbolType) => {
@@ -784,6 +815,8 @@ export function DisplayEditor({
               <div className={styles.toolbarGroup} aria-label="Inserir elementos">
                 <button type="button" title="Inserir forma geométrica" aria-label="Inserir forma geométrica" className={styles.iconButton} data-testid="display-insert-rectangle" onClick={handleInsertRectangle}><RectangleIcon /></button>
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
+                <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
+                <input ref={imageInputRef} type="file" accept="image/*" data-testid="display-image-input" className={styles.fileInput} onChange={handleImageFile} />
                 <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('value'); handleInsertBoundElement('value'); }}><ValueIcon /></button>
                 <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertBoundElement('gauge'); }}><GaugeIcon /></button>
                 <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBoundElement('bar'); }}><BarIcon /></button>
@@ -1544,6 +1577,10 @@ function RectangleIcon() {
 
 function TextIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M5 5h14M12 5v14M8 19h8" /></svg>;
+}
+
+function ImageIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="5" width="16" height="14" /><circle cx="9" cy="10" r="1.5" /><path d="m5 17 4-4 3 3 2-2 5 4" /></svg>;
 }
 
 function GaugeIcon() {
