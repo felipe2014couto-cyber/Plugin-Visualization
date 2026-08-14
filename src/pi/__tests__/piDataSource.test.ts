@@ -1,5 +1,5 @@
 import type { DataSourceSrv } from '@grafana/runtime';
-import { checkPiConnection, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
+import { checkPiConnection, getPiPointDatabaseLimits, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
 
 function makeDataSource(overrides: Partial<{ uid: string; name: string; isDefault: boolean }> = {}) {
   return {
@@ -33,6 +33,15 @@ function makeDataSourceSrv(options: {
 }
 
 describe('PI data source integration', () => {
+  it('obtém Zero e Span pelos metadados do PI Point', async () => {
+    const getResource = jest.fn(async () => ({ Zero: -50, Span: 100 }));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+
+    await expect(getPiPointDatabaseLimits({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG', webId: 'point-webid' }, dataSourceSrv))
+      .resolves.toEqual({ zero: -50, span: 100 });
+    expect(getResource).toHaveBeenCalledWith('/points/point-webid');
+  });
+
   it('resolve a Data Source PI padrão pela identidade estável', () => {
     const dataSourceSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ uid: 'pi-secondary' }), makeDataSource({ uid: 'pi-default', isDefault: true })],

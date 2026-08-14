@@ -176,6 +176,17 @@ export async function getPiPointDatabaseLimits(
   const dataSource = resolvePiDataSource(dataSourceSrv);
   if (!dataSource) throw new Error('PI Data Source não configurada');
   const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
+  const resourceApi = instance as PiDataSourceResourceApi;
+  if (binding.webId && typeof resourceApi.getResource === 'function') {
+    try {
+      const response = await resourceApi.getResource(`/points/${encodeURIComponent(binding.webId)}`);
+      const zero = getResourceNumber(response, 'Zero');
+      const span = getResourceNumber(response, 'Span');
+      if (zero !== undefined && span !== undefined && span > 0) return { zero, span };
+    } catch {
+      // Some datasource versions do not expose PI Point metadata as a resource.
+    }
+  }
   if (typeof instance.metricFindQuery !== 'function') throw new Error('A Data Source PI não expõe metadados de PI Points');
   const queries = [
     { path: binding.serverPath, pointName: binding.pointName, type: 'pipoint', webId: binding.webId },
@@ -876,6 +887,13 @@ function getMetricField(value: MetricFindValue | undefined, field: 'text' | 'Web
 function getMetricNumber(value: MetricFindValue | undefined, field: string): number | undefined {
   if (!value) return undefined;
   const candidate = (value as MetricFindValue & Record<string, unknown>)[field];
+  const number = typeof candidate === 'number' ? candidate : typeof candidate === 'string' ? Number(candidate) : NaN;
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function getResourceNumber(value: unknown, field: string): number | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = (value as Record<string, unknown>)[field];
   const number = typeof candidate === 'number' ? candidate : typeof candidate === 'string' ? Number(candidate) : NaN;
   return Number.isFinite(number) ? number : undefined;
 }
