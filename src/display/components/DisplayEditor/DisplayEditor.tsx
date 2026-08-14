@@ -57,6 +57,7 @@ import {
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBinding';
 import type { PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
+import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
 import { DisplaySurface } from './DisplaySurface';
 import { TrendPopup } from '../TrendPopup';
 import type { TrendSeriesViewState } from '../TrendElementView';
@@ -65,6 +66,7 @@ import { ScalePropertiesPanel } from './ScalePropertiesPanel';
 import { RectanglePropertiesPanel } from './RectanglePropertiesPanel';
 import { TextPropertiesPanel } from './TextPropertiesPanel';
 import { appendImage, createImage } from '../../createImage';
+import { appendLibrarySymbol, createLibrarySymbol } from '../../createLibrarySymbol';
 import { appendText, createText, TEXT_TYPE, updateTextProperties, type TextElement } from '../../createText';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
@@ -425,7 +427,18 @@ export function DisplayEditor({
   }, [commitDocument, dispatch, selectedPiPoint]);
 
   const handlePiPointDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    if (mode !== 'edit' || !onChangeRef.current || !Array.from(event.dataTransfer.types).includes(PI_POINT_DRAG_MIME)) {
+    if (mode !== 'edit' || !onChangeRef.current) {
+      return;
+    }
+    const librarySymbolId = Array.from(event.dataTransfer.types).includes(LIBRARY_SYMBOL_DRAG_MIME)
+      ? parseLibrarySymbolDragData(event.dataTransfer.getData(LIBRARY_SYMBOL_DRAG_MIME))
+      : undefined;
+    if (librarySymbolId) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      return;
+    }
+    if (!Array.from(event.dataTransfer.types).includes(PI_POINT_DRAG_MIME)) {
       return;
     }
     event.preventDefault();
@@ -482,6 +495,25 @@ export function DisplayEditor({
   const handlePiPointDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     setPiPointDragPreview(null);
     if (mode !== 'edit' || !onChangeRef.current) {
+      return;
+    }
+    const librarySymbolId = parseLibrarySymbolDragData(event.dataTransfer.getData(LIBRARY_SYMBOL_DRAG_MIME));
+    if (librarySymbolId) {
+      const svg = event.currentTarget.querySelector('svg');
+      const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
+      if (!point) {
+        return;
+      }
+      event.preventDefault();
+      const currentDocument = documentRef.current;
+      const symbol = createLibrarySymbol({
+        symbol: librarySymbolId,
+        surface: currentDocument.surface,
+        existingIds: currentDocument.elements.map((element) => element.id),
+      });
+      const positioned = positionElementAt(symbol, point, currentDocument);
+      commitDocument(appendLibrarySymbol(currentDocument, positioned));
+      dispatch({ type: 'SELECT', elementId: positioned.id });
       return;
     }
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;

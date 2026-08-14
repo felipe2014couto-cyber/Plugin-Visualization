@@ -35,6 +35,8 @@ export { appendText, createText, DEFAULT_TEXT_PROPERTIES, TEXT_TYPE, updateTextP
 export type { CreateTextOptions, TextAlign, TextElement, TextProperties } from './createText';
 export { appendImage, createImage, IMAGE_TYPE } from './createImage';
 export type { CreateImageOptions, ImageElement, ImageProperties } from './createImage';
+export { appendLibrarySymbol, createLibrarySymbol, LIBRARY_SYMBOL_TYPE } from './createLibrarySymbol';
+export type { CreateLibrarySymbolOptions, LibrarySymbolElement, LibrarySymbolProperties } from './createLibrarySymbol';
 export type {
   CreateRectangleOptions,
   RectangleElement,
