@@ -104,6 +104,7 @@ export function updateBarOptions(
         ...properties,
         ...normalizeScaleOptions({ ...properties, ...patch }),
         scaleMode: patch.scaleMode === 'custom' || patch.scaleMode === 'database' ? patch.scaleMode : getBarOptions(properties).scaleMode,
+        showScale: typeof patch.showScale === 'boolean' ? patch.showScale : getBarOptions(properties).showScale,
         orientation: patch.orientation === 'horizontal' ? 'horizontal' : patch.orientation === 'vertical' ? 'vertical' : getBarOptions(properties).orientation,
       },
     } as BarElement;
