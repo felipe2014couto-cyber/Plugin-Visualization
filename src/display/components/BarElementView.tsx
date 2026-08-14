@@ -79,7 +79,8 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
       {options.showScale !== false && horizontal && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
         const valueAtTick = minimum + ((maximum - minimum) * index) / 8;
         const x = plotX + (plotWidth * index) / 8;
-        return <g key={`bar-scale-horizontal-${index}`} pointerEvents="none"><line x1={x} y1={plotY + plotHeight} x2={x} y2={plotY + plotHeight + 4} stroke="var(--text-primary)" /><text x={x} y={plotY + plotHeight + 20} textAnchor="middle" fill="var(--text-primary)" fontSize={16} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
+        const scaleY = plotY + plotHeight + borderClearance / 2 + 4;
+        return <g key={`bar-scale-horizontal-${index}`} pointerEvents="none"><line x1={x} y1={scaleY} x2={x} y2={scaleY + 4} stroke="var(--text-primary)" /><text x={x} y={scaleY + 18} textAnchor="middle" fill="var(--text-primary)" fontSize={16} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
       })}
       {ratio !== undefined && (
         <rect
