@@ -61,7 +61,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
           {tagLabel}
         </text>
       )}
-      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill="var(--border-color, rgba(255, 255, 255, 0.12))" stroke={barOptions.borderColor} strokeWidth={barOptions.borderWidth} data-testid={`bar-track-${element.id}`} pointerEvents="none" />
+      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill="var(--border-color, rgba(255, 255, 255, 0.12))" data-testid={`bar-track-${element.id}`} pointerEvents="none" />
       {options.showScale !== false && !horizontal && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
         const valueAtTick = minimum + ((maximum - minimum) * index) / 8;
         const y = plotY + plotHeight - (plotHeight * index) / 8;
@@ -79,7 +79,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
           pointerEvents="none"
         />
       )}
-      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill="none" stroke={barOptions.borderColor} strokeWidth={barOptions.borderWidth} pointerEvents="none" />
+      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill="none" stroke={barOptions.borderColor} strokeWidth={barOptions.borderWidth} vectorEffect="non-scaling-stroke" data-testid={`bar-border-${element.id}`} pointerEvents="none" />
       <text x={element.x + element.width / 2} y={element.y + element.height - 12} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
         {options.showValue ? valueText : ''}
       </text>
