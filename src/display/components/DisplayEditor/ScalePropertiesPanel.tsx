@@ -55,14 +55,16 @@ export function ScalePropertiesPanel({
           <span>Cor</span>
           <input type="color" value={color} onChange={(event) => onChange({ color: event.target.value })} data-testid={`${kind.toLowerCase()}-color`} />
         </label>
-        <label className={styles.field}>
-          <span>Mínimo</span>
-          <input type="number" value={minimum} onChange={(event) => onChange({ minimum: Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-minimum`} />
-        </label>
-        <label className={styles.field}>
-          <span>Máximo</span>
-          <input type="number" value={maximum} onChange={(event) => onChange({ maximum: Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-maximum`} />
-        </label>
+        {(kind !== 'Bar' || scaleMode === 'custom') && <>
+          <label className={styles.field}>
+            <span>Mínimo</span>
+            <input type="number" value={minimum} onChange={(event) => onChange({ minimum: Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-minimum`} />
+          </label>
+          <label className={styles.field}>
+            <span>Máximo</span>
+            <input type="number" value={maximum} onChange={(event) => onChange({ maximum: Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-maximum`} />
+          </label>
+        </>}
         <label className={styles.field}>
           <span>Casas decimais</span>
           <select value={decimals === null ? '' : String(decimals)} onChange={(event) => onChange({ decimals: event.target.value === '' ? null : Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-decimals`}>

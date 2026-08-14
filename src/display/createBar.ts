@@ -65,6 +65,7 @@ export function createBar(options: CreateBarOptions): BarElement {
     properties: {
       ...(options.binding ? { binding: { ...options.binding } } : {}),
       ...normalizeScaleOptions(options.options),
+      scaleMode: 'database',
       orientation: options.orientation ?? 'vertical',
       ...(options.multistate ? { multistate: options.multistate } : {}),
     },
@@ -79,7 +80,7 @@ export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOp
   return {
     ...normalizeScaleOptions(properties),
     orientation: properties.orientation === 'horizontal' ? 'horizontal' : 'vertical',
-    scaleMode: properties.scaleMode === 'database' ? 'database' : 'custom',
+    scaleMode: properties.scaleMode === 'custom' ? 'custom' : 'database',
   };
 }
 
