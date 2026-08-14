@@ -87,7 +87,7 @@ export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOp
 export function updateBarOptions(
   document: DisplayDocument,
   elementId: string,
-  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation },
+  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database' },
 ): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => {
@@ -101,6 +101,7 @@ export function updateBarOptions(
       properties: {
         ...properties,
         ...normalizeScaleOptions({ ...properties, ...patch }),
+        scaleMode: patch.scaleMode === 'custom' || patch.scaleMode === 'database' ? patch.scaleMode : getBarOptions(properties).scaleMode,
         orientation: patch.orientation === 'horizontal' ? 'horizontal' : patch.orientation === 'vertical' ? 'vertical' : getBarOptions(properties).orientation,
       },
     } as BarElement;
