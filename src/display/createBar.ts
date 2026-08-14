@@ -18,6 +18,7 @@ export interface BarProperties extends Record<string, unknown> {
   orientation: BarOrientation;
   multistate?: MultistateConfig;
   scaleMode?: 'custom' | 'database';
+  showScale?: boolean;
 }
 
 export type BarElement = DisplayElement<typeof BAR_TYPE, BarProperties>;
@@ -76,18 +77,19 @@ export function appendBar(document: DisplayDocument, element: BarElement): Displ
   return { ...document, elements: [...document.elements, element] };
 }
 
-export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation; scaleMode: 'custom' | 'database' } {
+export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation; scaleMode: 'custom' | 'database'; showScale: boolean } {
   return {
     ...normalizeScaleOptions(properties),
     orientation: properties.orientation === 'horizontal' ? 'horizontal' : 'vertical',
     scaleMode: properties.scaleMode === 'custom' ? 'custom' : 'database',
+    showScale: properties.showScale !== false,
   };
 }
 
 export function updateBarOptions(
   document: DisplayDocument,
   elementId: string,
-  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database' },
+  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database'; showScale?: boolean },
 ): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => {

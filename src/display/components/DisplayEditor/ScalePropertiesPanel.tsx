@@ -16,6 +16,7 @@ export interface ScalePropertiesPanelProps {
   color: string;
   orientation?: BarOrientation;
   scaleMode?: 'custom' | 'database';
+  showScale?: boolean;
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -25,6 +26,7 @@ export interface ScalePropertiesPanelProps {
     color?: string;
     orientation?: BarOrientation;
     scaleMode?: 'custom' | 'database';
+    showScale?: boolean;
   }) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -40,6 +42,7 @@ export function ScalePropertiesPanel({
   color,
   orientation,
   scaleMode,
+  showScale = true,
   onChange,
   multistate,
   onMultistateChange,
@@ -94,6 +97,7 @@ export function ScalePropertiesPanel({
           <input type="checkbox" checked={showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-value`} />
           <span>Mostrar valor</span>
         </label>
+        {kind === 'Bar' && <label className={styles.checkbox}><input type="checkbox" checked={showScale} onChange={(event) => onChange({ showScale: event.target.checked })} data-testid="bar-show-scale" /><span>Mostrar escala</span></label>}
         <label className={styles.checkbox}>
           <input type="checkbox" checked={showTagName} onChange={(event) => onChange({ showTagName: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-tag-name`} />
           <span>Mostrar tag</span>
