@@ -32,6 +32,24 @@ function createDataTransfer(): DataTransfer {
 }
 
 describe('DisplayEditor - drop da Library', () => {
+  it('aceita o dragover mesmo quando o navegador protege o payload', () => {
+    render(<Harness />);
+    const wrapper = screen.getByTestId('display-editor-surface-wrapper');
+    const dataTransfer = {
+      types: [LIBRARY_SYMBOL_DRAG_MIME],
+      effectAllowed: 'copy',
+      dropEffect: 'none',
+      getData: () => '',
+    } as unknown as DataTransfer;
+    const event = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', { value: dataTransfer });
+
+    fireEvent(wrapper, event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(dataTransfer.dropEffect).toBe('copy');
+  });
+
   it('insere o símbolo SVG local no canvas e registra no histórico', () => {
     render(<Harness />);
     const surface = screen.getByTestId('display-surface') as unknown as SVGSVGElement;

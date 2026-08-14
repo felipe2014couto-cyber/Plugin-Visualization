@@ -12,7 +12,7 @@ describe('LibraryPanel', () => {
     render(<LibraryPanel />);
 
     expect(screen.getByPlaceholderText('Pesquisar símbolos...')).toBeInTheDocument();
-    expect(screen.getByText('Motores e acionamentos')).toBeInTheDocument();
+    expect(screen.getByText('Motores')).toBeInTheDocument();
     expect(screen.getByTestId('library-symbol-PT002A_Option1')).toBeInTheDocument();
     expect(screen.getByTestId('library-symbol-PV003B')).toBeInTheDocument();
 
@@ -26,6 +26,18 @@ describe('LibraryPanel', () => {
 
     expect(screen.getByTestId('library-symbol-PV003B')).toBeInTheDocument();
     expect(screen.queryByTestId('library-symbol-PT002A_Option1')).toBeNull();
-    expect(screen.getByText('Motores e acionamentos')).toBeInTheDocument();
+    expect(screen.getByText('Motores')).toBeInTheDocument();
+  });
+
+  it('renderiza os seis cards de motores dentro do grupo Motores', () => {
+    render(<LibraryPanel />);
+    fireEvent.click(screen.getByTestId('library-category-Motores').querySelector('button') as HTMLButtonElement);
+
+    expect(screen.getByText('Motor elétrico industrial horizontal')).toBeInTheDocument();
+    expect(screen.getByText('Motor elétrico industrial compacto')).toBeInTheDocument();
+    expect(screen.getByText('Motor elétrico de ventilação')).toBeInTheDocument();
+    expect(screen.getByText('Motor de passo')).toBeInTheDocument();
+    expect(screen.getByText('Motor vibratório')).toBeInTheDocument();
+    expect(screen.getByText('Motor elétrico trifásico')).toBeInTheDocument();
   });
 });

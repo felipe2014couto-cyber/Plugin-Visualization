@@ -69,7 +69,7 @@ export function LibraryPanel() {
                         type="button"
                         className={styles.card}
                         draggable
-                        title={`Arraste ${symbol.name} para o display`}
+                        title={`Arraste ${symbol.name} (${symbol.library || symbol.source}) para o display`}
                         data-testid={`library-symbol-${symbol.id}`}
                         onDragStart={(event) => {
                           event.dataTransfer.effectAllowed = 'copy';
@@ -78,7 +78,7 @@ export function LibraryPanel() {
                         }}
                       >
                         <span className={styles.symbolPreview}>
-                          <img src={getIndustrialSymbolAssetUrl(symbol)} alt="" draggable={false} />
+                          <img className={symbol.source === 'openclipart' ? styles.coloredImage : styles.technicalImage} src={getIndustrialSymbolAssetUrl(symbol)} alt="" draggable={false} />
                         </span>
                         <span className={styles.cardName}>{symbol.name}</span>
                       </button>
@@ -94,7 +94,7 @@ export function LibraryPanel() {
           );
         })}
         {filteredSymbols.length === 0 && <p className={styles.noResults} data-testid="library-symbols-empty">Nenhum símbolo encontrado.</p>}
-        <p className={styles.sourceNote}>Símbolos locais da Equinor Engineering Symbols, licença MIT.</p>
+        <p className={styles.sourceNote}>Símbolos locais; motores Openclipart em domínio público.</p>
       </div>
     </section>
   );
@@ -112,7 +112,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
   categoryCount: css`margin-left: auto; color: var(--text-muted); font-size: 11px; font-weight: 500;`,
   cards: css`display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 2px 0 12px;`,
   card: css`display: flex; flex-direction: column; align-items: center; min-width: 0; min-height: 128px; padding: 8px 6px 7px; border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); background: linear-gradient(145deg, var(--surface-secondary), var(--surface-primary)); cursor: grab; text-align: center; &:hover { border-color: var(--accent); background: var(--selection-bg); } &:active { cursor: grabbing; }`,
-  symbolPreview: css`display: flex; align-items: center; justify-content: center; width: 100%; height: 86px; margin-bottom: 4px; img { max-width: 76px; max-height: 76px; width: auto; height: auto; filter: invert(1); }`,
+  symbolPreview: css`display: flex; align-items: center; justify-content: center; width: 100%; height: 86px; margin-bottom: 4px; img { max-width: 76px; max-height: 76px; width: auto; height: auto; }`,
+  coloredImage: css`filter: none;`,
+  technicalImage: css`filter: invert(1);`,
   cardName: css`max-width: 100%; overflow-wrap: anywhere; color: var(--text-primary); font-size: 12px; line-height: 1.25;`,
   emptyCategory: css`margin: 0; padding: 0 0 12px 26px; color: var(--text-muted); font-size: 11px;`,
   noResults: css`margin: 18px 0; color: var(--text-secondary); font-size: 12px; text-align: center;`,

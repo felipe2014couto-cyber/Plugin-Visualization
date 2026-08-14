@@ -1,0 +1,309 @@
+{
+  "entries": [
+    {
+      "id": "openclipart:industrial-electric-motor",
+      "name": "Motor elétrico industrial horizontal",
+      "originalName": "Electrical Motor (upper motor)",
+      "category": "Motores",
+      "keywords": [
+        "motor",
+        "motor elétrico",
+        "acionamento",
+        "máquina",
+        "eixo",
+        "indústria"
+      ],
+      "synonyms": [
+        "motor industrial",
+        "motor elétrico"
+      ],
+      "source": "openclipart",
+      "library": "Openclipart",
+      "sourceUrl": "https://openclipart.org/detail/271781/electrical-motor",
+      "downloadUrl": "https://openclipart.org/download/271781",
+      "author": "AlignEasy",
+      "license": "Public Domain",
+      "modified": true,
+      "sanitized": true,
+      "originalSvgSha256": "de813d1b5a807e8c5b3b7647c30b1938daca620109baada10365cfeaf0b6ae97",
+      "sourceFile": "industrial-electric-motor-upper.svg",
+      "svg": "library/assets/modules/motores/openclipart/industrial-electric-motor-upper.svg",
+      "style": "monochrome",
+      "viewBox": "0 0 800 400",
+      "dimensions": {
+        "width": 800.0,
+        "height": 400.0
+      },
+      "originalAspectRatio": 2.0,
+      "defaultSize": {
+        "width": 96,
+        "height": 48
+      },
+      "capabilities": {
+        "fill": true,
+        "stroke": true,
+        "opacity": true,
+        "rotate": true,
+        "blink": true,
+        "multistateReady": true,
+        "animatedParts": [
+          "shaft"
+        ]
+      }
+    },
+    {
+      "id": "openclipart:industrial-electric-motor-lower",
+      "name": "Motor elétrico industrial compacto",
+      "originalName": "Electrical Motor (lower motor)",
+      "category": "Motores",
+      "keywords": [
+        "motor",
+        "motor elétrico",
+        "acionamento",
+        "máquina",
+        "eixo",
+        "indústria"
+      ],
+      "synonyms": [
+        "motor industrial compacto",
+        "motor elétrico retangular"
+      ],
+      "source": "openclipart",
+      "library": "Openclipart",
+      "sourceUrl": "https://openclipart.org/detail/271781/electrical-motor",
+      "downloadUrl": "https://openclipart.org/download/271781",
+      "author": "AlignEasy",
+      "license": "Public Domain",
+      "modified": true,
+      "sanitized": true,
+      "originalSvgSha256": "de813d1b5a807e8c5b3b7647c30b1938daca620109baada10365cfeaf0b6ae97",
+      "sourceFile": "industrial-electric-motor-lower.svg",
+      "svg": "library/assets/modules/motores/openclipart/industrial-electric-motor-lower.svg",
+      "style": "monochrome",
+      "viewBox": "0 400 800 400",
+      "dimensions": {
+        "width": 800.0,
+        "height": 400.0
+      },
+      "originalAspectRatio": 2.0,
+      "defaultSize": {
+        "width": 96,
+        "height": 48
+      },
+      "capabilities": {
+        "fill": true,
+        "stroke": true,
+        "opacity": true,
+        "rotate": true,
+        "blink": true,
+        "multistateReady": true,
+        "animatedParts": [
+          "shaft"
+        ]
+      }
+    },
+    {
+      "id": "openclipart:ventilation-electric-motor",
+      "name": "Motor elétrico de ventilação",
+      "originalName": "Electric Motor",
+      "category": "Motores",
+      "keywords": [
+        "motor",
+        "motor elétrico",
+        "ventilação",
+        "máquina",
+        "eixo"
+      ],
+      "synonyms": [
+        "motor de ventilador",
+        "motor de ventilação"
+      ],
+      "source": "openclipart",
+      "library": "Openclipart",
+      "sourceUrl": "https://openclipart.org/detail/333614/electric-motor",
+      "downloadUrl": "https://openclipart.org/download/333614",
+      "author": "algotruneman",
+      "license": "Public Domain",
+      "modified": true,
+      "sanitized": true,
+      "originalSvgSha256": "9dc223658ae5fe8c2f53158f6e31baf998c54c844643d30b58087cea42662eb7",
+      "sourceFile": "ventilation-electric-motor.svg",
+      "svg": "library/assets/modules/motores/openclipart/ventilation-electric-motor.svg",
+      "style": "monochrome",
+      "viewBox": "0 0 91.6321 54.6231",
+      "dimensions": {
+        "width": 91.6321,
+        "height": 54.6231
+      },
+      "originalAspectRatio": 1.6775338638781028,
+      "defaultSize": {
+        "width": 96,
+        "height": 57
+      },
+      "capabilities": {
+        "fill": true,
+        "stroke": true,
+        "opacity": true,
+        "rotate": true,
+        "blink": true,
+        "multistateReady": true,
+        "animatedParts": [
+          "fan"
+        ]
+      }
+    },
+    {
+      "id": "openclipart:stepper-motor",
+      "name": "Motor de passo",
+      "originalName": "Stepper motor",
+      "category": "Motores",
+      "keywords": [
+        "motor",
+        "motor elétrico",
+        "passo",
+        "acionamento",
+        "eixo",
+        "indústria"
+      ],
+      "synonyms": [
+        "motor passo a passo",
+        "stepper"
+      ],
+      "source": "openclipart",
+      "library": "Openclipart",
+      "sourceUrl": "https://openclipart.org/detail/201458/stepper-motor",
+      "downloadUrl": "https://openclipart.org/download/201458",
+      "author": "cyberscooty",
+      "license": "Public Domain",
+      "modified": true,
+      "sanitized": true,
+      "originalSvgSha256": "68047136d631c6a443146014fb5bd41a64c968308bd3bfe2f24346e04304d277",
+      "sourceFile": "stepper-motor.svg",
+      "svg": "library/assets/modules/motores/openclipart/stepper-motor.svg",
+      "style": "monochrome",
+      "viewBox": "0 0 277.41 242.26",
+      "dimensions": {
+        "width": 277.41,
+        "height": 242.26
+      },
+      "originalAspectRatio": 1.1450920498637829,
+      "defaultSize": {
+        "width": 96,
+        "height": 84
+      },
+      "capabilities": {
+        "fill": true,
+        "stroke": true,
+        "opacity": true,
+        "rotate": true,
+        "blink": true,
+        "multistateReady": true,
+        "animatedParts": [
+          "shaft"
+        ]
+      }
+    },
+    {
+      "id": "openclipart:vibrating-motor",
+      "name": "Motor vibratório",
+      "originalName": "Vibrating Motor",
+      "category": "Motores",
+      "keywords": [
+        "motor",
+        "motor elétrico",
+        "vibratório",
+        "máquina",
+        "acionamento",
+        "indústria"
+      ],
+      "synonyms": [
+        "motor vibrador",
+        "vibrador industrial"
+      ],
+      "source": "openclipart",
+      "library": "Openclipart",
+      "sourceUrl": "https://openclipart.org/detail/267434/vibrating-motor",
+      "downloadUrl": "https://openclipart.org/download/267434",
+      "author": "Inventoteca",
+      "license": "Public Domain",
+      "modified": true,
+      "sanitized": true,
+      "originalSvgSha256": "c057dad48ca14fab7eb0a781cb9587134debf035fdb40b95a6cdee3d3c114dd9",
+      "sourceFile": "vibrating-motor.svg",
+      "svg": "library/assets/modules/motores/openclipart/vibrating-motor.svg",
+      "style": "monochrome",
+      "viewBox": "0 0 177.1 254.7",
+      "dimensions": {
+        "width": 177.1,
+        "height": 254.7
+      },
+      "originalAspectRatio": 0.6953278366705928,
+      "defaultSize": {
+        "width": 67,
+        "height": 96
+      },
+      "capabilities": {
+        "fill": true,
+        "stroke": true,
+        "opacity": true,
+        "rotate": true,
+        "blink": true,
+        "multistateReady": true,
+        "animatedParts": [
+          "active-part"
+        ]
+      }
+    },
+    {
+      "id": "openclipart:three-phase-motor",
+      "name": "Motor elétrico trifásico",
+      "originalName": "A simple representation of a electric 3-phase motor",
+      "category": "Motores",
+      "keywords": [
+        "motor",
+        "motor elétrico",
+        "trifásico",
+        "acionamento",
+        "máquina",
+        "indústria"
+      ],
+      "synonyms": [
+        "motor de três fases",
+        "motor 3 fases"
+      ],
+      "source": "openclipart",
+      "library": "Openclipart",
+      "sourceUrl": "https://openclipart.org/detail/141613/a-simple-representation-of-a-electric-3phase-motor",
+      "downloadUrl": "https://openclipart.org/download/141613",
+      "author": "Eypros",
+      "license": "Public Domain",
+      "modified": true,
+      "sanitized": true,
+      "originalSvgSha256": "402d8ad19228282543fc3e5e1d10c20fca2c623f60665a4b46902dc809a1b535",
+      "sourceFile": "three-phase-motor.svg",
+      "svg": "library/assets/modules/motores/openclipart/three-phase-motor.svg",
+      "style": "monochrome",
+      "viewBox": "0 0 744.09 1052.4",
+      "dimensions": {
+        "width": 744.09,
+        "height": 1052.4
+      },
+      "originalAspectRatio": 0.7070410490307868,
+      "defaultSize": {
+        "width": 68,
+        "height": 96
+      },
+      "capabilities": {
+        "fill": true,
+        "stroke": true,
+        "opacity": true,
+        "rotate": true,
+        "blink": true,
+        "multistateReady": true,
+        "animatedParts": [
+          "shaft"
+        ]
+      }
+    }
+  ]
+}

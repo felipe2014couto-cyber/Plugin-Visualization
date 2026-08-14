@@ -55,7 +55,7 @@ import {
   updateRectangleProperties,
   type RectangleElement,
 } from '../../createRectangle';
-import { createPiPointBinding, isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBinding';
+import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
@@ -73,7 +73,6 @@ import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import type { TrendCursor } from '../../runtime/trendCursor';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
-import type { PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
 import { updateMultistateConfig, type MultistateConfig } from '../../multistate';
 import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay } from '../../displayTransfer';
@@ -436,10 +435,9 @@ export function DisplayEditor({
     if (mode !== 'edit' || !onChangeRef.current) {
       return;
     }
-    const librarySymbolId = Array.from(event.dataTransfer.types).includes(LIBRARY_SYMBOL_DRAG_MIME)
-      ? parseLibrarySymbolDragData(event.dataTransfer.getData(LIBRARY_SYMBOL_DRAG_MIME))
-      : undefined;
-    if (librarySymbolId) {
+    // During dragover browsers expose the MIME types but protect the payload;
+    // read the symbol data only in drop, where getData is available.
+    if (Array.from(event.dataTransfer.types).includes(LIBRARY_SYMBOL_DRAG_MIME)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
       return;
