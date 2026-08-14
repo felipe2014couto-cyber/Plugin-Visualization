@@ -16,6 +16,8 @@ import type { DisplayElement } from './displayElement';
 import type { PiPointBinding } from '../pi/piPointBinding';
 import { DEFAULT_TEXT_PROPERTIES, TEXT_TYPE } from './createText';
 import { IMAGE_TYPE } from './createImage';
+import { LIBRARY_SYMBOL_TYPE } from './createLibrarySymbol';
+import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../library';
 
 export const DISPLAY_EXPORT_FORMAT = 'pims-vision-display';
 export const DISPLAY_EXPORT_VERSION = 1;
@@ -111,6 +113,22 @@ function portableElement(input: unknown): DisplayElement {
         throw new DisplayImportError('Imagem de Display inválida.');
       }
       return { ...base, type: IMAGE_TYPE, properties: { src: input.properties.src, alt: typeof input.properties.alt === 'string' ? input.properties.alt : 'Imagem' } };
+    case LIBRARY_SYMBOL_TYPE: {
+      const symbol = typeof input.properties.symbolId === 'string' ? findIndustrialSymbol(input.properties.symbolId) : undefined;
+      if (!symbol) {
+        throw new DisplayImportError('Símbolo da Library inválido.');
+      }
+      return {
+        ...base,
+        type: LIBRARY_SYMBOL_TYPE,
+        properties: {
+          symbolId: symbol.id,
+          name: symbol.name,
+          src: getIndustrialSymbolAssetUrl(symbol),
+          viewBox: symbol.viewBox,
+        },
+      };
+    }
     case TEXT_TYPE:
       return { ...base, type: TEXT_TYPE, properties: {
         text: typeof input.properties.text === 'string' ? input.properties.text : DEFAULT_TEXT_PROPERTIES.text,

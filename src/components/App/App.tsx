@@ -25,6 +25,7 @@ import { PiPointSearch } from '../../pi/PiPointSearch';
 import { isStatePiPointBinding } from '../../pi/piPointBinding';
 import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
+import { LibraryPanel } from '../Library/LibraryPanel';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
@@ -41,6 +42,7 @@ export type VisualizationTheme = 'dark' | 'light';
 export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
 
 type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
+type AssetsTab = 'assets' | 'library';
 
 function getInitialTheme(): VisualizationTheme {
   try {
@@ -62,6 +64,7 @@ export function App() {
   const [dropSymbolType, setDropSymbolType] = useState<PiPointDropSymbolType>('trend');
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
+  const [assetsTab, setAssetsTab] = useState<AssetsTab>('assets');
   const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
   const [dashboardUid, setDashboardUid] = useState<string>();
   const [folders, setFolders] = useState<GrafanaDashboardFolder[]>([]);
@@ -363,7 +366,7 @@ export function App() {
         <aside
           className={isAssetsPanelOpen ? styles.assetsPanel : styles.assetsPanelCollapsed}
           data-testid="pims-vision-assets-panel"
-          aria-label="Ativos"
+          aria-label="Ativos e Library"
         >
           <div className={styles.assetsRail} aria-label="Navegação de ativos">
             <button
@@ -380,19 +383,40 @@ export function App() {
           </div>
           {isAssetsPanelOpen && (
             <div className={styles.assetsBody}>
-              <div className={styles.assetsHeader}>
-                <span className={styles.assetsIcon} aria-hidden="true"><CubeIcon /></span>
-                <span>Ativos</span>
+              <div className={styles.assetsHeader} role="tablist" aria-label="Módulos do painel">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={assetsTab === 'assets'}
+                  className={assetsTab === 'assets' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
+                  data-testid="pims-vision-assets-tab"
+                  onClick={() => setAssetsTab('assets')}
+                ><span className={styles.assetsIcon} aria-hidden="true"><CubeIcon /></span><span>Ativos</span></button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={assetsTab === 'library'}
+                  className={assetsTab === 'library' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
+                  data-testid="pims-vision-library-tab"
+                  onClick={() => setAssetsTab('library')}
+                ><span className={styles.assetsIcon} aria-hidden="true"><FactoryIcon /></span><span>Library</span></button>
               </div>
-              <div className={styles.assetsSectionLabel}>PI System</div>
-              {editorMode === 'edit' ? (
-                <PiPointSearch
-                  enabled={piConnection.status === 'connected'}
-                  onSelect={setSelectedPiPoint}
-                />
-              ) : (
-                <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
-              )}
+              <div className={styles.assetsContent}>
+                <div className={styles.assetsPiSearch}>
+                  <div className={styles.assetsSectionLabel}>PI System</div>
+                  {editorMode === 'edit' ? (
+                    <PiPointSearch
+                      enabled={piConnection.status === 'connected'}
+                      onSelect={setSelectedPiPoint}
+                    />
+                  ) : (
+                    <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
+                  )}
+                </div>
+                <div className={styles.libraryTabContent} hidden={assetsTab !== 'library'}>
+                  <LibraryPanel />
+                </div>
+              </div>
             </div>
           )}
         </aside>
@@ -962,6 +986,24 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border-radius: 14px;
     background: var(--panel-bg);
   `,
+  assetsContent: css`
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  `,
+  assetsPiSearch: css`
+    flex: 0 0 auto;
+    min-height: 0;
+  `,
+  libraryTabContent: css`
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    &[hidden] { display: none; }
+  `,
   assetsHeader: css`
     height: 72px;
     box-sizing: border-box;
@@ -974,6 +1016,39 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border-bottom: 1px solid var(--border-color);
     font-size: 18px;
     font-weight: ${theme.typography.fontWeightMedium};
+  `,
+  assetsHeaderTab: css`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    min-width: 0;
+    flex: 1;
+    gap: ${theme.spacing(1)};
+    padding: 0 ${theme.spacing(1)};
+    border: 0;
+    border-bottom: 3px solid transparent;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    &:hover { color: var(--assets-header-text); background: var(--selection-bg); }
+  `,
+  assetsHeaderTabActive: css`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    min-width: 0;
+    flex: 1;
+    gap: ${theme.spacing(1)};
+    padding: 0 ${theme.spacing(1)};
+    border: 0;
+    border-bottom: 3px solid var(--accent);
+    color: var(--assets-header-text);
+    background: var(--selection-bg);
+    cursor: pointer;
+    font: inherit;
   `,
   assetsIcon: css`
     display: inline-flex;
@@ -1040,6 +1115,13 @@ function CubeIcon() {
   return <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
     <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z" />
     <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
+  </svg>;
+}
+
+function FactoryIcon() {
+  return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 20V9l6 3V8l6 3V5h4v15" />
+    <path d="M2 20h20M6 16v4M11 16v4M16 16v4M19 8h2v12" />
   </svg>;
 }
 

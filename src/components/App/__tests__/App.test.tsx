@@ -139,4 +139,20 @@ describe('App', () => {
     expect(screen.getByTestId('display-editor')).toBeInTheDocument();
     expect(screen.getByTestId('time-range-bar')).toBeInTheDocument();
   });
+
+  it('troca para Library sem apagar a pesquisa do módulo', async () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('pims-vision-library-tab'));
+    expect(screen.getByTestId('pims-vision-library-tab')).toHaveAttribute('aria-selected', 'true');
+    fireEvent.change(screen.getByTestId('library-symbol-search'), { target: { value: 'PV003B' } });
+    fireEvent.click(screen.getByTestId('pims-vision-assets-tab'));
+    expect(screen.getByTestId('pims-vision-assets-tab')).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByTestId('pims-vision-library-tab'));
+
+    expect(screen.getByTestId('library-symbol-search')).toHaveValue('PV003B');
+  });
 });
