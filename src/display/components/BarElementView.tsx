@@ -15,22 +15,23 @@ export interface BarElementViewProps {
 export const BarElementView = React.memo(function BarElementView({ element, runtimeState, databaseScale }: BarElementViewProps) {
   const options = element.properties;
   const binding = options.binding;
+  const barOptions = getBarOptions(element.properties);
   const value = getNumericValue(runtimeState);
   const minimum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero : options.minimum;
   const maximum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : options.maximum;
   const ratio = value === undefined ? undefined : getScaleRatio(value, minimum, maximum);
   const horizontal = options.orientation === 'horizontal';
-  const leftPadding = 78;
+  const borderClearance = Math.max(0, barOptions.borderWidth);
+  const leftPadding = 78 + borderClearance * 2;
   const rightPadding = 12;
   const plotX = element.x + leftPadding;
-  const plotY = element.y + 42;
+  const plotY = element.y + 44 + borderClearance * 2;
   const plotWidth = Math.max(1, element.width - leftPadding - rightPadding);
-  // Reserve extra space below the bar so the value label does not touch the fill.
-  const plotHeight = Math.max(1, element.height - 78);
+  // Keep title, scale and value clear of thick borders.
+  const plotHeight = Math.max(1, element.height - (90 + borderClearance * 4));
   const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, runtimeState, value, options.decimals);
-  const barOptions = getBarOptions(element.properties);
   const activeColor = getMultistateColor(value, options.multistate, barOptions.fillColor);
   const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
     ? barOptions.customTagName
@@ -65,7 +66,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
       {options.showScale !== false && !horizontal && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
         const valueAtTick = minimum + ((maximum - minimum) * index) / 8;
         const y = plotY + plotHeight - (plotHeight * index) / 8;
-        return <g key={`bar-scale-${index}`} pointerEvents="none"><line x1={plotX - 4} y1={y} x2={plotX} y2={y} stroke="var(--text-primary)" /><text x={plotX - 8} y={y + 6} textAnchor="end" fill="var(--text-primary)" fontSize={18} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
+        return <g key={`bar-scale-${index}`} pointerEvents="none"><line x1={plotX - 4 - borderClearance / 2} y1={y} x2={plotX - borderClearance / 2} y2={y} stroke="var(--text-primary)" /><text x={plotX - 14 - borderClearance} y={y + 6} textAnchor="end" fill="var(--text-primary)" fontSize={18} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
       })}
       {ratio !== undefined && (
         <rect
