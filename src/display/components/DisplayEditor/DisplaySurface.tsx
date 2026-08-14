@@ -22,6 +22,7 @@ import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, typ
 import { getMultistateColor } from '../../multistate';
 import { TEXT_TYPE, type TextElement } from '../../createText';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
+import { LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
 import {
   getTrendSeriesConsumerId,
   useTrendRuntime,
@@ -616,6 +617,10 @@ export function DisplaySurface({
         if (element.type === IMAGE_TYPE) {
           const image = element as ImageElement;
           return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }} />;
+        }
+        if (element.type === LIBRARY_SYMBOL_TYPE) {
+          const symbol = element as LibrarySymbolElement;
+          return <image key={element.id} href={symbol.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }} />;
         }
         return (
           <rect
