@@ -14,6 +14,8 @@ export interface BarProperties extends Record<string, unknown> {
   maximum: number;
   showValue: boolean;
   showTagName: boolean;
+  tagNameMode?: 'tag' | 'custom';
+  customTagName?: string;
   decimals: number | null;
   orientation: BarOrientation;
   multistate?: MultistateConfig;
@@ -77,19 +79,21 @@ export function appendBar(document: DisplayDocument, element: BarElement): Displ
   return { ...document, elements: [...document.elements, element] };
 }
 
-export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation; scaleMode: 'custom' | 'database'; showScale: boolean } {
+export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation; scaleMode: 'custom' | 'database'; showScale: boolean; tagNameMode: 'tag' | 'custom'; customTagName: string } {
   return {
     ...normalizeScaleOptions(properties),
     orientation: properties.orientation === 'horizontal' ? 'horizontal' : 'vertical',
     scaleMode: properties.scaleMode === 'custom' ? 'custom' : 'database',
     showScale: properties.showScale !== false,
+    tagNameMode: properties.tagNameMode === 'custom' ? 'custom' : 'tag',
+    customTagName: typeof properties.customTagName === 'string' ? properties.customTagName : '',
   };
 }
 
 export function updateBarOptions(
   document: DisplayDocument,
   elementId: string,
-  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database'; showScale?: boolean },
+  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database'; showScale?: boolean; tagNameMode?: 'tag' | 'custom'; customTagName?: string },
 ): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => {
@@ -105,6 +109,8 @@ export function updateBarOptions(
         ...normalizeScaleOptions({ ...properties, ...patch }),
         scaleMode: patch.scaleMode === 'custom' || patch.scaleMode === 'database' ? patch.scaleMode : getBarOptions(properties).scaleMode,
         showScale: typeof patch.showScale === 'boolean' ? patch.showScale : getBarOptions(properties).showScale,
+        tagNameMode: patch.tagNameMode === 'tag' || patch.tagNameMode === 'custom' ? patch.tagNameMode : getBarOptions(properties).tagNameMode,
+        customTagName: typeof patch.customTagName === 'string' ? patch.customTagName : getBarOptions(properties).customTagName,
         orientation: patch.orientation === 'horizontal' ? 'horizontal' : patch.orientation === 'vertical' ? 'vertical' : getBarOptions(properties).orientation,
       },
     } as BarElement;

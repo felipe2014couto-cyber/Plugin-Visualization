@@ -17,6 +17,8 @@ export interface ScalePropertiesPanelProps {
   orientation?: BarOrientation;
   scaleMode?: 'custom' | 'database';
   showScale?: boolean;
+  tagNameMode?: 'tag' | 'custom';
+  customTagName?: string;
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -27,6 +29,8 @@ export interface ScalePropertiesPanelProps {
     orientation?: BarOrientation;
     scaleMode?: 'custom' | 'database';
     showScale?: boolean;
+    tagNameMode?: 'tag' | 'custom';
+    customTagName?: string;
   }) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -43,6 +47,8 @@ export function ScalePropertiesPanel({
   orientation,
   scaleMode,
   showScale = true,
+  tagNameMode = 'tag',
+  customTagName = '',
   onChange,
   multistate,
   onMultistateChange,
@@ -98,6 +104,8 @@ export function ScalePropertiesPanel({
           <span>Mostrar valor</span>
         </label>
         {kind === 'Bar' && <label className={styles.checkbox}><input type="checkbox" checked={showScale} onChange={(event) => onChange({ showScale: event.target.checked })} data-testid="bar-show-scale" /><span>Mostrar escala</span></label>}
+        {kind === 'Bar' && <label className={styles.field}><span>Nome exibido</span><select value={tagNameMode} onChange={(event) => onChange({ tagNameMode: event.target.value as 'tag' | 'custom' })} data-testid="bar-tag-name-mode"><option value="tag">Nome da tag</option><option value="custom">Personalizado</option></select></label>}
+        {kind === 'Bar' && tagNameMode === 'custom' && <label className={styles.field}><span>Nome personalizado</span><input value={customTagName} onChange={(event) => onChange({ customTagName: event.target.value })} data-testid="bar-custom-tag-name" /></label>}
         <label className={styles.checkbox}>
           <input type="checkbox" checked={showTagName} onChange={(event) => onChange({ showTagName: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-tag-name`} />
           <span>Mostrar tag</span>

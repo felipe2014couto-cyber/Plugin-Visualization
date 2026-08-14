@@ -31,6 +31,10 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, runtimeState, value, options.decimals);
   const activeColor = getMultistateColor(value, options.multistate, getBarOptions(element.properties).color);
+  const barOptions = getBarOptions(element.properties);
+  const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
+    ? barOptions.customTagName
+    : binding && isPiPointBinding(binding) ? binding.pointName : '';
 
   return (
     <g
@@ -54,7 +58,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
       />
       {binding && isPiPointBinding(binding) && options.showTagName && (
         <text x={element.x + element.width / 2} y={element.y + 18} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={12} pointerEvents="none">
-          {binding.pointName}
+          {tagLabel}
         </text>
       )}
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={3} fill="var(--border-color, rgba(255, 255, 255, 0.12))" data-testid={`bar-track-${element.id}`} pointerEvents="none" />
