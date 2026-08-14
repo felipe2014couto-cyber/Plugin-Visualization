@@ -20,7 +20,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const maximum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : options.maximum;
   const ratio = value === undefined ? undefined : getScaleRatio(value, minimum, maximum);
   const horizontal = options.orientation === 'horizontal';
-  const leftPadding = 58;
+  const leftPadding = 78;
   const rightPadding = 12;
   const plotX = element.x + leftPadding;
   const plotY = element.y + 42;
