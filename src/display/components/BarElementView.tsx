@@ -20,7 +20,8 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const plotX = element.x + padding;
   const plotY = element.y + 34;
   const plotWidth = Math.max(1, element.width - padding * 2);
-  const plotHeight = Math.max(1, element.height - 62);
+  // Reserve extra space below the bar so the value label does not touch the fill.
+  const plotHeight = Math.max(1, element.height - 78);
   const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, runtimeState, value, options.decimals);
