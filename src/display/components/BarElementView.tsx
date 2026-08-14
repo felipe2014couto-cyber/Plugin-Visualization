@@ -29,7 +29,9 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const plotY = element.y + (horizontal ? 48 : 44) + borderClearance * 2;
   const plotWidth = Math.max(1, element.width - leftPadding - rightPadding);
   // Keep title, scale and value clear of thick borders.
-  const plotHeight = Math.max(1, element.height - (horizontal ? 82 : 90) - borderClearance * 4);
+  // Horizontal scale labels live below the track, so leave enough room for the
+  // border stroke plus the tick labels instead of letting the stroke cover them.
+  const plotHeight = Math.max(1, element.height - (horizontal ? 104 : 90) - borderClearance * 4);
   const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, runtimeState, value, options.decimals);
