@@ -62,7 +62,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
           {tagLabel}
         </text>
       )}
-      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill="var(--border-color, rgba(255, 255, 255, 0.12))" data-testid={`bar-track-${element.id}`} pointerEvents="none" />
+      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill={barOptions.backgroundColor} data-testid={`bar-track-${element.id}`} pointerEvents="none" />
       {options.showScale !== false && !horizontal && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
         const valueAtTick = minimum + ((maximum - minimum) * index) / 8;
         const y = plotY + plotHeight - (plotHeight * index) / 8;

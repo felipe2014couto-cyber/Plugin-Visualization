@@ -20,6 +20,7 @@ export interface ScalePropertiesPanelProps {
   tagNameMode?: 'tag' | 'custom';
   customTagName?: string;
   fillColor?: string;
+  backgroundColor?: string;
   borderColor?: string;
   borderWidth?: number;
   onChange: (patch: {
@@ -35,6 +36,7 @@ export interface ScalePropertiesPanelProps {
     tagNameMode?: 'tag' | 'custom';
     customTagName?: string;
     fillColor?: string;
+    backgroundColor?: string;
     borderColor?: string;
     borderWidth?: number;
   }) => void;
@@ -56,6 +58,7 @@ export function ScalePropertiesPanel({
   tagNameMode = 'tag',
   customTagName = '',
   fillColor = color,
+  backgroundColor = '#2d3b4f',
   borderColor = '#ffffff',
   borderWidth = 1,
   onChange,
@@ -70,10 +73,11 @@ export function ScalePropertiesPanel({
       </div>
       <div className={styles.fields}>
         <label className={styles.field}>
-          <span>Cor</span>
+          <span>{kind === 'Bar' ? 'Cor da barra' : 'Cor'}</span>
           <input type="color" value={kind === 'Bar' ? fillColor : color} onChange={(event) => onChange(kind === 'Bar' ? { fillColor: event.target.value, color: event.target.value } : { color: event.target.value })} data-testid={`${kind.toLowerCase()}-color`} />
         </label>
         {kind === 'Bar' && <>
+          <label className={styles.field}><span>Cor de preenchimento</span><input type="color" value={backgroundColor} onChange={(event) => onChange({ backgroundColor: event.target.value })} data-testid="bar-background-color" /></label>
           <label className={styles.field}><span>Cor do contorno</span><input type="color" value={borderColor.startsWith('#') ? borderColor : '#ffffff'} onChange={(event) => onChange({ borderColor: event.target.value })} data-testid="bar-border-color" /></label>
           <label className={styles.field}><span>Espessura do contorno ({borderWidth})</span><input type="range" min="0" max="8" step="1" value={borderWidth} onChange={(event) => onChange({ borderWidth: Number(event.target.value) })} data-testid="bar-border-width" /></label>
         </>}
