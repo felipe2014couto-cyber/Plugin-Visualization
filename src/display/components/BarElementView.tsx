@@ -61,7 +61,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         pointerEvents="all"
       />
       {binding && isPiPointBinding(binding) && options.showTagName && (
-        <text x={element.x + element.width / 2} y={element.y + (horizontal ? 16 : 22)} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={horizontal ? 14 : 18} fontWeight={500} pointerEvents="none">
+        <text x={element.x + element.width / 2} y={element.y + (horizontal ? 16 : 22)} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
           {tagLabel}
         </text>
       )}
