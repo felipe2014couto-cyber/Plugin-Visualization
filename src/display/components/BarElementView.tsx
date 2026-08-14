@@ -30,8 +30,8 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, runtimeState, value, options.decimals);
-  const activeColor = getMultistateColor(value, options.multistate, getBarOptions(element.properties).color);
   const barOptions = getBarOptions(element.properties);
+  const activeColor = getMultistateColor(value, options.multistate, barOptions.fillColor);
   const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
     ? barOptions.customTagName
     : binding && isPiPointBinding(binding) ? binding.pointName : '';
@@ -50,8 +50,8 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         height={element.height}
         rx={14}
         fill="var(--element-bg, rgba(255, 255, 255, 0.06))"
-        stroke="var(--element-border, rgba(255, 255, 255, 0.35))"
-        strokeWidth={1}
+        stroke={barOptions.borderColor}
+        strokeWidth={barOptions.borderWidth}
         data-testid={`bar-background-${element.id}`}
         data-element-id={element.id}
         pointerEvents="all"
@@ -74,7 +74,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
           width={fillWidth}
           height={fillHeight}
           rx={3}
-          fill={activeColor}
+          fill={activeColor || barOptions.fillColor}
           data-testid={`bar-fill-${element.id}`}
           pointerEvents="none"
         />

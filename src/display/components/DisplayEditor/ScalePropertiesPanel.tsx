@@ -19,6 +19,9 @@ export interface ScalePropertiesPanelProps {
   showScale?: boolean;
   tagNameMode?: 'tag' | 'custom';
   customTagName?: string;
+  fillColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -31,6 +34,9 @@ export interface ScalePropertiesPanelProps {
     showScale?: boolean;
     tagNameMode?: 'tag' | 'custom';
     customTagName?: string;
+    fillColor?: string;
+    borderColor?: string;
+    borderWidth?: number;
   }) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -49,6 +55,9 @@ export function ScalePropertiesPanel({
   showScale = true,
   tagNameMode = 'tag',
   customTagName = '',
+  fillColor = color,
+  borderColor = '#ffffff',
+  borderWidth = 1,
   onChange,
   multistate,
   onMultistateChange,
@@ -62,8 +71,12 @@ export function ScalePropertiesPanel({
       <div className={styles.fields}>
         <label className={styles.field}>
           <span>Cor</span>
-          <input type="color" value={color} onChange={(event) => onChange({ color: event.target.value })} data-testid={`${kind.toLowerCase()}-color`} />
+          <input type="color" value={kind === 'Bar' ? fillColor : color} onChange={(event) => onChange(kind === 'Bar' ? { fillColor: event.target.value, color: event.target.value } : { color: event.target.value })} data-testid={`${kind.toLowerCase()}-color`} />
         </label>
+        {kind === 'Bar' && <>
+          <label className={styles.field}><span>Cor do contorno</span><input type="color" value={borderColor.startsWith('#') ? borderColor : '#ffffff'} onChange={(event) => onChange({ borderColor: event.target.value })} data-testid="bar-border-color" /></label>
+          <label className={styles.field}><span>Espessura do contorno ({borderWidth})</span><input type="range" min="0" max="8" step="1" value={borderWidth} onChange={(event) => onChange({ borderWidth: Number(event.target.value) })} data-testid="bar-border-width" /></label>
+        </>}
         {(kind !== 'Bar' || scaleMode === 'custom') && <>
           <label className={styles.field}>
             <span>Mínimo</span>
