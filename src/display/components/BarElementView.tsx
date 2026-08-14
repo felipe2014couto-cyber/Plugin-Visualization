@@ -59,12 +59,12 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         pointerEvents="all"
       />
       {binding && isPiPointBinding(binding) && options.showTagName && (
-        <text x={element.x + element.width / 2} y={element.y + 22} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={18} fontWeight={500} pointerEvents="none">
+        <text x={element.x + element.width / 2} y={element.y + (horizontal ? 16 : 22)} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={horizontal ? 14 : 18} fontWeight={500} pointerEvents="none">
           {tagLabel}
         </text>
       )}
       {horizontal && (
-        <text x={element.x + element.width / 2} y={element.y + 40} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(14, Math.min(24, element.height * 0.14))} fontWeight={500} pointerEvents="none">
+        <text x={element.x + element.width / 2} y={element.y + 42} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
           {options.showValue ? valueText : ''}
         </text>
       )}
