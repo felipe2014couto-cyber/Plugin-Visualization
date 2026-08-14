@@ -17,6 +17,7 @@ export interface BarProperties extends Record<string, unknown> {
   decimals: number | null;
   orientation: BarOrientation;
   multistate?: MultistateConfig;
+  scaleMode?: 'custom' | 'database';
 }
 
 export type BarElement = DisplayElement<typeof BAR_TYPE, BarProperties>;
@@ -74,10 +75,11 @@ export function appendBar(document: DisplayDocument, element: BarElement): Displ
   return { ...document, elements: [...document.elements, element] };
 }
 
-export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation } {
+export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation; scaleMode: 'custom' | 'database' } {
   return {
     ...normalizeScaleOptions(properties),
     orientation: properties.orientation === 'horizontal' ? 'horizontal' : 'vertical',
+    scaleMode: properties.scaleMode === 'database' ? 'database' : 'custom',
   };
 }
 

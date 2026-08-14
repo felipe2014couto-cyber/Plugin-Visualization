@@ -16,6 +16,7 @@ import {
   type TrendSeriesViewState,
 } from '../TrendElementView';
 import type { PiPointValue, PiPointValueResult, PiTrendSeriesResult } from '../../../pi/piDataSource';
+import type { PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { DisplayTimeRange } from '../../../time/timeRange';
 import { isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBinding';
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
@@ -77,6 +78,7 @@ export interface DisplaySurfaceProps {
   onPointerMove: (pointer: Point) => void;
   onPointerEnd: () => void;
   loadValue?: (binding: PiPointBinding) => Promise<PiPointValue>;
+  loadPiPointDatabaseLimits?: (binding: PiPointBinding) => Promise<PiPointDatabaseLimits>;
   loadValues?: LoadCurrentValues;
   loadTrend?: LoadTrendSeries;
   trendRefreshKey?: string;
@@ -127,6 +129,7 @@ export function DisplaySurface({
   onPointerMove,
   onPointerEnd,
   loadValue,
+  loadPiPointDatabaseLimits,
   loadValues,
   loadTrend,
   trendRefreshKey,
@@ -143,6 +146,14 @@ export function DisplaySurface({
   const [cursorsByTrend, setCursorsByTrend] = useState<Record<string, TrendCursor[]>>({});
   const [selectedCursor, setSelectedCursor] = useState<CursorSelection | null>(null);
   const [cursorDrag, setCursorDrag] = useState<CursorDrag | null>(null);
+  const [databaseScales, setDatabaseScales] = useState<Record<string, PiPointDatabaseLimits>>({});
+  useEffect(() => {
+    if (!loadPiPointDatabaseLimits) return;
+    const bars = elements.filter((element): element is BarElement => element.type === BAR_TYPE && element.properties.scaleMode === 'database' && isPiPointBinding(element.properties.binding));
+    void Promise.all(bars.map(async (bar) => {
+      try { return [bar.id, await loadPiPointDatabaseLimits(bar.properties.binding as PiPointBinding)] as const; } catch { return null; }
+    })).then((results) => setDatabaseScales(Object.fromEntries(results.filter((item): item is readonly [string, PiPointDatabaseLimits] => item !== null))));
+  }, [elements, loadPiPointDatabaseLimits]);
   const [selectionBox, setSelectionBox] = useState<{ start: Point; current: Point } | null>(null);
   const multiSelectionRef = useRef(false);
 
@@ -579,6 +590,7 @@ export function DisplaySurface({
               key={element.id}
               element={element as unknown as BarElement}
               runtimeState={runtimeStates.get(element.id)}
+              databaseScale={databaseScales[element.id]}
             />
           );
         }

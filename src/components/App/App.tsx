@@ -11,6 +11,7 @@ import {
 import {
   checkPiConnection,
   getPiPointCurrentValue,
+  getPiPointDatabaseLimits,
   getPiPointsCurrentValues,
   getPiTrendsHistoryForRange,
   getPiTrendsPlotDataForRange,
@@ -427,6 +428,7 @@ export function App() {
             onModeChange={setEditorMode}
             selectedPiPoint={selectedPiPoint}
             loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
+            loadPiPointDatabaseLimits={hasPiConnection ? getPiPointDatabaseLimits : undefined}
             loadValues={hasPiConnection ? getPiPointsCurrentValues : undefined}
             loadTrend={hasPiConnection ? loadTrend : undefined}
             loadRecordedTrend={hasPiConnection ? loadTrend : undefined}

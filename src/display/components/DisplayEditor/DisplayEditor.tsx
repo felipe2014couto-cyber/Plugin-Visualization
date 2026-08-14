@@ -73,6 +73,7 @@ import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import type { TrendCursor } from '../../runtime/trendCursor';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
+import type { PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
 import { updateMultistateConfig, type MultistateConfig } from '../../multistate';
 import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay } from '../../displayTransfer';
@@ -96,6 +97,7 @@ export interface DisplayEditorProps {
   onModeChange?: (mode: DisplayEditorMode) => void;
   selectedPiPoint?: PiPointSearchResult | null;
   loadValue?: (binding: PiPointBinding) => Promise<PiPointValue>;
+  loadPiPointDatabaseLimits?: (binding: PiPointBinding) => Promise<PiPointDatabaseLimits>;
   loadValues?: LoadCurrentValues;
   loadTrend?: LoadTrendSeries;
   loadRecordedTrend?: LoadTrendSeries;
@@ -142,6 +144,7 @@ export function DisplayEditor({
   onModeChange,
   selectedPiPoint,
   loadValue,
+  loadPiPointDatabaseLimits,
   loadValues,
   loadTrend,
   loadRecordedTrend,
@@ -924,6 +927,7 @@ export function DisplayEditor({
             onPointerMove={handlePointerMove}
             onPointerEnd={handlePointerEnd}
             loadValue={loadValue}
+            loadPiPointDatabaseLimits={loadPiPointDatabaseLimits}
             loadValues={loadValues}
             loadTrend={loadTrend}
             trendRefreshKey={trendRefreshKey}

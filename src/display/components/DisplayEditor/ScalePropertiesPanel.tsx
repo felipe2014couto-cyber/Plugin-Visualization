@@ -15,6 +15,7 @@ export interface ScalePropertiesPanelProps {
   decimals: number | null;
   color: string;
   orientation?: BarOrientation;
+  scaleMode?: 'custom' | 'database';
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -23,6 +24,7 @@ export interface ScalePropertiesPanelProps {
     decimals?: number | null;
     color?: string;
     orientation?: BarOrientation;
+    scaleMode?: 'custom' | 'database';
   }) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -37,6 +39,7 @@ export function ScalePropertiesPanel({
   decimals,
   color,
   orientation,
+  scaleMode,
   onChange,
   multistate,
   onMultistateChange,
@@ -67,6 +70,15 @@ export function ScalePropertiesPanel({
             {[0, 1, 2, 3, 4, 5, 6].map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
         </label>
+        {kind === 'Bar' && (
+          <label className={styles.field}>
+            <span>Intervalo de escala</span>
+            <select value={scaleMode ?? 'custom'} onChange={(event) => onChange({ scaleMode: event.target.value as 'custom' | 'database' })} data-testid="bar-scale-mode">
+              <option value="custom">Personalizado</option>
+              <option value="database">Limites do banco de dados</option>
+            </select>
+          </label>
+        )}
         {kind === 'Bar' && (
           <label className={styles.field}>
             <span>Orientação</span>

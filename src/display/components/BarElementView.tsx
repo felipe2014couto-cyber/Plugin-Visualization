@@ -4,17 +4,21 @@ import { getBarOptions, type BarElement } from '../createBar';
 import { formatScaleValue, getScaleRatio } from '../scaleOptions';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
 import { getMultistateColor } from '../multistate';
+import type { PiPointDatabaseLimits } from '../../pi/piPointBinding';
 
 export interface BarElementViewProps {
   element: BarElement;
   runtimeState?: ValueRuntimeState;
+  databaseScale?: PiPointDatabaseLimits;
 }
 
-export const BarElementView = React.memo(function BarElementView({ element, runtimeState }: BarElementViewProps) {
+export const BarElementView = React.memo(function BarElementView({ element, runtimeState, databaseScale }: BarElementViewProps) {
   const options = element.properties;
   const binding = options.binding;
   const value = getNumericValue(runtimeState);
-  const ratio = value === undefined ? undefined : getScaleRatio(value, options.minimum, options.maximum);
+  const minimum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero : options.minimum;
+  const maximum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : options.maximum;
+  const ratio = value === undefined ? undefined : getScaleRatio(value, minimum, maximum);
   const horizontal = options.orientation === 'horizontal';
   const padding = 12;
   const plotX = element.x + padding;

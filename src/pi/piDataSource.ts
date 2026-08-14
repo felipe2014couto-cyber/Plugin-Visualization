@@ -10,7 +10,7 @@ import {
 } from '@grafana/data';
 import { getDataSourceSrv, type DataSourceSrv } from '@grafana/runtime';
 import { firstValueFrom, type Observable } from 'rxjs';
-import type { PiPointBinding } from './piPointBinding';
+import type { PiPointBinding, PiPointDatabaseLimits } from './piPointBinding';
 import {
   DATA_QUERY_MAX_CONCURRENT_BATCHES,
   DATA_QUERY_MAX_TARGETS,
@@ -167,6 +167,22 @@ export async function getPiPointCurrentValue(
     throw result?.error ?? new Error('PI Point sem valor atual');
   }
   return result.value;
+}
+
+export async function getPiPointDatabaseLimits(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
+): Promise<PiPointDatabaseLimits> {
+  const dataSource = resolvePiDataSource(dataSourceSrv);
+  if (!dataSource) throw new Error('PI Data Source não configurada');
+  const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
+  if (typeof instance.metricFindQuery !== 'function') throw new Error('A Data Source PI não expõe metadados de PI Points');
+  const points = await instance.metricFindQuery({ path: binding.serverPath, pointName: binding.pointName, type: 'pipoint', webId: binding.webId }, { isPiPoint: true });
+  const point = points[0];
+  const zero = getMetricNumber(point, 'Zero');
+  const span = getMetricNumber(point, 'Span');
+  if (zero === undefined || span === undefined || span <= 0) throw new Error('PI Point sem Zero/Span válidos');
+  return { zero, span };
 }
 
 export async function getPiPointsCurrentValues(
@@ -842,6 +858,13 @@ function getMetricField(value: MetricFindValue | undefined, field: 'text' | 'Web
   }
   const fieldValue = (value as MetricFindValue & Record<string, unknown>)[field];
   return typeof fieldValue === 'string' && fieldValue.length > 0 ? fieldValue : undefined;
+}
+
+function getMetricNumber(value: MetricFindValue | undefined, field: string): number | undefined {
+  if (!value) return undefined;
+  const candidate = (value as MetricFindValue & Record<string, unknown>)[field];
+  const number = typeof candidate === 'number' ? candidate : typeof candidate === 'string' ? Number(candidate) : NaN;
+  return Number.isFinite(number) ? number : undefined;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

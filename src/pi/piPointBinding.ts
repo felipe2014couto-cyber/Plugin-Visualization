@@ -6,6 +6,11 @@ export interface PiPointBinding {
   pointType?: string;
 }
 
+export interface PiPointDatabaseLimits {
+  zero: number;
+  span: number;
+}
+
 export interface PiPointIdentityInput {
   dataSourceUid?: string;
   name?: string;

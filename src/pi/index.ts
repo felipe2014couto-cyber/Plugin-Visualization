@@ -4,6 +4,7 @@ export {
   resolvePiDataSource,
   searchPiPoints,
   getPiPointCurrentValue,
+  getPiPointDatabaseLimits,
   getPiPointsCurrentValues,
   getPiTrendHistory,
   getPiTrendsHistory,
@@ -43,4 +44,4 @@ export {
   DATA_QUERY_MAX_TARGETS,
 } from './dataQueryPolicy';
 export { createPiPointBinding, isPiPointBinding } from './piPointBinding';
-export type { PiPointBinding } from './piPointBinding';
+export type { PiPointBinding, PiPointDatabaseLimits } from './piPointBinding';
