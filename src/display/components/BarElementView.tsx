@@ -20,10 +20,10 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const maximum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : options.maximum;
   const ratio = value === undefined ? undefined : getScaleRatio(value, minimum, maximum);
   const horizontal = options.orientation === 'horizontal';
-  const leftPadding = 42;
+  const leftPadding = 58;
   const rightPadding = 12;
   const plotX = element.x + leftPadding;
-  const plotY = element.y + 34;
+  const plotY = element.y + 42;
   const plotWidth = Math.max(1, element.width - leftPadding - rightPadding);
   // Reserve extra space below the bar so the value label does not touch the fill.
   const plotHeight = Math.max(1, element.height - 78);
