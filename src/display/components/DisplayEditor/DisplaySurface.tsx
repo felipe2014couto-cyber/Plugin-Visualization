@@ -4,7 +4,7 @@ import type { DisplayDocument } from '../../displayDocument';
 import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE, type RectangleElement } from '../../createRectangle';
 import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
-import { BAR_TYPE, type BarElement } from '../../createBar';
+import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
 import { GAUGE_TYPE, type GaugeElement } from '../../createGauge';
 import { ValueElementView } from '../ValueElementView';
 import { GaugeElementView } from '../GaugeElementView';
@@ -149,7 +149,7 @@ export function DisplaySurface({
   const [databaseScales, setDatabaseScales] = useState<Record<string, PiPointDatabaseLimits>>({});
   useEffect(() => {
     if (!loadPiPointDatabaseLimits) return;
-    const bars = elements.filter((element): element is BarElement => element.type === BAR_TYPE && element.properties.scaleMode === 'database' && isPiPointBinding(element.properties.binding));
+    const bars = elements.filter((element): element is BarElement => element.type === BAR_TYPE && getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding));
     void Promise.all(bars.map(async (bar) => {
       try { return [bar.id, await loadPiPointDatabaseLimits(bar.properties.binding as PiPointBinding)] as const; } catch { return null; }
     })).then((results) => setDatabaseScales(Object.fromEntries(results.filter((item): item is readonly [string, PiPointDatabaseLimits] => item !== null))));

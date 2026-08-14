@@ -177,8 +177,21 @@ export async function getPiPointDatabaseLimits(
   if (!dataSource) throw new Error('PI Data Source não configurada');
   const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
   if (typeof instance.metricFindQuery !== 'function') throw new Error('A Data Source PI não expõe metadados de PI Points');
-  const points = await instance.metricFindQuery({ path: binding.serverPath, pointName: binding.pointName, type: 'pipoint', webId: binding.webId }, { isPiPoint: true });
-  const point = points[0];
+  const queries = [
+    { path: binding.serverPath, pointName: binding.pointName, type: 'pipoint', webId: binding.webId },
+    { path: '', pointName: binding.pointName, type: 'pipoint', webId: binding.webId },
+  ];
+  let point: MetricFindValue | undefined;
+  for (const query of queries) {
+    let points: MetricFindValue[] = [];
+    try {
+      points = await instance.metricFindQuery(query, { isPiPoint: true });
+    } catch {
+      continue;
+    }
+    point = points.find((candidate) => getMetricField(candidate, 'text') === binding.pointName) ?? points[0];
+    if (getMetricNumber(point, 'Zero') !== undefined && getMetricNumber(point, 'Span') !== undefined) break;
+  }
   const zero = getMetricNumber(point, 'Zero');
   const span = getMetricNumber(point, 'Span');
   if (zero === undefined || span === undefined || span <= 0) throw new Error('PI Point sem Zero/Span válidos');
