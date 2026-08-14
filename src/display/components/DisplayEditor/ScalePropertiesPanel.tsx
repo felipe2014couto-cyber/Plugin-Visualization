@@ -124,6 +124,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
     background: var(--panel-bg);
     color: var(--text-primary);
     overflow: auto;
+
+    @media (max-width: 760px) {
+      width: 100%;
+      flex-basis: auto;
+    }
   `,
   header: css`
     padding: 10px 12px;

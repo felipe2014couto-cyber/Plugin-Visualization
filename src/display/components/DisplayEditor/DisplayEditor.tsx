@@ -1293,6 +1293,12 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border: 1px solid var(--border-color);
     border-radius: 14px;
     background: linear-gradient(115deg, var(--surface-primary), var(--surface-secondary));
+
+    @media (max-width: 760px) {
+      height: auto;
+      min-height: 100%;
+      border-radius: 0;
+    }
   `,
   header: css`
     display: flex;
@@ -1300,6 +1306,12 @@ const getStyles = (theme: GrafanaTheme2) => ({
     min-height: 68px;
     border-bottom: 1px solid var(--border-color);
     background: var(--surface-primary);
+
+    @media (max-width: 760px) {
+      flex: 0 0 auto;
+      min-height: 56px;
+      flex-wrap: wrap;
+    }
   `,
   headerPrimary: css`
     flex: 1 1 auto;
@@ -1312,6 +1324,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
     min-width: 0;
     color: var(--text-primary);
     background: transparent;
+
+    @media (max-width: 760px) {
+      flex: 1 1 100%;
+      height: 56px;
+    }
   `,
   displayLabel: css`
     display: flex;
@@ -1370,6 +1387,12 @@ const getStyles = (theme: GrafanaTheme2) => ({
     min-width: 0;
     overflow-x: auto;
     padding: 0 ${theme.spacing(1)};
+
+    @media (max-width: 760px) {
+      flex: 1 1 100%;
+      height: 50px;
+      border-top: 1px solid var(--border-color);
+    }
   `,
   toolbarGroup: css`
     display: flex;
@@ -1494,6 +1517,12 @@ const getStyles = (theme: GrafanaTheme2) => ({
       max-width: none;
       max-height: none;
     }
+
+    @media (max-width: 760px) {
+      flex: 0 0 auto;
+      width: 100%;
+      min-height: min(62vh, 560px);
+    }
   `,
   surfaceWrapperDragOver: css`
     box-shadow: inset 0 0 0 3px var(--accent);
@@ -1595,6 +1624,20 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex: 1;
     min-height: 0;
     min-width: 0;
+
+    @media (max-width: 760px) {
+      flex-direction: column;
+      overflow-y: auto;
+
+      & > aside {
+        width: 100% !important;
+        max-width: none !important;
+        max-height: 46vh;
+        flex: 0 0 auto !important;
+        border-left: 0 !important;
+        border-top: 1px solid var(--border-color);
+      }
+    }
   `,
 });
 
