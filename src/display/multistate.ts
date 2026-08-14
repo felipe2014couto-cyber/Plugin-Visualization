@@ -57,7 +57,7 @@ export function getMultistateColor(
 }
 
 export function isValidMultistateRule(rule: MultistateRule): boolean {
-  if (!Number.isFinite(rule.value) || !HEX_COLOR.test(rule.color)) {
+  if (!Number.isFinite(rule.value) || (!HEX_COLOR.test(rule.color) && rule.color !== 'transparent')) {
     return false;
   }
   return rule.operator !== 'between'
@@ -120,6 +120,6 @@ function normalizeRule(rule: unknown, index: number): MultistateRule | undefined
     operator: operator as MultistateOperator,
     value,
     ...(value2 === undefined ? {} : { value2 }),
-    color: typeof candidate.color === 'string' && HEX_COLOR.test(candidate.color) ? candidate.color : DEFAULT_RULE_COLOR,
+    color: typeof candidate.color === 'string' && (HEX_COLOR.test(candidate.color) || candidate.color === 'transparent') ? candidate.color : DEFAULT_RULE_COLOR,
   };
 }

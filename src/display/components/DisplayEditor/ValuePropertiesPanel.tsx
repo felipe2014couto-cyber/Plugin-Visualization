@@ -9,6 +9,7 @@ import {
 } from '../../createValue';
 import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 import type { MultistateConfig } from '../../multistate';
+import { ColorControl } from './ColorControl';
 
 export interface ValuePropertiesPanelProps {
   options: ValueVisualOptions;
@@ -63,15 +64,7 @@ export function ValuePropertiesPanel({ options, pointName, onChange, multistate,
             onChange={(event) => onChange({ fontSize: Number(event.target.value) })}
           />
         </label>
-        <label className={styles.field}>
-          <span>Cor do texto</span>
-          <input
-            type="color"
-            data-testid="value-color"
-            value={visual.color}
-            onChange={(event) => onChange({ color: event.target.value })}
-          />
-        </label>
+        <ColorControl label="Cor do texto" color={visual.color} onChange={(value) => onChange({ color: value })} testId="value-color" />
         <label className={styles.field}>
           <span>Alinhamento</span>
           <select

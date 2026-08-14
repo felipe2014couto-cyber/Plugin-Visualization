@@ -254,7 +254,7 @@ function portableMultistate(input: unknown): { multistate?: MultistateConfig } {
 }
 
 function portableMultistateRule(input: unknown): MultistateRule {
-  if (!isRecord(input) || !isNonEmptyString(input.id) || !['lt', 'lte', 'gt', 'gte', 'eq', 'between'].includes(String(input.operator)) || !isFiniteNumber(input.value) || typeof input.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(input.color)) {
+  if (!isRecord(input) || !isNonEmptyString(input.id) || !['lt', 'lte', 'gt', 'gte', 'eq', 'between'].includes(String(input.operator)) || !isFiniteNumber(input.value) || typeof input.color !== 'string' || (input.color !== 'transparent' && !/^#[0-9a-f]{6}$/i.test(input.color))) {
     throw new DisplayImportError('Arquivo de Display inválido.');
   }
   if (input.operator === 'between' && !isFiniteNumber(input.value2)) {

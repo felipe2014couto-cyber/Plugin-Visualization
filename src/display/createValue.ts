@@ -153,5 +153,5 @@ export function updateValueVisualOptions(
 }
 
 function isValidColor(color: string): boolean {
-  return /^#[0-9a-f]{3,8}$/i.test(color.trim());
+  return color.trim().toLowerCase() === 'transparent' || /^#[0-9a-f]{3,8}$/i.test(color.trim());
 }

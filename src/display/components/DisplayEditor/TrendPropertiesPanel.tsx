@@ -3,6 +3,7 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendLineStyle, type TrendMarker, type TrendNumberFormat, type TrendScaleMode } from '../../createTrend';
+import { ColorControl } from './ColorControl';
 
 export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onSeriesRemove, onClose }: {
   element: TrendElement;
@@ -30,14 +31,16 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
     setFontSizeDraft(String(fontSize));
     onVisualChange({ fontSize });
   };
-  if (!selected) return null;
+  if (!selected) {
+    return null;
+  }
   const selectedKey = trendBindingKey(selected.binding);
   return <aside className={styles.panel} data-testid="trend-properties-panel" aria-label="Opções da Trend">
     <div className={styles.heading}><strong>Opções de traço</strong><button type="button" onClick={onClose} aria-label="Fechar opções da Trend" title="Fechar">×</button></div>
     <label>Série<select value={selectedKey} onChange={(e) => setKey(e.currentTarget.value)}>{series.map((item) => <option key={trendBindingKey(item.binding)} value={trendBindingKey(item.binding)}>{item.binding.pointName}</option>)}</select></label>
     <label>Título<input value={visual.title} onChange={(e) => onVisualChange({ title: e.currentTarget.value })} placeholder="Título do gráfico" /></label>
     <label>Rótulo da legenda<input value={selected.legendLabel ?? selected.binding.pointName} onChange={(e) => onSeriesChange(selectedKey, { legendLabel: e.currentTarget.value })} /></label>
-    <label>Cor<input type="color" value={selected.color} onChange={(e) => onSeriesChange(selectedKey, { color: e.currentTarget.value })} /></label>
+    <ColorControl label="Cor" color={selected.color} onChange={(color) => onSeriesChange(selectedKey, { color })} />
     <label>Espessura <span className={styles.rangeValue}>{selected.lineWidth ?? 2}</span><input type="range" min="1" max="8" value={selected.lineWidth ?? 2} onChange={(e) => onSeriesChange(selectedKey, { lineWidth: Number(e.currentTarget.value) })} /></label>
     <button type="button" className={styles.removeButton} disabled={series.length <= 1} onClick={() => onSeriesRemove(selectedKey)}>Excluir tag selecionada</button>
     <label>Estilo<select value={selected.lineStyle ?? 'solid'} onChange={(e) => onSeriesChange(selectedKey, { lineStyle: e.currentTarget.value as TrendLineStyle })}><option value="solid">Sólido</option><option value="dashed">Tracejado</option><option value="dotted">Pontilhado</option></select></label>

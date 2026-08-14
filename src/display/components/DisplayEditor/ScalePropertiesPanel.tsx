@@ -5,6 +5,7 @@ import { useStyles2 } from '@grafana/ui';
 import type { BarOrientation } from '../../scaleOptions';
 import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 import type { MultistateConfig } from '../../multistate';
+import { ColorControl } from './ColorControl';
 
 export interface ScalePropertiesPanelProps {
   kind: 'Gauge' | 'Bar';
@@ -72,13 +73,10 @@ export function ScalePropertiesPanel({
         <span className={styles.title}>{kind}</span>
       </div>
       <div className={styles.fields}>
-        <label className={styles.field}>
-          <span>{kind === 'Bar' ? 'Cor da barra' : 'Cor'}</span>
-          <input type="color" value={kind === 'Bar' ? fillColor : color} onChange={(event) => onChange(kind === 'Bar' ? { fillColor: event.target.value, color: event.target.value } : { color: event.target.value })} data-testid={`${kind.toLowerCase()}-color`} />
-        </label>
+        <ColorControl label={kind === 'Bar' ? 'Cor da barra' : 'Cor'} color={kind === 'Bar' ? fillColor : color} onChange={(value) => onChange(kind === 'Bar' ? { fillColor: value, color: value } : { color: value })} testId={`${kind.toLowerCase()}-color`} />
         {kind === 'Bar' && <>
-          <label className={styles.field}><span>Cor de preenchimento</span><input type="color" value={backgroundColor} onChange={(event) => onChange({ backgroundColor: event.target.value })} data-testid="bar-background-color" /></label>
-          <label className={styles.field}><span>Cor do contorno</span><input type="color" value={borderColor.startsWith('#') ? borderColor : '#ffffff'} onChange={(event) => onChange({ borderColor: event.target.value })} data-testid="bar-border-color" /></label>
+          <ColorControl label="Cor de preenchimento" color={backgroundColor} onChange={(value) => onChange({ backgroundColor: value })} testId="bar-background-color" />
+          <ColorControl label="Cor do contorno" color={borderColor} onChange={(value) => onChange({ borderColor: value })} testId="bar-border-color" />
           <label className={styles.field}><span>Espessura do contorno ({borderWidth})</span><input type="range" min="0" max="8" step="1" value={borderWidth} onChange={(event) => onChange({ borderWidth: Number(event.target.value) })} data-testid="bar-border-width" /></label>
         </>}
         {(kind !== 'Bar' || scaleMode === 'custom') && <>

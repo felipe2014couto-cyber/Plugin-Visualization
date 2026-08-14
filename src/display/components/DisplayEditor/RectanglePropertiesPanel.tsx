@@ -5,6 +5,7 @@ import { useStyles2 } from '@grafana/ui';
 import type { RectangleProperties } from '../../createRectangle';
 import type { MultistateConfig } from '../../multistate';
 import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
+import { ColorControl } from './ColorControl';
 
 export interface RectanglePropertiesPanelProps {
   fill: string;
@@ -33,14 +34,8 @@ export function RectanglePropertiesPanel({ fill, stroke, shape, pointName, onCha
           </select>
         </label>
         {pointName && <div className={styles.binding}>PI Point: {pointName}</div>}
-        <label className={styles.field}>
-          <span>Preenchimento</span>
-          <input type="color" value={toColorInputValue(fill)} onChange={(event) => onChange({ fill: event.target.value })} data-testid="rectangle-fill" />
-        </label>
-        <label className={styles.field}>
-          <span>Contorno</span>
-          <input type="color" value={toColorInputValue(stroke)} onChange={(event) => onChange({ stroke: event.target.value })} data-testid="rectangle-stroke" />
-        </label>
+        <ColorControl label="Preenchimento" color={fill} onChange={(value) => onChange({ fill: value })} testId="rectangle-fill" />
+        <ColorControl label="Contorno" color={stroke} onChange={(value) => onChange({ stroke: value })} testId="rectangle-stroke" />
       </div>
       {pointName ? (
         <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />
@@ -49,19 +44,6 @@ export function RectanglePropertiesPanel({ fill, stroke, shape, pointName, onCha
       )}
     </aside>
   );
-}
-
-function toColorInputValue(value: string): string {
-  const trimmed = value.trim();
-  if (/^#[0-9a-f]{3,8}$/i.test(trimmed)) {
-    return trimmed;
-  }
-  const rgb = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,[^)]*)?\)$/i.exec(trimmed);
-  if (rgb) {
-    const toHex = (channel: string) => Number(channel).toString(16).padStart(2, '0');
-    return `#${toHex(rgb[1])}${toHex(rgb[2])}${toHex(rgb[3])}`;
-  }
-  return '#6e9fff';
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({
