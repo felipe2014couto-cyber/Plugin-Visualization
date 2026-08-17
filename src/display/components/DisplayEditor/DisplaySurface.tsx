@@ -5,7 +5,7 @@ import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE, type RectangleElement } f
 import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
-import { GAUGE_TYPE, type GaugeElement } from '../../createGauge';
+import { GAUGE_TYPE, getGaugeOptions, type GaugeElement } from '../../createGauge';
 import { ValueElementView } from '../ValueElementView';
 import { GaugeElementView } from '../GaugeElementView';
 import { BarElementView } from '../BarElementView';
@@ -149,9 +149,13 @@ export function DisplaySurface({
   const [databaseScales, setDatabaseScales] = useState<Record<string, PiPointDatabaseLimits>>({});
   useEffect(() => {
     if (!loadPiPointDatabaseLimits) return;
-    const bars = elements.filter((element): element is BarElement => element.type === BAR_TYPE && getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding));
-    void Promise.all(bars.map(async (bar) => {
-      try { return [bar.id, await loadPiPointDatabaseLimits(bar.properties.binding as PiPointBinding)] as const; } catch { return null; }
+    const databaseElements = elements.filter((element): element is BarElement | GaugeElement => {
+      if (element.type === BAR_TYPE) return getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
+      if (element.type === GAUGE_TYPE) return getGaugeOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
+      return false;
+    });
+    void Promise.all(databaseElements.map(async (item) => {
+      try { return [item.id, await loadPiPointDatabaseLimits(item.properties.binding as PiPointBinding)] as const; } catch { return null; }
     })).then((results) => setDatabaseScales(Object.fromEntries(results.filter((item): item is readonly [string, PiPointDatabaseLimits] => item !== null))));
   }, [elements, loadPiPointDatabaseLimits]);
   const [selectionBox, setSelectionBox] = useState<{ start: Point; current: Point } | null>(null);
@@ -581,6 +585,7 @@ export function DisplaySurface({
               key={element.id}
               element={element as unknown as GaugeElement}
               runtimeState={runtimeStates.get(element.id)}
+              databaseScale={databaseScales[element.id]}
             />
           );
         }

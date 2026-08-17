@@ -12,14 +12,14 @@ describe('GaugeElement', () => {
 
   it('usa a cor base padrão quando ausente', () => {
     const gauge = createGauge({ id: 'gauge-default', binding });
-    expect(getGaugeOptions(gauge.properties).color).toBe('#6e9fff');
+    expect(getGaugeOptions(gauge.properties).color).toBe('#00a2e8');
   });
 
   it('preserva e normaliza a cor base configurada', () => {
     const gauge = createGauge({ id: 'gauge-color', binding, options: { color: '#ff9830' } });
     expect(gauge.properties.color).toBe('#ff9830');
-    expect(getGaugeOptions({ minimum: 0, maximum: 100, color: 'not-a-color' }).color).toBe('#6e9fff');
-    expect(getGaugeOptions({ minimum: 0, maximum: 100 }).color).toBe('#6e9fff');
+    expect(getGaugeOptions({ minimum: 0, maximum: 100, color: 'not-a-color' }).color).toBe('#00a2e8');
+    expect(getGaugeOptions({ minimum: 0, maximum: 100 }).color).toBe('#00a2e8');
   });
 
   it('atualiza a cor base sem alterar demais opções', () => {

@@ -37,7 +37,7 @@ export function normalizeScaleOptions(
 }
 
 function isValidHexColor(value: string): boolean {
-  return /^#[0-9a-f]{3,8}$/i.test(value.trim());
+  return value.trim().toLowerCase() === 'transparent' || /^#[0-9a-f]{3,8}$/i.test(value.trim());
 }
 
 export function getScaleRatio(value: number, minimum: number, maximum: number): number | undefined {

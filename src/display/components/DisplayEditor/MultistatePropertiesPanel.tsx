@@ -11,6 +11,7 @@ import {
   type MultistateOperator,
   type MultistateRule,
 } from '../../index';
+import { ColorControl } from './ColorControl';
 
 export interface MultistatePropertiesPanelProps {
   config?: MultistateConfig;
@@ -85,16 +86,7 @@ export function MultistatePropertiesPanel({ config, onChange }: MultistateProper
                 />
               </label>
             )}
-            <label className={styles.colorField}>
-              <span>Cor</span>
-              <input
-                type="color"
-                value={isValidColor(rule.color) ? rule.color : '#d32f2f'}
-                aria-label="Cor da regra"
-                data-testid={`multistate-color-${rule.id}`}
-                onChange={(event) => updateRule(rule.id, { color: event.target.value })}
-              />
-            </label>
+            <ColorControl label="Cor" color={isValidColor(rule.color) || rule.color === 'transparent' ? rule.color : '#d32f2f'} fallback="#d32f2f" onChange={(color) => updateRule(rule.id, { color })} testId={`multistate-color-${rule.id}`} />
             <button type="button" className={styles.removeButton} data-testid={`multistate-remove-${rule.id}`} onClick={() => update({ rules: normalized.rules.filter((item) => item.id !== rule.id) })}>
               Remover
             </button>

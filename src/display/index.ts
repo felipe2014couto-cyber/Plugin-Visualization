@@ -59,7 +59,7 @@ export {
   getGaugeOptions,
   updateGaugeOptions,
 } from './createGauge';
-export type { CreateGaugeOptions, GaugeElement, GaugeProperties } from './createGauge';
+export type { CreateGaugeOptions, GaugeElement, GaugeProperties, GaugeStyle, GaugeVisualOptions } from './createGauge';
 
 export {
   appendBar,

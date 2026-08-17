@@ -1,6 +1,6 @@
 import { BAR_TYPE } from './createBar';
 import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE } from './createRectangle';
-import { GAUGE_TYPE } from './createGauge';
+import { GAUGE_TYPE, normalizeGaugeOptions } from './createGauge';
 import { normalizeMultistateConfig, type MultistateConfig, type MultistateRule } from './multistate';
 import { normalizeScaleOptions } from './scaleOptions';
 import { DISPLAY_SCHEMA_VERSION } from './schemaVersion';
@@ -161,7 +161,7 @@ function portableElement(input: unknown): DisplayElement {
     case GAUGE_TYPE:
       return { ...base, type: GAUGE_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
-        ...portableScale(input.properties),
+        ...portableGauge(input.properties),
         ...portableMultistate(input.properties.multistate),
       } };
     case BAR_TYPE:
@@ -241,6 +241,20 @@ function portableScale(input: Record<string, unknown>) {
   return normalizeScaleOptions(input);
 }
 
+function portableGauge(input: Record<string, unknown>) {
+  return normalizeGaugeOptions({
+    ...portableScale(input),
+    gaugeStyle: input.gaugeStyle as 'arc' | 'triangle' | 'pointer' | 'line',
+    scaleMode: input.scaleMode === 'custom' ? 'custom' : 'database',
+    title: typeof input.title === 'string' ? input.title : '',
+    labelPosition: input.labelPosition === 'below' ? 'below' : 'above',
+    scaleDisplay: input.scaleDisplay === 'endpoints' ? 'endpoints' : 'all',
+    gaugeAngle: typeof input.gaugeAngle === 'number' ? input.gaugeAngle : 270,
+    gaugeBorderColor: typeof input.gaugeBorderColor === 'string' ? input.gaugeBorderColor : undefined,
+    gaugeScaleColor: typeof input.gaugeScaleColor === 'string' ? input.gaugeScaleColor : undefined,
+  });
+}
+
 function portableMultistate(input: unknown): { multistate?: MultistateConfig } {
   if (input === undefined) {
     return {};
@@ -254,7 +268,7 @@ function portableMultistate(input: unknown): { multistate?: MultistateConfig } {
 }
 
 function portableMultistateRule(input: unknown): MultistateRule {
-  if (!isRecord(input) || !isNonEmptyString(input.id) || !['lt', 'lte', 'gt', 'gte', 'eq', 'between'].includes(String(input.operator)) || !isFiniteNumber(input.value) || typeof input.color !== 'string' || !/^#[0-9a-f]{6}$/i.test(input.color)) {
+  if (!isRecord(input) || !isNonEmptyString(input.id) || !['lt', 'lte', 'gt', 'gte', 'eq', 'between'].includes(String(input.operator)) || !isFiniteNumber(input.value) || typeof input.color !== 'string' || (input.color !== 'transparent' && !/^#[0-9a-f]{6}$/i.test(input.color))) {
     throw new DisplayImportError('Arquivo de Display inválido.');
   }
   if (input.operator === 'between' && !isFiniteNumber(input.value2)) {
