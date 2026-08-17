@@ -763,23 +763,21 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
   const fill = getMultistateColor(value, element.properties.multistate, baseFill);
   const common = {
     key: element.id,
-    fill,
-    stroke: getElementStroke(element),
-    strokeWidth: 1,
     'data-testid': `display-element-${element.id}`,
     'data-element-id': element.id,
     'data-element-type': element.type,
     'data-shape': element.properties.shape ?? 'rectangle',
     style: { cursor: 'move' },
-    transform: `rotate(${Number(element.properties.rotation) || 0}, ${element.x + element.width / 2}, ${element.y + element.height / 2})`,
+    transform: `rotate(${Number(element.properties.rotation) || 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
   };
+  const appearance = { fill, stroke: getElementStroke(element), strokeWidth: 1, pointerEvents: 'all' as const };
   if (element.properties.shape === 'ellipse') {
-    return <ellipse {...common} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} />;
+    return <g {...common}><ellipse {...appearance} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} /></g>;
   }
   if (element.properties.shape === 'triangle') {
-    return <polygon {...common} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} />;
+    return <g {...common}><polygon {...appearance} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} /></g>;
   }
-  return <rect {...common} x={element.x} y={element.y} width={element.width} height={element.height} />;
+  return <g {...common}><rect {...appearance} x={element.x} y={element.y} width={element.width} height={element.height} /></g>;
 }
 
 function normalizeSelectionBox(start: Point, current: Point) {
