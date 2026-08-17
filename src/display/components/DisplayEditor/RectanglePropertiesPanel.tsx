@@ -38,7 +38,7 @@ export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, po
         {pointName && <div className={styles.binding}>PI Point: {pointName}</div>}
         <ColorControl label="Preenchimento" color={fill} onChange={(value) => onChange({ fill: value })} testId="rectangle-fill" />
         <ColorControl label="Contorno" color={stroke} onChange={(value) => onChange({ stroke: value })} testId="rectangle-stroke" />
-        <RotationControl value={rotation} onChange={(value) => onChange({ rotation })} testId="rectangle-rotation" />
+        <RotationControl value={rotation} onChange={(value) => onChange({ rotation: value })} testId="rectangle-rotation" />
       </div>
       {pointName ? (
         <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />
