@@ -161,7 +161,6 @@ export function ScalePropertiesPanel({
         <label className={styles.checkbox}><input type="checkbox" checked={showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-value`} /><span>Valor</span></label>
         {kind === 'Bar' && <label className={styles.checkbox}><input type="checkbox" checked={showScale} onChange={(event) => onChange({ showScale: event.target.checked })} data-testid="bar-show-scale" /><span>Mostrar escala</span></label>}
         <label className={styles.checkbox}><input type="checkbox" checked={showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-unit`} /><span>Unidades</span></label>
-        {kind === 'Gauge' && <label className={styles.checkbox}><input type="checkbox" checked={showTimestamp} onChange={(event) => onChange({ showTimestamp: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-timestamp`} /><span>Timestamp</span></label>}
       </div>
       <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />
     </aside>

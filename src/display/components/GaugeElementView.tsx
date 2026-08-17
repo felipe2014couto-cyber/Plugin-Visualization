@@ -30,7 +30,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const startAngle = 90 + (360 - sweepAngle) / 2;
   const track = arcPath(cx, cy, radius, startAngle, sweepAngle);
   const valueText = getValueText(binding, runtimeState, numericValue, options.decimals);
-  const detailLines = getDetailLines(valueText, runtimeState, options.showValue, options.showUnit, options.showTimestamp);
+  const detailLines = getDetailLines(valueText, runtimeState, options.showValue, options.showUnit, false);
   const activeColor = getMultistateColor(numericValue, element.properties.multistate, options.color);
   const valueY = options.labelPosition === 'below'
     ? element.y + element.height - 12
