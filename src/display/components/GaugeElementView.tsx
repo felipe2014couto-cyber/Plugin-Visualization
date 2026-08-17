@@ -28,6 +28,9 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const track = arcPath(cx, cy, radius, startAngle, sweepAngle);
   const valueText = getValueText(binding, runtimeState, numericValue, options.decimals);
   const activeColor = getMultistateColor(numericValue, element.properties.multistate, options.color);
+  const valueY = options.gaugeStyle === 'pointer' || options.gaugeStyle === 'line'
+    ? element.y + element.height - 42
+    : cy + 28;
 
   return (
     <g
@@ -77,7 +80,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         const tickValue = options.minimum + ((options.maximum - options.minimum) * index) / 8;
         return <g key={`gauge-tick-${index}`} pointerEvents="none"><line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={TEXT_COLOR} strokeWidth={1} /><text x={label.x} y={label.y + 4} textAnchor="middle" fill={TEXT_COLOR} fontSize={10}>{formatScaleValue(tickValue, options.decimals)}</text></g>;
       })}
-      <text x={cx} y={cy + 28} textAnchor="middle" fill={TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
+      <text x={cx} y={valueY} textAnchor="middle" fill={TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
         {options.showValue ? valueText : ''}
       </text>
       <text x={element.x + 10} y={element.y + element.height - 10} fill={TEXT_COLOR} fontSize={10} data-testid={`gauge-min-${element.id}`} pointerEvents="none">
