@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" data-style="colored" data-modified="true" data-palette="industrial">
+<g id="sym_21fa4e75989f_body" data-role="body"><g id="sym_21fa4e75989f_outline" data-role="outline"><g id="sym_21fa4e75989f_active_part" data-role="active-part"><path d="M2 15V9C2 6.79086 3.79086 5 6 5H18C20.2091 5 22 6.79086 22 9V15C22 17.2091 20.2091 19 18 19H6C3.79086 19 2 17.2091 2 15Z" stroke="#283843" stroke-width="1.5" fill="#DB9A32" />
+</g><path d="M8.5 9.5L6 12L8.5 14.5" stroke="#283843" stroke-linecap="round" stroke-linejoin="round" fill="#5A7180" />
+<path d="M15.5 9.5L18 12L15.5 14.5" stroke="#A7BDC6" stroke-linecap="round" stroke-linejoin="round" fill="#A7BDC6" />
+</g></g></svg>

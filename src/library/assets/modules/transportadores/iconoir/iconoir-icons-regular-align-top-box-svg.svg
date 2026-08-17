@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" stroke-width="1.5" viewBox="0 0 24 24" fill="none" data-style="colored" data-modified="true" data-palette="industrial">
+<g id="sym_6b28c3586407_body" data-role="body"><g id="sym_6b28c3586407_outline" data-role="outline"><g id="sym_6b28c3586407_active_part" data-role="active-part"><path d="M4 12V4H20V12H4Z" stroke="#A7BDC6" stroke-linecap="round" stroke-linejoin="round" fill="#A7BDC6" />
+</g><path d="M4 16L4.01 15.9889" stroke="#283843" stroke-linecap="round" stroke-linejoin="round" fill="#5A7180" />
+<path d="M4 20L4.01 19.9889" stroke="#A7BDC6" stroke-linecap="round" stroke-linejoin="round" fill="#A7BDC6" />
+<path d="M8 20L8.01 19.9889" stroke="#283843" stroke-linecap="round" stroke-linejoin="round" fill="#DB9A32" />
+<path d="M12 20L12.01 19.9889" stroke="#5A7180" stroke-linecap="round" stroke-linejoin="round" fill="#5A7180" />
+<path d="M16 20L16.01 19.9889" stroke="#283843" stroke-linecap="round" stroke-linejoin="round" fill="#A7BDC6" />
+<path d="M20 20L20.01 19.9889" stroke="#DB9A32" stroke-linecap="round" stroke-linejoin="round" fill="#DB9A32" />
+<path d="M20 16L20.01 15.9889" stroke="#283843" stroke-linecap="round" stroke-linejoin="round" fill="#5A7180" />
+</g></g></svg>

@@ -23,6 +23,8 @@ export interface MultistateMatch {
 const DEFAULT_RULE_COLOR = '#d32f2f';
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
+export const TRANSPARENT_COLOR = 'transparent' as const;
+
 export function normalizeMultistateConfig(config?: Partial<MultistateConfig> | null): MultistateConfig | undefined {
   if (!config) {
     return undefined;
@@ -37,11 +39,12 @@ export function normalizeMultistateConfig(config?: Partial<MultistateConfig> | n
 }
 
 export function evaluateMultistate(value: unknown, config?: MultistateConfig | null): MultistateMatch | undefined {
-  if (!config?.enabled || typeof value !== 'number' || !Number.isFinite(value)) {
+  const numericValue = toMultistateNumber(value);
+  if (!config?.enabled || numericValue === undefined) {
     return undefined;
   }
   for (const rule of config.rules) {
-    if (matchesRule(value, rule)) {
+    if (matchesRule(numericValue, rule)) {
       return { rule, color: rule.color };
     }
   }
@@ -57,7 +60,7 @@ export function getMultistateColor(
 }
 
 export function isValidMultistateRule(rule: MultistateRule): boolean {
-  if (!Number.isFinite(rule.value) || (!HEX_COLOR.test(rule.color) && rule.color !== 'transparent')) {
+  if (!Number.isFinite(rule.value) || (!HEX_COLOR.test(rule.color) && rule.color !== TRANSPARENT_COLOR)) {
     return false;
   }
   return rule.operator !== 'between'
@@ -75,7 +78,7 @@ export function updateMultistateConfig(
 ): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => {
-    if (element.id !== elementId || !['value', 'gauge', 'bar', 'rectangle'].includes(element.type)) {
+    if (element.id !== elementId || !['value', 'gauge', 'bar', 'rectangle', 'library-symbol'].includes(element.type)) {
       return element;
     }
     changed = true;
@@ -120,6 +123,17 @@ function normalizeRule(rule: unknown, index: number): MultistateRule | undefined
     operator: operator as MultistateOperator,
     value,
     ...(value2 === undefined ? {} : { value2 }),
-    color: typeof candidate.color === 'string' && (HEX_COLOR.test(candidate.color) || candidate.color === 'transparent') ? candidate.color : DEFAULT_RULE_COLOR,
+    color: typeof candidate.color === 'string' && (HEX_COLOR.test(candidate.color) || candidate.color === TRANSPARENT_COLOR) ? candidate.color : DEFAULT_RULE_COLOR,
   };
+}
+
+function toMultistateNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : undefined;
+  }
+  return undefined;
 }

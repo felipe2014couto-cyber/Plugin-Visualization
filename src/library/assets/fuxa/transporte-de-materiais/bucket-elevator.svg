@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 68.305161 201" id="fuxaWidget" style="border: none !important; outline: none !important; box-shadow: none !important; margin: 0; padding: 0; background: transparent;" width="100%" height="100%">
+  <ns0:g id="fuxaSymbol">
+    <ns0:defs id="defs1" />
+    <ns0:g data-cell-id="O15Uu-mBIumR_HXsXS1V-180" id="g195" style="fill:none" transform="translate(-178.69484,-30)">
+      <ns0:g id="cell-O15Uu-mBIumR_HXsXS1V-180" style="fill:none">
+        <ns0:g transform="translate(0.5,0.5)" id="g194" style="fill:none">
+          <ns0:path d="m 205,30 h 20 v 185 h 20 l -20,15 H 205 V 45 h -25 z" fill="#ffffff" stroke="#000000" stroke-miterlimit="10" pointer-events="all" style="fill:none" id="path193" />
+        </ns0:g>
+      </ns0:g>
+    </ns0:g>
+  </ns0:g>
+  </ns0:svg>

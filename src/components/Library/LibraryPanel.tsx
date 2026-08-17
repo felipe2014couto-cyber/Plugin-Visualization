@@ -78,7 +78,7 @@ export function LibraryPanel() {
                         }}
                       >
                         <span className={styles.symbolPreview}>
-                          <img className={symbol.source === 'openclipart' ? styles.coloredImage : styles.technicalImage} src={getIndustrialSymbolAssetUrl(symbol)} alt="" draggable={false} />
+                          <img className={symbol.source === 'openclipart' || symbol.source === 'pims-vision' ? styles.coloredImage : styles.technicalImage} src={getIndustrialSymbolAssetUrl(symbol)} alt="" draggable={false} />
                         </span>
                         <span className={styles.cardName}>{symbol.name}</span>
                       </button>

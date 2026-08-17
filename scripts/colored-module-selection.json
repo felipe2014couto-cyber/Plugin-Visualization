@@ -1,0 +1,4375 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/bucket-droplet.svg",
+      "category": "Bombas",
+      "name": "Caçamba gota",
+      "keywords": [
+        "bombas",
+        "bucket droplet"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/gas-pump.svg",
+      "category": "Bombas",
+      "name": "Gás bomba",
+      "keywords": [
+        "bombas",
+        "gas pump"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet.svg",
+      "category": "Bombas",
+      "name": "Gota",
+      "keywords": [
+        "bombas",
+        "droplet"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-bolt.svg",
+      "category": "Bombas",
+      "name": "Gota raio",
+      "keywords": [
+        "bombas",
+        "droplet bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-check.svg",
+      "category": "Bombas",
+      "name": "Gota check",
+      "keywords": [
+        "bombas",
+        "droplet check"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-code.svg",
+      "category": "Bombas",
+      "name": "Gota code",
+      "keywords": [
+        "bombas",
+        "droplet code"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-cog.svg",
+      "category": "Bombas",
+      "name": "Gota cog",
+      "keywords": [
+        "bombas",
+        "droplet cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-dollar.svg",
+      "category": "Bombas",
+      "name": "Gota dollar",
+      "keywords": [
+        "bombas",
+        "droplet dollar"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-down.svg",
+      "category": "Bombas",
+      "name": "Gota down",
+      "keywords": [
+        "bombas",
+        "droplet down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-exclamation.svg",
+      "category": "Bombas",
+      "name": "Gota exclamation",
+      "keywords": [
+        "bombas",
+        "droplet exclamation"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-half.svg",
+      "category": "Bombas",
+      "name": "Gota half",
+      "keywords": [
+        "bombas",
+        "droplet half"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-half-2.svg",
+      "category": "Bombas",
+      "name": "Gota half 2",
+      "keywords": [
+        "bombas",
+        "droplet half 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-heart.svg",
+      "category": "Bombas",
+      "name": "Gota heart",
+      "keywords": [
+        "bombas",
+        "droplet heart"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-minus.svg",
+      "category": "Bombas",
+      "name": "Gota minus",
+      "keywords": [
+        "bombas",
+        "droplet minus"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-pause.svg",
+      "category": "Bombas",
+      "name": "Gota pause",
+      "keywords": [
+        "bombas",
+        "droplet pause"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-pin.svg",
+      "category": "Bombas",
+      "name": "Gota pin",
+      "keywords": [
+        "bombas",
+        "droplet pin"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-plus.svg",
+      "category": "Bombas",
+      "name": "Gota plus",
+      "keywords": [
+        "bombas",
+        "droplet plus"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-question.svg",
+      "category": "Bombas",
+      "name": "Gota question",
+      "keywords": [
+        "bombas",
+        "droplet question"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-search.svg",
+      "category": "Bombas",
+      "name": "Gota search",
+      "keywords": [
+        "bombas",
+        "droplet search"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-share.svg",
+      "category": "Bombas",
+      "name": "Gota share",
+      "keywords": [
+        "bombas",
+        "droplet share"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-star.svg",
+      "category": "Bombas",
+      "name": "Gota star",
+      "keywords": [
+        "bombas",
+        "droplet star"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-up.svg",
+      "category": "Bombas",
+      "name": "Gota up",
+      "keywords": [
+        "bombas",
+        "droplet up"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/droplet-x.svg",
+      "category": "Bombas",
+      "name": "Gota x",
+      "keywords": [
+        "bombas",
+        "droplet x"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/campfire.svg",
+      "category": "Caldeiras",
+      "name": "Campfire",
+      "keywords": [
+        "caldeiras",
+        "campfire"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/firewall-flame.svg",
+      "category": "Caldeiras",
+      "name": "Firewall chama",
+      "keywords": [
+        "caldeiras",
+        "firewall flame"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/temperature-sun.svg",
+      "category": "Caldeiras",
+      "name": "Temperatura solar",
+      "keywords": [
+        "caldeiras",
+        "temperature sun"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/campfire.svg",
+      "category": "Caldeiras",
+      "name": "Campfire",
+      "keywords": [
+        "caldeiras",
+        "campfire"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/alarm-smoke.svg",
+      "category": "Caldeiras",
+      "name": "Alarme fumaça",
+      "keywords": [
+        "caldeiras",
+        "alarm smoke"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-factory.svg",
+      "category": "Caldeiras",
+      "name": "Edifício fábrica",
+      "keywords": [
+        "caldeiras",
+        "building factory"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-factory-2.svg",
+      "category": "Caldeiras",
+      "name": "Edifício fábrica 2",
+      "keywords": [
+        "caldeiras",
+        "building factory 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/fire-extinguisher.svg",
+      "category": "Caldeiras",
+      "name": "Fogo extinguisher",
+      "keywords": [
+        "caldeiras",
+        "fire extinguisher"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/fire-hydrant.svg",
+      "category": "Caldeiras",
+      "name": "Fogo hydrant",
+      "keywords": [
+        "caldeiras",
+        "fire hydrant"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/firetruck.svg",
+      "category": "Caldeiras",
+      "name": "Firetruck",
+      "keywords": [
+        "caldeiras",
+        "firetruck"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/firewall-check.svg",
+      "category": "Caldeiras",
+      "name": "Firewall check",
+      "keywords": [
+        "caldeiras",
+        "firewall check"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/flame.svg",
+      "category": "Caldeiras",
+      "name": "Chama",
+      "keywords": [
+        "caldeiras",
+        "flame"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/gas-station.svg",
+      "category": "Caldeiras",
+      "name": "Gás station",
+      "keywords": [
+        "caldeiras",
+        "gas station"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/ironing-steam.svg",
+      "category": "Caldeiras",
+      "name": "Ironing vapor",
+      "keywords": [
+        "caldeiras",
+        "ironing steam"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/masks-theater.svg",
+      "category": "Caldeiras",
+      "name": "Masks theater",
+      "keywords": [
+        "caldeiras",
+        "masks theater"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/steam.svg",
+      "category": "Caldeiras",
+      "name": "Vapor",
+      "keywords": [
+        "caldeiras",
+        "steam"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/sun.svg",
+      "category": "Caldeiras",
+      "name": "Solar",
+      "keywords": [
+        "caldeiras",
+        "sun"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/sun-electricity.svg",
+      "category": "Caldeiras",
+      "name": "Solar electricity",
+      "keywords": [
+        "caldeiras",
+        "sun electricity"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/sun-high.svg",
+      "category": "Caldeiras",
+      "name": "Solar high",
+      "keywords": [
+        "caldeiras",
+        "sun high"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/sun-low.svg",
+      "category": "Caldeiras",
+      "name": "Solar low",
+      "keywords": [
+        "caldeiras",
+        "sun low"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/sun-moon.svg",
+      "category": "Caldeiras",
+      "name": "Solar moon",
+      "keywords": [
+        "caldeiras",
+        "sun moon"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/sun-wind.svg",
+      "category": "Caldeiras",
+      "name": "Solar vento",
+      "keywords": [
+        "caldeiras",
+        "sun wind"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/sunglasses.svg",
+      "category": "Caldeiras",
+      "name": "Sunglasses",
+      "keywords": [
+        "caldeiras",
+        "sunglasses"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/application-screen.svg",
+      "category": "Computadores",
+      "name": "Aplicação tela",
+      "keywords": [
+        "computadores",
+        "application screen"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/application-screen-alarm-classes.svg",
+      "category": "Computadores",
+      "name": "Aplicação tela alarme classes",
+      "keywords": [
+        "computadores",
+        "application screen alarm classes"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/application-screen-globe.svg",
+      "category": "Computadores",
+      "name": "Aplicação tela globe",
+      "keywords": [
+        "computadores",
+        "application screen globe"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/application-screen-play.svg",
+      "category": "Computadores",
+      "name": "Aplicação tela iniciar",
+      "keywords": [
+        "computadores",
+        "application screen play"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/application-screens.svg",
+      "category": "Computadores",
+      "name": "Aplicação screens",
+      "keywords": [
+        "computadores",
+        "application screens"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/folder-application-screen.svg",
+      "category": "Computadores",
+      "name": "Folder aplicação tela",
+      "keywords": [
+        "computadores",
+        "folder application screen"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/generic-device-brackets.svg",
+      "category": "Computadores",
+      "name": "Genérico dispositivo brackets",
+      "keywords": [
+        "computadores",
+        "generic device brackets"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/network-device.svg",
+      "category": "Computadores",
+      "name": "Rede dispositivo",
+      "keywords": [
+        "computadores",
+        "network device"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/network-device-play.svg",
+      "category": "Computadores",
+      "name": "Rede dispositivo iniciar",
+      "keywords": [
+        "computadores",
+        "network device play"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/plc-device.svg",
+      "category": "Computadores",
+      "name": "PLC dispositivo",
+      "keywords": [
+        "computadores",
+        "plc device"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/plc-device-tag.svg",
+      "category": "Computadores",
+      "name": "PLC dispositivo etiqueta",
+      "keywords": [
+        "computadores",
+        "plc device tag"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/plc-device-user-data-type.svg",
+      "category": "Computadores",
+      "name": "PLC dispositivo user data type",
+      "keywords": [
+        "computadores",
+        "plc device user data type"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/project-server.svg",
+      "category": "Computadores",
+      "name": "Projeto servidor",
+      "keywords": [
+        "computadores",
+        "project server"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/server-rack.svg",
+      "category": "Computadores",
+      "name": "Servidor rack",
+      "keywords": [
+        "computadores",
+        "server rack"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/asset-network.svg",
+      "category": "Computadores",
+      "name": "Asset rede",
+      "keywords": [
+        "computadores",
+        "asset network"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/cam-track.svg",
+      "category": "Computadores",
+      "name": "Cam esteira",
+      "keywords": [
+        "computadores",
+        "cam track"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/cloud.svg",
+      "category": "Computadores",
+      "name": "Nuvem",
+      "keywords": [
+        "computadores",
+        "cloud"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/cloud-download.svg",
+      "category": "Computadores",
+      "name": "Nuvem download",
+      "keywords": [
+        "computadores",
+        "cloud download"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/cloud-download-add.svg",
+      "category": "Computadores",
+      "name": "Nuvem download add",
+      "keywords": [
+        "computadores",
+        "cloud download add"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/cloud-download-list.svg",
+      "category": "Computadores",
+      "name": "Nuvem download list",
+      "keywords": [
+        "computadores",
+        "cloud download list"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/cloud-fail.svg",
+      "category": "Computadores",
+      "name": "Nuvem fail",
+      "keywords": [
+        "computadores",
+        "cloud fail"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/cloud-new.svg",
+      "category": "Computadores",
+      "name": "Nuvem new",
+      "keywords": [
+        "computadores",
+        "cloud new"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/cloud-rain.svg",
+      "category": "Computadores",
+      "name": "Nuvem rain",
+      "keywords": [
+        "computadores",
+        "cloud rain"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-down-square.svg",
+      "category": "Dutos",
+      "name": "Seta down square",
+      "keywords": [
+        "dutos",
+        "arrow down square"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-left-square.svg",
+      "category": "Dutos",
+      "name": "Seta left square",
+      "keywords": [
+        "dutos",
+        "arrow left square"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-right-square.svg",
+      "category": "Dutos",
+      "name": "Seta right square",
+      "keywords": [
+        "dutos",
+        "arrow right square"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-up-square.svg",
+      "category": "Dutos",
+      "name": "Seta up square",
+      "keywords": [
+        "dutos",
+        "arrow up square"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/pipeline.svg",
+      "category": "Dutos",
+      "name": "Duto",
+      "keywords": [
+        "dutos",
+        "pipeline"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/route-square.svg",
+      "category": "Dutos",
+      "name": "Rota square",
+      "keywords": [
+        "dutos",
+        "route square"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/route-square-2.svg",
+      "category": "Dutos",
+      "name": "Rota square 2",
+      "keywords": [
+        "dutos",
+        "route square 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/square-arrow-down.svg",
+      "category": "Dutos",
+      "name": "Square seta down",
+      "keywords": [
+        "dutos",
+        "square arrow down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/square-arrow-left.svg",
+      "category": "Dutos",
+      "name": "Square seta left",
+      "keywords": [
+        "dutos",
+        "square arrow left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/square-arrow-right.svg",
+      "category": "Dutos",
+      "name": "Square seta right",
+      "keywords": [
+        "dutos",
+        "square arrow right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/square-arrow-up.svg",
+      "category": "Dutos",
+      "name": "Square seta up",
+      "keywords": [
+        "dutos",
+        "square arrow up"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/square-rounded-arrow-down.svg",
+      "category": "Dutos",
+      "name": "Square rounded seta down",
+      "keywords": [
+        "dutos",
+        "square rounded arrow down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/square-rounded-arrow-left.svg",
+      "category": "Dutos",
+      "name": "Square rounded seta left",
+      "keywords": [
+        "dutos",
+        "square rounded arrow left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/square-rounded-arrow-right.svg",
+      "category": "Dutos",
+      "name": "Square rounded seta right",
+      "keywords": [
+        "dutos",
+        "square rounded arrow right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/square-rounded-arrow-up.svg",
+      "category": "Dutos",
+      "name": "Square rounded seta up",
+      "keywords": [
+        "dutos",
+        "square rounded arrow up"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/air-conditioning.svg",
+      "category": "Dutos",
+      "name": "Air conditioning",
+      "keywords": [
+        "dutos",
+        "air conditioning"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/alert-square.svg",
+      "category": "Dutos",
+      "name": "Alert square",
+      "keywords": [
+        "dutos",
+        "alert square"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/alert-square-rounded.svg",
+      "category": "Dutos",
+      "name": "Alert square rounded",
+      "keywords": [
+        "dutos",
+        "alert square rounded"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-bottom-center.svg",
+      "category": "Dutos",
+      "name": "Align box bottom center",
+      "keywords": [
+        "dutos",
+        "align box bottom center"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-bottom-left.svg",
+      "category": "Dutos",
+      "name": "Align box bottom left",
+      "keywords": [
+        "dutos",
+        "align box bottom left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-bottom-right.svg",
+      "category": "Dutos",
+      "name": "Align box bottom right",
+      "keywords": [
+        "dutos",
+        "align box bottom right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-center-bottom.svg",
+      "category": "Dutos",
+      "name": "Align box center bottom",
+      "keywords": [
+        "dutos",
+        "align box center bottom"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-center-middle.svg",
+      "category": "Dutos",
+      "name": "Align box center middle",
+      "keywords": [
+        "dutos",
+        "align box center middle"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-circle-down.svg",
+      "category": "Encanamentos",
+      "name": "Seta circular down",
+      "keywords": [
+        "encanamentos",
+        "arrow circle down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-circle-down-left.svg",
+      "category": "Encanamentos",
+      "name": "Seta circular down left",
+      "keywords": [
+        "encanamentos",
+        "arrow circle down left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-circle-down-right.svg",
+      "category": "Encanamentos",
+      "name": "Seta circular down right",
+      "keywords": [
+        "encanamentos",
+        "arrow circle down right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-circle-left.svg",
+      "category": "Encanamentos",
+      "name": "Seta circular left",
+      "keywords": [
+        "encanamentos",
+        "arrow circle left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-circle-right.svg",
+      "category": "Encanamentos",
+      "name": "Seta circular right",
+      "keywords": [
+        "encanamentos",
+        "arrow circle right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-circle-up.svg",
+      "category": "Encanamentos",
+      "name": "Seta circular up",
+      "keywords": [
+        "encanamentos",
+        "arrow circle up"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-circle-up-left.svg",
+      "category": "Encanamentos",
+      "name": "Seta circular up left",
+      "keywords": [
+        "encanamentos",
+        "arrow circle up left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-circle-up-right.svg",
+      "category": "Encanamentos",
+      "name": "Seta circular up right",
+      "keywords": [
+        "encanamentos",
+        "arrow circle up right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/flow-arrow.svg",
+      "category": "Encanamentos",
+      "name": "Fluxo seta",
+      "keywords": [
+        "encanamentos",
+        "flow arrow"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-arc-left.svg",
+      "category": "Encanamentos",
+      "name": "Seta arc left",
+      "keywords": [
+        "encanamentos",
+        "arrow arc left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-arc-right.svg",
+      "category": "Encanamentos",
+      "name": "Seta arc right",
+      "keywords": [
+        "encanamentos",
+        "arrow arc right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-double-up-left.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend double up left",
+      "keywords": [
+        "encanamentos",
+        "arrow bend double up left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-double-up-right.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend double up right",
+      "keywords": [
+        "encanamentos",
+        "arrow bend double up right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-down-left.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend down left",
+      "keywords": [
+        "encanamentos",
+        "arrow bend down left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-down-right.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend down right",
+      "keywords": [
+        "encanamentos",
+        "arrow bend down right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-left-down.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend left down",
+      "keywords": [
+        "encanamentos",
+        "arrow bend left down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-left-up.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend left up",
+      "keywords": [
+        "encanamentos",
+        "arrow bend left up"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-right-down.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend right down",
+      "keywords": [
+        "encanamentos",
+        "arrow bend right down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-right-up.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend right up",
+      "keywords": [
+        "encanamentos",
+        "arrow bend right up"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-up-left.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend up left",
+      "keywords": [
+        "encanamentos",
+        "arrow bend up left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-bend-up-right.svg",
+      "category": "Encanamentos",
+      "name": "Seta bend up right",
+      "keywords": [
+        "encanamentos",
+        "arrow bend up right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-clockwise.svg",
+      "category": "Encanamentos",
+      "name": "Seta clockwise",
+      "keywords": [
+        "encanamentos",
+        "arrow clockwise"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-counter-clockwise.svg",
+      "category": "Encanamentos",
+      "name": "Seta counter clockwise",
+      "keywords": [
+        "encanamentos",
+        "arrow counter clockwise"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circuit-battery.svg",
+      "category": "Fios e cabos",
+      "name": "Circuito bateria",
+      "keywords": [
+        "fios e cabos",
+        "circuit battery"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-desktop-bolt.svg",
+      "category": "Fios e cabos",
+      "name": "Dispositivo desktop raio",
+      "keywords": [
+        "fios e cabos",
+        "device desktop bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-imac-bolt.svg",
+      "category": "Fios e cabos",
+      "name": "Dispositivo imac raio",
+      "keywords": [
+        "fios e cabos",
+        "device imac bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-ipad-bolt.svg",
+      "category": "Fios e cabos",
+      "name": "Dispositivo ipad raio",
+      "keywords": [
+        "fios e cabos",
+        "device ipad bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-ipad-horizontal-bolt.svg",
+      "category": "Fios e cabos",
+      "name": "Dispositivo ipad horizontal raio",
+      "keywords": [
+        "fios e cabos",
+        "device ipad horizontal bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-mobile-bolt.svg",
+      "category": "Fios e cabos",
+      "name": "Dispositivo mobile raio",
+      "keywords": [
+        "fios e cabos",
+        "device mobile bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-tablet-bolt.svg",
+      "category": "Fios e cabos",
+      "name": "Dispositivo tablet raio",
+      "keywords": [
+        "fios e cabos",
+        "device tablet bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-usb.svg",
+      "category": "Fios e cabos",
+      "name": "Dispositivo USB",
+      "keywords": [
+        "fios e cabos",
+        "device usb"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-watch-bolt.svg",
+      "category": "Fios e cabos",
+      "name": "Dispositivo watch raio",
+      "keywords": [
+        "fios e cabos",
+        "device watch bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/devices-bolt.svg",
+      "category": "Fios e cabos",
+      "name": "Devices raio",
+      "keywords": [
+        "fios e cabos",
+        "devices bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/adjustments-bolt.svg",
+      "category": "Fios e cabos",
+      "name": "Adjustments raio",
+      "keywords": [
+        "fios e cabos",
+        "adjustments bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/antenna.svg",
+      "category": "Fios e cabos",
+      "name": "Antena",
+      "keywords": [
+        "fios e cabos",
+        "antenna"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/antenna-bars-1.svg",
+      "category": "Fios e cabos",
+      "name": "Antena bars 1",
+      "keywords": [
+        "fios e cabos",
+        "antenna bars 1"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/antenna-bars-2.svg",
+      "category": "Fios e cabos",
+      "name": "Antena bars 2",
+      "keywords": [
+        "fios e cabos",
+        "antenna bars 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/antenna-bars-3.svg",
+      "category": "Fios e cabos",
+      "name": "Antena bars 3",
+      "keywords": [
+        "fios e cabos",
+        "antenna bars 3"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/antenna-bars-4.svg",
+      "category": "Fios e cabos",
+      "name": "Antena bars 4",
+      "keywords": [
+        "fios e cabos",
+        "antenna bars 4"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/antenna-bars-5.svg",
+      "category": "Fios e cabos",
+      "name": "Antena bars 5",
+      "keywords": [
+        "fios e cabos",
+        "antenna bars 5"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/archery-arrow.svg",
+      "category": "Fios e cabos",
+      "name": "Archery seta",
+      "keywords": [
+        "fios e cabos",
+        "archery arrow"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-autofit-content.svg",
+      "category": "Fios e cabos",
+      "name": "Seta autofit content",
+      "keywords": [
+        "fios e cabos",
+        "arrow autofit content"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-autofit-down.svg",
+      "category": "Fios e cabos",
+      "name": "Seta autofit down",
+      "keywords": [
+        "fios e cabos",
+        "arrow autofit down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-autofit-height.svg",
+      "category": "Fios e cabos",
+      "name": "Seta autofit height",
+      "keywords": [
+        "fios e cabos",
+        "arrow autofit height"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-autofit-left.svg",
+      "category": "Fios e cabos",
+      "name": "Seta autofit left",
+      "keywords": [
+        "fios e cabos",
+        "arrow autofit left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-autofit-right.svg",
+      "category": "Fios e cabos",
+      "name": "Seta autofit right",
+      "keywords": [
+        "fios e cabos",
+        "arrow autofit right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/rewind-circle.svg",
+      "category": "Misturadores",
+      "name": "Rewind circular",
+      "keywords": [
+        "misturadores",
+        "rewind circle"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/user-circle-gear.svg",
+      "category": "Misturadores",
+      "name": "User circular engrenagem",
+      "keywords": [
+        "misturadores",
+        "user circle gear"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/app-window.svg",
+      "category": "Misturadores",
+      "name": "App window",
+      "keywords": [
+        "misturadores",
+        "app window"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-down.svg",
+      "category": "Misturadores",
+      "name": "Seta down",
+      "keywords": [
+        "misturadores",
+        "arrow down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-down-left.svg",
+      "category": "Misturadores",
+      "name": "Seta down left",
+      "keywords": [
+        "misturadores",
+        "arrow down left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-down-right.svg",
+      "category": "Misturadores",
+      "name": "Seta down right",
+      "keywords": [
+        "misturadores",
+        "arrow down right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-down-left.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow down left",
+      "keywords": [
+        "misturadores",
+        "arrow elbow down left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-down-right.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow down right",
+      "keywords": [
+        "misturadores",
+        "arrow elbow down right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-left.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow left",
+      "keywords": [
+        "misturadores",
+        "arrow elbow left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-left-down.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow left down",
+      "keywords": [
+        "misturadores",
+        "arrow elbow left down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-left-up.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow left up",
+      "keywords": [
+        "misturadores",
+        "arrow elbow left up"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-right.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow right",
+      "keywords": [
+        "misturadores",
+        "arrow elbow right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-right-down.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow right down",
+      "keywords": [
+        "misturadores",
+        "arrow elbow right down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-right-up.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow right up",
+      "keywords": [
+        "misturadores",
+        "arrow elbow right up"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-up-left.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow up left",
+      "keywords": [
+        "misturadores",
+        "arrow elbow up left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-elbow-up-right.svg",
+      "category": "Misturadores",
+      "name": "Seta elbow up right",
+      "keywords": [
+        "misturadores",
+        "arrow elbow up right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-down.svg",
+      "category": "Misturadores",
+      "name": "Seta fat down",
+      "keywords": [
+        "misturadores",
+        "arrow fat down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-left.svg",
+      "category": "Misturadores",
+      "name": "Seta fat left",
+      "keywords": [
+        "misturadores",
+        "arrow fat left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-line-down.svg",
+      "category": "Misturadores",
+      "name": "Seta fat line down",
+      "keywords": [
+        "misturadores",
+        "arrow fat line down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-line-left.svg",
+      "category": "Misturadores",
+      "name": "Seta fat line left",
+      "keywords": [
+        "misturadores",
+        "arrow fat line left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-line-right.svg",
+      "category": "Misturadores",
+      "name": "Seta fat line right",
+      "keywords": [
+        "misturadores",
+        "arrow fat line right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-line-up.svg",
+      "category": "Misturadores",
+      "name": "Seta fat line up",
+      "keywords": [
+        "misturadores",
+        "arrow fat line up"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-lines-down.svg",
+      "category": "Misturadores",
+      "name": "Seta fat lines down",
+      "keywords": [
+        "misturadores",
+        "arrow fat lines down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/automatic-gearbox.svg",
+      "category": "Motores",
+      "name": "Automatic caixa de engrenagens",
+      "keywords": [
+        "motores",
+        "automatic gearbox"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-fan.svg",
+      "category": "Motores",
+      "name": "Car ventoinha",
+      "keywords": [
+        "motores",
+        "car fan"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-fan-1.svg",
+      "category": "Motores",
+      "name": "Car ventoinha 1",
+      "keywords": [
+        "motores",
+        "car fan 1"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-fan-2.svg",
+      "category": "Motores",
+      "name": "Car ventoinha 2",
+      "keywords": [
+        "motores",
+        "car fan 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-fan-3.svg",
+      "category": "Motores",
+      "name": "Car ventoinha 3",
+      "keywords": [
+        "motores",
+        "car fan 3"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-fan-auto.svg",
+      "category": "Motores",
+      "name": "Car ventoinha auto",
+      "keywords": [
+        "motores",
+        "car fan auto"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-turbine.svg",
+      "category": "Motores",
+      "name": "Car turbina",
+      "keywords": [
+        "motores",
+        "car turbine"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circuit-motor.svg",
+      "category": "Motores",
+      "name": "Circuito motor",
+      "keywords": [
+        "motores",
+        "circuit motor"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/manual-gearbox.svg",
+      "category": "Motores",
+      "name": "Manual caixa de engrenagens",
+      "keywords": [
+        "motores",
+        "manual gearbox"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/baby-carriage.svg",
+      "category": "Motores",
+      "name": "Baby carriage",
+      "keywords": [
+        "motores",
+        "baby carriage"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-carousel.svg",
+      "category": "Motores",
+      "name": "Edifício carousel",
+      "keywords": [
+        "motores",
+        "building carousel"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-wind-turbine.svg",
+      "category": "Motores",
+      "name": "Edifício vento turbina",
+      "keywords": [
+        "motores",
+        "building wind turbine"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/camera-rotate.svg",
+      "category": "Motores",
+      "name": "Câmera rotação",
+      "keywords": [
+        "motores",
+        "camera rotate"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car.svg",
+      "category": "Motores",
+      "name": "Car",
+      "keywords": [
+        "motores",
+        "car"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-4wd.svg",
+      "category": "Motores",
+      "name": "Car 4wd",
+      "keywords": [
+        "motores",
+        "car 4wd"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-crane.svg",
+      "category": "Motores",
+      "name": "Car guindaste",
+      "keywords": [
+        "motores",
+        "car crane"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-crash.svg",
+      "category": "Motores",
+      "name": "Car crash",
+      "keywords": [
+        "motores",
+        "car crash"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-door.svg",
+      "category": "Motores",
+      "name": "Car door",
+      "keywords": [
+        "motores",
+        "car door"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-garage.svg",
+      "category": "Motores",
+      "name": "Car garage",
+      "keywords": [
+        "motores",
+        "car garage"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-lifter.svg",
+      "category": "Motores",
+      "name": "Car lifter",
+      "keywords": [
+        "motores",
+        "car lifter"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-suspension.svg",
+      "category": "Motores",
+      "name": "Car suspension",
+      "keywords": [
+        "motores",
+        "car suspension"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/car-suv.svg",
+      "category": "Motores",
+      "name": "Car suv",
+      "keywords": [
+        "motores",
+        "car suv"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/carambola.svg",
+      "category": "Motores",
+      "name": "Carambola",
+      "keywords": [
+        "motores",
+        "carambola"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-broadcast-tower.svg",
+      "category": "Mineração",
+      "name": "Edifício broadcast tower",
+      "keywords": [
+        "mineração",
+        "building broadcast tower"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-warehouse.svg",
+      "category": "Mineração",
+      "name": "Edifício armazém",
+      "keywords": [
+        "mineração",
+        "building warehouse"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/hammer-drill.svg",
+      "category": "Mineração",
+      "name": "Martelo furadeira",
+      "keywords": [
+        "mineração",
+        "hammer drill"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/broadcast.svg",
+      "category": "Mineração",
+      "name": "Broadcast",
+      "keywords": [
+        "mineração",
+        "broadcast"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/bucket.svg",
+      "category": "Mineração",
+      "name": "Caçamba",
+      "keywords": [
+        "mineração",
+        "bucket"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building.svg",
+      "category": "Mineração",
+      "name": "Edifício",
+      "keywords": [
+        "mineração",
+        "building"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-airport.svg",
+      "category": "Mineração",
+      "name": "Edifício airport",
+      "keywords": [
+        "mineração",
+        "building airport"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-arch.svg",
+      "category": "Mineração",
+      "name": "Edifício arch",
+      "keywords": [
+        "mineração",
+        "building arch"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-bank.svg",
+      "category": "Mineração",
+      "name": "Edifício bank",
+      "keywords": [
+        "mineração",
+        "building bank"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-bridge.svg",
+      "category": "Mineração",
+      "name": "Edifício bridge",
+      "keywords": [
+        "mineração",
+        "building bridge"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-bridge-2.svg",
+      "category": "Mineração",
+      "name": "Edifício bridge 2",
+      "keywords": [
+        "mineração",
+        "building bridge 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-burj-al-arab.svg",
+      "category": "Mineração",
+      "name": "Edifício burj al arab",
+      "keywords": [
+        "mineração",
+        "building burj al arab"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-castle.svg",
+      "category": "Mineração",
+      "name": "Edifício castle",
+      "keywords": [
+        "mineração",
+        "building castle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-church.svg",
+      "category": "Mineração",
+      "name": "Edifício church",
+      "keywords": [
+        "mineração",
+        "building church"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-circus.svg",
+      "category": "Mineração",
+      "name": "Edifício circus",
+      "keywords": [
+        "mineração",
+        "building circus"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-cog.svg",
+      "category": "Mineração",
+      "name": "Edifício cog",
+      "keywords": [
+        "mineração",
+        "building cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-community.svg",
+      "category": "Mineração",
+      "name": "Edifício community",
+      "keywords": [
+        "mineração",
+        "building community"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-cottage.svg",
+      "category": "Mineração",
+      "name": "Edifício cottage",
+      "keywords": [
+        "mineração",
+        "building cottage"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-eiffel-tower.svg",
+      "category": "Mineração",
+      "name": "Edifício eiffel tower",
+      "keywords": [
+        "mineração",
+        "building eiffel tower"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-estate.svg",
+      "category": "Mineração",
+      "name": "Edifício estate",
+      "keywords": [
+        "mineração",
+        "building estate"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-fortress.svg",
+      "category": "Mineração",
+      "name": "Edifício fortress",
+      "keywords": [
+        "mineração",
+        "building fortress"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-hospital.svg",
+      "category": "Mineração",
+      "name": "Edifício hospital",
+      "keywords": [
+        "mineração",
+        "building hospital"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/building-minus.svg",
+      "category": "Mineração",
+      "name": "Edifício minus",
+      "keywords": [
+        "mineração",
+        "building minus"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-transfer-down.svg",
+      "category": "Setas",
+      "name": "Setas transferência down",
+      "keywords": [
+        "setas",
+        "arrows transfer down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-transfer-up.svg",
+      "category": "Setas",
+      "name": "Setas transferência up",
+      "keywords": [
+        "setas",
+        "arrows transfer up"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-transfer-up-down.svg",
+      "category": "Setas",
+      "name": "Setas transferência up down",
+      "keywords": [
+        "setas",
+        "arrows transfer up down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/direction-arrows.svg",
+      "category": "Setas",
+      "name": "Direction setas",
+      "keywords": [
+        "setas",
+        "direction arrows"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-cross.svg",
+      "category": "Setas",
+      "name": "Setas cross",
+      "keywords": [
+        "setas",
+        "arrows cross"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-diagonal.svg",
+      "category": "Setas",
+      "name": "Setas diagonal",
+      "keywords": [
+        "setas",
+        "arrows diagonal"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-diagonal-2.svg",
+      "category": "Setas",
+      "name": "Setas diagonal 2",
+      "keywords": [
+        "setas",
+        "arrows diagonal 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-diagonal-minimize.svg",
+      "category": "Setas",
+      "name": "Setas diagonal minimize",
+      "keywords": [
+        "setas",
+        "arrows diagonal minimize"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-diagonal-minimize-2.svg",
+      "category": "Setas",
+      "name": "Setas diagonal minimize 2",
+      "keywords": [
+        "setas",
+        "arrows diagonal minimize 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-diff.svg",
+      "category": "Setas",
+      "name": "Setas diff",
+      "keywords": [
+        "setas",
+        "arrows diff"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-double-ne-sw.svg",
+      "category": "Setas",
+      "name": "Setas double ne sw",
+      "keywords": [
+        "setas",
+        "arrows double ne sw"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-double-nw-se.svg",
+      "category": "Setas",
+      "name": "Setas double nw se",
+      "keywords": [
+        "setas",
+        "arrows double nw se"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-double-se-nw.svg",
+      "category": "Setas",
+      "name": "Setas double se nw",
+      "keywords": [
+        "setas",
+        "arrows double se nw"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-double-sw-ne.svg",
+      "category": "Setas",
+      "name": "Setas double sw ne",
+      "keywords": [
+        "setas",
+        "arrows double sw ne"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-down.svg",
+      "category": "Setas",
+      "name": "Setas down",
+      "keywords": [
+        "setas",
+        "arrows down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-down-up.svg",
+      "category": "Setas",
+      "name": "Setas down up",
+      "keywords": [
+        "setas",
+        "arrows down up"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-exchange.svg",
+      "category": "Setas",
+      "name": "Setas exchange",
+      "keywords": [
+        "setas",
+        "arrows exchange"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-exchange-2.svg",
+      "category": "Setas",
+      "name": "Setas exchange 2",
+      "keywords": [
+        "setas",
+        "arrows exchange 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-horizontal.svg",
+      "category": "Setas",
+      "name": "Setas horizontal",
+      "keywords": [
+        "setas",
+        "arrows horizontal"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-join.svg",
+      "category": "Setas",
+      "name": "Setas join",
+      "keywords": [
+        "setas",
+        "arrows join"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-join-2.svg",
+      "category": "Setas",
+      "name": "Setas join 2",
+      "keywords": [
+        "setas",
+        "arrows join 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-left.svg",
+      "category": "Setas",
+      "name": "Setas left",
+      "keywords": [
+        "setas",
+        "arrows left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-left-down.svg",
+      "category": "Setas",
+      "name": "Setas left down",
+      "keywords": [
+        "setas",
+        "arrows left down"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/axis-positioning.svg",
+      "category": "Sensores",
+      "name": "Eixo posicionamento",
+      "keywords": [
+        "sensores",
+        "axis positioning"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/axis-rotation.svg",
+      "category": "Sensores",
+      "name": "Eixo rotação",
+      "keywords": [
+        "sensores",
+        "axis rotation"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/generic-device-alarm.svg",
+      "category": "Sensores",
+      "name": "Genérico dispositivo alarme",
+      "keywords": [
+        "sensores",
+        "generic device alarm"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/generic-device-power-saving.svg",
+      "category": "Sensores",
+      "name": "Genérico dispositivo potência saving",
+      "keywords": [
+        "sensores",
+        "generic device power saving"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/generic-device-software-alarm.svg",
+      "category": "Sensores",
+      "name": "Genérico dispositivo software alarme",
+      "keywords": [
+        "sensores",
+        "generic device software alarm"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/photo-camera.svg",
+      "category": "Sensores",
+      "name": "Foto câmera",
+      "keywords": [
+        "sensores",
+        "photo camera"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/photo-camera-add.svg",
+      "category": "Sensores",
+      "name": "Foto câmera add",
+      "keywords": [
+        "sensores",
+        "photo camera add"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/photo-cameras.svg",
+      "category": "Sensores",
+      "name": "Foto cameras",
+      "keywords": [
+        "sensores",
+        "photo cameras"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/alarm.svg",
+      "category": "Sensores",
+      "name": "Alarme",
+      "keywords": [
+        "sensores",
+        "alarm"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/alarm-bell.svg",
+      "category": "Sensores",
+      "name": "Alarme bell",
+      "keywords": [
+        "sensores",
+        "alarm bell"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/alarm-clock.svg",
+      "category": "Sensores",
+      "name": "Alarme clock",
+      "keywords": [
+        "sensores",
+        "alarm clock"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/alarm-clock-success.svg",
+      "category": "Sensores",
+      "name": "Alarme clock success",
+      "keywords": [
+        "sensores",
+        "alarm clock success"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/controlled-device.svg",
+      "category": "Sensores",
+      "name": "Controlled dispositivo",
+      "keywords": [
+        "sensores",
+        "controlled device"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/controller-device.svg",
+      "category": "Sensores",
+      "name": "Controller dispositivo",
+      "keywords": [
+        "sensores",
+        "controller device"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/controller-device-safety.svg",
+      "category": "Sensores",
+      "name": "Controller dispositivo safety",
+      "keywords": [
+        "sensores",
+        "controller device safety"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/device-driver.svg",
+      "category": "Sensores",
+      "name": "Dispositivo driver",
+      "keywords": [
+        "sensores",
+        "device driver"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/device-fan.svg",
+      "category": "Sensores",
+      "name": "Dispositivo ventoinha",
+      "keywords": [
+        "sensores",
+        "device fan"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/device-manager.svg",
+      "category": "Sensores",
+      "name": "Dispositivo manager",
+      "keywords": [
+        "sensores",
+        "device manager"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/device-play.svg",
+      "category": "Sensores",
+      "name": "Dispositivo iniciar",
+      "keywords": [
+        "sensores",
+        "device play"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/device-view-flat.svg",
+      "category": "Sensores",
+      "name": "Dispositivo view flat",
+      "keywords": [
+        "sensores",
+        "device view flat"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/device-view-hierarchical.svg",
+      "category": "Sensores",
+      "name": "Dispositivo view hierarchical",
+      "keywords": [
+        "sensores",
+        "device view hierarchical"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/external-encoder.svg",
+      "category": "Sensores",
+      "name": "External encoder",
+      "keywords": [
+        "sensores",
+        "external encoder"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/flow-physically.svg",
+      "category": "Sensores",
+      "name": "Fluxo físico",
+      "keywords": [
+        "sensores",
+        "flow physically"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/compress-lines.svg",
+      "category": "Tubos",
+      "name": "Compress lines",
+      "keywords": [
+        "tubos",
+        "compress lines"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/gas-tank-droplet.svg",
+      "category": "Tubos",
+      "name": "Gás tank gota",
+      "keywords": [
+        "tubos",
+        "gas tank droplet"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/triangle-flag-circle.svg",
+      "category": "Tubos",
+      "name": "Triangle flag circular",
+      "keywords": [
+        "tubos",
+        "triangle flag circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-rectangle.svg",
+      "category": "Tubos",
+      "name": "Circular rectangle",
+      "keywords": [
+        "tubos",
+        "circle rectangle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-triangle.svg",
+      "category": "Tubos",
+      "name": "Circular triangle",
+      "keywords": [
+        "tubos",
+        "circle triangle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/triangle-square-circle.svg",
+      "category": "Tubos",
+      "name": "Triangle square circular",
+      "keywords": [
+        "tubos",
+        "triangle square circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/angle-tool.svg",
+      "category": "Tubos",
+      "name": "Angle ferramenta",
+      "keywords": [
+        "tubos",
+        "angle tool"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-down-circle.svg",
+      "category": "Tubos",
+      "name": "Seta down circular",
+      "keywords": [
+        "tubos",
+        "arrow down circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-down-left-circle.svg",
+      "category": "Tubos",
+      "name": "Seta down left circular",
+      "keywords": [
+        "tubos",
+        "arrow down left circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-down-right-circle.svg",
+      "category": "Tubos",
+      "name": "Seta down right circular",
+      "keywords": [
+        "tubos",
+        "arrow down right circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-left-circle.svg",
+      "category": "Tubos",
+      "name": "Seta left circular",
+      "keywords": [
+        "tubos",
+        "arrow left circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-right-circle.svg",
+      "category": "Tubos",
+      "name": "Seta right circular",
+      "keywords": [
+        "tubos",
+        "arrow right circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-up-circle.svg",
+      "category": "Tubos",
+      "name": "Seta up circular",
+      "keywords": [
+        "tubos",
+        "arrow up circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-up-left-circle.svg",
+      "category": "Tubos",
+      "name": "Seta up left circular",
+      "keywords": [
+        "tubos",
+        "arrow up left circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-up-right-circle.svg",
+      "category": "Tubos",
+      "name": "Seta up right circular",
+      "keywords": [
+        "tubos",
+        "arrow up right circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrows-up-from-line.svg",
+      "category": "Tubos",
+      "name": "Setas up from line",
+      "keywords": [
+        "tubos",
+        "arrows up from line"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/at-sign-circle.svg",
+      "category": "Tubos",
+      "name": "At sign circular",
+      "keywords": [
+        "tubos",
+        "at sign circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/bitcoin-circle.svg",
+      "category": "Tubos",
+      "name": "Bitcoin circular",
+      "keywords": [
+        "tubos",
+        "bitcoin circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/bookmark-circle.svg",
+      "category": "Tubos",
+      "name": "Bookmark circular",
+      "keywords": [
+        "tubos",
+        "bookmark circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/chat-lines.svg",
+      "category": "Tubos",
+      "name": "Chat lines",
+      "keywords": [
+        "tubos",
+        "chat lines"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/check-circle.svg",
+      "category": "Tubos",
+      "name": "Check circular",
+      "keywords": [
+        "tubos",
+        "check circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/circle.svg",
+      "category": "Tubos",
+      "name": "Circular",
+      "keywords": [
+        "tubos",
+        "circle"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/circle-spark.svg",
+      "category": "Tubos",
+      "name": "Circular spark",
+      "keywords": [
+        "tubos",
+        "circle spark"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-desktop-cog.svg",
+      "category": "Usinagem",
+      "name": "Dispositivo desktop cog",
+      "keywords": [
+        "usinagem",
+        "device desktop cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-imac-cog.svg",
+      "category": "Usinagem",
+      "name": "Dispositivo imac cog",
+      "keywords": [
+        "usinagem",
+        "device imac cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-ipad-cog.svg",
+      "category": "Usinagem",
+      "name": "Dispositivo ipad cog",
+      "keywords": [
+        "usinagem",
+        "device ipad cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-ipad-horizontal-cog.svg",
+      "category": "Usinagem",
+      "name": "Dispositivo ipad horizontal cog",
+      "keywords": [
+        "usinagem",
+        "device ipad horizontal cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-mobile-cog.svg",
+      "category": "Usinagem",
+      "name": "Dispositivo mobile cog",
+      "keywords": [
+        "usinagem",
+        "device mobile cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-tablet-cog.svg",
+      "category": "Usinagem",
+      "name": "Dispositivo tablet cog",
+      "keywords": [
+        "usinagem",
+        "device tablet cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-watch-cog.svg",
+      "category": "Usinagem",
+      "name": "Dispositivo watch cog",
+      "keywords": [
+        "usinagem",
+        "device watch cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/devices-cog.svg",
+      "category": "Usinagem",
+      "name": "Devices cog",
+      "keywords": [
+        "usinagem",
+        "devices cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/message-circle-bolt.svg",
+      "category": "Usinagem",
+      "name": "Message circular raio",
+      "keywords": [
+        "usinagem",
+        "message circle bolt"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/message-circle-cog.svg",
+      "category": "Usinagem",
+      "name": "Message circular cog",
+      "keywords": [
+        "usinagem",
+        "message circle cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/wave-saw-tool.svg",
+      "category": "Usinagem",
+      "name": "Onda saw ferramenta",
+      "keywords": [
+        "usinagem",
+        "wave saw tool"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/ad-circle.svg",
+      "category": "Usinagem",
+      "name": "Ad circular",
+      "keywords": [
+        "usinagem",
+        "ad circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/adjustments-cog.svg",
+      "category": "Usinagem",
+      "name": "Adjustments cog",
+      "keywords": [
+        "usinagem",
+        "adjustments cog"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/alert-circle.svg",
+      "category": "Usinagem",
+      "name": "Alert circular",
+      "keywords": [
+        "usinagem",
+        "alert circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-down-circle.svg",
+      "category": "Usinagem",
+      "name": "Seta down circular",
+      "keywords": [
+        "usinagem",
+        "arrow down circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-down-left-circle.svg",
+      "category": "Usinagem",
+      "name": "Seta down left circular",
+      "keywords": [
+        "usinagem",
+        "arrow down left circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-down-right-circle.svg",
+      "category": "Usinagem",
+      "name": "Seta down right circular",
+      "keywords": [
+        "usinagem",
+        "arrow down right circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-left-circle.svg",
+      "category": "Usinagem",
+      "name": "Seta left circular",
+      "keywords": [
+        "usinagem",
+        "arrow left circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-right-circle.svg",
+      "category": "Usinagem",
+      "name": "Seta right circular",
+      "keywords": [
+        "usinagem",
+        "arrow right circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-up-circle.svg",
+      "category": "Usinagem",
+      "name": "Seta up circular",
+      "keywords": [
+        "usinagem",
+        "arrow up circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-up-left-circle.svg",
+      "category": "Usinagem",
+      "name": "Seta up left circular",
+      "keywords": [
+        "usinagem",
+        "arrow up left circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-up-right-circle.svg",
+      "category": "Usinagem",
+      "name": "Seta up right circular",
+      "keywords": [
+        "usinagem",
+        "arrow up right circle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/axe.svg",
+      "category": "Usinagem",
+      "name": "Axe",
+      "keywords": [
+        "usinagem",
+        "axe"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/delivery-truck.svg",
+      "category": "Transportadores",
+      "name": "Entrega caminhão",
+      "keywords": [
+        "transportadores",
+        "delivery truck"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/truck-delivery.svg",
+      "category": "Transportadores",
+      "name": "Caminhão entrega",
+      "keywords": [
+        "transportadores",
+        "truck delivery"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/align-bottom-box.svg",
+      "category": "Transportadores",
+      "name": "Align bottom box",
+      "keywords": [
+        "transportadores",
+        "align bottom box"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/align-left-box.svg",
+      "category": "Transportadores",
+      "name": "Align left box",
+      "keywords": [
+        "transportadores",
+        "align left box"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/align-right-box.svg",
+      "category": "Transportadores",
+      "name": "Align right box",
+      "keywords": [
+        "transportadores",
+        "align right box"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/align-top-box.svg",
+      "category": "Transportadores",
+      "name": "Align top box",
+      "keywords": [
+        "transportadores",
+        "align top box"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-archery.svg",
+      "category": "Transportadores",
+      "name": "Seta archery",
+      "keywords": [
+        "transportadores",
+        "arrow archery"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-down.svg",
+      "category": "Transportadores",
+      "name": "Seta down",
+      "keywords": [
+        "transportadores",
+        "arrow down"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-down-left.svg",
+      "category": "Transportadores",
+      "name": "Seta down left",
+      "keywords": [
+        "transportadores",
+        "arrow down left"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-down-left-square.svg",
+      "category": "Transportadores",
+      "name": "Seta down left square",
+      "keywords": [
+        "transportadores",
+        "arrow down left square"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-down-right.svg",
+      "category": "Transportadores",
+      "name": "Seta down right",
+      "keywords": [
+        "transportadores",
+        "arrow down right"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-down-right-square.svg",
+      "category": "Transportadores",
+      "name": "Seta down right square",
+      "keywords": [
+        "transportadores",
+        "arrow down right square"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-down-tag.svg",
+      "category": "Transportadores",
+      "name": "Seta down etiqueta",
+      "keywords": [
+        "transportadores",
+        "arrow down tag"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-email-forward.svg",
+      "category": "Transportadores",
+      "name": "Seta email forward",
+      "keywords": [
+        "transportadores",
+        "arrow email forward"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-enlarge-tag.svg",
+      "category": "Transportadores",
+      "name": "Seta enlarge etiqueta",
+      "keywords": [
+        "transportadores",
+        "arrow enlarge tag"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-left.svg",
+      "category": "Transportadores",
+      "name": "Seta left",
+      "keywords": [
+        "transportadores",
+        "arrow left"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-left-tag.svg",
+      "category": "Transportadores",
+      "name": "Seta left etiqueta",
+      "keywords": [
+        "transportadores",
+        "arrow left tag"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-reduce-tag.svg",
+      "category": "Transportadores",
+      "name": "Seta reduce etiqueta",
+      "keywords": [
+        "transportadores",
+        "arrow reduce tag"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-right.svg",
+      "category": "Transportadores",
+      "name": "Seta right",
+      "keywords": [
+        "transportadores",
+        "arrow right"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-right-tag.svg",
+      "category": "Transportadores",
+      "name": "Seta right etiqueta",
+      "keywords": [
+        "transportadores",
+        "arrow right tag"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-separate.svg",
+      "category": "Transportadores",
+      "name": "Seta separate",
+      "keywords": [
+        "transportadores",
+        "arrow separate"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-separate-vertical.svg",
+      "category": "Transportadores",
+      "name": "Seta separate vertical",
+      "keywords": [
+        "transportadores",
+        "arrow separate vertical"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-union.svg",
+      "category": "Transportadores",
+      "name": "Seta union",
+      "keywords": [
+        "transportadores",
+        "arrow union"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-move-down.svg",
+      "category": "Esteiras",
+      "name": "Seta movimento down",
+      "keywords": [
+        "esteiras",
+        "arrow move down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-move-left.svg",
+      "category": "Esteiras",
+      "name": "Seta movimento left",
+      "keywords": [
+        "esteiras",
+        "arrow move left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-move-right.svg",
+      "category": "Esteiras",
+      "name": "Seta movimento right",
+      "keywords": [
+        "esteiras",
+        "arrow move right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-move-up.svg",
+      "category": "Esteiras",
+      "name": "Seta movimento up",
+      "keywords": [
+        "esteiras",
+        "arrow move up"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-move.svg",
+      "category": "Esteiras",
+      "name": "Setas movimento",
+      "keywords": [
+        "esteiras",
+        "arrows move"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-move-horizontal.svg",
+      "category": "Esteiras",
+      "name": "Setas movimento horizontal",
+      "keywords": [
+        "esteiras",
+        "arrows move horizontal"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrows-move-vertical.svg",
+      "category": "Esteiras",
+      "name": "Setas movimento vertical",
+      "keywords": [
+        "esteiras",
+        "arrows move vertical"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-center-stretch.svg",
+      "category": "Esteiras",
+      "name": "Align box center stretch",
+      "keywords": [
+        "esteiras",
+        "align box center stretch"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-center-top.svg",
+      "category": "Esteiras",
+      "name": "Align box center top",
+      "keywords": [
+        "esteiras",
+        "align box center top"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-left-bottom.svg",
+      "category": "Esteiras",
+      "name": "Align box left bottom",
+      "keywords": [
+        "esteiras",
+        "align box left bottom"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-left-middle.svg",
+      "category": "Esteiras",
+      "name": "Align box left middle",
+      "keywords": [
+        "esteiras",
+        "align box left middle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-left-stretch.svg",
+      "category": "Esteiras",
+      "name": "Align box left stretch",
+      "keywords": [
+        "esteiras",
+        "align box left stretch"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-left-top.svg",
+      "category": "Esteiras",
+      "name": "Align box left top",
+      "keywords": [
+        "esteiras",
+        "align box left top"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-right-bottom.svg",
+      "category": "Esteiras",
+      "name": "Align box right bottom",
+      "keywords": [
+        "esteiras",
+        "align box right bottom"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-right-middle.svg",
+      "category": "Esteiras",
+      "name": "Align box right middle",
+      "keywords": [
+        "esteiras",
+        "align box right middle"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-right-stretch.svg",
+      "category": "Esteiras",
+      "name": "Align box right stretch",
+      "keywords": [
+        "esteiras",
+        "align box right stretch"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-right-top.svg",
+      "category": "Esteiras",
+      "name": "Align box right top",
+      "keywords": [
+        "esteiras",
+        "align box right top"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-top-center.svg",
+      "category": "Esteiras",
+      "name": "Align box top center",
+      "keywords": [
+        "esteiras",
+        "align box top center"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-top-left.svg",
+      "category": "Esteiras",
+      "name": "Align box top left",
+      "keywords": [
+        "esteiras",
+        "align box top left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-box-top-right.svg",
+      "category": "Esteiras",
+      "name": "Align box top right",
+      "keywords": [
+        "esteiras",
+        "align box top right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-center.svg",
+      "category": "Esteiras",
+      "name": "Align center",
+      "keywords": [
+        "esteiras",
+        "align center"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-justified.svg",
+      "category": "Esteiras",
+      "name": "Align justified",
+      "keywords": [
+        "esteiras",
+        "align justified"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/align-left.svg",
+      "category": "Esteiras",
+      "name": "Align left",
+      "keywords": [
+        "esteiras",
+        "align left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-loop-left.svg",
+      "category": "Correias",
+      "name": "Seta laço left",
+      "keywords": [
+        "correias",
+        "arrow loop left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-loop-left-2.svg",
+      "category": "Correias",
+      "name": "Seta laço left 2",
+      "keywords": [
+        "correias",
+        "arrow loop left 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-loop-right.svg",
+      "category": "Correias",
+      "name": "Seta laço right",
+      "keywords": [
+        "correias",
+        "arrow loop right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/arrow-loop-right-2.svg",
+      "category": "Correias",
+      "name": "Seta laço right 2",
+      "keywords": [
+        "correias",
+        "arrow loop right 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-arrow-down.svg",
+      "category": "Correias",
+      "name": "Circular seta down",
+      "keywords": [
+        "correias",
+        "circle arrow down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-arrow-down-left.svg",
+      "category": "Correias",
+      "name": "Circular seta down left",
+      "keywords": [
+        "correias",
+        "circle arrow down left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-arrow-down-right.svg",
+      "category": "Correias",
+      "name": "Circular seta down right",
+      "keywords": [
+        "correias",
+        "circle arrow down right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-arrow-left.svg",
+      "category": "Correias",
+      "name": "Circular seta left",
+      "keywords": [
+        "correias",
+        "circle arrow left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-arrow-right.svg",
+      "category": "Correias",
+      "name": "Circular seta right",
+      "keywords": [
+        "correias",
+        "circle arrow right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-arrow-up.svg",
+      "category": "Correias",
+      "name": "Circular seta up",
+      "keywords": [
+        "correias",
+        "circle arrow up"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-arrow-up-left.svg",
+      "category": "Correias",
+      "name": "Circular seta up left",
+      "keywords": [
+        "correias",
+        "circle arrow up left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-arrow-up-right.svg",
+      "category": "Correias",
+      "name": "Circular seta up right",
+      "keywords": [
+        "correias",
+        "circle arrow up right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-open-arrow-down.svg",
+      "category": "Correias",
+      "name": "Circular open seta down",
+      "keywords": [
+        "correias",
+        "circle open arrow down"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-open-arrow-left.svg",
+      "category": "Correias",
+      "name": "Circular open seta left",
+      "keywords": [
+        "correias",
+        "circle open arrow left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-open-arrow-right.svg",
+      "category": "Correias",
+      "name": "Circular open seta right",
+      "keywords": [
+        "correias",
+        "circle open arrow right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/circle-open-arrow-up.svg",
+      "category": "Correias",
+      "name": "Circular open seta up",
+      "keywords": [
+        "correias",
+        "circle open arrow up"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-union-vertical.svg",
+      "category": "Correias",
+      "name": "Seta union vertical",
+      "keywords": [
+        "correias",
+        "arrow union vertical"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-up.svg",
+      "category": "Correias",
+      "name": "Seta up",
+      "keywords": [
+        "correias",
+        "arrow up"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-up-left.svg",
+      "category": "Correias",
+      "name": "Seta up left",
+      "keywords": [
+        "correias",
+        "arrow up left"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-up-left-square.svg",
+      "category": "Correias",
+      "name": "Seta up left square",
+      "keywords": [
+        "correias",
+        "arrow up left square"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-up-right.svg",
+      "category": "Correias",
+      "name": "Seta up right",
+      "keywords": [
+        "correias",
+        "arrow up right"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-up-right-square.svg",
+      "category": "Correias",
+      "name": "Seta up right square",
+      "keywords": [
+        "correias",
+        "arrow up right square"
+      ]
+    },
+    {
+      "source": "iconoir",
+      "sourcePath": "iconoir/icons/regular/arrow-up-tag.svg",
+      "category": "Correias",
+      "name": "Seta up etiqueta",
+      "keywords": [
+        "correias",
+        "arrow up tag"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrows-clockwise.svg",
+      "category": "Válvulas",
+      "name": "Setas clockwise",
+      "keywords": [
+        "válvulas",
+        "arrows clockwise"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrows-counter-clockwise.svg",
+      "category": "Válvulas",
+      "name": "Setas counter clockwise",
+      "keywords": [
+        "válvulas",
+        "arrows counter clockwise"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/drop-circle.svg",
+      "category": "Válvulas",
+      "name": "Gota circular",
+      "keywords": [
+        "válvulas",
+        "drop circle"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/air-traffic-control.svg",
+      "category": "Válvulas",
+      "name": "Air traffic controle",
+      "keywords": [
+        "válvulas",
+        "air traffic control"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-lines-left.svg",
+      "category": "Válvulas",
+      "name": "Seta fat lines left",
+      "keywords": [
+        "válvulas",
+        "arrow fat lines left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-lines-right.svg",
+      "category": "Válvulas",
+      "name": "Seta fat lines right",
+      "keywords": [
+        "válvulas",
+        "arrow fat lines right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-lines-up.svg",
+      "category": "Válvulas",
+      "name": "Seta fat lines up",
+      "keywords": [
+        "válvulas",
+        "arrow fat lines up"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-right.svg",
+      "category": "Válvulas",
+      "name": "Seta fat right",
+      "keywords": [
+        "válvulas",
+        "arrow fat right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-fat-up.svg",
+      "category": "Válvulas",
+      "name": "Seta fat up",
+      "keywords": [
+        "válvulas",
+        "arrow fat up"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-left.svg",
+      "category": "Válvulas",
+      "name": "Seta left",
+      "keywords": [
+        "válvulas",
+        "arrow left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-line-down.svg",
+      "category": "Válvulas",
+      "name": "Seta line down",
+      "keywords": [
+        "válvulas",
+        "arrow line down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-line-down-left.svg",
+      "category": "Válvulas",
+      "name": "Seta line down left",
+      "keywords": [
+        "válvulas",
+        "arrow line down left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-line-down-right.svg",
+      "category": "Válvulas",
+      "name": "Seta line down right",
+      "keywords": [
+        "válvulas",
+        "arrow line down right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-line-left.svg",
+      "category": "Válvulas",
+      "name": "Seta line left",
+      "keywords": [
+        "válvulas",
+        "arrow line left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-line-right.svg",
+      "category": "Válvulas",
+      "name": "Seta line right",
+      "keywords": [
+        "válvulas",
+        "arrow line right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-line-up.svg",
+      "category": "Válvulas",
+      "name": "Seta line up",
+      "keywords": [
+        "válvulas",
+        "arrow line up"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-line-up-left.svg",
+      "category": "Válvulas",
+      "name": "Seta line up left",
+      "keywords": [
+        "válvulas",
+        "arrow line up left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-line-up-right.svg",
+      "category": "Válvulas",
+      "name": "Seta line up right",
+      "keywords": [
+        "válvulas",
+        "arrow line up right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-right.svg",
+      "category": "Válvulas",
+      "name": "Seta right",
+      "keywords": [
+        "válvulas",
+        "arrow right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-square-down.svg",
+      "category": "Válvulas",
+      "name": "Seta square down",
+      "keywords": [
+        "válvulas",
+        "arrow square down"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-square-down-left.svg",
+      "category": "Válvulas",
+      "name": "Seta square down left",
+      "keywords": [
+        "válvulas",
+        "arrow square down left"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-square-down-right.svg",
+      "category": "Válvulas",
+      "name": "Seta square down right",
+      "keywords": [
+        "válvulas",
+        "arrow square down right"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/arrow-square-in.svg",
+      "category": "Válvulas",
+      "name": "Seta square in",
+      "keywords": [
+        "válvulas",
+        "arrow square in"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/wheelchair.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Wheelchair",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "wheelchair"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/windmill.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Windmill",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "windmill"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/pinwheel.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Pinwheel",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "pinwheel"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/wheelchair.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Wheelchair",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "wheelchair"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/wheelchair-motion.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Wheelchair motion",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "wheelchair motion"
+      ]
+    },
+    {
+      "source": "phosphor-core",
+      "sourcePath": "phosphor-core/raw/regular/windmill.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Windmill",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "windmill"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/air-balloon.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Air balloon",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "air balloon"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/air-traffic-control.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Air traffic controle",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "air traffic control"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/app-window.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "App window",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "app window"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/app-window-bottom.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "App window bottom",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "app window bottom"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/app-window-bottom-left.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "App window bottom left",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "app window bottom left"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/app-window-bottom-right.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "App window bottom right",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "app window bottom right"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/app-window-center.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "App window center",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "app window center"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/armchair.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Armchair",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "armchair"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/armchair-2.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Armchair 2",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "armchair 2"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/chair-director.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Chair director",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "chair director"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/crosshair.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Crosshair",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "crosshair"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/currency-naira.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Currency naira",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "currency naira"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-airpods.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Dispositivo airpods",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "device airpods"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-airpods-case.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Dispositivo airpods case",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "device airpods case"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/device-airtag.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Dispositivo airtag",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "device airtag"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/flower.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Flower",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "flower"
+      ]
+    },
+    {
+      "source": "tabler-icons",
+      "sourcePath": "tabler-icons/icons/outline/propeller.svg",
+      "category": "Ventoinhas e ventiladores",
+      "name": "Hélice",
+      "keywords": [
+        "ventoinhas e ventiladores",
+        "propeller"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/control-button.svg",
+      "category": "Botões",
+      "name": "Controle botão",
+      "keywords": [
+        "botões",
+        "control button"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/control-radiobutton.svg",
+      "category": "Botões",
+      "name": "Controle radiobutton",
+      "keywords": [
+        "botões",
+        "control radiobutton"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/control-switch.svg",
+      "category": "Botões",
+      "name": "Controle chave",
+      "keywords": [
+        "botões",
+        "control switch"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/control-text-button.svg",
+      "category": "Botões",
+      "name": "Controle text botão",
+      "keywords": [
+        "botões",
+        "control text button"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/tag-circle-arrow-down.svg",
+      "category": "Botões",
+      "name": "Etiqueta circular seta down",
+      "keywords": [
+        "botões",
+        "tag circle arrow down"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-diagonal-bottom-left.svg",
+      "category": "Botões",
+      "name": "Seta diagonal bottom left",
+      "keywords": [
+        "botões",
+        "arrow diagonal bottom left"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-diagonal-bottom-right.svg",
+      "category": "Botões",
+      "name": "Seta diagonal bottom right",
+      "keywords": [
+        "botões",
+        "arrow diagonal bottom right"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-diagonal-top-left.svg",
+      "category": "Botões",
+      "name": "Seta diagonal top left",
+      "keywords": [
+        "botões",
+        "arrow diagonal top left"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-diagonal-top-right.svg",
+      "category": "Botões",
+      "name": "Seta diagonal top right",
+      "keywords": [
+        "botões",
+        "arrow diagonal top right"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-down.svg",
+      "category": "Botões",
+      "name": "Seta down",
+      "keywords": [
+        "botões",
+        "arrow down"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-down-right.svg",
+      "category": "Botões",
+      "name": "Seta down right",
+      "keywords": [
+        "botões",
+        "arrow down right"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-left.svg",
+      "category": "Botões",
+      "name": "Seta left",
+      "keywords": [
+        "botões",
+        "arrow left"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-right.svg",
+      "category": "Botões",
+      "name": "Seta right",
+      "keywords": [
+        "botões",
+        "arrow right"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-right-down.svg",
+      "category": "Botões",
+      "name": "Seta right down",
+      "keywords": [
+        "botões",
+        "arrow right down"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-up.svg",
+      "category": "Botões",
+      "name": "Seta up",
+      "keywords": [
+        "botões",
+        "arrow up"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/arrow-up-left.svg",
+      "category": "Botões",
+      "name": "Seta up left",
+      "keywords": [
+        "botões",
+        "arrow up left"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/circle-play.svg",
+      "category": "Botões",
+      "name": "Circular iniciar",
+      "keywords": [
+        "botões",
+        "circle play"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/circle-stop.svg",
+      "category": "Botões",
+      "name": "Circular parar",
+      "keywords": [
+        "botões",
+        "circle stop"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/control-checkbox.svg",
+      "category": "Botões",
+      "name": "Controle checkbox",
+      "keywords": [
+        "botões",
+        "control checkbox"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/control-io-field.svg",
+      "category": "Botões",
+      "name": "Controle io field",
+      "keywords": [
+        "botões",
+        "control io field"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/control-label.svg",
+      "category": "Botões",
+      "name": "Controle label",
+      "keywords": [
+        "botões",
+        "control label"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/control-list-box.svg",
+      "category": "Botões",
+      "name": "Controle list box",
+      "keywords": [
+        "botões",
+        "control list box"
+      ]
+    },
+    {
+      "source": "siemens-ix-icons",
+      "sourcePath": "siemens-ix-icons/incoming-svg/control-select.svg",
+      "category": "Botões",
+      "name": "Controle select",
+      "keywords": [
+        "botões",
+        "control select"
+      ]
+    }
+  ]
+}

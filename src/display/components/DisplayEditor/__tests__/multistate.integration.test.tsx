@@ -18,6 +18,13 @@ function Harness({ initial, onChange, loadValue }: { initial?: DisplayDocument; 
   return <DisplayEditor document={document} onChange={(next) => { setDocument(next); onChange?.(next); }} selectedPiPoint={point} loadValue={loadValue} />;
 }
 
+function setMultistateRuleColor(ruleId: string, color: string) {
+  const testId = `multistate-color-${ruleId}`;
+  fireEvent.click(screen.getByTestId(testId));
+  fireEvent.change(screen.getByLabelText('Código hexadecimal'), { target: { value: color } });
+  fireEvent.click(screen.getByTestId(testId));
+}
+
 describe('Multistate no editor', () => {
   it('aplica Multistate a uma forma geométrica vinculada ao PI Point', async () => {
     const loadValue = jest.fn().mockResolvedValue({ value: 85 });
@@ -29,7 +36,7 @@ describe('Multistate no editor', () => {
     const ruleId = screen.getByTestId(/^multistate-rule-/).getAttribute('data-testid')?.replace('multistate-rule-', '') as string;
     fireEvent.change(screen.getByTestId(`multistate-operator-${ruleId}`), { target: { value: 'gte' } });
     fireEvent.change(screen.getByTestId(`multistate-value-${ruleId}`), { target: { value: '80' } });
-    fireEvent.change(screen.getByTestId(`multistate-color-${ruleId}`), { target: { value: '#00ff00' } });
+    setMultistateRuleColor(ruleId, '#00ff00');
     expect(await screen.findByTestId(/^display-element-/)).toHaveAttribute('data-shape', 'ellipse');
     expect(await screen.findByTestId(/^display-element-/)).toHaveAttribute('fill', '#00ff00');
   });
@@ -43,7 +50,7 @@ describe('Multistate no editor', () => {
     const ruleId = rule.getAttribute('data-testid')?.replace('multistate-rule-', '') as string;
     fireEvent.change(screen.getByTestId(`multistate-operator-${ruleId}`), { target: { value: 'gte' } });
     fireEvent.change(screen.getByTestId(`multistate-value-${ruleId}`), { target: { value: '80' } });
-    fireEvent.change(screen.getByTestId(`multistate-color-${ruleId}`), { target: { value: '#00ff00' } });
+    setMultistateRuleColor(ruleId, '#00ff00');
     expect(screen.getByTestId(`multistate-rule-${ruleId}`)).toBeInTheDocument();
     fireEvent.click(screen.getByTestId(`multistate-remove-${ruleId}`));
     expect(screen.queryByTestId(`multistate-rule-${ruleId}`)).toBeNull();

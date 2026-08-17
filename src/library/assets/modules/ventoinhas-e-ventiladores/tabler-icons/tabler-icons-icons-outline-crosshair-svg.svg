@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#20333D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-style="colored" data-modified="true" data-palette="industrial">
+  <g id="sym_ff9c5d87ea16_body" data-role="body"><g id="sym_ff9c5d87ea16_outline" data-role="outline"><g id="sym_ff9c5d87ea16_active_part" data-role="active-part"><path d="M12 9l0 6" fill="#E0A037" />
+</g><path d="M4 8v-2a2 2 0 0 1 2 -2h2" fill="#2F6886" />
+  <path d="M4 16v2a2 2 0 0 0 2 2h2" fill="#84B8C7" />
+  <path d="M16 4h2a2 2 0 0 1 2 2v2" fill="#E0A037" />
+  <path d="M16 20h2a2 2 0 0 0 2 -2v-2" fill="#2F6886" />
+  <path d="M9 12l6 0" fill="#84B8C7" />
+  </g></g></svg>

@@ -16,7 +16,7 @@ import type { DisplayElement } from './displayElement';
 import type { PiPointBinding } from '../pi/piPointBinding';
 import { DEFAULT_TEXT_PROPERTIES, TEXT_TYPE } from './createText';
 import { IMAGE_TYPE } from './createImage';
-import { LIBRARY_SYMBOL_TYPE } from './createLibrarySymbol';
+import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE } from './createLibrarySymbol';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../library';
 
 export const DISPLAY_EXPORT_FORMAT = 'pims-vision-display';
@@ -126,6 +126,9 @@ function portableElement(input: unknown): DisplayElement {
           name: symbol.name,
           src: getIndustrialSymbolAssetUrl(symbol),
           viewBox: symbol.viewBox,
+          color: getLibrarySymbolColor(input.properties),
+          ...portableOptionalBinding(input.properties.binding),
+          ...portableMultistate(input.properties.multistate),
         },
       };
     }

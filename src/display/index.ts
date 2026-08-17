@@ -35,7 +35,7 @@ export { appendText, createText, DEFAULT_TEXT_PROPERTIES, TEXT_TYPE, updateTextP
 export type { CreateTextOptions, TextAlign, TextElement, TextProperties } from './createText';
 export { appendImage, createImage, IMAGE_TYPE } from './createImage';
 export type { CreateImageOptions, ImageElement, ImageProperties } from './createImage';
-export { appendLibrarySymbol, createLibrarySymbol, LIBRARY_SYMBOL_TYPE } from './createLibrarySymbol';
+export { appendLibrarySymbol, createLibrarySymbol, DEFAULT_LIBRARY_SYMBOL_COLOR, getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, updateLibrarySymbolProperties } from './createLibrarySymbol';
 export type { CreateLibrarySymbolOptions, LibrarySymbolElement, LibrarySymbolProperties } from './createLibrarySymbol';
 export type {
   CreateRectangleOptions,
@@ -117,6 +117,7 @@ export {
   getMultistateColor,
   isValidMultistateRule,
   normalizeMultistateConfig,
+  TRANSPARENT_COLOR,
   updateMultistateConfig,
 } from './multistate';
 export type { MultistateConfig, MultistateMatch, MultistateOperator, MultistateRule } from './multistate';

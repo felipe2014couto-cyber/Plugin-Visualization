@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1B2E3A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-style="colored" data-modified="true" data-palette="industrial">
+  <g id="sym_5befe3e86deb_body" data-role="body"><g id="sym_5befe3e86deb_outline" data-role="outline"><g id="sym_5befe3e86deb_active_part" data-role="active-part"><path d="M3 6l9 -4l9 4" fill="#2E6386" />
+</g><path d="M5 20a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" fill="#2E6386" />
+  <path d="M15 20a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" fill="#7AA8BF" />
+  <path d="M5 20h-2v-6l2 -5h9l4 5h1a2 2 0 0 1 2 2v4h-2m-4 0h-6m-6 -6h15m-6 0v-5" fill="#D98732" />
+  </g></g></svg>

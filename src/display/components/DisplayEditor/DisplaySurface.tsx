@@ -23,7 +23,8 @@ import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, typ
 import { getMultistateColor } from '../../multistate';
 import { TEXT_TYPE, type TextElement } from '../../createText';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
-import { LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
+import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
+import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../../../library';
 import {
   getTrendSeriesConsumerId,
   useTrendRuntime,
@@ -85,6 +86,7 @@ export interface DisplaySurfaceProps {
   trendTimeRange?: DisplayTimeRange;
   onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors?: readonly TrendCursor[]) => void;
   onTrendContextMenu?: (element: TrendElement) => void;
+  onLibrarySymbolContextMenu?: (element: LibrarySymbolElement) => void;
   zoom?: number;
   viewCenter?: Point;
 }
@@ -136,6 +138,7 @@ export function DisplaySurface({
   trendTimeRange,
   onTrendOpen,
   onTrendContextMenu,
+  onLibrarySymbolContextMenu,
   zoom = 1,
   viewCenter,
 }: DisplaySurfaceProps) {
@@ -171,7 +174,7 @@ export function DisplaySurface({
   }, [editable]);
 
   const valueConsumers: ValueRuntimeConsumer[] = elements.flatMap((element) => (
-    (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE)
+    (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE)
       && isPiPointBinding(element.properties.binding)
       ? [{ elementId: element.id, binding: element.properties.binding }]
       : []
@@ -245,6 +248,19 @@ export function DisplaySurface({
     event.stopPropagation();
     onTrendContextMenu?.(element as TrendElement);
   }, [editable, elements, onTrendContextMenu]);
+
+  const handleLibrarySymbolContextMenu = useCallback((event: React.MouseEvent<SVGElement>, elementId: string) => {
+    if (!editable) {
+      return;
+    }
+    const element = elements.find((candidate) => candidate.id === elementId);
+    if (!element || element.type !== LIBRARY_SYMBOL_TYPE) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onLibrarySymbolContextMenu?.(element as LibrarySymbolElement);
+  }, [editable, elements, onLibrarySymbolContextMenu]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
@@ -547,6 +563,15 @@ export function DisplaySurface({
         <pattern id="visualization-editor-grid" width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--canvas-dot)" />
         </pattern>
+        {elements.filter((element) => element.type === LIBRARY_SYMBOL_TYPE).map((element) => {
+          const symbol = element as LibrarySymbolElement;
+          const source = getLibrarySymbolSource(symbol);
+          return (
+            <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height} mask-type="alpha">
+              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" />
+            </mask>
+          );
+        })}
       </defs>
       <rect
         x={viewportX}
@@ -639,7 +664,16 @@ export function DisplaySurface({
         }
         if (element.type === LIBRARY_SYMBOL_TYPE) {
           const symbol = element as LibrarySymbolElement;
-          return <image key={element.id} href={symbol.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }} />;
+          const source = getLibrarySymbolSource(symbol);
+          const runtimeState = runtimeStates.get(element.id);
+          const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
+          const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
+          return (
+            <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>
+              <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
+              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
+            </g>
+          );
         }
         return (
           <rect
@@ -755,6 +789,15 @@ function getElementStroke(element: DisplayDocument['elements'][number]): string 
   }
   const stroke = element.properties.stroke;
   return typeof stroke === 'string' ? stroke : DEFAULT_RECTANGLE_PROPERTIES.stroke;
+}
+
+function getLibrarySymbolMaskId(elementId: string): string {
+  return `library-symbol-mask-${elementId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+}
+
+function getLibrarySymbolSource(element: LibrarySymbolElement): string {
+  const definition = findIndustrialSymbol(element.properties.symbolId);
+  return definition ? getIndustrialSymbolAssetUrl(definition) : element.properties.src;
 }
 
 function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRuntimeState) {

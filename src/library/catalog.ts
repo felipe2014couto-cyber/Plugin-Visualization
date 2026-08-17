@@ -1,4 +1,5 @@
 import openclipartMotorCatalog from './assets/openclipartMotorCatalog.json';
+import localSymbolCatalog from './assets/local/catalog.json';
 import { PLUGIN_ASSET_BASE_URL } from '../constants';
 
 export const INDUSTRIAL_SYMBOL_CATEGORIES = [
@@ -12,10 +13,15 @@ export const INDUSTRIAL_SYMBOL_CATEGORIES = [
   'Transporte de materiais',
   'Instrumentação',
   'Utilidades industriais',
+  'Correias',
+  'Peneiras',
+  'Silos',
+  'Tubulações e fluidos',
+  'Industrial',
 ] as const;
 
 export type IndustrialSymbolCategory = typeof INDUSTRIAL_SYMBOL_CATEGORIES[number];
-export type IndustrialSymbolSource = 'equinor-engineering-symbols' | 'openclipart';
+export type IndustrialSymbolSource = 'equinor-engineering-symbols' | 'openclipart' | 'pims-vision';
 
 export interface IndustrialSymbolDefinition {
   id: string;
@@ -23,7 +29,7 @@ export interface IndustrialSymbolDefinition {
   category: IndustrialSymbolCategory;
   keywords: readonly string[];
   source: IndustrialSymbolSource;
-  license: 'MIT' | 'Public Domain';
+  license: 'MIT' | 'Public Domain' | 'Project Asset';
   svg: string;
   viewBox: string;
   defaultSize: { width: number; height: number };
@@ -104,13 +110,33 @@ const OPENCLIPART_MOTOR_CATALOG: readonly IndustrialSymbolDefinition[] = opencli
   dimensions: entry.dimensions,
 })) as readonly IndustrialSymbolDefinition[];
 
+const LOCAL_SYMBOL_CATALOG: readonly IndustrialSymbolDefinition[] = localSymbolCatalog.entries.map((entry) => ({
+  id: entry.id,
+  name: entry.name,
+  category: entry.category as IndustrialSymbolCategory,
+  keywords: entry.keywords,
+  source: entry.source,
+  license: entry.license,
+  svg: entry.svg,
+  viewBox: entry.viewBox,
+  defaultSize: entry.defaultSize,
+  capabilities: entry.capabilities,
+  originalName: entry.originalName,
+  synonyms: entry.synonyms,
+  sourceFile: entry.sourceFile,
+  originalAspectRatio: entry.originalAspectRatio,
+  dimensions: entry.dimensions,
+})) as readonly IndustrialSymbolDefinition[];
+
 export const INDUSTRIAL_SYMBOL_CATALOG: readonly IndustrialSymbolDefinition[] = [
   ...EXISTING_SYMBOL_CATALOG,
   ...OPENCLIPART_MOTOR_CATALOG,
+  ...LOCAL_SYMBOL_CATALOG,
 ];
 
 export function getIndustrialSymbolAssetUrl(symbol: IndustrialSymbolDefinition): string {
-  return `${PLUGIN_ASSET_BASE_URL}/${symbol.svg}`;
+  const cacheVersion = symbol.source === 'pims-vision' ? '?v=transparent-symbols-20260817' : '';
+  return `${PLUGIN_ASSET_BASE_URL}/${symbol.svg}${cacheVersion}`;
 }
 
 export function findIndustrialSymbol(id: string): IndustrialSymbolDefinition | undefined {
