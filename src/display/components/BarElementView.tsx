@@ -35,7 +35,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, runtimeState, value, options.decimals);
-  const detailLines = getDetailLines(valueText, runtimeState, barOptions.showValue, barOptions.showUnit, barOptions.showTimestamp);
+  const detailLines = getDetailLines(valueText, runtimeState, barOptions.showValue, barOptions.showUnit, false);
   const activeColor = getMultistateColor(value, options.multistate, barOptions.fillColor);
   const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
     ? barOptions.customTagName
