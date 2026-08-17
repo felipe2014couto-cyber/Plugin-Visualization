@@ -53,6 +53,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const color = getMultistateColor(getRuntimeValue(runtimeState ?? state), element.properties.multistate, visual.color);
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
+  const responsiveFontSize = getResponsiveFontSize(element, visual.fontSize);
   return (
     <g
       data-testid={`display-element-${element.id}`}
@@ -77,7 +78,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
         x={textX}
         y={element.y + element.height / 2}
         fill={color}
-        fontSize={visual.fontSize}
+        fontSize={responsiveFontSize}
         textAnchor={textAnchor}
         dominantBaseline="middle"
         data-testid={`display-value-${element.id}`}
@@ -130,4 +131,9 @@ function getTextX(element: ValueElement, textAlign: ValueVisualOptions['textAlig
     case 'center':
       return element.x + element.width / 2;
   }
+}
+
+function getResponsiveFontSize(element: ValueElement, configuredSize: number): number {
+  const areaScale = Math.sqrt((element.width * element.height) / (160 * 64));
+  return Math.max(8, Math.min(96, configuredSize * Math.min(1.5, Math.max(0.7, areaScale))));
 }

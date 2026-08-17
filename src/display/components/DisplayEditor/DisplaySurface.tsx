@@ -622,18 +622,20 @@ export function DisplaySurface({
             />
           );
         }
-        if (element.type === RECTANGLE_TYPE) {
+  if (element.type === RECTANGLE_TYPE) {
           return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
         }
         if (element.type === TEXT_TYPE) {
           const textElement = element as TextElement;
           const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
           const x = textElement.properties.textAlign === 'left' ? textElement.x + 4 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 4 : textElement.x + textElement.width / 2;
-          return <text key={element.id} x={x} y={element.y + element.height / 2} fill={textElement.properties.color} fontSize={textElement.properties.fontSize} textAnchor={anchor} dominantBaseline="middle" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>{textElement.properties.text}</text>;
+          const rotation = textElement.properties.rotation ?? 0;
+          return <text key={element.id} x={x} y={textElement.y + textElement.height / 2} transform={`rotate(${rotation} ${textElement.x + textElement.width / 2} ${textElement.y + textElement.height / 2})`} fill={textElement.properties.color} fontSize={textElement.properties.fontSize} textAnchor={anchor} dominantBaseline="middle" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>{textElement.properties.text}</text>;
         }
         if (element.type === IMAGE_TYPE) {
           const image = element as ImageElement;
-          return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }} />;
+          const rotation = image.properties.rotation ?? 0;
+          return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} transform={`rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }} />;
         }
         if (element.type === LIBRARY_SYMBOL_TYPE) {
           const symbol = element as LibrarySymbolElement;
@@ -761,22 +763,25 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
   const fill = getMultistateColor(value, element.properties.multistate, baseFill);
   const common = {
     key: element.id,
-    fill,
-    stroke: getElementStroke(element),
-    strokeWidth: 1,
     'data-testid': `display-element-${element.id}`,
     'data-element-id': element.id,
     'data-element-type': element.type,
     'data-shape': element.properties.shape ?? 'rectangle',
+    x: element.x,
+    y: element.y,
+    width: element.width,
+    height: element.height,
     style: { cursor: 'move' },
+    transform: `rotate(${Number(element.properties.rotation) || 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
   };
+  const appearance = { fill, stroke: getElementStroke(element), strokeWidth: 1, pointerEvents: 'all' as const };
   if (element.properties.shape === 'ellipse') {
-    return <ellipse {...common} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} />;
+    return <g {...common}><ellipse {...appearance} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} /></g>;
   }
   if (element.properties.shape === 'triangle') {
-    return <polygon {...common} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} />;
+    return <g {...common}><polygon {...appearance} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} /></g>;
   }
-  return <rect {...common} x={element.x} y={element.y} width={element.width} height={element.height} />;
+  return <g {...common}><rect {...appearance} x={element.x} y={element.y} width={element.width} height={element.height} /></g>;
 }
 
 function normalizeSelectionBox(start: Point, current: Point) {
