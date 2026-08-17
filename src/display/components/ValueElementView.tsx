@@ -127,11 +127,11 @@ function getValueLines(
   if (visual.showUnit && result?.unit) {
     lines.push(result.unit);
   }
-  if (visual.showTimestamp && result?.timestamp) {
-    lines.push(formatTimestamp(result.timestamp));
-  }
   if (visual.showValue) {
     lines.push(valueText);
+  }
+  if (visual.showTimestamp && result?.timestamp) {
+    lines.push(formatTimestamp(result.timestamp));
   }
   return lines.length > 0 ? lines : [''];
 }
