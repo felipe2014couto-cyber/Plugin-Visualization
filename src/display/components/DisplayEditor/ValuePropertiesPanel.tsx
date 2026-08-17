@@ -17,9 +17,11 @@ export interface ValuePropertiesPanelProps {
   onChange: (patch: Partial<ValueVisualOptions>) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
+  linkUrl?: string;
+  onLinkChange: (value: string) => void;
 }
 
-export function ValuePropertiesPanel({ options, pointName, onChange, multistate, onMultistateChange }: ValuePropertiesPanelProps) {
+export function ValuePropertiesPanel({ options, pointName, onChange, multistate, onMultistateChange, linkUrl, onLinkChange }: ValuePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const visual = getValueVisualOptions({ visual: options });
 
@@ -62,6 +64,7 @@ export function ValuePropertiesPanel({ options, pointName, onChange, multistate,
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid="value-show-unit" /><span>Unidades</span></label>
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showTimestamp} onChange={(event) => onChange({ showTimestamp: event.target.checked })} data-testid="value-show-timestamp" /><span>Timestamp</span></label>
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid="value-show-value" /><span>Valor</span></label>
+        <label className={styles.field}><span>Link</span><input type="url" value={linkUrl ?? ''} placeholder="https://..." onChange={(event) => onLinkChange(event.target.value)} data-testid="value-link-url" /></label>
         <label className={styles.field}>
           <span>Tamanho da fonte</span>
           <input
@@ -137,7 +140,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-size: 10px;
 
     select,
-    input[type='number'] {
+    input[type='number'],
+    input[type='url'] {
       width: 100%;
       box-sizing: border-box;
       min-height: 27px;

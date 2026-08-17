@@ -1010,6 +1010,8 @@ export function DisplayEditor({
             onChange={handleValueVisualChange}
             multistate={selectedValue.properties.multistate}
             onMultistateChange={handleMultistateChange}
+            linkUrl={typeof selectedValue.properties.linkUrl === 'string' ? selectedValue.properties.linkUrl : undefined}
+            onLinkChange={handleLinkChange}
           />
         )}
         {selectedGauge && (
@@ -1040,7 +1042,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {state.selectedElementId && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
+        {state.selectedElementId && !selectedValue && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
