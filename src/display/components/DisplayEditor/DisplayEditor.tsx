@@ -67,6 +67,7 @@ import { ScalePropertiesPanel } from './ScalePropertiesPanel';
 import { RectanglePropertiesPanel } from './RectanglePropertiesPanel';
 import { TextPropertiesPanel } from './TextPropertiesPanel';
 import { ImagePropertiesPanel } from './ImagePropertiesPanel';
+import { LinkPropertiesPanel } from './LinkPropertiesPanel';
 import { appendImage, createImage, IMAGE_TYPE, updateImageProperties, type ImageElement } from '../../createImage';
 import { LibrarySymbolPropertiesPanel } from './LibrarySymbolPropertiesPanel';
 import { appendLibrarySymbol, createLibrarySymbol, updateLibrarySymbolProperties, type LibrarySymbolElement, type LibrarySymbolProperties } from '../../createLibrarySymbol';
@@ -697,6 +698,11 @@ export function DisplayEditor({
   const handleImageChange = useCallback((patch: Parameters<typeof updateImageProperties>[2]) => {
     commitDocument(updateImageProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
+  const handleLinkChange = useCallback((linkUrl: string) => {
+    const selectedId = stateRef.current.selectedElementId;
+    if (!selectedId) return;
+    commitDocument({ ...documentRef.current, elements: documentRef.current.elements.map((element) => element.id === selectedId ? { ...element, properties: { ...element.properties, linkUrl: linkUrl.trim() || undefined } } : element) });
+  }, [commitDocument]);
   const handleLibrarySymbolChange = useCallback((patch: Partial<LibrarySymbolProperties>) => {
     commitDocument(updateLibrarySymbolProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
@@ -1034,6 +1040,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
+        {state.selectedElementId && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (

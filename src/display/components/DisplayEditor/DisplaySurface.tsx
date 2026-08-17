@@ -373,6 +373,17 @@ export function DisplaySurface({
   const selectedElement = selectedElementId
     ? getElementById(displayDocument, selectedElementId) ?? null
     : null;
+  const handleElementClick = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    if (editable) return;
+    const target = event.target as Element;
+    const elementId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
+    const element = elementId ? displayDocument.elements.find((candidate) => candidate.id === elementId) : undefined;
+    const linkUrl = element && typeof (element.properties as { linkUrl?: unknown }).linkUrl === 'string' ? (element.properties as { linkUrl: string }).linkUrl.trim() : '';
+    if (linkUrl) {
+      event.preventDefault();
+      window.open(linkUrl, '_blank', 'noopener,noreferrer');
+    }
+  }, [displayDocument.elements, editable]);
 
   const handleSvgPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -540,6 +551,7 @@ export function DisplaySurface({
 
   return (
     <svg
+      onClick={handleElementClick}
       ref={svgRef}
       width={surface.width}
       height={surface.height}

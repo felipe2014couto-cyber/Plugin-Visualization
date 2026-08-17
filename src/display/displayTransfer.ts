@@ -112,7 +112,7 @@ function portableElement(input: unknown): DisplayElement {
       if (typeof input.properties.src !== 'string' || !input.properties.src.startsWith('data:image/')) {
         throw new DisplayImportError('Imagem de Display inválida.');
       }
-      return { ...base, type: IMAGE_TYPE, properties: { src: input.properties.src, alt: typeof input.properties.alt === 'string' ? input.properties.alt : 'Imagem', rotation: normalizeRotation(input.properties.rotation) } };
+      return { ...base, type: IMAGE_TYPE, properties: { src: input.properties.src, alt: typeof input.properties.alt === 'string' ? input.properties.alt : 'Imagem', rotation: normalizeRotation(input.properties.rotation), ...portableLink(input.properties) } };
     case LIBRARY_SYMBOL_TYPE: {
       const symbol = typeof input.properties.symbolId === 'string' ? findIndustrialSymbol(input.properties.symbolId) : undefined;
       if (!symbol) {
@@ -127,6 +127,7 @@ function portableElement(input: unknown): DisplayElement {
           src: getIndustrialSymbolAssetUrl(symbol),
           viewBox: symbol.viewBox,
           color: getLibrarySymbolColor(input.properties),
+          ...portableLink(input.properties),
           rotation: normalizeRotation(input.properties.rotation),
           ...portableOptionalBinding(input.properties.binding),
           ...portableMultistate(input.properties.multistate),
@@ -140,6 +141,7 @@ function portableElement(input: unknown): DisplayElement {
         fontSize: isFiniteNumber(input.properties.fontSize) ? Math.max(8, Math.min(120, input.properties.fontSize)) : DEFAULT_TEXT_PROPERTIES.fontSize,
         textAlign: input.properties.textAlign === 'left' || input.properties.textAlign === 'right' ? input.properties.textAlign : 'center',
         rotation: normalizeRotation(input.properties.rotation),
+        ...portableLink(input.properties),
       } };
     case RECTANGLE_TYPE:
       return {
@@ -152,6 +154,7 @@ function portableElement(input: unknown): DisplayElement {
             ? input.properties.shape
             : 'rectangle',
           rotation: normalizeRotation(input.properties.rotation),
+          ...portableLink(input.properties),
           ...portableOptionalBinding(input.properties.binding),
           ...portableMultistate(input.properties.multistate),
         },
@@ -161,14 +164,16 @@ function portableElement(input: unknown): DisplayElement {
         binding: portableBinding(input.properties.binding),
         visual: portableVisual(input.properties.visual),
         ...portableMultistate(input.properties.multistate),
+        ...portableLink(input.properties),
       } };
     case TREND_TYPE:
-      return { ...base, type: TREND_TYPE, properties: { series: portableTrendSeries(input.properties) } };
+      return { ...base, type: TREND_TYPE, properties: { series: portableTrendSeries(input.properties), ...portableLink(input.properties) } };
     case GAUGE_TYPE:
       return { ...base, type: GAUGE_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
         ...portableGauge(input.properties),
         ...portableMultistate(input.properties.multistate),
+        ...portableLink(input.properties),
       } };
     case BAR_TYPE:
       return { ...base, type: BAR_TYPE, properties: {
@@ -176,6 +181,7 @@ function portableElement(input: unknown): DisplayElement {
         ...portableScale(input.properties),
         orientation: input.properties.orientation === 'horizontal' ? 'horizontal' : 'vertical',
         ...portableMultistate(input.properties.multistate),
+        ...portableLink(input.properties),
       } };
     default:
       throw new DisplayImportError('Tipo de elemento não suportado.');
@@ -184,6 +190,12 @@ function portableElement(input: unknown): DisplayElement {
 
 function normalizeRotation(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value % 360 : 0;
+}
+
+function portableLink(properties: Record<string, unknown>): { linkUrl?: string } {
+  return typeof properties.linkUrl === 'string' && properties.linkUrl.trim().length > 0
+    ? { linkUrl: properties.linkUrl.trim() }
+    : {};
 }
 
 function portableBinding(input: unknown): PiPointBinding {
