@@ -26,6 +26,8 @@ export interface ScalePropertiesPanelProps {
   borderColor?: string;
   borderWidth?: number;
   gaugeStyle?: GaugeStyle;
+  gaugeBorderColor?: string;
+  gaugeScaleColor?: string;
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -43,6 +45,8 @@ export interface ScalePropertiesPanelProps {
     borderColor?: string;
     borderWidth?: number;
     gaugeStyle?: GaugeStyle;
+    gaugeBorderColor?: string;
+    gaugeScaleColor?: string;
   }) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -66,6 +70,8 @@ export function ScalePropertiesPanel({
   borderColor = '#ffffff',
   borderWidth = 1,
   gaugeStyle = 'pointer',
+  gaugeBorderColor = '#ffffff',
+  gaugeScaleColor = '#ffffff',
   onChange,
   multistate,
   onMultistateChange,
@@ -77,8 +83,12 @@ export function ScalePropertiesPanel({
         <span className={styles.title}>{kind}</span>
       </div>
       <div className={styles.fields}>
-        <ColorControl label={kind === 'Bar' ? 'Cor da barra' : 'Cor'} color={kind === 'Bar' ? fillColor : color} onChange={(value) => onChange(kind === 'Bar' ? { fillColor: value, color: value } : { color: value })} testId={`${kind.toLowerCase()}-color`} />
+        <ColorControl label={kind === 'Bar' ? 'Cor da barra' : 'Cor do indicador'} color={kind === 'Bar' ? fillColor : color} fallback={kind === 'Gauge' ? '#00a2e8' : '#ffffff'} onChange={(value) => onChange(kind === 'Bar' ? { fillColor: value, color: value } : { color: value })} testId={`${kind.toLowerCase()}-color`} />
         {kind === 'Gauge' && <label className={styles.field}><span>Estilo</span><select value={gaugeStyle} onChange={(event) => onChange({ gaugeStyle: event.target.value as GaugeStyle })} data-testid="gauge-style"><option value="arc">Arco</option><option value="triangle">Triângulo</option><option value="pointer">Ponteiro</option><option value="line">Linha</option></select></label>}
+        {kind === 'Gauge' && <>
+          <ColorControl label="Cor do contorno" color={gaugeBorderColor} onChange={(value) => onChange({ gaugeBorderColor: value })} testId="gauge-border-color" />
+          <ColorControl label="Cor da escala e título" color={gaugeScaleColor} onChange={(value) => onChange({ gaugeScaleColor: value })} testId="gauge-scale-color" />
+        </>}
         {kind === 'Bar' && <>
           <ColorControl label="Cor de preenchimento" color={backgroundColor} onChange={(value) => onChange({ backgroundColor: value })} testId="bar-background-color" />
           <ColorControl label="Cor do contorno" color={borderColor} onChange={(value) => onChange({ borderColor: value })} testId="bar-border-color" />

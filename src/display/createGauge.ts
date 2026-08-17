@@ -8,7 +8,11 @@ import type { MultistateConfig } from './multistate';
 
 export const GAUGE_TYPE = 'gauge' as const;
 export type GaugeStyle = 'arc' | 'triangle' | 'pointer' | 'line';
-export type GaugeVisualOptions = ScaleVisualOptions & { gaugeStyle: GaugeStyle };
+export type GaugeVisualOptions = ScaleVisualOptions & {
+  gaugeStyle: GaugeStyle;
+  gaugeBorderColor: string;
+  gaugeScaleColor: string;
+};
 
 export interface GaugeProperties extends Record<string, unknown> {
   binding?: PiPointBinding;
@@ -18,6 +22,8 @@ export interface GaugeProperties extends Record<string, unknown> {
   showTagName: boolean;
   decimals: number | null;
   gaugeStyle: GaugeStyle;
+  gaugeBorderColor: string;
+  gaugeScaleColor: string;
   multistate?: MultistateConfig;
 }
 
@@ -102,5 +108,15 @@ export function normalizeGaugeOptions(options?: Partial<GaugeProperties> | null)
   const gaugeStyle = options?.gaugeStyle === 'arc' || options?.gaugeStyle === 'triangle' || options?.gaugeStyle === 'line'
     ? options.gaugeStyle
     : 'pointer';
-  return { ...scale, gaugeStyle };
+  return {
+    ...scale,
+    color: isColor(options?.color) ? scale.color : '#00a2e8',
+    gaugeStyle,
+    gaugeBorderColor: isColor(options?.gaugeBorderColor) ? options!.gaugeBorderColor! : '#ffffff',
+    gaugeScaleColor: isColor(options?.gaugeScaleColor) ? options!.gaugeScaleColor! : '#ffffff',
+  };
+}
+
+function isColor(value: unknown): value is string {
+  return typeof value === 'string' && (value === 'transparent' || /^#[0-9a-f]{3,8}$/i.test(value));
 }

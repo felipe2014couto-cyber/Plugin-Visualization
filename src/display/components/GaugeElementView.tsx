@@ -10,8 +10,7 @@ export interface GaugeElementViewProps {
   runtimeState?: ValueRuntimeState;
 }
 
-const TRACK_COLOR = 'var(--border-color, rgba(255, 255, 255, 0.18))';
-const TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.86))';
+const DEFAULT_TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.86))';
 
 export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState }: GaugeElementViewProps) {
   const options = getGaugeOptions(element.properties);
@@ -32,6 +31,8 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
     ? element.y + element.height - 42
     : cy + 28;
   const showGaugeScale = element.width >= 180 && element.height >= 160;
+  const scaleColor = options.gaugeScaleColor || '#ffffff';
+  const borderColor = options.gaugeBorderColor || '#ffffff';
 
   return (
     <g
@@ -47,18 +48,18 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         height={element.height}
         rx={14}
         fill="var(--element-bg, rgba(255, 255, 255, 0.06))"
-        stroke="var(--element-border, rgba(255, 255, 255, 0.35))"
+        stroke={borderColor}
         strokeWidth={1}
         data-testid={`gauge-background-${element.id}`}
         data-element-id={element.id}
         pointerEvents="all"
       />
       {binding && isPiPointBinding(binding) && options.showTagName && (
-        <text x={cx} y={element.y + 20} textAnchor="middle" fill={TEXT_COLOR} fontSize={Math.max(15, Math.min(22, element.height * 0.085))} fontWeight={500} pointerEvents="none">
+        <text x={cx} y={element.y + 20} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(15, Math.min(22, element.height * 0.085))} fontWeight={500} pointerEvents="none">
           {binding.pointName}
         </text>
       )}
-      <path d={track} fill="none" stroke={TRACK_COLOR} strokeWidth={options.gaugeStyle === 'arc' ? 12 : 3} strokeLinecap="round" data-testid={`gauge-track-${element.id}`} pointerEvents="none" />
+      <path d={track} fill="none" stroke={borderColor} strokeWidth={options.gaugeStyle === 'arc' ? 12 : 3} strokeLinecap="round" data-testid={`gauge-track-${element.id}`} pointerEvents="none" />
       {ratio !== undefined && (
         <path
           d={track}
@@ -79,15 +80,15 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         const inner = polar(cx, cy, radius - 3, angle);
         const label = polar(cx, cy, radius + 19, angle);
         const tickValue = options.minimum + ((options.maximum - options.minimum) * index) / 8;
-        return <g key={`gauge-tick-${index}`} pointerEvents="none"><line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={TEXT_COLOR} strokeWidth={1} /><text x={label.x} y={label.y + 5} textAnchor="middle" fill={TEXT_COLOR} fontSize={Math.max(13, Math.min(18, element.height * 0.07))}>{formatScaleValue(tickValue, options.decimals)}</text></g>;
+        return <g key={`gauge-tick-${index}`} pointerEvents="none"><line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={scaleColor} strokeWidth={1} /><text x={label.x} y={label.y + 5} textAnchor="middle" fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))}>{formatScaleValue(tickValue, options.decimals)}</text></g>;
       })}
-      <text x={cx} y={valueY} textAnchor="middle" fill={TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
+      <text x={cx} y={valueY} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
         {options.showValue ? valueText : ''}
       </text>
-      {showGaugeScale && <text x={element.x + 10} y={element.y + element.height - 10} fill={TEXT_COLOR} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-min-${element.id}`} pointerEvents="none">
+      {showGaugeScale && <text x={element.x + 10} y={element.y + element.height - 10} fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-min-${element.id}`} pointerEvents="none">
         {formatScale(options.minimum)}
       </text>}
-      {showGaugeScale && <text x={element.x + element.width - 10} y={element.y + element.height - 10} textAnchor="end" fill={TEXT_COLOR} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-max-${element.id}`} pointerEvents="none">
+      {showGaugeScale && <text x={element.x + element.width - 10} y={element.y + element.height - 10} textAnchor="end" fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-max-${element.id}`} pointerEvents="none">
         {formatScale(options.maximum)}
       </text>}
       {!isValidScale(options.minimum, options.maximum) && (
