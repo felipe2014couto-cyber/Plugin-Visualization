@@ -6,6 +6,7 @@ import type { BarOrientation } from '../../scaleOptions';
 import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 import type { MultistateConfig } from '../../multistate';
 import { ColorControl } from './ColorControl';
+import type { GaugeStyle } from '../../createGauge';
 
 export interface ScalePropertiesPanelProps {
   kind: 'Gauge' | 'Bar';
@@ -24,6 +25,7 @@ export interface ScalePropertiesPanelProps {
   backgroundColor?: string;
   borderColor?: string;
   borderWidth?: number;
+  gaugeStyle?: GaugeStyle;
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -40,6 +42,7 @@ export interface ScalePropertiesPanelProps {
     backgroundColor?: string;
     borderColor?: string;
     borderWidth?: number;
+    gaugeStyle?: GaugeStyle;
   }) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -62,6 +65,7 @@ export function ScalePropertiesPanel({
   backgroundColor = '#2d3b4f',
   borderColor = '#ffffff',
   borderWidth = 1,
+  gaugeStyle = 'pointer',
   onChange,
   multistate,
   onMultistateChange,
@@ -74,6 +78,7 @@ export function ScalePropertiesPanel({
       </div>
       <div className={styles.fields}>
         <ColorControl label={kind === 'Bar' ? 'Cor da barra' : 'Cor'} color={kind === 'Bar' ? fillColor : color} onChange={(value) => onChange(kind === 'Bar' ? { fillColor: value, color: value } : { color: value })} testId={`${kind.toLowerCase()}-color`} />
+        {kind === 'Gauge' && <label className={styles.field}><span>Estilo</span><select value={gaugeStyle} onChange={(event) => onChange({ gaugeStyle: event.target.value as GaugeStyle })} data-testid="gauge-style"><option value="arc">Arco</option><option value="triangle">Triângulo</option><option value="pointer">Ponteiro</option><option value="line">Linha</option></select></label>}
         {kind === 'Bar' && <>
           <ColorControl label="Cor de preenchimento" color={backgroundColor} onChange={(value) => onChange({ backgroundColor: value })} testId="bar-background-color" />
           <ColorControl label="Cor do contorno" color={borderColor} onChange={(value) => onChange({ borderColor: value })} testId="bar-border-color" />

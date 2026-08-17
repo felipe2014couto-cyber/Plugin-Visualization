@@ -1,6 +1,6 @@
 import { BAR_TYPE } from './createBar';
 import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE } from './createRectangle';
-import { GAUGE_TYPE } from './createGauge';
+import { GAUGE_TYPE, normalizeGaugeOptions } from './createGauge';
 import { normalizeMultistateConfig, type MultistateConfig, type MultistateRule } from './multistate';
 import { normalizeScaleOptions } from './scaleOptions';
 import { DISPLAY_SCHEMA_VERSION } from './schemaVersion';
@@ -161,7 +161,7 @@ function portableElement(input: unknown): DisplayElement {
     case GAUGE_TYPE:
       return { ...base, type: GAUGE_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
-        ...portableScale(input.properties),
+        ...portableGauge(input.properties),
         ...portableMultistate(input.properties.multistate),
       } };
     case BAR_TYPE:
@@ -239,6 +239,10 @@ function portableScale(input: Record<string, unknown>) {
     throw new DisplayImportError('Arquivo de Display inválido.');
   }
   return normalizeScaleOptions(input);
+}
+
+function portableGauge(input: Record<string, unknown>) {
+  return normalizeGaugeOptions({ ...portableScale(input), gaugeStyle: input.gaugeStyle as 'arc' | 'triangle' | 'pointer' | 'line' });
 }
 
 function portableMultistate(input: unknown): { multistate?: MultistateConfig } {

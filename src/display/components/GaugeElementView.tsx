@@ -1,6 +1,6 @@
 import React from 'react';
 import { isPiPointBinding } from '../../pi/piPointBinding';
-import { getGaugeOptions, type GaugeElement } from '../createGauge';
+import { getGaugeOptions, type GaugeElement, type GaugeStyle } from '../createGauge';
 import { formatScaleValue, getScaleRatio } from '../scaleOptions';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
 import { getMultistateColor } from '../multistate';
@@ -14,18 +14,20 @@ const TRACK_COLOR = 'var(--border-color, rgba(255, 255, 255, 0.18))';
 const TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.86))';
 
 export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState }: GaugeElementViewProps) {
-  const options = element.properties;
-  const binding = options.binding;
+  const options = getGaugeOptions(element.properties);
+  const binding = element.properties.binding;
   const numericValue = getNumericValue(runtimeState);
   const ratio = numericValue === undefined
     ? undefined
     : getScaleRatio(numericValue, options.minimum, options.maximum);
   const cx = element.x + element.width / 2;
-  const cy = element.y + element.height * 0.68;
-  const radius = Math.max(1, Math.min(element.width * 0.38, element.height * 0.42));
-  const track = arcPath(cx, cy, radius);
+  const cy = element.y + element.height * 0.53;
+  const radius = Math.max(1, Math.min(element.width * 0.37, element.height * 0.39));
+  const startAngle = -225;
+  const sweepAngle = 270;
+  const track = arcPath(cx, cy, radius, startAngle, sweepAngle);
   const valueText = getValueText(binding, runtimeState, numericValue, options.decimals);
-  const activeColor = getMultistateColor(numericValue, options.multistate, getGaugeOptions(element.properties).color);
+  const activeColor = getMultistateColor(numericValue, element.properties.multistate, options.color);
 
   return (
     <g
@@ -52,13 +54,13 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
           {binding.pointName}
         </text>
       )}
-      <path d={track} fill="none" stroke={TRACK_COLOR} strokeWidth={12} strokeLinecap="round" data-testid={`gauge-track-${element.id}`} pointerEvents="none" />
+      <path d={track} fill="none" stroke={TRACK_COLOR} strokeWidth={options.gaugeStyle === 'arc' ? 12 : 3} strokeLinecap="round" data-testid={`gauge-track-${element.id}`} pointerEvents="none" />
       {ratio !== undefined && (
         <path
           d={track}
           fill="none"
           stroke={activeColor}
-          strokeWidth={12}
+          strokeWidth={options.gaugeStyle === 'arc' ? 12 : 3}
           strokeLinecap="round"
           pathLength={100}
           strokeDasharray={`${ratio * 100} 100`}
@@ -66,19 +68,15 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
           pointerEvents="none"
         />
       )}
-      {ratio !== undefined && (
-        <line
-          x1={cx}
-          y1={cy}
-          x2={cx + Math.cos(Math.PI - ratio * Math.PI) * radius * 0.78}
-          y2={cy - Math.sin(Math.PI - ratio * Math.PI) * radius * 0.78}
-          stroke={activeColor}
-          strokeWidth={3}
-          strokeLinecap="round"
-          data-testid={`gauge-needle-${element.id}`}
-          pointerEvents="none"
-        />
-      )}
+      {renderIndicator(options.gaugeStyle, ratio, cx, cy, radius, activeColor, element.id)}
+      {isValidScale(options.minimum, options.maximum) && Array.from({ length: 9 }, (_, index) => {
+        const angle = startAngle + (sweepAngle * index) / 8;
+        const outer = polar(cx, cy, radius + 5, angle);
+        const inner = polar(cx, cy, radius - 3, angle);
+        const label = polar(cx, cy, radius + 19, angle);
+        const tickValue = options.minimum + ((options.maximum - options.minimum) * index) / 8;
+        return <g key={`gauge-tick-${index}`} pointerEvents="none"><line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={TEXT_COLOR} strokeWidth={1} /><text x={label.x} y={label.y + 4} textAnchor="middle" fill={TEXT_COLOR} fontSize={10}>{formatScaleValue(tickValue, options.decimals)}</text></g>;
+      })}
       <text x={cx} y={cy + 28} textAnchor="middle" fill={TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
         {options.showValue ? valueText : ''}
       </text>
@@ -97,8 +95,29 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   );
 });
 
-function arcPath(cx: number, cy: number, radius: number): string {
-  return `M ${cx - radius} ${cy} A ${radius} ${radius} 0 0 1 ${cx + radius} ${cy}`;
+function arcPath(cx: number, cy: number, radius: number, startAngle: number, sweepAngle: number): string {
+  const start = polar(cx, cy, radius, startAngle);
+  const end = polar(cx, cy, radius, startAngle + sweepAngle);
+  return `M ${start.x} ${start.y} A ${radius} ${radius} 0 1 1 ${end.x} ${end.y}`;
+}
+
+function polar(cx: number, cy: number, radius: number, angle: number): { x: number; y: number } {
+  const radians = (angle * Math.PI) / 180;
+  return { x: cx + Math.cos(radians) * radius, y: cy + Math.sin(radians) * radius };
+}
+
+function renderIndicator(style: GaugeStyle, ratio: number | undefined, cx: number, cy: number, radius: number, color: string, id: string): React.ReactNode {
+  if (ratio === undefined || style === 'arc') {
+    return null;
+  }
+  const point = polar(cx, cy, radius * 0.82, -225 + 270 * ratio);
+  if (style === 'triangle') {
+    const tip = polar(cx, cy, radius * 0.96, -225 + 270 * ratio);
+    const left = polar(cx, cy, radius * 0.72, -225 + 270 * ratio - 7);
+    const right = polar(cx, cy, radius * 0.72, -225 + 270 * ratio + 7);
+    return <polygon points={`${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`} fill={color} data-testid={`gauge-needle-${id}`} pointerEvents="none" />;
+  }
+  return <g data-testid={`gauge-needle-${id}`} pointerEvents="none"><line x1={cx} y1={cy} x2={point.x} y2={point.y} stroke={color} strokeWidth={style === 'pointer' ? 7 : 3} strokeLinecap="round" /><circle cx={cx} cy={cy} r={style === 'pointer' ? 8 : 3} fill={color} /></g>;
 }
 
 function getNumericValue(state: ValueRuntimeState | undefined): number | undefined {

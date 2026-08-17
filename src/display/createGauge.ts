@@ -7,6 +7,8 @@ import { DEFAULT_SCALE_OPTIONS, normalizeScaleOptions, type ScaleVisualOptions }
 import type { MultistateConfig } from './multistate';
 
 export const GAUGE_TYPE = 'gauge' as const;
+export type GaugeStyle = 'arc' | 'triangle' | 'pointer' | 'line';
+export type GaugeVisualOptions = ScaleVisualOptions & { gaugeStyle: GaugeStyle };
 
 export interface GaugeProperties extends Record<string, unknown> {
   binding?: PiPointBinding;
@@ -15,6 +17,7 @@ export interface GaugeProperties extends Record<string, unknown> {
   showValue: boolean;
   showTagName: boolean;
   decimals: number | null;
+  gaugeStyle: GaugeStyle;
   multistate?: MultistateConfig;
 }
 
@@ -31,7 +34,7 @@ export interface CreateGaugeOptions {
   y?: number;
   width?: number;
   height?: number;
-  options?: Partial<ScaleVisualOptions>;
+  options?: Partial<ScaleVisualOptions> & { gaugeStyle?: GaugeStyle };
   surface?: DisplaySurface;
   existingIds?: readonly string[];
   generateId?: () => string;
@@ -61,7 +64,7 @@ export function createGauge(options: CreateGaugeOptions): GaugeElement {
     height: safeHeight,
     properties: {
       ...(options.binding ? { binding: { ...options.binding } } : {}),
-      ...normalizeScaleOptions(options.options),
+      ...normalizeGaugeOptions(options.options),
       ...(options.multistate ? { multistate: options.multistate } : {}),
     },
   };
@@ -71,14 +74,14 @@ export function appendGauge(document: DisplayDocument, element: GaugeElement): D
   return { ...document, elements: [...document.elements, element] };
 }
 
-export function getGaugeOptions(properties: Partial<GaugeProperties>): ScaleVisualOptions {
-  return normalizeScaleOptions(properties);
+export function getGaugeOptions(properties: Partial<GaugeProperties>): GaugeVisualOptions {
+  return normalizeGaugeOptions(properties);
 }
 
 export function updateGaugeOptions(
   document: DisplayDocument,
   elementId: string,
-  patch: Partial<ScaleVisualOptions>,
+  patch: Partial<GaugeVisualOptions>,
 ): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => {
@@ -87,9 +90,17 @@ export function updateGaugeOptions(
     }
     changed = true;
     const properties = element.properties as Partial<GaugeProperties>;
-    return { ...element, properties: { ...properties, ...normalizeScaleOptions({ ...properties, ...patch }) } } as GaugeElement;
+    return { ...element, properties: { ...properties, ...normalizeGaugeOptions({ ...properties, ...patch }) } } as GaugeElement;
   });
   return changed ? { ...document, elements } : document;
 }
 
 export { DEFAULT_SCALE_OPTIONS };
+
+export function normalizeGaugeOptions(options?: Partial<GaugeProperties> | null): GaugeVisualOptions {
+  const scale = normalizeScaleOptions(options);
+  const gaugeStyle = options?.gaugeStyle === 'arc' || options?.gaugeStyle === 'triangle' || options?.gaugeStyle === 'line'
+    ? options.gaugeStyle
+    : 'pointer';
+  return { ...scale, gaugeStyle };
+}
