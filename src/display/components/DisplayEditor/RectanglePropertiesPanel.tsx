@@ -7,6 +7,7 @@ import type { MultistateConfig } from '../../multistate';
 import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 import { ColorControl } from './ColorControl';
 import { RotationControl } from './RotationControl';
+import { LinkField } from './LinkField';
 
 export interface RectanglePropertiesPanelProps {
   fill: string;
@@ -14,12 +15,14 @@ export interface RectanglePropertiesPanelProps {
   shape: RectangleProperties['shape'];
   rotation?: number;
   pointName?: string;
+  linkUrl?: string;
+  onLinkChange?: (value: string) => void;
   onChange: (patch: Partial<RectangleProperties>) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
 }
 
-export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, pointName, onChange, multistate, onMultistateChange }: RectanglePropertiesPanelProps) {
+export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, pointName, linkUrl, onLinkChange, onChange, multistate, onMultistateChange }: RectanglePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   return (
     <aside className={styles.panel} data-testid="rectangle-properties-panel" aria-label="Configuração do Rectangle">
@@ -39,6 +42,7 @@ export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, po
         <ColorControl label="Preenchimento" color={fill} onChange={(value) => onChange({ fill: value })} testId="rectangle-fill" />
         <ColorControl label="Contorno" color={stroke} onChange={(value) => onChange({ stroke: value })} testId="rectangle-stroke" />
         <RotationControl value={rotation} onChange={(value) => onChange({ rotation: value })} testId="rectangle-rotation" />
+        {onLinkChange && <LinkField value={linkUrl} onChange={onLinkChange} testId="rectangle-link-url" />}
       </div>
       {pointName ? (
         <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />

@@ -1015,10 +1015,10 @@ export function DisplayEditor({
           />
         )}
         {selectedGauge && (
-          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} {...getGaugeOptions(selectedGauge.properties)} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedBar && (
-          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} {...getBarOptions(selectedBar.properties)} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedRectangle && (
           <RectanglePropertiesPanel
@@ -1027,6 +1027,8 @@ export function DisplayEditor({
             shape={selectedRectangle.properties.shape ?? 'rectangle'}
             rotation={selectedRectangle.properties.rotation}
             pointName={isPiPointBinding(selectedRectangle.properties.binding) ? selectedRectangle.properties.binding.pointName : undefined}
+            linkUrl={typeof selectedRectangle.properties.linkUrl === 'string' ? selectedRectangle.properties.linkUrl : undefined}
+            onLinkChange={handleLinkChange}
             multistate={selectedRectangle.properties.multistate}
             onChange={handleRectangleChange}
             onMultistateChange={handleMultistateChange}
@@ -1042,8 +1044,8 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {state.selectedElementId && !selectedValue && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
-        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
+        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedRectangle && !selectedLibrarySymbol && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
+        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} linkUrl={typeof optionsTrend.properties.linkUrl === 'string' ? optionsTrend.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
         <TrendPopup

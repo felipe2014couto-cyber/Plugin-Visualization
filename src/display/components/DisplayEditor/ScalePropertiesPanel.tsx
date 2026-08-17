@@ -7,6 +7,7 @@ import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 import type { MultistateConfig } from '../../multistate';
 import { ColorControl } from './ColorControl';
 import type { GaugeStyle } from '../../createGauge';
+import { LinkField } from './LinkField';
 
 export interface ScalePropertiesPanelProps {
   kind: 'Gauge' | 'Bar';
@@ -35,6 +36,8 @@ export interface ScalePropertiesPanelProps {
   labelPosition?: 'above' | 'below';
   scaleDisplay?: 'all' | 'endpoints';
   gaugeAngle?: number;
+  linkUrl?: string;
+  onLinkChange?: (value: string) => void;
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -92,6 +95,8 @@ export function ScalePropertiesPanel({
   labelPosition = 'above',
   scaleDisplay = 'all',
   gaugeAngle = 270,
+  linkUrl,
+  onLinkChange,
   onChange,
   multistate,
   onMultistateChange,
@@ -161,6 +166,7 @@ export function ScalePropertiesPanel({
         <label className={styles.checkbox}><input type="checkbox" checked={showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-value`} /><span>Valor</span></label>
         {kind === 'Bar' && <label className={styles.checkbox}><input type="checkbox" checked={showScale} onChange={(event) => onChange({ showScale: event.target.checked })} data-testid="bar-show-scale" /><span>Mostrar escala</span></label>}
         <label className={styles.checkbox}><input type="checkbox" checked={showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-unit`} /><span>Unidades</span></label>
+        {onLinkChange && <LinkField value={linkUrl} onChange={onLinkChange} testId={`${kind.toLowerCase()}-link-url`} />}
       </div>
       <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />
     </aside>
