@@ -26,8 +26,8 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const cx = element.x + element.width / 2;
   const cy = element.y + element.height * 0.53;
   const radius = Math.max(1, Math.min(element.width * 0.37, element.height * 0.39));
-  const startAngle = -225;
-  const sweepAngle = 270;
+  const sweepAngle = options.gaugeAngle;
+  const startAngle = 90 + (360 - sweepAngle) / 2;
   const track = arcPath(cx, cy, radius, startAngle, sweepAngle);
   const valueText = getValueText(binding, runtimeState, numericValue, options.decimals);
   const activeColor = getMultistateColor(numericValue, element.properties.multistate, options.color);
@@ -81,7 +81,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
           pointerEvents="none"
         />
       )}
-      {renderIndicator(options.gaugeStyle, ratio, cx, cy, radius, activeColor, element.id)}
+      {renderIndicator(options.gaugeStyle, ratio, cx, cy, radius, activeColor, element.id, startAngle, sweepAngle)}
       {showGaugeScale && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
         if (options.scaleDisplay === 'endpoints' && index !== 0 && index !== 8) return null;
         const angle = startAngle + (sweepAngle * index) / 8;
@@ -112,6 +112,10 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
 function arcPath(cx: number, cy: number, radius: number, startAngle: number, sweepAngle: number): string {
   const start = polar(cx, cy, radius, startAngle);
   const end = polar(cx, cy, radius, startAngle + sweepAngle);
+  if (sweepAngle >= 359) {
+    const opposite = polar(cx, cy, radius, startAngle + 180);
+    return `M ${start.x} ${start.y} A ${radius} ${radius} 0 1 1 ${opposite.x} ${opposite.y} A ${radius} ${radius} 0 1 1 ${start.x} ${start.y}`;
+  }
   return `M ${start.x} ${start.y} A ${radius} ${radius} 0 1 1 ${end.x} ${end.y}`;
 }
 
@@ -120,15 +124,16 @@ function polar(cx: number, cy: number, radius: number, angle: number): { x: numb
   return { x: cx + Math.cos(radians) * radius, y: cy + Math.sin(radians) * radius };
 }
 
-function renderIndicator(style: GaugeStyle, ratio: number | undefined, cx: number, cy: number, radius: number, color: string, id: string): React.ReactNode {
+function renderIndicator(style: GaugeStyle, ratio: number | undefined, cx: number, cy: number, radius: number, color: string, id: string, startAngle: number, sweepAngle: number): React.ReactNode {
   if (ratio === undefined || style === 'arc') {
     return null;
   }
-  const point = polar(cx, cy, radius * 0.82, -225 + 270 * ratio);
+  const angle = startAngle + sweepAngle * ratio;
+  const point = polar(cx, cy, radius * 0.82, angle);
   if (style === 'triangle') {
-    const tip = polar(cx, cy, radius * 0.96, -225 + 270 * ratio);
-    const left = polar(cx, cy, radius * 0.72, -225 + 270 * ratio - 7);
-    const right = polar(cx, cy, radius * 0.72, -225 + 270 * ratio + 7);
+    const tip = polar(cx, cy, radius * 0.96, angle);
+    const left = polar(cx, cy, radius * 0.72, angle - 7);
+    const right = polar(cx, cy, radius * 0.72, angle + 7);
     return <polygon points={`${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`} fill={color} data-testid={`gauge-needle-${id}`} pointerEvents="none" />;
   }
   return <g data-testid={`gauge-needle-${id}`} pointerEvents="none"><line x1={cx} y1={cy} x2={point.x} y2={point.y} stroke={color} strokeWidth={style === 'pointer' ? 7 : 3} strokeLinecap="round" /><circle cx={cx} cy={cy} r={style === 'pointer' ? 8 : 3} fill={color} /></g>;

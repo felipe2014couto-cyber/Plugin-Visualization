@@ -31,6 +31,7 @@ export interface ScalePropertiesPanelProps {
   title?: string;
   labelPosition?: 'above' | 'below';
   scaleDisplay?: 'all' | 'endpoints';
+  gaugeAngle?: number;
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -53,6 +54,7 @@ export interface ScalePropertiesPanelProps {
     title?: string;
     labelPosition?: 'above' | 'below';
     scaleDisplay?: 'all' | 'endpoints';
+    gaugeAngle?: number;
   }) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -81,6 +83,7 @@ export function ScalePropertiesPanel({
   title = '',
   labelPosition = 'above',
   scaleDisplay = 'all',
+  gaugeAngle = 270,
   onChange,
   multistate,
   onMultistateChange,
@@ -98,6 +101,7 @@ export function ScalePropertiesPanel({
           <label className={styles.field}><span>Título</span><input value={title} onChange={(event) => onChange({ title: event.target.value })} placeholder="Nome da tag" data-testid="gauge-title" /></label>
           <label className={styles.field}><span>Local do rótulo</span><select value={labelPosition} onChange={(event) => onChange({ labelPosition: event.target.value as 'above' | 'below' })} data-testid="gauge-label-position"><option value="above">Acima</option><option value="below">Abaixo</option></select></label>
           <label className={styles.field}><span>Escala</span><select value={scaleDisplay} onChange={(event) => onChange({ scaleDisplay: event.target.value as 'all' | 'endpoints' })} data-testid="gauge-scale-display"><option value="all">Mostrar tudo</option><option value="endpoints">Mostrar apenas primeiro e último</option></select></label>
+          <label className={styles.field}><span>Ângulo ({gaugeAngle}°)</span><input type="range" min="180" max="360" step="1" value={gaugeAngle} onChange={(event) => onChange({ gaugeAngle: Number(event.target.value) })} data-testid="gauge-angle" /></label>
         </>}
         {kind === 'Gauge' && <>
           <ColorControl label="Cor do contorno" color={gaugeBorderColor} onChange={(value) => onChange({ gaugeBorderColor: value })} testId="gauge-border-color" />

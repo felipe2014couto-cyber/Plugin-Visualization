@@ -14,6 +14,7 @@ export type GaugeVisualOptions = ScaleVisualOptions & {
   title: string;
   labelPosition: 'above' | 'below';
   scaleDisplay: 'all' | 'endpoints';
+  gaugeAngle: number;
   gaugeBorderColor: string;
   gaugeScaleColor: string;
 };
@@ -30,6 +31,7 @@ export interface GaugeProperties extends Record<string, unknown> {
   title: string;
   labelPosition: 'above' | 'below';
   scaleDisplay: 'all' | 'endpoints';
+  gaugeAngle: number;
   gaugeBorderColor: string;
   gaugeScaleColor: string;
   multistate?: MultistateConfig;
@@ -125,6 +127,9 @@ export function normalizeGaugeOptions(options?: Partial<GaugeProperties> | null)
     title: typeof options?.title === 'string' ? options.title : '',
     labelPosition: options?.labelPosition === 'below' ? 'below' : 'above',
     scaleDisplay: options?.scaleDisplay === 'endpoints' ? 'endpoints' : 'all',
+    gaugeAngle: typeof options?.gaugeAngle === 'number' && Number.isFinite(options.gaugeAngle)
+      ? Math.max(180, Math.min(360, options.gaugeAngle))
+      : 270,
     gaugeBorderColor: isColor(options?.gaugeBorderColor) ? options!.gaugeBorderColor! : '#ffffff',
     gaugeScaleColor: isColor(options?.gaugeScaleColor) ? options!.gaugeScaleColor! : '#ffffff',
   };

@@ -249,6 +249,7 @@ function portableGauge(input: Record<string, unknown>) {
     title: typeof input.title === 'string' ? input.title : '',
     labelPosition: input.labelPosition === 'below' ? 'below' : 'above',
     scaleDisplay: input.scaleDisplay === 'endpoints' ? 'endpoints' : 'all',
+    gaugeAngle: typeof input.gaugeAngle === 'number' ? input.gaugeAngle : 270,
     gaugeBorderColor: typeof input.gaugeBorderColor === 'string' ? input.gaugeBorderColor : undefined,
     gaugeScaleColor: typeof input.gaugeScaleColor === 'string' ? input.gaugeScaleColor : undefined,
   });
