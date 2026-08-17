@@ -106,6 +106,7 @@ export function updateRectangleProperties(
         ...DEFAULT_RECTANGLE_PROPERTIES,
         ...element.properties,
         ...patch,
+        rotation: normalizeRotation({ ...element.properties, ...patch }.rotation),
       },
     } as RectangleElement;
   });

@@ -771,7 +771,7 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
     'data-element-type': element.type,
     'data-shape': element.properties.shape ?? 'rectangle',
     style: { cursor: 'move' },
-    transform: `rotate(${element.properties.rotation ?? 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
+    transform: `rotate(${Number(element.properties.rotation) || 0}, ${element.x + element.width / 2}, ${element.y + element.height / 2})`,
   };
   if (element.properties.shape === 'ellipse') {
     return <ellipse {...common} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} />;
