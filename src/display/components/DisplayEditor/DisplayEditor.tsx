@@ -66,7 +66,8 @@ import { ValuePropertiesPanel } from './ValuePropertiesPanel';
 import { ScalePropertiesPanel } from './ScalePropertiesPanel';
 import { RectanglePropertiesPanel } from './RectanglePropertiesPanel';
 import { TextPropertiesPanel } from './TextPropertiesPanel';
-import { appendImage, createImage } from '../../createImage';
+import { ImagePropertiesPanel } from './ImagePropertiesPanel';
+import { appendImage, createImage, IMAGE_TYPE, updateImageProperties, type ImageElement } from '../../createImage';
 import { appendLibrarySymbol, createLibrarySymbol } from '../../createLibrarySymbol';
 import { appendText, createText, TEXT_TYPE, updateTextProperties, type TextElement } from '../../createText';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
@@ -665,6 +666,9 @@ export function DisplayEditor({
   const selectedText = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TEXT_TYPE) as TextElement | undefined
     : undefined;
+  const selectedImage = mode === 'edit' && state.selectedElementId
+    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === IMAGE_TYPE) as ImageElement | undefined
+    : undefined;
   const handleGaugeChange = useCallback((patch: Parameters<typeof updateGaugeOptions>[2]) => {
     commitDocument(updateGaugeOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
@@ -676,6 +680,9 @@ export function DisplayEditor({
   }, [commitDocument]);
   const handleTextChange = useCallback((patch: Parameters<typeof updateTextProperties>[2]) => {
     commitDocument(updateTextProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
+  }, [commitDocument]);
+  const handleImageChange = useCallback((patch: Parameters<typeof updateImageProperties>[2]) => {
+    commitDocument(updateImageProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
   const optionsTrend = optionsTrendId
     ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
@@ -989,6 +996,7 @@ export function DisplayEditor({
             fill={selectedRectangle.properties.fill ?? DEFAULT_RECTANGLE_PROPERTIES.fill}
             stroke={selectedRectangle.properties.stroke ?? DEFAULT_RECTANGLE_PROPERTIES.stroke}
             shape={selectedRectangle.properties.shape ?? 'rectangle'}
+            rotation={selectedRectangle.properties.rotation}
             pointName={isPiPointBinding(selectedRectangle.properties.binding) ? selectedRectangle.properties.binding.pointName : undefined}
             multistate={selectedRectangle.properties.multistate}
             onChange={handleRectangleChange}
@@ -996,6 +1004,7 @@ export function DisplayEditor({
           />
         )}
         {selectedText && <TextPropertiesPanel properties={selectedText.properties} onChange={handleTextChange} />}
+        {selectedImage && <ImagePropertiesPanel properties={selectedImage.properties} onChange={handleImageChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (

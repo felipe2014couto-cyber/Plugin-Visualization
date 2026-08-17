@@ -112,7 +112,7 @@ function portableElement(input: unknown): DisplayElement {
       if (typeof input.properties.src !== 'string' || !input.properties.src.startsWith('data:image/')) {
         throw new DisplayImportError('Imagem de Display inválida.');
       }
-      return { ...base, type: IMAGE_TYPE, properties: { src: input.properties.src, alt: typeof input.properties.alt === 'string' ? input.properties.alt : 'Imagem' } };
+      return { ...base, type: IMAGE_TYPE, properties: { src: input.properties.src, alt: typeof input.properties.alt === 'string' ? input.properties.alt : 'Imagem', rotation: normalizeRotation(input.properties.rotation) } };
     case LIBRARY_SYMBOL_TYPE: {
       const symbol = typeof input.properties.symbolId === 'string' ? findIndustrialSymbol(input.properties.symbolId) : undefined;
       if (!symbol) {
@@ -135,6 +135,7 @@ function portableElement(input: unknown): DisplayElement {
         color: typeof input.properties.color === 'string' ? input.properties.color : DEFAULT_TEXT_PROPERTIES.color,
         fontSize: isFiniteNumber(input.properties.fontSize) ? Math.max(8, Math.min(120, input.properties.fontSize)) : DEFAULT_TEXT_PROPERTIES.fontSize,
         textAlign: input.properties.textAlign === 'left' || input.properties.textAlign === 'right' ? input.properties.textAlign : 'center',
+        rotation: normalizeRotation(input.properties.rotation),
       } };
     case RECTANGLE_TYPE:
       return {
@@ -146,6 +147,7 @@ function portableElement(input: unknown): DisplayElement {
           shape: input.properties.shape === 'ellipse' || input.properties.shape === 'triangle'
             ? input.properties.shape
             : 'rectangle',
+          rotation: normalizeRotation(input.properties.rotation),
           ...portableOptionalBinding(input.properties.binding),
           ...portableMultistate(input.properties.multistate),
         },
@@ -174,6 +176,10 @@ function portableElement(input: unknown): DisplayElement {
     default:
       throw new DisplayImportError('Tipo de elemento não suportado.');
   }
+}
+
+function normalizeRotation(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value % 360 : 0;
 }
 
 function portableBinding(input: unknown): PiPointBinding {

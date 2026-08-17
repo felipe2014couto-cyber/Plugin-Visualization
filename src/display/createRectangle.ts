@@ -13,6 +13,7 @@ export type RectangleProperties = Record<string, unknown> & {
   fill: string;
   stroke: string;
   shape: GeometricShape;
+  rotation: number;
   binding?: PiPointBinding;
   multistate?: MultistateConfig;
 };
@@ -23,6 +24,7 @@ export const DEFAULT_RECTANGLE_PROPERTIES: RectangleProperties = {
   fill: 'rgba(110, 159, 255, 0.15)',
   stroke: '#6e9fff',
   shape: 'rectangle',
+  rotation: 0,
 };
 
 const DEFAULT_RECTANGLE_WIDTH = 240;
@@ -68,11 +70,14 @@ export function createRectangle(options: CreateRectangleOptions = {}): Rectangle
     properties: {
       ...DEFAULT_RECTANGLE_PROPERTIES,
       ...options.properties,
+      rotation: normalizeRotation(options.properties?.rotation),
       ...(options.binding ? { binding: { ...options.binding } } : {}),
       ...(options.multistate ? { multistate: options.multistate } : {}),
     },
   };
 }
+
+function normalizeRotation(value: unknown): number { return typeof value === 'number' && Number.isFinite(value) ? value % 360 : 0; }
 
 export function appendDisplayElement(
   document: DisplayDocument,

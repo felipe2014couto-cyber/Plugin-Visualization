@@ -10,9 +10,10 @@ export interface TextProperties extends Record<string, unknown> {
   color: string;
   fontSize: number;
   textAlign: TextAlign;
+  rotation: number;
 }
 export type TextElement = DisplayElement<typeof TEXT_TYPE, TextProperties>;
-export const DEFAULT_TEXT_PROPERTIES: TextProperties = { text: 'Texto', color: '#ffffff', fontSize: 24, textAlign: 'center' };
+export const DEFAULT_TEXT_PROPERTIES: TextProperties = { text: 'Texto', color: '#ffffff', fontSize: 24, textAlign: 'center', rotation: 0 };
 export interface CreateTextOptions { id?: string; x?: number; y?: number; width?: number; height?: number; properties?: Partial<TextProperties>; surface?: DisplaySurface; existingIds?: readonly string[]; generateId?: () => string; }
 
 export function createText(options: CreateTextOptions = {}): TextElement {
@@ -32,7 +33,8 @@ export function appendText(document: DisplayDocument, element: TextElement): Dis
 export function updateTextProperties(document: DisplayDocument, elementId: string, patch: Partial<TextProperties>): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => element.id === elementId && element.type === TEXT_TYPE
-    ? (changed = true, { ...element, properties: { ...DEFAULT_TEXT_PROPERTIES, ...element.properties, ...patch } } as TextElement)
+    ? (changed = true, { ...element, properties: { ...DEFAULT_TEXT_PROPERTIES, ...element.properties, ...patch, rotation: normalizeRotation({ ...element.properties, ...patch }.rotation) } } as TextElement)
     : element);
   return changed ? { ...document, elements } : document;
 }
+function normalizeRotation(value: unknown): number { return typeof value === 'number' && Number.isFinite(value) ? value % 360 : 0; }
