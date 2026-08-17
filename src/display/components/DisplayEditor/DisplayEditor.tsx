@@ -987,10 +987,10 @@ export function DisplayEditor({
           />
         )}
         {selectedGauge && (
-          <ScalePropertiesPanel kind="Gauge" {...getGaugeOptions(selectedGauge.properties)} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} {...getGaugeOptions(selectedGauge.properties)} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedBar && (
-          <ScalePropertiesPanel kind="Bar" {...getBarOptions(selectedBar.properties)} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} {...getBarOptions(selectedBar.properties)} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedRectangle && (
           <RectanglePropertiesPanel
