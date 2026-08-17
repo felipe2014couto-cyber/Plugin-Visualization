@@ -40,7 +40,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const scaleColor = options.gaugeScaleColor || '#ffffff';
   const borderColor = options.gaugeBorderColor || '#ffffff';
   const title = options.title.trim() || (binding && isPiPointBinding(binding) ? binding.pointName : '');
-  const titleY = options.labelPosition === 'below' ? element.y + element.height - 34 : element.y + 20;
+  const titleY = options.labelPosition === 'below' ? element.y + element.height - 52 : element.y + 20;
 
   return (
     <g
