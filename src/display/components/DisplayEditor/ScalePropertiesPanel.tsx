@@ -28,6 +28,9 @@ export interface ScalePropertiesPanelProps {
   gaugeStyle?: GaugeStyle;
   gaugeBorderColor?: string;
   gaugeScaleColor?: string;
+  title?: string;
+  labelPosition?: 'above' | 'below';
+  scaleDisplay?: 'all' | 'endpoints';
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -47,6 +50,9 @@ export interface ScalePropertiesPanelProps {
     gaugeStyle?: GaugeStyle;
     gaugeBorderColor?: string;
     gaugeScaleColor?: string;
+    title?: string;
+    labelPosition?: 'above' | 'below';
+    scaleDisplay?: 'all' | 'endpoints';
   }) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -72,6 +78,9 @@ export function ScalePropertiesPanel({
   gaugeStyle = 'pointer',
   gaugeBorderColor = '#ffffff',
   gaugeScaleColor = '#ffffff',
+  title = '',
+  labelPosition = 'above',
+  scaleDisplay = 'all',
   onChange,
   multistate,
   onMultistateChange,
@@ -85,6 +94,11 @@ export function ScalePropertiesPanel({
       <div className={styles.fields}>
         <ColorControl label={kind === 'Bar' ? 'Cor da barra' : 'Cor do indicador'} color={kind === 'Bar' ? fillColor : color} fallback={kind === 'Gauge' ? '#00a2e8' : '#ffffff'} onChange={(value) => onChange(kind === 'Bar' ? { fillColor: value, color: value } : { color: value })} testId={`${kind.toLowerCase()}-color`} />
         {kind === 'Gauge' && <label className={styles.field}><span>Estilo</span><select value={gaugeStyle} onChange={(event) => onChange({ gaugeStyle: event.target.value as GaugeStyle })} data-testid="gauge-style"><option value="arc">Arco</option><option value="triangle">Triângulo</option><option value="pointer">Ponteiro</option><option value="line">Linha</option></select></label>}
+        {kind === 'Gauge' && <>
+          <label className={styles.field}><span>Título</span><input value={title} onChange={(event) => onChange({ title: event.target.value })} placeholder="Nome da tag" data-testid="gauge-title" /></label>
+          <label className={styles.field}><span>Local do rótulo</span><select value={labelPosition} onChange={(event) => onChange({ labelPosition: event.target.value as 'above' | 'below' })} data-testid="gauge-label-position"><option value="above">Acima</option><option value="below">Abaixo</option></select></label>
+          <label className={styles.field}><span>Escala</span><select value={scaleDisplay} onChange={(event) => onChange({ scaleDisplay: event.target.value as 'all' | 'endpoints' })} data-testid="gauge-scale-display"><option value="all">Mostrar tudo</option><option value="endpoints">Mostrar apenas primeiro e último</option></select></label>
+        </>}
         {kind === 'Gauge' && <>
           <ColorControl label="Cor do contorno" color={gaugeBorderColor} onChange={(value) => onChange({ gaugeBorderColor: value })} testId="gauge-border-color" />
           <ColorControl label="Cor da escala e título" color={gaugeScaleColor} onChange={(value) => onChange({ gaugeScaleColor: value })} testId="gauge-scale-color" />

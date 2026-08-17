@@ -37,6 +37,8 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const showGaugeScale = element.width >= 180 && element.height >= 160;
   const scaleColor = options.gaugeScaleColor || '#ffffff';
   const borderColor = options.gaugeBorderColor || '#ffffff';
+  const title = options.title.trim() || (binding && isPiPointBinding(binding) ? binding.pointName : '');
+  const titleY = options.labelPosition === 'below' ? element.y + element.height - 24 : element.y + 20;
 
   return (
     <g
@@ -58,9 +60,9 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         data-element-id={element.id}
         pointerEvents="all"
       />
-      {binding && isPiPointBinding(binding) && options.showTagName && (
-        <text x={cx} y={element.y + 20} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(15, Math.min(22, element.height * 0.085))} fontWeight={500} pointerEvents="none">
-          {binding.pointName}
+      {binding && isPiPointBinding(binding) && options.showTagName && title && (
+        <text x={cx} y={titleY} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(15, Math.min(22, element.height * 0.085))} fontWeight={500} pointerEvents="none">
+          {title}
         </text>
       )}
       <path d={track} fill="none" stroke={borderColor} strokeWidth={options.gaugeStyle === 'arc' ? 12 : 3} strokeLinecap="round" data-testid={`gauge-track-${element.id}`} pointerEvents="none" />
@@ -79,6 +81,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
       )}
       {renderIndicator(options.gaugeStyle, ratio, cx, cy, radius, activeColor, element.id)}
       {showGaugeScale && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
+        if (options.scaleDisplay === 'endpoints' && index !== 0 && index !== 8) return null;
         const angle = startAngle + (sweepAngle * index) / 8;
         const outer = polar(cx, cy, radius + 5, angle);
         const inner = polar(cx, cy, radius - 3, angle);

@@ -246,6 +246,9 @@ function portableGauge(input: Record<string, unknown>) {
     ...portableScale(input),
     gaugeStyle: input.gaugeStyle as 'arc' | 'triangle' | 'pointer' | 'line',
     scaleMode: input.scaleMode === 'custom' ? 'custom' : 'database',
+    title: typeof input.title === 'string' ? input.title : '',
+    labelPosition: input.labelPosition === 'below' ? 'below' : 'above',
+    scaleDisplay: input.scaleDisplay === 'endpoints' ? 'endpoints' : 'all',
     gaugeBorderColor: typeof input.gaugeBorderColor === 'string' ? input.gaugeBorderColor : undefined,
     gaugeScaleColor: typeof input.gaugeScaleColor === 'string' ? input.gaugeScaleColor : undefined,
   });
