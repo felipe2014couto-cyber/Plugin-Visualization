@@ -53,7 +53,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         pointerEvents="all"
       />
       {binding && isPiPointBinding(binding) && options.showTagName && (
-        <text x={cx} y={element.y + 18} textAnchor="middle" fill={TEXT_COLOR} fontSize={12} pointerEvents="none">
+        <text x={cx} y={element.y + 20} textAnchor="middle" fill={TEXT_COLOR} fontSize={Math.max(15, Math.min(22, element.height * 0.085))} fontWeight={500} pointerEvents="none">
           {binding.pointName}
         </text>
       )}
@@ -78,15 +78,15 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         const inner = polar(cx, cy, radius - 3, angle);
         const label = polar(cx, cy, radius + 19, angle);
         const tickValue = options.minimum + ((options.maximum - options.minimum) * index) / 8;
-        return <g key={`gauge-tick-${index}`} pointerEvents="none"><line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={TEXT_COLOR} strokeWidth={1} /><text x={label.x} y={label.y + 4} textAnchor="middle" fill={TEXT_COLOR} fontSize={10}>{formatScaleValue(tickValue, options.decimals)}</text></g>;
+        return <g key={`gauge-tick-${index}`} pointerEvents="none"><line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={TEXT_COLOR} strokeWidth={1} /><text x={label.x} y={label.y + 5} textAnchor="middle" fill={TEXT_COLOR} fontSize={Math.max(13, Math.min(18, element.height * 0.07))}>{formatScaleValue(tickValue, options.decimals)}</text></g>;
       })}
       <text x={cx} y={valueY} textAnchor="middle" fill={TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
         {options.showValue ? valueText : ''}
       </text>
-      <text x={element.x + 10} y={element.y + element.height - 10} fill={TEXT_COLOR} fontSize={10} data-testid={`gauge-min-${element.id}`} pointerEvents="none">
+      <text x={element.x + 10} y={element.y + element.height - 10} fill={TEXT_COLOR} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-min-${element.id}`} pointerEvents="none">
         {formatScale(options.minimum)}
       </text>
-      <text x={element.x + element.width - 10} y={element.y + element.height - 10} textAnchor="end" fill={TEXT_COLOR} fontSize={10} data-testid={`gauge-max-${element.id}`} pointerEvents="none">
+      <text x={element.x + element.width - 10} y={element.y + element.height - 10} textAnchor="end" fill={TEXT_COLOR} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-max-${element.id}`} pointerEvents="none">
         {formatScale(options.maximum)}
       </text>
       {!isValidScale(options.minimum, options.maximum) && (
