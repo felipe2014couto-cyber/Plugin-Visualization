@@ -767,6 +767,10 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
     'data-element-id': element.id,
     'data-element-type': element.type,
     'data-shape': element.properties.shape ?? 'rectangle',
+    x: element.x,
+    y: element.y,
+    width: element.width,
+    height: element.height,
     style: { cursor: 'move' },
     transform: `rotate(${Number(element.properties.rotation) || 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
   };

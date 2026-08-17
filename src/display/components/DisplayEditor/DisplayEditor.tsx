@@ -707,18 +707,19 @@ export function DisplayEditor({
     if (mode !== 'edit') {
       return;
     }
-    const selectedId = stateRef.current.selectedElementId;
-    if (!selectedId) {
+    const selectedIds = stateRef.current.selectedElementIds;
+    if (selectedIds.length === 0) {
       return;
     }
     const currentDocument = documentRef.current;
-    if (!currentDocument.elements.some((element) => element.id === selectedId)) {
+    const idsToDelete = new Set(selectedIds.filter((id) => currentDocument.elements.some((element) => element.id === id)));
+    if (idsToDelete.size === 0) {
       dispatch({ type: 'CLEAR_SELECTION' });
       return;
     }
     commitDocument({
       ...currentDocument,
-      elements: currentDocument.elements.filter((element) => element.id !== selectedId),
+      elements: currentDocument.elements.filter((element) => !idsToDelete.has(element.id)),
     });
   }, [commitDocument, dispatch, mode]);
 
