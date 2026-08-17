@@ -8,6 +8,7 @@ import { DEFAULT_LIBRARY_SYMBOL_COLOR, type LibrarySymbolProperties } from '../.
 import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 import { TransparentColorPicker } from './TransparentColorPicker';
 import type { MultistateConfig } from '../../multistate';
+import { RotationControl } from './RotationControl';
 
 export interface LibrarySymbolPropertiesPanelProps {
   properties: LibrarySymbolProperties;
@@ -28,6 +29,7 @@ export function LibrarySymbolPropertiesPanel({ properties, selectedPiPoint, onCh
         <span className={styles.name}>{properties.name}</span>
       </div>
       <div className={styles.fields}>
+        <RotationControl value={properties.rotation} onChange={(rotation) => onChange({ rotation })} testId="library-symbol-rotation" />
         <label className={styles.field}>
           <span>Cor do símbolo</span>
           <TransparentColorPicker color={properties.color} fallbackColor={DEFAULT_LIBRARY_SYMBOL_COLOR} testId="library-symbol-color" onChange={(color) => onChange({ color })} />

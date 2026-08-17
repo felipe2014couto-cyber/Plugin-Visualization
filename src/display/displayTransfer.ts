@@ -127,6 +127,7 @@ function portableElement(input: unknown): DisplayElement {
           src: getIndustrialSymbolAssetUrl(symbol),
           viewBox: symbol.viewBox,
           color: getLibrarySymbolColor(input.properties),
+          rotation: normalizeRotation(input.properties.rotation),
           ...portableOptionalBinding(input.properties.binding),
           ...portableMultistate(input.properties.multistate),
         },

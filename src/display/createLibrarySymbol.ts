@@ -14,6 +14,7 @@ export interface LibrarySymbolProperties extends Record<string, unknown> {
   src: string;
   viewBox: string;
   color: string;
+  rotation: number;
   binding?: PiPointBinding;
   multistate?: MultistateConfig;
 }
@@ -64,6 +65,7 @@ export function createLibrarySymbol(options: CreateLibrarySymbolOptions): Librar
       src: getIndustrialSymbolAssetUrl(symbol),
       viewBox: symbol.viewBox,
       color: normalizeLibrarySymbolColor(options.color),
+      rotation: 0,
       ...(options.binding ? { binding: { ...options.binding } } : {}),
       ...(options.multistate ? { multistate: options.multistate } : {}),
     },
@@ -92,6 +94,7 @@ export function updateLibrarySymbolProperties(
         ...properties,
         ...patch,
         color: normalizeLibrarySymbolColor(patch.color ?? properties.color),
+        rotation: normalizeRotation(patch.rotation ?? properties.rotation),
       },
     } as LibrarySymbolElement;
   });
@@ -108,4 +111,8 @@ function normalizeLibrarySymbolColor(color: unknown): string {
   return color === 'transparent' || (typeof color === 'string' && /^#[0-9a-f]{6}$/i.test(color))
     ? color
     : DEFAULT_LIBRARY_SYMBOL_COLOR;
+}
+
+function normalizeRotation(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value % 360 : 0;
 }
