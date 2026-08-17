@@ -11,7 +11,7 @@ import {
   type MultistateOperator,
   type MultistateRule,
 } from '../../index';
-import { ColorControl } from './ColorControl';
+import { TransparentColorPicker } from './TransparentColorPicker';
 
 export interface MultistatePropertiesPanelProps {
   config?: MultistateConfig;
@@ -86,7 +86,10 @@ export function MultistatePropertiesPanel({ config, onChange }: MultistateProper
                 />
               </label>
             )}
-            <ColorControl label="Cor" color={isValidColor(rule.color) || rule.color === 'transparent' ? rule.color : '#d32f2f'} fallback="#d32f2f" onChange={(color) => updateRule(rule.id, { color })} testId={`multistate-color-${rule.id}`} />
+            <label className={styles.colorField}>
+              <span>Cor</span>
+              <TransparentColorPicker color={rule.color} fallbackColor="#d32f2f" testId={`multistate-color-${rule.id}`} onChange={(color) => updateRule(rule.id, { color })} />
+            </label>
             <button type="button" className={styles.removeButton} data-testid={`multistate-remove-${rule.id}`} onClick={() => update({ rules: normalized.rules.filter((item) => item.id !== rule.id) })}>
               Remover
             </button>
@@ -104,10 +107,6 @@ function toFiniteNumber(value: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function isValidColor(color: string): boolean {
-  return /^#[0-9a-f]{6}$/i.test(color);
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({

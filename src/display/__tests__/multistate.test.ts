@@ -22,7 +22,8 @@ describe('Multistate', () => {
     expect(evaluateMultistate(50, config([rule('gt', 'gt', 20)]))).toBeDefined();
     expect(evaluateMultistate(20, config([rule('gte', 'gte', 20)]))).toBeDefined();
     expect(evaluateMultistate(20, config([rule('eq', 'eq', 20)]))).toBeDefined();
-    for (const value of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, '20']) {
+    expect(evaluateMultistate('20', config([rule('string-number', 'gte', 20)]))).toBeDefined();
+    for (const value of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 'not-a-number']) {
       expect(evaluateMultistate(value, config([rule('invalid', 'gte', 0)]))).toBeUndefined();
     }
   });
@@ -44,6 +45,12 @@ describe('Multistate', () => {
     expect(evaluateMultistate(60, config(rules))?.rule.id).toBe('first');
     expect(evaluateMultistate(5, config(rules))).toBeUndefined();
     expect(evaluateMultistate(60, { enabled: false, rules })).toBeUndefined();
+  });
+
+  it('aceita regra transparente', () => {
+    const transparent = rule('transparent', 'eq', 0, 'transparent');
+    expect(isValidMultistateRule(transparent)).toBe(true);
+    expect(evaluateMultistate(0, config([transparent]))?.color).toBe('transparent');
   });
 
   it('persiste configuração aditiva em Value, Gauge e Barra sem runtime', () => {

@@ -200,7 +200,7 @@ export function App() {
     [progressiveTrendLoader, rangeFrom, rangeTo],
   );
   const hasPiConnection = piConnection.status === 'connected';
-  const openSaveDialog = useCallback(() => {
+  const openSaveAsDialog = useCallback(() => {
     setSaveName(document.name);
     setSaveFolderUid(selectedFolderUid);
     setSaveFolderSearch('');
@@ -209,7 +209,29 @@ export function App() {
     setIsSaveDialogOpen(true);
   }, [document.name, selectedFolderUid]);
 
-  const handleSaveDashboard = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+  const updateDashboardUrl = useCallback((uid: string) => {
+    const savedUrl = new URL(globalThis.location.href);
+    savedUrl.searchParams.set('dashboardUid', uid);
+    globalThis.history?.replaceState(null, '', `${savedUrl.pathname}${savedUrl.search}`);
+  }, []);
+
+  const handleSaveDashboard = useCallback(async () => {
+    if (!dashboardUid) {
+      openSaveAsDialog();
+      return;
+    }
+
+    setSaveState('saving');
+    try {
+      const saved = await savePimsVisionDashboard(document, dashboardUid, selectedFolderUid);
+      setDashboardUid(saved.uid);
+      setSaveState('saved');
+    } catch {
+      setSaveState('error');
+    }
+  }, [dashboardUid, document, openSaveAsDialog, selectedFolderUid]);
+
+  const handleSaveAsDashboard = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const title = saveName.trim();
     if (!title) {
@@ -219,7 +241,7 @@ export function App() {
 
     setSaveState('saving');
     try {
-      if (await hasDashboardTitleConflict(title, saveFolderUid, dashboardUid)) {
+      if (await hasDashboardTitleConflict(title, saveFolderUid)) {
         setSaveValidationError('Já existe um dashboard com esse nome nesta pasta.');
         setSaveState('idle');
         return;
@@ -227,19 +249,17 @@ export function App() {
 
       const documentToSave = { ...document, name: title };
       setDocument(documentToSave);
-      const saved = await savePimsVisionDashboard(documentToSave, dashboardUid, saveFolderUid);
+      const saved = await savePimsVisionDashboard(documentToSave, undefined, saveFolderUid);
       setDashboardUid(saved.uid);
       setSelectedFolderUid(saveFolderUid);
       setIsSaveDialogOpen(false);
       setSaveValidationError('');
-      const savedUrl = new URL(globalThis.location.href);
-      savedUrl.searchParams.set('dashboardUid', saved.uid);
-      globalThis.history?.replaceState(null, '', `${savedUrl.pathname}${savedUrl.search}`);
+      updateDashboardUrl(saved.uid);
       setSaveState('saved');
     } catch {
       setSaveState('error');
     }
-  }, [dashboardUid, document, saveFolderUid, saveName]);
+  }, [document, saveFolderUid, saveName, updateDashboardUrl]);
 
   if (authenticationState !== 'authenticated') {
     const loginUrl = `/login?redirect=${encodeURIComponent(globalThis.location?.href ?? '')}`;
@@ -291,8 +311,15 @@ export function App() {
               className={styles.saveButton}
               data-testid="pims-vision-save-dashboard"
               disabled={saveState === 'saving'}
-              onClick={openSaveDialog}
-            >{saveState === 'saving' ? 'Salvando...' : 'Salvar dashboard'}</button>
+              onClick={handleSaveDashboard}
+            >{saveState === 'saving' ? 'Salvando...' : 'Salvar'}</button>
+            <button
+              type="button"
+              className={styles.saveAsButton}
+              data-testid="pims-vision-save-as-dashboard"
+              disabled={saveState === 'saving'}
+              onClick={openSaveAsDialog}
+            >Salvar como</button>
             {saveState !== 'idle' && (
               <span className={saveState === 'error' ? styles.saveError : styles.saveStatus} role="status">
                 {saveState === 'saved' ? 'Salvo no Grafana' : saveState === 'error' ? 'Não foi possível salvar' : ''}
@@ -303,8 +330,8 @@ export function App() {
       </header>
       {isSaveDialogOpen && (
         <div className={styles.dialogBackdrop} role="presentation">
-          <form className={styles.saveDialog} role="dialog" aria-modal="true" aria-labelledby="save-dashboard-title" onSubmit={handleSaveDashboard}>
-            <h2 id="save-dashboard-title">Salvar dashboard</h2>
+          <form className={styles.saveDialog} role="dialog" aria-modal="true" aria-labelledby="save-dashboard-title" onSubmit={handleSaveAsDashboard}>
+            <h2 id="save-dashboard-title">Salvar como</h2>
             <label className={styles.dialogLabel} htmlFor="save-dashboard-name">Nome do dashboard</label>
             <input
               id="save-dashboard-name"
@@ -356,8 +383,8 @@ export function App() {
                 className={styles.dialogCancelButton}
                 onClick={() => setIsSaveDialogOpen(false)}
               >Cancelar</button>
-              <button type="submit" className={styles.dialogSaveButton} disabled={saveState === 'saving'}>
-                {saveState === 'saving' ? 'Salvando...' : 'Salvar'}
+              <button type="submit" className={styles.dialogSaveButton} data-testid="pims-vision-save-as-submit" disabled={saveState === 'saving'}>
+                {saveState === 'saving' ? 'Salvando...' : 'Salvar como'}
               </button>
             </div>
           </form>
@@ -690,30 +717,44 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 4px;
+    gap: 3px;
+    box-sizing: border-box;
     margin-left: auto;
   `,
   headerConnectionRow: css`
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   `,
   headerSaveRow: css`
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   `,
   saveButton: css`
-    height: 34px;
-    padding: 0 14px;
+    height: 30px;
+    padding: 0 12px;
     border: 1px solid var(--accent);
     border-radius: 8px;
     color: var(--accent-contrast);
     background: var(--accent);
     cursor: pointer;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
     &:hover:not(:disabled) { background: var(--accent-hover); }
+    &:disabled { opacity: 0.65; cursor: wait; }
+  `,
+  saveAsButton: css`
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    background: var(--button-bg);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    &:hover:not(:disabled) { background: var(--button-hover); }
     &:disabled { opacity: 0.65; cursor: wait; }
   `,
   saveStatus: css`
@@ -871,14 +912,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     align-items: center;
     gap: 2px;
-    padding: 3px;
+    padding: 2px;
     border: 1px solid var(--border-color);
     border-radius: 10px;
     background: var(--surface-secondary);
   `,
   themeButton: css`
-    min-width: 62px;
-    height: 32px;
+    min-width: 56px;
+    height: 28px;
     padding: 0 8px;
     border: 0;
     border-radius: 7px;
@@ -889,8 +930,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     &:hover { color: var(--text-primary); background: var(--button-hover); }
   `,
   themeButtonActive: css`
-    min-width: 62px;
-    height: 32px;
+    min-width: 56px;
+    height: 28px;
     padding: 0 8px;
     border: 0;
     border-radius: 7px;

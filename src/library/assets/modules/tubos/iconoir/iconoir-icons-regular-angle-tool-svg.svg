@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="1.5" fill="none" data-style="colored" data-modified="true" data-palette="industrial">
+<g id="sym_b0ebbaee982a_body" data-role="body"><g id="sym_b0ebbaee982a_outline" data-role="outline"><path d="M3 21L3 3L9 3V15L21 15V21H3Z" stroke="#283942" stroke-linecap="round" stroke-linejoin="round" fill="#5F7888" />
+<path d="M13 19V21" stroke="#AFC2CB" stroke-linecap="round" fill="#AFC2CB" />
+<path d="M9 19V21" stroke="#283942" stroke-linecap="round" fill="#C88935" />
+<path d="M3 7H5" stroke="#5F7888" stroke-linecap="round" fill="#5F7888" />
+<path d="M3 11H5" stroke="#283942" stroke-linecap="round" fill="#AFC2CB" />
+<path d="M3 15H5" stroke="#C88935" stroke-linecap="round" fill="#C88935" />
+<path d="M17 19V21" stroke="#283942" stroke-linecap="round" fill="#5F7888" />
+</g></g></svg>

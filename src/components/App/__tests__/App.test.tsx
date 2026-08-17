@@ -4,13 +4,15 @@ import { createTheme } from '@grafana/data';
 import {
   checkPiConnection,
 } from '../../../pi';
+import { createDisplayDocument } from '../../../display';
 import { App, VISUALIZATION_THEME_STORAGE_KEY } from '../App';
 
 const mockGetBackendSrv = jest.fn();
+const mockPostBackendSrv = jest.fn();
 
 jest.mock('@grafana/runtime', () => ({
   PluginPage: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  getBackendSrv: () => ({ get: mockGetBackendSrv }),
+  getBackendSrv: () => ({ get: mockGetBackendSrv, post: mockPostBackendSrv }),
 }));
 
 jest.mock('@grafana/ui', () => ({
@@ -30,6 +32,7 @@ describe('App', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    mockPostBackendSrv.mockReset();
     mockGetBackendSrv.mockImplementation((url: string) => {
       if (url === '/api/user') {
         return Promise.resolve({ id: 1, login: 'admin' });
@@ -37,8 +40,16 @@ describe('App', () => {
       if (url.startsWith('/api/search?type=dash-folder')) {
         return Promise.resolve([]);
       }
+      if (url.startsWith('/api/search?type=dash-db')) {
+        return Promise.resolve([]);
+      }
       return Promise.resolve({});
     });
+    mockPostBackendSrv.mockResolvedValue({ uid: 'new-dashboard-uid', url: '/d/new-dashboard-uid' });
+  });
+
+  afterEach(() => {
+    globalThis.history.replaceState(null, '', '/');
   });
 
   it('mostra o estado inicial de verificação da sessão', () => {
@@ -154,5 +165,56 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('pims-vision-library-tab'));
 
     expect(screen.getByTestId('library-symbol-search')).toHaveValue('PV003B');
+  });
+
+  it('salva diretamente as alterações do dashboard atual', async () => {
+    globalThis.history.replaceState(null, '', '/a/pims-vision-app?dashboardUid=current-dashboard-uid');
+    const document = createDisplayDocument({ name: 'Dashboard atual' });
+    mockGetBackendSrv.mockImplementation((url: string) => {
+      if (url === '/api/user') {
+        return Promise.resolve({ id: 1, login: 'admin' });
+      }
+      if (url.startsWith('/api/search?type=dash-folder')) {
+        return Promise.resolve([]);
+      }
+      if (url.startsWith('/api/dashboards/uid/current-dashboard-uid')) {
+        return Promise.resolve({ dashboard: { pimsVision: document }, meta: { folderUid: 'folder-uid' } });
+      }
+      return Promise.resolve({});
+    });
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('pims-vision-save-dashboard')).toBeEnabled());
+
+    fireEvent.click(screen.getByTestId('pims-vision-save-dashboard'));
+
+    await waitFor(() => expect(mockPostBackendSrv).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(mockPostBackendSrv.mock.calls[0][1]).toMatchObject({
+      dashboard: expect.objectContaining({ uid: 'current-dashboard-uid' }),
+      folderUid: 'folder-uid',
+      overwrite: true,
+    });
+  });
+
+  it('salva como sempre cria um novo dashboard', async () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('pims-vision-save-as-dashboard'));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Salvar como');
+
+    fireEvent.click(screen.getByTestId('pims-vision-save-as-submit'));
+
+    await waitFor(() => expect(mockPostBackendSrv).toHaveBeenCalledTimes(2));
+    expect(mockPostBackendSrv.mock.calls[0][1]).toMatchObject({
+      dashboard: expect.objectContaining({ uid: undefined }),
+      overwrite: false,
+    });
+    expect(globalThis.location.search).toBe('?dashboardUid=new-dashboard-uid');
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

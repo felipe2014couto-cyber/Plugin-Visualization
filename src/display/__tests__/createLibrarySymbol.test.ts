@@ -5,6 +5,7 @@ import {
   parseImportedDisplay,
   serializeDisplay,
 } from '../index';
+import { INDUSTRIAL_SYMBOL_CATALOG } from '../../library';
 
 describe('Library symbols no display', () => {
   it('cria o elemento com tamanho padrão e preserva o símbolo no export/import', () => {
@@ -23,5 +24,20 @@ describe('Library symbols no display', () => {
     expect(symbol.width).toBe(96);
     expect(symbol.height).toBe(96);
     expect(imported.elements).toEqual([symbol]);
+  });
+
+  it('preserva os seis motores Openclipart no salvar e restaurar', () => {
+    const motors = INDUSTRIAL_SYMBOL_CATALOG.filter((symbol) => symbol.source === 'openclipart');
+    const document = motors.reduce((current, motor, index) => appendLibrarySymbol(current, createLibrarySymbol({
+      symbol: motor,
+      x: index * 110,
+      y: 40,
+      existingIds: current.elements.map(({ id }) => id),
+      generateId: () => 'openclipart-motor-' + index,
+    })), createDisplayDocument({ id: 'openclipart-motors', name: 'Openclipart motors' }));
+    const imported = parseImportedDisplay(serializeDisplay(document));
+
+    expect(imported.elements).toHaveLength(6);
+    expect(imported.elements.map((element) => element.properties.symbolId)).toEqual(motors.map((motor) => motor.id));
   });
 });

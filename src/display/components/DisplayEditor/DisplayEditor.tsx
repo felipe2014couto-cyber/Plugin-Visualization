@@ -55,7 +55,7 @@ import {
   updateRectangleProperties,
   type RectangleElement,
 } from '../../createRectangle';
-import { createPiPointBinding, isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBinding';
+import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
@@ -68,13 +68,13 @@ import { RectanglePropertiesPanel } from './RectanglePropertiesPanel';
 import { TextPropertiesPanel } from './TextPropertiesPanel';
 import { ImagePropertiesPanel } from './ImagePropertiesPanel';
 import { appendImage, createImage, IMAGE_TYPE, updateImageProperties, type ImageElement } from '../../createImage';
-import { appendLibrarySymbol, createLibrarySymbol } from '../../createLibrarySymbol';
+import { LibrarySymbolPropertiesPanel } from './LibrarySymbolPropertiesPanel';
+import { appendLibrarySymbol, createLibrarySymbol, updateLibrarySymbolProperties, type LibrarySymbolElement, type LibrarySymbolProperties } from '../../createLibrarySymbol';
 import { appendText, createText, TEXT_TYPE, updateTextProperties, type TextElement } from '../../createText';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import type { TrendCursor } from '../../runtime/trendCursor';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
-import type { PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
 import { updateMultistateConfig, type MultistateConfig } from '../../multistate';
 import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay } from '../../displayTransfer';
@@ -437,10 +437,9 @@ export function DisplayEditor({
     if (mode !== 'edit' || !onChangeRef.current) {
       return;
     }
-    const librarySymbolId = Array.from(event.dataTransfer.types).includes(LIBRARY_SYMBOL_DRAG_MIME)
-      ? parseLibrarySymbolDragData(event.dataTransfer.getData(LIBRARY_SYMBOL_DRAG_MIME))
-      : undefined;
-    if (librarySymbolId) {
+    // During dragover browsers expose the MIME types but protect the payload;
+    // read the symbol data only in drop, where getData is available.
+    if (Array.from(event.dataTransfer.types).includes(LIBRARY_SYMBOL_DRAG_MIME)) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'copy';
       return;
@@ -517,6 +516,7 @@ export function DisplayEditor({
         symbol: librarySymbolId,
         surface: currentDocument.surface,
         existingIds: currentDocument.elements.map((element) => element.id),
+        binding: selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined,
       });
       const positioned = positionElementAt(symbol, point, currentDocument);
       commitDocument(appendLibrarySymbol(currentDocument, positioned));
@@ -537,11 +537,21 @@ export function DisplayEditor({
         point,
       )
       : undefined;
+    const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
     const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
-    if (!binding || (!point && !targetTrend && !targetShape)) {
+    if (!binding || (!point && !targetTrend && !targetShape && !targetLibrarySymbol)) {
       return;
     }
     event.preventDefault();
+
+    if (targetLibrarySymbol) {
+      const multistate = targetLibrarySymbol.properties.multistate
+        ? { ...targetLibrarySymbol.properties.multistate, enabled: true }
+        : { enabled: true, rules: [] };
+      commitDocument(updateLibrarySymbolProperties(currentDocument, targetLibrarySymbol.id, { binding, multistate }));
+      dispatch({ type: 'SELECT', elementId: targetLibrarySymbol.id });
+      return;
+    }
 
     if (targetTrend) {
       commitDocument(addTrendSeries(currentDocument, targetTrend.id, binding));
@@ -669,6 +679,9 @@ export function DisplayEditor({
   const selectedImage = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === IMAGE_TYPE) as ImageElement | undefined
     : undefined;
+  const selectedLibrarySymbol = mode === 'edit' && state.selectedElementId
+    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === 'library-symbol') as LibrarySymbolElement | undefined
+      : undefined;
   const handleGaugeChange = useCallback((patch: Parameters<typeof updateGaugeOptions>[2]) => {
     commitDocument(updateGaugeOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
@@ -684,6 +697,12 @@ export function DisplayEditor({
   const handleImageChange = useCallback((patch: Parameters<typeof updateImageProperties>[2]) => {
     commitDocument(updateImageProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
+  const handleLibrarySymbolChange = useCallback((patch: Partial<LibrarySymbolProperties>) => {
+    commitDocument(updateLibrarySymbolProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
+  }, [commitDocument]);
+  const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement) => {
+    dispatch({ type: 'SELECT', elementId: element.id });
+  }, [dispatch]);
   const optionsTrend = optionsTrendId
     ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
     : undefined;
@@ -942,6 +961,7 @@ export function DisplayEditor({
             trendTimeRange={trendTimeRange}
             onTrendOpen={handleTrendOpen}
             onTrendContextMenu={(trend) => setOptionsTrendId(trend.id)}
+            onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
             zoom={surfaceZoom}
             viewCenter={surfaceViewCenter}
           />
@@ -1006,6 +1026,14 @@ export function DisplayEditor({
         )}
         {selectedText && <TextPropertiesPanel properties={selectedText.properties} onChange={handleTextChange} />}
         {selectedImage && <ImagePropertiesPanel properties={selectedImage.properties} onChange={handleImageChange} />}
+        {selectedLibrarySymbol && (
+          <LibrarySymbolPropertiesPanel
+            properties={selectedLibrarySymbol.properties}
+            selectedPiPoint={selectedPiPoint}
+            onChange={handleLibrarySymbolChange}
+            onMultistateChange={handleMultistateChange}
+          />
+        )}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
@@ -1196,6 +1224,34 @@ function resolveGeometricDropTarget(
       && point.y <= element.y + element.height
   ));
   return topmostElement as RectangleElement | undefined;
+}
+
+function resolveLibrarySymbolDropTarget(
+  document: DisplayDocument,
+  eventTarget: EventTarget | null,
+  point: Point | undefined,
+): LibrarySymbolElement | undefined {
+  const symbolNode = eventTarget instanceof Element
+    ? eventTarget.closest('[data-element-id][data-element-type="library-symbol"]')
+    : null;
+  const elementId = symbolNode?.getAttribute('data-element-id');
+  if (elementId) {
+    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === 'library-symbol');
+    if (element) {
+      return element as LibrarySymbolElement;
+    }
+  }
+  if (!point) {
+    return undefined;
+  }
+  const topmostElement = [...document.elements].reverse().find((element) => (
+    element.type === 'library-symbol'
+      && point.x >= element.x
+      && point.x <= element.x + element.width
+      && point.y >= element.y
+      && point.y <= element.y + element.height
+  ));
+  return topmostElement as LibrarySymbolElement | undefined;
 }
 
 function findTrendAtClientPoint(

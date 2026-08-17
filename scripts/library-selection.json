@@ -1,0 +1,1188 @@
+ {
+   "version": 1,
+   "entries": [
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/engine.svg",
+       "category": "Motores e acionamentos",
+       "name": "Motor"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-motor.svg",
+       "category": "Motores e acionamentos",
+       "name": "Circuito de motor"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/automatic-gearbox.svg",
+       "category": "Motores e acionamentos",
+       "name": "Caixa de engrenagens automática"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/manual-gearbox.svg",
+       "category": "Motores e acionamentos",
+       "name": "Caixa de engrenagens manual"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/propeller.svg",
+       "category": "Motores e acionamentos",
+       "name": "Hélice"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/building-wind-turbine.svg",
+       "category": "Motores e acionamentos",
+       "name": "Turbina eólica"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/car-fan-1.svg",
+       "category": "Motores e acionamentos",
+       "name": "Ventilador automotivo 1"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/car-fan-2.svg",
+       "category": "Motores e acionamentos",
+       "name": "Ventilador automotivo 2"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/car-fan-3.svg",
+       "category": "Motores e acionamentos",
+       "name": "Ventilador automotivo 3"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/car-fan-auto.svg",
+       "category": "Motores e acionamentos",
+       "name": "Ventilador automotivo automático"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/windmill.svg",
+       "category": "Motores e acionamentos",
+       "name": "Moinho de vento"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/robot.svg",
+       "category": "Motores e acionamentos",
+       "name": "Robô"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/settings-automation.svg",
+       "category": "Motores e acionamentos",
+       "name": "Configuração automação"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/settings-cog.svg",
+       "category": "Motores e acionamentos",
+       "name": "Configuração engrenagem"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/motorcycle.svg",
+       "category": "Motores e acionamentos",
+       "name": "Motocicleta"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/motorcycle.svg",
+       "category": "Motores e acionamentos",
+       "name": "Motocicleta"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/gas-pump.svg",
+       "category": "Bombas e válvulas",
+       "name": "Bomba de gás"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/pipe.svg",
+       "category": "Bombas e válvulas",
+       "name": "Tubulação"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/pipe-wrench.svg",
+       "category": "Bombas e válvulas",
+       "name": "Chave de tubulação"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/funnel.svg",
+       "category": "Bombas e válvulas",
+       "name": "Funil"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/funnel-simple.svg",
+       "category": "Bombas e válvulas",
+       "name": "Funil simples"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/drop.svg",
+       "category": "Bombas e válvulas",
+       "name": "Gota"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/drop-half.svg",
+       "category": "Bombas e válvulas",
+       "name": "Gota parcial"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/waves.svg",
+       "category": "Bombas e válvulas",
+       "name": "Ondas"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/wave-sine.svg",
+       "category": "Bombas e válvulas",
+       "name": "Onda senoidal"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/gas-tank.svg",
+       "category": "Bombas e válvulas",
+       "name": "Tanque de gás"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/gas-tank-droplet.svg",
+       "category": "Bombas e válvulas",
+       "name": "Tanque de gás com gota"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/tank.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Tanque"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/scuba-diving-tank.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Tanque de mergulho"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/barrel.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Barril"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/container.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Contêiner"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/building-warehouse.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Edifício armazém"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/building-factory.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Edifício fábrica"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/bucket.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Balde"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/bucket-droplet.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Balde com gota"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/archive.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Arquivo"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/package.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Pacote"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/packages.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Pacotes"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/box.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Caixa"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/cylinder.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Cilindro"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/database.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Banco de dados"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/shipping-container.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Contêiner de transporte"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/warehouse.svg",
+       "category": "Tanques e reservatórios",
+       "name": "Warehouse"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/air-conditioning.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Ar condicionado"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/air-conditioning-disabled.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Ar condicionado desativado"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/car-fan.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Ventilador automotivo"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/windsock.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Windsock"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/wind-electricity.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Energia eólica"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/car-turbine.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Turbina automotiva"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/fan.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Ventilador"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/wind.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Vento"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/windmill.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Moinho de vento"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/pinwheel.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Pinwheel"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/fan.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Ventilador"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/wind.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Vento"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/wind.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Vento"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/air-conditioner.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Condicionador de ar"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/sea-waves.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Ondas do mar"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/web-window-energy-consumption.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Janela de consumo de energia"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/energy-usage-window.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Janela de consumo de energia"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/airplane-engines.svg",
+       "category": "Ventilação e exaustão",
+       "name": "Motores de aeronave"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-2.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro secundário"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-off.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro desligado"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-star.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro estrela"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-bolt.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro raio"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-cog.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro engrenagem"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-check.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro verificação"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-x.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro falha"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-2-check.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro secundário com verificação"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-2-cog.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro secundário com engrenagem"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/filter-2-exclamation.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro secundário com alerta"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/filter.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/filter-alt.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro alternativo"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/filter-list.svg",
+       "category": "Desempoeiramento",
+       "name": "Lista de filtros"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/filter-list-circle.svg",
+       "category": "Desempoeiramento",
+       "name": "Lista circular de filtros"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/color-filter.svg",
+       "category": "Desempoeiramento",
+       "name": "Filtro de cor"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/flame.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Chama"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/fire-extinguisher.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Extintor de incêndio"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/fire-hydrant.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Hidrante de incêndio"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/temperature.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Temperature"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/temperature-plus.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Temperatura alta"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/temperature-minus.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Temperatura baixa"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/temperature-sun.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Temperatura solar"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/temperature-snow.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Temperatura fria"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/thermometer.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Termômetro"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/campfire.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Campfire"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/flame.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Chama"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/fire.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Fogo"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/fire-simple.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Fogo simples"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/fire-extinguisher.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Extintor de incêndio"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/thermometer.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Termômetro"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/thermometer-hot.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Termômetro quente"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/thermometer-cold.svg",
+       "category": "Fornos, caldeiras e térmicos",
+       "name": "Termômetro frio"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-ammeter.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito amperímetro"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-battery.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito bateria"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-bulb.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito lâmpada"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-capacitor.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito capacitor"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-capacitor-polarized.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito capacitor polarizado"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-cell.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito célula"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-changeover.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito de comutação"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-diode.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito diodo"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-ground.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito terra"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-ground-digital.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito terra digital"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-pushbutton.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito com botão"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-switch-closed.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito com chave fechada"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-switch-open.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito com chave aberta"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/circuit-voltmeter.svg",
+       "category": "Elétrica e automação",
+       "name": "Circuito voltímetro"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/plug.svg",
+       "category": "Elétrica e automação",
+       "name": "Plugue"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/battery.svg",
+       "category": "Elétrica e automação",
+       "name": "Bateria"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/gauge.svg",
+       "category": "Instrumentação",
+       "name": "Indicador"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/meter-square.svg",
+       "category": "Instrumentação",
+       "name": "Medidor quadrado"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/meter-cube.svg",
+       "category": "Instrumentação",
+       "name": "Medidor cúbico"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/radar.svg",
+       "category": "Instrumentação",
+       "name": "Radar"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/activity.svg",
+       "category": "Instrumentação",
+       "name": "Atividade"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/chart-line.svg",
+       "category": "Instrumentação",
+       "name": "Gráfico de linha"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/chart-bar.svg",
+       "category": "Instrumentação",
+       "name": "Gráfico de barras"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/chart-dots.svg",
+       "category": "Instrumentação",
+       "name": "Gráfico de pontos"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/ruler-measure.svg",
+       "category": "Instrumentação",
+       "name": "Régua medição"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/chart-area.svg",
+       "category": "Instrumentação",
+       "name": "Gráfico de área"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/gauge.svg",
+       "category": "Instrumentação",
+       "name": "Indicador"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/speedometer.svg",
+       "category": "Instrumentação",
+       "name": "Speedometer"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/thermometer-simple.svg",
+       "category": "Instrumentação",
+       "name": "Termômetro simples"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/truck.svg",
+       "category": "Transporte de materiais",
+       "name": "Caminhão"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/truck-delivery.svg",
+       "category": "Transporte de materiais",
+       "name": "Caminhão de entrega"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/truck-loading.svg",
+       "category": "Transporte de materiais",
+       "name": "Caminhão de carregamento"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/forklift.svg",
+       "category": "Transporte de materiais",
+       "name": "Forklift"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/crane.svg",
+       "category": "Transporte de materiais",
+       "name": "Guindaste"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/car-crane.svg",
+       "category": "Transporte de materiais",
+       "name": "Guindaste automotivo"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/package-export.svg",
+       "category": "Transporte de materiais",
+       "name": "Pacote de exportação"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/package-import.svg",
+       "category": "Transporte de materiais",
+       "name": "Pacote de importação"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/minecart.svg",
+       "category": "Transporte de materiais",
+       "name": "Vagonete"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/train-freight-front.svg",
+       "category": "Transporte de materiais",
+       "name": "Trem de carga frontal"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/truck.svg",
+       "category": "Transporte de materiais",
+       "name": "Caminhão"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/truck-trailer.svg",
+       "category": "Transporte de materiais",
+       "name": "Caminhão com reboque"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/crane.svg",
+       "category": "Transporte de materiais",
+       "name": "Guindaste"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/crane-tower.svg",
+       "category": "Transporte de materiais",
+       "name": "Guindaste de torre"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/package.svg",
+       "category": "Transporte de materiais",
+       "name": "Pacote"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/truck-flatbed.svg",
+       "category": "Transporte de materiais",
+       "name": "Caminhão plataforma"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/truck-front.svg",
+       "category": "Transporte de materiais",
+       "name": "Caminhão frontal"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/settings.svg",
+       "category": "Componentes mecânicos",
+       "name": "Configuração"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/settings-2.svg",
+       "category": "Componentes mecânicos",
+       "name": "Configuração 2"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/tool.svg",
+       "category": "Componentes mecânicos",
+       "name": "Ferramenta"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/tools.svg",
+       "category": "Componentes mecânicos",
+       "name": "Ferramentas"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/hammer.svg",
+       "category": "Componentes mecânicos",
+       "name": "Martelo"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/link.svg",
+       "category": "Componentes mecânicos",
+       "name": "Elo"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/wheel.svg",
+       "category": "Componentes mecânicos",
+       "name": "Roda"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/bolt.svg",
+       "category": "Componentes mecânicos",
+       "name": "Raio"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/rotate.svg",
+       "category": "Componentes mecânicos",
+       "name": "Rotação"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/gear.svg",
+       "category": "Componentes mecânicos",
+       "name": "Engrenagem"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/gear-fine.svg",
+       "category": "Componentes mecânicos",
+       "name": "Engrenagem fina"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/gear-six.svg",
+       "category": "Componentes mecânicos",
+       "name": "Engrenagem de seis dentes"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/toolbox.svg",
+       "category": "Componentes mecânicos",
+       "name": "Caixa de ferramentas"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/wrench.svg",
+       "category": "Componentes mecânicos",
+       "name": "Chave"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/hammer.svg",
+       "category": "Componentes mecânicos",
+       "name": "Martelo"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/screwdriver.svg",
+       "category": "Componentes mecânicos",
+       "name": "Chave de fenda"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/gear-wide.svg",
+       "category": "Componentes mecânicos",
+       "name": "Engrenagem larga"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/gear-wide-connected.svg",
+       "category": "Componentes mecânicos",
+       "name": "Engrenagem larga conectada"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/tools.svg",
+       "category": "Componentes mecânicos",
+       "name": "Ferramentas"
+     },
+     {
+       "source": "heroicons",
+       "sourcePath": "optimized/24/outline/wrench-screwdriver.svg",
+       "category": "Componentes mecânicos",
+       "name": "Chave de fenda"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/pipeline.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Pipeline"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/chevron-left-pipe.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Conexão esquerda de tubulação"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/chevron-right-pipe.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Conexão direita de tubulação"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/test-pipe.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Tubulação de teste"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/test-pipe-2.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Tubulação de teste 2"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/droplet.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Droplet"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/droplets.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Gotas"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/ripple.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Ripple"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/fountain.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Fountain"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/pipe-3d.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Tubulação 3D"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/droplet.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Droplet"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/droplet-half.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Gota parcial"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/compress-lines.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Linhas de compressão"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/watering-soil.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Irrigação do solo"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/droplet.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Droplet"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/droplet-half.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Gota parcial"
+     },
+     {
+       "source": "bootstrap-icons",
+       "sourcePath": "icons/water.svg",
+       "category": "Tubulações e fluidos",
+       "name": "Water"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/alert-circle.svg",
+       "category": "Segurança e sinalização",
+       "name": "Alerta circular"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/alert-hexagon.svg",
+       "category": "Segurança e sinalização",
+       "name": "Alerta hexagonal"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/alert-octagon.svg",
+       "category": "Segurança e sinalização",
+       "name": "Alerta octogonal"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/alert-square.svg",
+       "category": "Segurança e sinalização",
+       "name": "Alerta quadrado"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/alert-triangle.svg",
+       "category": "Segurança e sinalização",
+       "name": "Alerta triangular"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/barrier-block.svg",
+       "category": "Segurança e sinalização",
+       "name": "Barreira de bloqueio"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/traffic-cone.svg",
+       "category": "Segurança e sinalização",
+       "name": "Cone de tráfego"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/traffic-lights.svg",
+       "category": "Segurança e sinalização",
+       "name": "Sinaleiro de tráfego"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/helmet.svg",
+       "category": "Segurança e sinalização",
+       "name": "Capacete"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/shield.svg",
+       "category": "Segurança e sinalização",
+       "name": "Escudo"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/shield-check.svg",
+       "category": "Segurança e sinalização",
+       "name": "Escudo verificação"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/shield-lock.svg",
+       "category": "Segurança e sinalização",
+       "name": "Escudo bloqueio"
+     },
+     {
+       "source": "tabler-icons",
+       "sourcePath": "icons/outline/lock.svg",
+       "category": "Segurança e sinalização",
+       "name": "Bloqueio"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/warning.svg",
+       "category": "Segurança e sinalização",
+       "name": "Advertência"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/warning-circle.svg",
+       "category": "Segurança e sinalização",
+       "name": "Advertência circular"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/warning-diamond.svg",
+       "category": "Segurança e sinalização",
+       "name": "Advertência em losango"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/warning-octagon.svg",
+       "category": "Segurança e sinalização",
+       "name": "Advertência octogonal"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/traffic-cone.svg",
+       "category": "Segurança e sinalização",
+       "name": "Cone de tráfego"
+     },
+     {
+       "source": "phosphor-core",
+       "sourcePath": "raw/regular/traffic-signal.svg",
+       "category": "Segurança e sinalização",
+       "name": "Sinal de tráfego"
+     },
+     {
+       "source": "iconoir",
+       "sourcePath": "icons/regular/warning-triangle.svg",
+       "category": "Segurança e sinalização",
+       "name": "Advertência triangular"
+     }
+   ]
+ }
+ 

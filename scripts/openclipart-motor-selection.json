@@ -1,0 +1,42 @@
+{
+  "source": "Openclipart",
+  "license": "Public Domain / Creative Commons Zero 1.0",
+  "consultedAt": "2026-08-14",
+  "entries": [
+    {
+      "id": "openclipart:industrial-electric-motor",
+      "sourceUrl": "https://openclipart.org/detail/271781/electrical-motor",
+      "downloadUrl": "https://openclipart.org/download/271781",
+      "author": "AlignEasy",
+      "localFile": "industrial-electric-motor.svg"
+    },
+    {
+      "id": "openclipart:ventilation-electric-motor",
+      "sourceUrl": "https://openclipart.org/detail/333614/electric-motor",
+      "downloadUrl": "https://openclipart.org/download/333614",
+      "author": "algotruneman",
+      "localFile": "ventilation-electric-motor.svg"
+    },
+    {
+      "id": "openclipart:stepper-motor",
+      "sourceUrl": "https://openclipart.org/detail/201458/stepper-motor",
+      "downloadUrl": "https://openclipart.org/download/201458",
+      "author": "cyberscooty",
+      "localFile": "stepper-motor.svg"
+    },
+    {
+      "id": "openclipart:vibrating-motor",
+      "sourceUrl": "https://openclipart.org/detail/267434/vibrating-motor",
+      "downloadUrl": "https://openclipart.org/download/267434",
+      "author": "Inventoteca",
+      "localFile": "vibrating-motor.svg"
+    },
+    {
+      "id": "openclipart:three-phase-motor",
+      "sourceUrl": "https://openclipart.org/detail/141613/a-simple-representation-of-a-electric-3phase-motor",
+      "downloadUrl": "https://openclipart.org/download/141613",
+      "author": "Eypros",
+      "localFile": "three-phase-motor.svg"
+    }
+  ]
+}
