@@ -6,7 +6,7 @@ import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendEleme
 import { ColorControl } from './ColorControl';
 import { LinkField } from './LinkField';
 
-export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onSeriesRemove, onClose }: {
+export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onSeriesRemove, onClose, linkUrl, onLinkChange }: {
   element: TrendElement;
   onVisualChange: (patch: Partial<ReturnType<typeof getTrendVisualOptions>>) => void;
   onSeriesChange: (key: string, patch: { color?: string; legendLabel?: string; lineWidth?: number; lineStyle?: TrendLineStyle; marker?: TrendMarker; primaryScale?: boolean; scaleMin?: number; scaleMax?: number }) => void;
