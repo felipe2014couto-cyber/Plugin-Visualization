@@ -42,6 +42,7 @@ export interface PiPointSearchResult {
 export interface PiPointValue {
   value: unknown;
   timestamp?: string;
+  unit?: string;
   quality?: Record<string, unknown>;
 }
 
@@ -522,13 +523,21 @@ function normalizeCurrentValue(frame: DataFrame, pointName: string): PiPointValu
 
   const timeField = frame.fields.find((field) => field.name.toLocaleLowerCase() === 'time');
   const timestamp = timeField ? getFirstFieldValue(timeField) : undefined;
+  const unit = getFieldUnit(valueField);
 
   const quality = normalizeQuality(frame);
   return {
     value,
     timestamp: normalizeTimestamp(timestamp),
+    ...(unit ? { unit } : {}),
     ...(quality ? { quality } : {}),
   };
+}
+
+function getFieldUnit(field: DataFrame['fields'][number] | undefined): string | undefined {
+  const config = field ? field.config as Record<string, unknown> : undefined;
+  const unit = config?.unit;
+  return typeof unit === 'string' && unit.trim().length > 0 ? unit : undefined;
 }
 
 function normalizeCurrentValues(

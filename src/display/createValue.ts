@@ -12,6 +12,11 @@ export type ValueTextAlign = 'left' | 'center' | 'right';
 export interface ValueVisualOptions {
   decimals: number | null;
   showTagName: boolean;
+  labelMode: 'tag' | 'custom';
+  customLabel: string;
+  showUnit: boolean;
+  showTimestamp: boolean;
+  showValue: boolean;
   fontSize: number;
   color: string;
   textAlign: ValueTextAlign;
@@ -19,7 +24,12 @@ export interface ValueVisualOptions {
 
 export const DEFAULT_VALUE_VISUAL_OPTIONS: ValueVisualOptions = {
   decimals: null,
-  showTagName: false,
+  showTagName: true,
+  labelMode: 'tag',
+  customLabel: '',
+  showUnit: false,
+  showTimestamp: false,
+  showValue: true,
   fontSize: 16,
   color: '#ffffff',
   textAlign: 'center',
@@ -110,6 +120,11 @@ export function normalizeValueVisualOptions(
     showTagName: typeof options?.showTagName === 'boolean'
       ? options.showTagName
       : DEFAULT_VALUE_VISUAL_OPTIONS.showTagName,
+    labelMode: options?.labelMode === 'custom' ? 'custom' : 'tag',
+    customLabel: typeof options?.customLabel === 'string' ? options.customLabel : '',
+    showUnit: options?.showUnit === true,
+    showTimestamp: options?.showTimestamp === true,
+    showValue: options?.showValue !== false,
     fontSize: normalizedFontSize,
     color: typeof color === 'string' && isValidColor(color)
       ? color

@@ -50,8 +50,18 @@ export function ValuePropertiesPanel({ options, pointName, onChange, multistate,
             checked={visual.showTagName}
             onChange={(event) => onChange({ showTagName: event.target.checked })}
           />
-          <span>Mostrar nome da tag</span>
+          <span>Rótulo</span>
         </label>
+        <label className={styles.field}>
+          <span>Nome do rótulo</span>
+          <select value={visual.labelMode} onChange={(event) => onChange({ labelMode: event.target.value as ValueVisualOptions['labelMode'] })} data-testid="value-label-mode">
+            <option value="tag">Nome da tag</option><option value="custom">Personalizado</option>
+          </select>
+        </label>
+        {visual.labelMode === 'custom' && <label className={styles.field}><span>Rótulo personalizado</span><input value={visual.customLabel} onChange={(event) => onChange({ customLabel: event.target.value })} data-testid="value-custom-label" /></label>}
+        <label className={styles.checkboxField}><input type="checkbox" checked={visual.showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid="value-show-unit" /><span>Unidades</span></label>
+        <label className={styles.checkboxField}><input type="checkbox" checked={visual.showTimestamp} onChange={(event) => onChange({ showTimestamp: event.target.checked })} data-testid="value-show-timestamp" /><span>Timestamp</span></label>
+        <label className={styles.checkboxField}><input type="checkbox" checked={visual.showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid="value-show-value" /><span>Valor</span></label>
         <label className={styles.field}>
           <span>Tamanho da fonte</span>
           <input

@@ -48,8 +48,9 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
     };
   }, [binding, binding.dataSourceUid, binding.serverPath, binding.pointName, loadValue, runtimeState]);
 
-  const text = getValueText(runtimeState ?? state, getValueVisualOptions(element.properties), binding.pointName);
   const visual = getValueVisualOptions(element.properties);
+  const currentState = runtimeState ?? state;
+  const lines = getValueLines(currentState, visual, binding.pointName);
   const color = getMultistateColor(getRuntimeValue(runtimeState ?? state), element.properties.multistate, visual.color);
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
@@ -76,7 +77,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
       />
       <text
         x={textX}
-        y={element.y + element.height / 2}
+        y={element.y + element.height / 2 - ((lines.length - 1) * responsiveFontSize * 0.6)}
         fill={color}
         fontSize={responsiveFontSize}
         textAnchor={textAnchor}
@@ -86,7 +87,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
         data-element-type={element.type}
         pointerEvents="none"
       >
-        {text}
+        {lines.map((line, index) => <tspan key={`${line}-${index}`} x={textX} dy={index === 0 ? 0 : responsiveFontSize * 1.2}>{line}</tspan>)}
       </text>
     </g>
   );
@@ -96,12 +97,13 @@ function getRuntimeValue(state: ValueLoadState | ValueRuntimeState): unknown {
   return state.status === 'loading' ? undefined : state.result?.value;
 }
 
-function getValueText(
+function getValueLines(
   state: ValueLoadState | ValueRuntimeState,
   visual: ValueVisualOptions,
   pointName: string,
-): string {
+): string[] {
   let valueText: string;
+  const result = state.status === 'loading' ? undefined : state.result;
   switch (state.status) {
     case 'loading':
       valueText = '...';
@@ -113,7 +115,30 @@ function getValueText(
       valueText = formatValue(state.result.value, visual);
       break;
   }
-  return visual.showTagName && state.status !== 'loading' ? `${pointName}: ${valueText}` : valueText;
+  const lines: string[] = [];
+  const label = visual.labelMode === 'custom' && visual.customLabel.trim() ? visual.customLabel : pointName;
+  if (visual.showTagName && visual.showValue && !visual.showUnit && !visual.showTimestamp) {
+    lines.push(`${label}: ${valueText}`);
+    return lines;
+  }
+  if (visual.showTagName) {
+    lines.push(label);
+  }
+  if (visual.showUnit && result?.unit) {
+    lines.push(result.unit);
+  }
+  if (visual.showTimestamp && result?.timestamp) {
+    lines.push(formatTimestamp(result.timestamp));
+  }
+  if (visual.showValue) {
+    lines.push(valueText);
+  }
+  return lines.length > 0 ? lines : [''];
+}
+
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString('pt-BR');
 }
 
 export function formatValue(value: unknown, visual: ValueVisualOptions = getValueVisualOptions({})): string {
@@ -134,6 +159,6 @@ function getTextX(element: ValueElement, textAlign: ValueVisualOptions['textAlig
 }
 
 function getResponsiveFontSize(element: ValueElement, configuredSize: number): number {
-  const areaScale = Math.sqrt((element.width * element.height) / (160 * 64));
+  const areaScale = Math.sqrt((element.width * element.height) / (240 * 100));
   return Math.max(8, Math.min(96, configuredSize * Math.min(1.5, Math.max(0.7, areaScale))));
 }
