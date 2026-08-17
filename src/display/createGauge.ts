@@ -17,6 +17,8 @@ export type GaugeVisualOptions = ScaleVisualOptions & {
   gaugeAngle: number;
   gaugeBorderColor: string;
   gaugeScaleColor: string;
+  showUnit: boolean;
+  showTimestamp: boolean;
 };
 
 export interface GaugeProperties extends Record<string, unknown> {
@@ -34,6 +36,8 @@ export interface GaugeProperties extends Record<string, unknown> {
   gaugeAngle: number;
   gaugeBorderColor: string;
   gaugeScaleColor: string;
+  showUnit: boolean;
+  showTimestamp: boolean;
   multistate?: MultistateConfig;
 }
 
@@ -132,6 +136,8 @@ export function normalizeGaugeOptions(options?: Partial<GaugeProperties> | null)
       : 270,
     gaugeBorderColor: isColor(options?.gaugeBorderColor) ? options!.gaugeBorderColor! : '#ffffff',
     gaugeScaleColor: isColor(options?.gaugeScaleColor) ? options!.gaugeScaleColor! : '#ffffff',
+    showUnit: options?.showUnit === true,
+    showTimestamp: options?.showTimestamp === true,
   };
 }
 

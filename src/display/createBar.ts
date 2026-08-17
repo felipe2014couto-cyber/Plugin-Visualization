@@ -14,6 +14,8 @@ export interface BarProperties extends Record<string, unknown> {
   maximum: number;
   showValue: boolean;
   showTagName: boolean;
+  showUnit?: boolean;
+  showTimestamp?: boolean;
   tagNameMode?: 'tag' | 'custom';
   customTagName?: string;
   decimals: number | null;
@@ -83,12 +85,14 @@ export function appendBar(document: DisplayDocument, element: BarElement): Displ
   return { ...document, elements: [...document.elements, element] };
 }
 
-export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation; scaleMode: 'custom' | 'database'; showScale: boolean; tagNameMode: 'tag' | 'custom'; customTagName: string; fillColor: string; backgroundColor: string; borderColor: string; borderWidth: number } {
+export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation; scaleMode: 'custom' | 'database'; showScale: boolean; showUnit: boolean; showTimestamp: boolean; tagNameMode: 'tag' | 'custom'; customTagName: string; fillColor: string; backgroundColor: string; borderColor: string; borderWidth: number } {
   return {
     ...normalizeScaleOptions(properties),
     orientation: properties.orientation === 'horizontal' ? 'horizontal' : 'vertical',
     scaleMode: properties.scaleMode === 'custom' ? 'custom' : 'database',
     showScale: properties.showScale !== false,
+    showUnit: properties.showUnit === true,
+    showTimestamp: properties.showTimestamp === true,
     tagNameMode: properties.tagNameMode === 'custom' ? 'custom' : 'tag',
     customTagName: typeof properties.customTagName === 'string' ? properties.customTagName : '',
     fillColor: typeof properties.fillColor === 'string' ? properties.fillColor : normalizeScaleOptions(properties).color,
@@ -101,7 +105,7 @@ export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOp
 export function updateBarOptions(
   document: DisplayDocument,
   elementId: string,
-  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database'; showScale?: boolean; tagNameMode?: 'tag' | 'custom'; customTagName?: string; fillColor?: string; backgroundColor?: string; borderColor?: string; borderWidth?: number },
+  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database'; showScale?: boolean; showUnit?: boolean; showTimestamp?: boolean; tagNameMode?: 'tag' | 'custom'; customTagName?: string; fillColor?: string; backgroundColor?: string; borderColor?: string; borderWidth?: number },
 ): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => {
@@ -117,6 +121,8 @@ export function updateBarOptions(
         ...normalizeScaleOptions({ ...properties, ...patch }),
         scaleMode: patch.scaleMode === 'custom' || patch.scaleMode === 'database' ? patch.scaleMode : getBarOptions(properties).scaleMode,
         showScale: typeof patch.showScale === 'boolean' ? patch.showScale : getBarOptions(properties).showScale,
+        showUnit: typeof patch.showUnit === 'boolean' ? patch.showUnit : getBarOptions(properties).showUnit,
+        showTimestamp: typeof patch.showTimestamp === 'boolean' ? patch.showTimestamp : getBarOptions(properties).showTimestamp,
         tagNameMode: patch.tagNameMode === 'tag' || patch.tagNameMode === 'custom' ? patch.tagNameMode : getBarOptions(properties).tagNameMode,
         customTagName: typeof patch.customTagName === 'string' ? patch.customTagName : getBarOptions(properties).customTagName,
         fillColor: typeof patch.fillColor === 'string' ? patch.fillColor : getBarOptions(properties).fillColor,

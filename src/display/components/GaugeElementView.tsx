@@ -30,6 +30,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const startAngle = 90 + (360 - sweepAngle) / 2;
   const track = arcPath(cx, cy, radius, startAngle, sweepAngle);
   const valueText = getValueText(binding, runtimeState, numericValue, options.decimals);
+  const detailLines = getDetailLines(valueText, runtimeState, options.showValue, options.showUnit, options.showTimestamp);
   const activeColor = getMultistateColor(numericValue, element.properties.multistate, options.color);
   const valueY = options.labelPosition === 'below'
     ? element.y + element.height - 12
@@ -92,7 +93,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         return <g key={`gauge-tick-${index}`} pointerEvents="none"><line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={scaleColor} strokeWidth={1} /><text x={label.x} y={label.y + 5} textAnchor="middle" fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))}>{formatScaleValue(tickValue, options.decimals)}</text></g>;
       })}
       <text x={cx} y={valueY} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
-        {options.showValue ? valueText : ''}
+        {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={cx} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
       </text>
       {showGaugeScale && options.labelPosition !== 'below' && <text x={element.x + 10} y={element.y + element.height - 10} fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-min-${element.id}`} pointerEvents="none">
         {formatScale(minimum)}
@@ -168,4 +169,17 @@ function isValidScale(minimum: number, maximum: number): boolean {
 
 function formatScale(value: number): string {
   return Number.isFinite(value) ? String(value) : '--';
+}
+
+function getDetailLines(valueText: string, state: ValueRuntimeState | undefined, showValue: boolean, showUnit: boolean, showTimestamp: boolean): string[] {
+  const lines = showValue ? [valueText] : [];
+  const result = state?.result;
+  if (showUnit && result?.unit) lines.push(result.unit);
+  if (showTimestamp && result?.timestamp) lines.push(formatTimestamp(result.timestamp));
+  return lines;
+}
+
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString('pt-BR');
 }

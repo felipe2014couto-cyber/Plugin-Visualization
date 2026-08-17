@@ -35,6 +35,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, runtimeState, value, options.decimals);
+  const detailLines = getDetailLines(valueText, runtimeState, barOptions.showValue, barOptions.showUnit, barOptions.showTimestamp);
   const activeColor = getMultistateColor(value, options.multistate, barOptions.fillColor);
   const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
     ? barOptions.customTagName
@@ -67,7 +68,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
       )}
       {horizontal && (
         <text x={element.x + element.width / 2} y={element.y + 42} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
-          {options.showValue ? valueText : ''}
+          {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={element.x + element.width / 2} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
         </text>
       )}
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill={barOptions.backgroundColor} data-testid={`bar-track-${element.id}`} pointerEvents="none" />
@@ -96,7 +97,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
       )}
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill="none" stroke={barOptions.borderColor} strokeWidth={barOptions.borderWidth} vectorEffect="non-scaling-stroke" data-testid={`bar-border-${element.id}`} pointerEvents="none" />
       <text x={element.x + element.width / 2} y={element.y + element.height - 12} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
-        {!horizontal && options.showValue ? valueText : ''}
+        {!horizontal && detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={element.x + element.width / 2} dy={index === 0 ? 0 : -16}>{line}</tspan>)}
       </text>
       {!isValidScale(minimum, maximum) && (
         <text x={element.x + element.width / 2} y={element.y + element.height / 2} textAnchor="middle" fill="#f2cc0c" fontSize={10} data-testid={`bar-invalid-scale-${element.id}`} pointerEvents="none">
@@ -128,6 +129,19 @@ function getValueText(
     return formatScaleValue(value, decimals);
   }
   return state?.status === 'error' ? 'BAD' : '--';
+}
+
+function getDetailLines(valueText: string, state: ValueRuntimeState | undefined, showValue: boolean, showUnit: boolean, showTimestamp: boolean): string[] {
+  const lines = showValue ? [valueText] : [];
+  const result = state?.result;
+  if (showUnit && result?.unit) lines.push(result.unit);
+  if (showTimestamp && result?.timestamp) lines.push(formatTimestamp(result.timestamp));
+  return lines;
+}
+
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString('pt-BR');
 }
 
 function isValidScale(minimum: number, maximum: number): boolean {

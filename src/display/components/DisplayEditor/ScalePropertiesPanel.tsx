@@ -14,6 +14,8 @@ export interface ScalePropertiesPanelProps {
   maximum: number;
   showValue: boolean;
   showTagName: boolean;
+  showUnit?: boolean;
+  showTimestamp?: boolean;
   decimals: number | null;
   color: string;
   orientation?: BarOrientation;
@@ -37,6 +39,8 @@ export interface ScalePropertiesPanelProps {
     maximum?: number;
     showValue?: boolean;
     showTagName?: boolean;
+    showUnit?: boolean;
+    showTimestamp?: boolean;
     decimals?: number | null;
     color?: string;
     orientation?: BarOrientation;
@@ -66,6 +70,8 @@ export function ScalePropertiesPanel({
   maximum,
   showValue,
   showTagName,
+  showUnit = false,
+  showTimestamp = false,
   decimals,
   color,
   orientation,
@@ -152,6 +158,8 @@ export function ScalePropertiesPanel({
           <span>Mostrar valor</span>
         </label>
         {kind === 'Bar' && <label className={styles.checkbox}><input type="checkbox" checked={showScale} onChange={(event) => onChange({ showScale: event.target.checked })} data-testid="bar-show-scale" /><span>Mostrar escala</span></label>}
+        <label className={styles.checkbox}><input type="checkbox" checked={showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-unit`} /><span>Unidades</span></label>
+        <label className={styles.checkbox}><input type="checkbox" checked={showTimestamp} onChange={(event) => onChange({ showTimestamp: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-timestamp`} /><span>Timestamp</span></label>
         {kind === 'Bar' && <label className={styles.field}><span>Nome exibido</span><select value={tagNameMode} onChange={(event) => onChange({ tagNameMode: event.target.value as 'tag' | 'custom' })} data-testid="bar-tag-name-mode"><option value="tag">Nome da tag</option><option value="custom">Personalizado</option></select></label>}
         {kind === 'Bar' && tagNameMode === 'custom' && <label className={styles.field}><span>Nome personalizado</span><input value={customTagName} onChange={(event) => onChange({ customTagName: event.target.value })} data-testid="bar-custom-tag-name" /></label>}
         <label className={styles.checkbox}>
