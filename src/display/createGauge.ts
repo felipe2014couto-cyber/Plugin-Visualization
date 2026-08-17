@@ -10,6 +10,7 @@ export const GAUGE_TYPE = 'gauge' as const;
 export type GaugeStyle = 'arc' | 'triangle' | 'pointer' | 'line';
 export type GaugeVisualOptions = ScaleVisualOptions & {
   gaugeStyle: GaugeStyle;
+  scaleMode: 'custom' | 'database';
   gaugeBorderColor: string;
   gaugeScaleColor: string;
 };
@@ -22,6 +23,7 @@ export interface GaugeProperties extends Record<string, unknown> {
   showTagName: boolean;
   decimals: number | null;
   gaugeStyle: GaugeStyle;
+  scaleMode: 'custom' | 'database';
   gaugeBorderColor: string;
   gaugeScaleColor: string;
   multistate?: MultistateConfig;
@@ -71,6 +73,7 @@ export function createGauge(options: CreateGaugeOptions): GaugeElement {
     properties: {
       ...(options.binding ? { binding: { ...options.binding } } : {}),
       ...normalizeGaugeOptions(options.options),
+      scaleMode: 'database',
       ...(options.multistate ? { multistate: options.multistate } : {}),
     },
   };
@@ -112,6 +115,7 @@ export function normalizeGaugeOptions(options?: Partial<GaugeProperties> | null)
     ...scale,
     color: isColor(options?.color) ? scale.color : '#00a2e8',
     gaugeStyle,
+    scaleMode: options?.scaleMode === 'custom' ? 'custom' : 'database',
     gaugeBorderColor: isColor(options?.gaugeBorderColor) ? options!.gaugeBorderColor! : '#ffffff',
     gaugeScaleColor: isColor(options?.gaugeScaleColor) ? options!.gaugeScaleColor! : '#ffffff',
   };

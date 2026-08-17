@@ -4,21 +4,25 @@ import { getGaugeOptions, type GaugeElement, type GaugeStyle } from '../createGa
 import { formatScaleValue, getScaleRatio } from '../scaleOptions';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
 import { getMultistateColor } from '../multistate';
+import type { PiPointDatabaseLimits } from '../../pi/piPointBinding';
 
 export interface GaugeElementViewProps {
   element: GaugeElement;
   runtimeState?: ValueRuntimeState;
+  databaseScale?: PiPointDatabaseLimits;
 }
 
 const DEFAULT_TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.86))';
 
-export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState }: GaugeElementViewProps) {
+export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState, databaseScale }: GaugeElementViewProps) {
   const options = getGaugeOptions(element.properties);
   const binding = element.properties.binding;
   const numericValue = getNumericValue(runtimeState);
+  const minimum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero : options.minimum;
+  const maximum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : options.maximum;
   const ratio = numericValue === undefined
     ? undefined
-    : getScaleRatio(numericValue, options.minimum, options.maximum);
+    : getScaleRatio(numericValue, minimum, maximum);
   const cx = element.x + element.width / 2;
   const cy = element.y + element.height * 0.53;
   const radius = Math.max(1, Math.min(element.width * 0.37, element.height * 0.39));
@@ -74,24 +78,24 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         />
       )}
       {renderIndicator(options.gaugeStyle, ratio, cx, cy, radius, activeColor, element.id)}
-      {showGaugeScale && isValidScale(options.minimum, options.maximum) && Array.from({ length: 9 }, (_, index) => {
+      {showGaugeScale && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
         const angle = startAngle + (sweepAngle * index) / 8;
         const outer = polar(cx, cy, radius + 5, angle);
         const inner = polar(cx, cy, radius - 3, angle);
         const label = polar(cx, cy, radius + 19, angle);
-        const tickValue = options.minimum + ((options.maximum - options.minimum) * index) / 8;
+        const tickValue = minimum + ((maximum - minimum) * index) / 8;
         return <g key={`gauge-tick-${index}`} pointerEvents="none"><line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={scaleColor} strokeWidth={1} /><text x={label.x} y={label.y + 5} textAnchor="middle" fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))}>{formatScaleValue(tickValue, options.decimals)}</text></g>;
       })}
       <text x={cx} y={valueY} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
         {options.showValue ? valueText : ''}
       </text>
       {showGaugeScale && <text x={element.x + 10} y={element.y + element.height - 10} fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-min-${element.id}`} pointerEvents="none">
-        {formatScale(options.minimum)}
+        {formatScale(minimum)}
       </text>}
       {showGaugeScale && <text x={element.x + element.width - 10} y={element.y + element.height - 10} textAnchor="end" fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-max-${element.id}`} pointerEvents="none">
-        {formatScale(options.maximum)}
+        {formatScale(maximum)}
       </text>}
-      {!isValidScale(options.minimum, options.maximum) && (
+      {!isValidScale(minimum, maximum) && (
         <text x={cx} y={element.y + element.height - 28} textAnchor="middle" fill="#f2cc0c" fontSize={10} data-testid={`gauge-invalid-scale-${element.id}`} pointerEvents="none">
           Escala inválida
         </text>

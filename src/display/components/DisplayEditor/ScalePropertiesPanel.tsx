@@ -94,7 +94,7 @@ export function ScalePropertiesPanel({
           <ColorControl label="Cor do contorno" color={borderColor} onChange={(value) => onChange({ borderColor: value })} testId="bar-border-color" />
           <label className={styles.field}><span>Espessura do contorno ({borderWidth})</span><input type="range" min="0" max="8" step="1" value={borderWidth} onChange={(event) => onChange({ borderWidth: Number(event.target.value) })} data-testid="bar-border-width" /></label>
         </>}
-        {(kind !== 'Bar' || scaleMode === 'custom') && <>
+        {(kind !== 'Bar' && kind !== 'Gauge' || scaleMode === 'custom') && <>
           <label className={styles.field}>
             <span>Mínimo</span>
             <input type="number" value={minimum} onChange={(event) => onChange({ minimum: Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-minimum`} />
@@ -111,7 +111,7 @@ export function ScalePropertiesPanel({
             {[0, 1, 2, 3, 4, 5, 6].map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
         </label>
-        {kind === 'Bar' && (
+        {(kind === 'Bar' || kind === 'Gauge') && (
           <label className={styles.field}>
             <span>Intervalo de escala</span>
             <select value={scaleMode ?? 'custom'} onChange={(event) => onChange({ scaleMode: event.target.value as 'custom' | 'database' })} data-testid="bar-scale-mode">
