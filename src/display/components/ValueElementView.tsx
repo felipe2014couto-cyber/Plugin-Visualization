@@ -117,10 +117,6 @@ function getValueLines(
   }
   const lines: string[] = [];
   const label = visual.labelMode === 'custom' && visual.customLabel.trim() ? visual.customLabel : pointName;
-  if (visual.showTagName && visual.showValue && !visual.showUnit && !visual.showTimestamp) {
-    lines.push(`${label}: ${valueText}`);
-    return lines;
-  }
   if (visual.showTagName) {
     lines.push(label);
   }

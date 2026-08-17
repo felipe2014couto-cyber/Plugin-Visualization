@@ -54,7 +54,8 @@ describe('ValueElementView', () => {
     const loadValue = jest.fn().mockResolvedValue({ value: 12.3456 });
     render(<svg><ValueElementView element={element} loadValue={loadValue} /></svg>);
 
-    await waitFor(() => expect(screen.getByTestId('display-value-value-3')).toHaveTextContent('LFI_A268SV_TEMPERATURA_AMBIENTE: 12.35'));
+    await waitFor(() => expect(screen.getByTestId('display-value-value-3')).toHaveTextContent('LFI_A268SV_TEMPERATURA_AMBIENTE'));
+    expect(screen.getByTestId('display-value-value-3')).toHaveTextContent('12.35');
     const text = screen.getByTestId('display-value-value-3');
     expect(text).toHaveAttribute('fill', '#ff0000');
     expect(text).toHaveAttribute('font-size', '24');
