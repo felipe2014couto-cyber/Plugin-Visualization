@@ -187,6 +187,22 @@ export async function searchPiPointsWithStatus(
     }
     throw new Error('A pesquisa por metadados não é suportada por esta versão do PI Web API.');
   }
+
+  // O datasource GridProtectionAlliance fixa maxCount=100 em piPointSearch().
+  // Para buscas por nome, use diretamente o endpoint legado do mesmo PI Web
+  // API, preservando o datasource/proxy configurado e permitindo paginação.
+  if (serverWebId && typeof resourceApi.getResource === 'function') {
+    try {
+      const legacyResults = await searchPiPointsByDataServer(resourceApi, request, dataSource.uid, serverWebId);
+      return {
+        results: filterPiPointSearchResults(legacyResults.results, request),
+        hasMore: legacyResults.hasMore,
+      };
+    } catch {
+      // Somente instalações sem esse recurso precisam usar metricFindQuery.
+    }
+  }
+
   if (typeof instance.metricFindQuery !== 'function') throw new Error('A Data Source PI não expõe pesquisa de PI Points');
   if (!serverWebId) return { results: [], hasMore: false };
   const pointNameCandidates = request.term.includes('*') || request.term.includes('?')
@@ -211,6 +227,62 @@ export async function searchPiPointsWithStatus(
   });
   const enriched = await enrichPiPointMetadata(candidates, resourceApi, dataSource.uid);
   return { results: filterPiPointSearchResults(enriched, request), hasMore };
+}
+
+async function searchPiPointsByDataServer(
+  resourceApi: PiDataSourceResourceApi,
+  request: ReturnType<typeof normalizePiPointSearchRequest>,
+  dataSourceUid: string,
+  serverWebId: string,
+): Promise<PiPointSearchResponse> {
+  const pointName = request.term.includes('*') || request.term.includes('?') ? request.term : `${request.term}*`;
+  const baseParams = new URLSearchParams({
+    nameFilter: pointName,
+    selectedFields: 'Items.WebId;Items.Name;Items.Path;Items.Descriptor;Items.PointType;Items.EngineeringUnits;Items.PointSource',
+  });
+  const basePath = `/dataservers/${encodeURIComponent(serverWebId)}/points`;
+  const results: PiPointSearchResult[] = [];
+  const identities = new Set<string>();
+  let startIndex = 0;
+
+  while (results.length < request.limit) {
+    const params = new URLSearchParams(baseParams);
+    params.set('startIndex', String(startIndex));
+    params.set('maxCount', String(request.limit - results.length));
+    const response = await resourceApi.getResource(`${basePath}?${params.toString()}`);
+    assertPiPointSearchResponse(response);
+    const rawItems = getResourceItems(response);
+    if (rawItems.length === 0) break;
+
+    let added = 0;
+    for (const item of rawItems) {
+      const result = normalizePiPointMetadata(item, dataSourceUid);
+      if (!result) continue;
+      const identity = result.webId ?? `${result.path ?? ''}:${result.name}`;
+      if (identities.has(identity)) continue;
+      identities.add(identity);
+      results.push(result);
+      added += 1;
+      if (results.length === request.limit) break;
+    }
+    startIndex += rawItems.length;
+    if (added === 0) break;
+  }
+
+  let hasMore = false;
+  if (results.length === request.limit) {
+    const probeParams = new URLSearchParams(baseParams);
+    probeParams.set('startIndex', String(startIndex));
+    probeParams.set('maxCount', '1');
+    const probeResponse = await resourceApi.getResource(`${basePath}?${probeParams.toString()}`);
+    assertPiPointSearchResponse(probeResponse);
+    hasMore = getResourceItems(probeResponse).some((item) => {
+      const result = normalizePiPointMetadata(item, dataSourceUid);
+      const identity = result?.webId ?? (result ? `${result.path ?? ''}:${result.name}` : undefined);
+      return Boolean(identity && !identities.has(identity));
+    });
+  }
+  return { results, hasMore };
 }
 
 function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Required<Pick<PiPointSearchRequest, 'term' | 'description' | 'pointTypes' | 'engineeringUnits' | 'pointSources' | 'limit'>> {

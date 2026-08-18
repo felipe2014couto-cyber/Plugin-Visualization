@@ -234,6 +234,31 @@ describe('PI data source integration', () => {
     expect(getResource).toHaveBeenCalledTimes(11);
   });
 
+  it('ignora o limite fixo de 100 do metricFindQuery usando o endpoint legado do Data Server', async () => {
+    const metricFindQuery = jest.fn().mockResolvedValue([{ text: 'pims', WebId: 'server-webid' }]);
+    const allItems = Array.from({ length: 1001 }, (_, index) => ({
+      Name: `LFS_RB2_${index}`,
+      WebId: `legacy-${index}`,
+      Descriptor: `Ponto ${index}`,
+      PointType: 'Float32',
+    }));
+    const getResource = jest.fn(async (path: string) => {
+      if (path.startsWith('/points/search?')) throw new Error('404');
+      const params = new URL(path, 'http://pi.local').searchParams;
+      const startIndex = Number(params.get('startIndex') ?? 0);
+      const requested = Number(params.get('maxCount') ?? 1000);
+      return { Items: allItems.slice(startIndex, startIndex + Math.min(100, requested)) };
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPointsWithStatus } = await import('../piDataSource');
+
+    const response = await searchPiPointsWithStatus('LFS_RB2*', dataSourceSrv);
+    expect(response.results).toHaveLength(1000);
+    expect(response.hasMore).toBe(true);
+    expect(metricFindQuery).toHaveBeenCalledTimes(1);
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('/dataservers/server-webid/points?'));
+  });
+
   it('consulta o valor atual pela query de PI Point e normaliza o DataFrame', async () => {
     const query = jest.fn(async (_request: unknown) => ({
       data: [{
