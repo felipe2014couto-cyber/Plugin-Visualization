@@ -1054,8 +1054,10 @@ const getStyles = (theme: GrafanaTheme2) => ({
     overflow: hidden;
   `,
   assetsPiSearch: css`
-    flex: 0 0 auto;
+    display: flex;
+    flex: 1;
     min-height: 0;
+    overflow: hidden;
   `,
   libraryTabContent: css`
     display: flex;
