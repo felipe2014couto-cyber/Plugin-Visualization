@@ -146,7 +146,11 @@ export async function searchPiPoints(
   if (typeof resourceApi.getResource === 'function') {
     try {
       const advancedResults = await searchPiPointsAdvanced(resourceApi, request, dataSource.uid);
-      return filterPiPointSearchResults(advancedResults, request);
+      const filteredAdvancedResults = filterPiPointSearchResults(advancedResults, request);
+      // Alguns adaptadores aceitam o endpoint, mas ignoram parte dos filtros
+      // e respondem vazio. Se há um nome, ainda podemos usar o fallback seguro
+      // por nome para não esconder uma PI Point existente.
+      if (filteredAdvancedResults.length > 0 || !request.term) return filteredAdvancedResults;
     } catch {
       // Instalações antigas do PI Web API não expõem pesquisa avançada.
     }

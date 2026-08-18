@@ -171,6 +171,21 @@ describe('PI data source integration', () => {
     expect(getResource).toHaveBeenCalledWith('/points/b');
   });
 
+  it('usa o fallback por nome quando a pesquisa avançada responde vazia', async () => {
+    const metricFindQuery = jest.fn()
+      .mockResolvedValueOnce([{ text: 'pims', WebId: 'server-webid' }])
+      .mockResolvedValueOnce([{ text: 'LFS_RB2_ARCF_TEMP', WebId: 'point-id', Path: '\\\\pims\\LFS_RB2_ARCF_TEMP' }]);
+    const getResource = jest.fn(async (path: string) => {
+      if (path.includes('/points/search?')) return { Items: [] };
+      return { Name: 'LFS_RB2_ARCF_TEMP', WebId: 'point-id', Descriptor: 'Temperatura do motor', PointType: 'Float32', EngineeringUnits: '°C' };
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPoints } = await import('../piDataSource');
+
+    await expect(searchPiPoints({ term: 'LFS_RB2', pointTypes: ['Float32'], engineeringUnits: ['°C'] }, dataSourceSrv))
+      .resolves.toEqual([expect.objectContaining({ name: 'LFS_RB2_ARCF_TEMP', pointType: 'Float32', engineeringUnit: '°C' })]);
+  });
+
   it('consulta o valor atual pela query de PI Point e normaliza o DataFrame', async () => {
     const query = jest.fn(async (_request: unknown) => ({
       data: [{
