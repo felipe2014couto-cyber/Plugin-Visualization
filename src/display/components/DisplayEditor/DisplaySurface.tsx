@@ -260,13 +260,6 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
-    const linkUrl = typeof (element.properties as { linkUrl?: unknown }).linkUrl === 'string'
-      ? (element.properties as { linkUrl: string }).linkUrl.trim()
-      : '';
-    if (linkUrl) {
-      window.open(linkUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
     if (!onTrendOpen) {
       return;
     }
@@ -420,7 +413,8 @@ export function DisplaySurface({
     const linkUrl = element && typeof (element.properties as { linkUrl?: unknown }).linkUrl === 'string' ? (element.properties as { linkUrl: string }).linkUrl.trim() : '';
     if (linkUrl) {
       event.preventDefault();
-      window.open(linkUrl, '_blank', 'noopener,noreferrer');
+      const openInNewTab = (element?.properties as { openInNewTab?: unknown }).openInNewTab !== false;
+      window.open(linkUrl, openInNewTab ? '_blank' : '_self', openInNewTab ? 'noopener,noreferrer' : undefined);
     }
   }, [displayDocument.elements, editable]);
 

@@ -80,7 +80,8 @@ import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
 import { updateMultistateConfig, type MultistateConfig } from '../../multistate';
-import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay } from '../../displayTransfer';
+import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay, serializeDisplayCsv, serializeDisplayXml, type DisplayExportFileFormat } from '../../displayTransfer';
+import { collectDisplayDataBindings, DISPLAY_DATA_EXPORT_MAX_POINTS, serializePiDataCsv, serializePiDataXml, type DisplayDataLoader } from '../../displayDataExport';
 import { editorReducer, initialEditorState, type EditorAction, type EditorState } from './editorState';
 import {
   computeDragGeometry,
@@ -112,6 +113,8 @@ export interface DisplayEditorProps {
   timeSelection?: DisplayTimeSelection;
   onTimeSelectionChange?: (selection: DisplayTimeSelection) => void;
   showToolbar?: boolean;
+  loadRecordedData?: DisplayDataLoader;
+  loadInterpolatedData?: DisplayDataLoader;
 }
 
 interface PendingDocumentTransaction {
@@ -159,6 +162,8 @@ export function DisplayEditor({
   timeSelection,
   onTimeSelectionChange,
   showToolbar = true,
+  loadRecordedData,
+  loadInterpolatedData,
 }: DisplayEditorProps) {
   const styles = useStyles2(getStyles);
   const [state, baseDispatch] = useReducer(editorReducer, initialEditorState);
@@ -177,6 +182,8 @@ export function DisplayEditor({
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [surfaceZoom, setSurfaceZoom] = useState(1);
   const [surfaceViewCenter, setSurfaceViewCenter] = useState({
     x: displayDocument.surface.width / 2,
@@ -621,15 +628,41 @@ export function DisplayEditor({
     [dispatch, onModeChange],
   );
 
-  const handleExport = useCallback(() => {
-    const blob = new Blob([serializeDisplay(documentRef.current)], { type: 'application/json;charset=utf-8' });
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = getDisplayExportFileName(documentRef.current.name);
-    anchor.click();
-    URL.revokeObjectURL(objectUrl);
-  }, []);
+  const handleExport = useCallback(async (exportFormat: DisplayExportFileFormat) => {
+    if (exporting) return;
+    if (exportFormat !== 'json') {
+      const bindings = collectDisplayDataBindings(documentRef.current);
+      if (bindings.length === 0) { setImportError('Nenhuma fonte de dados PI encontrada no Display.'); setExportMenuOpen(false); return; }
+      if (!trendTimeRange || !loadRecordedData || (exportFormat === 'xml' && !loadInterpolatedData)) { setImportError('Consulta histórica PI indisponível.'); setExportMenuOpen(false); return; }
+      setExporting(true);
+      setImportError(null);
+      try {
+        const recorded = await loadRecordedData(bindings, trendTimeRange, { maxDataPoints: DISPLAY_DATA_EXPORT_MAX_POINTS });
+        let content: string;
+        if (exportFormat === 'csv') {
+          content = serializePiDataCsv(bindings, recorded);
+        } else {
+          const interpolated = await loadInterpolatedData!(bindings, trendTimeRange, { maxDataPoints: DISPLAY_DATA_EXPORT_MAX_POINTS });
+          content = serializePiDataXml(bindings, interpolated, recorded);
+        }
+        downloadExport(content, exportFormat, documentRef.current.name);
+      } catch { setImportError('Não foi possível exportar os dados PI do Display.'); }
+      finally { setExporting(false); setExportMenuOpen(false); }
+      return;
+    }
+    const serializers: Record<DisplayExportFileFormat, () => string> = {
+      json: () => serializeDisplay(documentRef.current),
+      csv: () => serializeDisplayCsv(documentRef.current),
+      xml: () => serializeDisplayXml(documentRef.current),
+    };
+    const mimeTypes: Record<DisplayExportFileFormat, string> = {
+      json: 'application/json;charset=utf-8',
+      csv: 'text/csv;charset=utf-8',
+      xml: 'application/xml;charset=utf-8',
+    };
+    downloadExport(serializers[exportFormat](), exportFormat, documentRef.current.name, mimeTypes[exportFormat]);
+    setExportMenuOpen(false);
+  }, [exporting, loadInterpolatedData, loadRecordedData, trendTimeRange]);
 
   const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -715,6 +748,11 @@ export function DisplayEditor({
     const selectedId = stateRef.current.selectedElementId;
     if (!selectedId) return;
     commitDocument({ ...documentRef.current, elements: documentRef.current.elements.map((element) => element.id === selectedId ? { ...element, properties: { ...element.properties, linkUrl: linkUrl.trim() || undefined } } : element) });
+  }, [commitDocument]);
+  const handleLinkOpenInNewTabChange = useCallback((openInNewTab: boolean) => {
+    const selectedId = stateRef.current.selectedElementId;
+    if (!selectedId) return;
+    commitDocument({ ...documentRef.current, elements: documentRef.current.elements.map((element) => element.id === selectedId ? { ...element, properties: { ...element.properties, openInNewTab } } : element) });
   }, [commitDocument]);
   const handleLibrarySymbolChange = useCallback((patch: Partial<LibrarySymbolProperties>) => {
     commitDocument(updateLibrarySymbolProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
@@ -992,9 +1030,17 @@ export function DisplayEditor({
               <button type="button" title="Reduzir" aria-label="Reduzir" className={styles.iconButton} data-testid="display-zoom-out" disabled={surfaceZoom <= DISPLAY_ZOOM_MIN} onClick={() => setSurfaceZoom((zoom) => Math.max(DISPLAY_ZOOM_MIN, Number((zoom - DISPLAY_ZOOM_STEP).toFixed(1))))}><ZoomOutIcon /></button>
               <button type="button" title="Ajustar à tela" aria-label="Ajustar à tela" className={styles.iconButton} data-testid="display-zoom-fit" onClick={handleZoomFit}><ZoomFitIcon /></button>
             </div>
-            <button type="button" title="Exportar Display" aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" onClick={handleExport}>
-              <ExportIcon />
-            </button>
+            <div className={styles.exportControl}>
+              <button type="button" title={exporting ? 'Exportando dados PI...' : 'Exportar Display'} aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" disabled={exporting} aria-expanded={exportMenuOpen} onClick={() => setExportMenuOpen((open) => !open)}>
+                <ExportIcon />
+              </button>
+              {exportMenuOpen && <div className={styles.exportMenu} data-testid="display-export-format" role="menu" aria-label="Formato de exportação">
+                {exporting ? <span>Exportando dados PI...</span> : <><span>Exportar como</span>
+                  <button type="button" role="menuitem" data-testid="display-export-format-json" onClick={() => void handleExport('json')}>JSON — Configuração</button>
+                  <button type="button" role="menuitem" data-testid="display-export-format-csv" onClick={() => void handleExport('csv')}>CSV — Dados</button>
+                  <button type="button" role="menuitem" data-testid="display-export-format-xml" onClick={() => void handleExport('xml')}>XML — Dados</button></>}
+              </div>}
+            </div>
             <button type="button" title="Importar Display" aria-label="Importar Display" className={styles.iconButton} data-testid="display-import" disabled={!onChange} onClick={() => importInputRef.current?.click()}>
               <ImportIcon />
             </button>
@@ -1078,13 +1124,15 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
             linkUrl={typeof selectedValue.properties.linkUrl === 'string' ? selectedValue.properties.linkUrl : undefined}
             onLinkChange={handleLinkChange}
+            openInNewTab={selectedValue.properties.openInNewTab !== false}
+            onOpenInNewTabChange={handleLinkOpenInNewTabChange}
           />
         )}
         {selectedGauge && (
-          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedBar && (
-          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} openInNewTab={selectedBar.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedRectangle && (
           <RectanglePropertiesPanel
@@ -1094,7 +1142,9 @@ export function DisplayEditor({
             rotation={selectedRectangle.properties.rotation}
             pointName={isPiPointBinding(selectedRectangle.properties.binding) ? selectedRectangle.properties.binding.pointName : undefined}
             linkUrl={typeof selectedRectangle.properties.linkUrl === 'string' ? selectedRectangle.properties.linkUrl : undefined}
+            openInNewTab={selectedRectangle.properties.openInNewTab !== false}
             onLinkChange={handleLinkChange}
+            onOpenInNewTabChange={handleLinkOpenInNewTabChange}
             multistate={selectedRectangle.properties.multistate}
             onChange={handleRectangleChange}
             onMultistateChange={handleMultistateChange}
@@ -1110,8 +1160,8 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
-        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} linkUrl={typeof optionsTrend.properties.linkUrl === 'string' ? optionsTrend.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
+        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
+        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
         <TrendPopup
@@ -1136,6 +1186,16 @@ function readFileText(file: File): Promise<string> {
     reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
     reader.readAsText(file, 'UTF-8');
   });
+}
+
+function downloadExport(content: string, format: DisplayExportFileFormat, name: string, mimeType?: string): void {
+  const types: Record<DisplayExportFileFormat, string> = { json: 'application/json;charset=utf-8', csv: 'text/csv;charset=utf-8', xml: 'application/xml;charset=utf-8' };
+  const objectUrl = URL.createObjectURL(new Blob([content], { type: mimeType ?? types[format] }));
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = getDisplayExportFileName(name, format);
+  anchor.click();
+  URL.revokeObjectURL(objectUrl);
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -1592,6 +1652,24 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     gap: 8px;
     margin-left: auto;
+  `,
+  exportControl: css`position:relative; display:flex;`,
+  exportMenu: css`
+    position:absolute;
+    z-index:20;
+    right:0;
+    top:calc(100% + 6px);
+    display:flex;
+    flex-direction:column;
+    min-width:132px;
+    padding:8px;
+    border:1px solid var(--border-color);
+    border-radius:5px;
+    background:var(--panel-bg);
+    box-shadow:0 8px 20px rgba(0, 0, 0, 0.28);
+    span { padding:2px 5px 6px; color:var(--text-secondary); font-size:10px; }
+    button { min-height:28px; padding:3px 6px; border:0; border-radius:3px; background:transparent; color:var(--text-primary); text-align:left; cursor:pointer; font-size:11px; }
+    button:hover { background:var(--button-hover); }
   `,
   zoomControls: css`
     display: flex;

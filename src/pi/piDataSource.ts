@@ -37,7 +37,29 @@ export interface PiPointSearchResult {
   path?: string;
   dataSourceUid?: string;
   pointType?: string;
+  description?: string;
+  engineeringUnit?: string;
+  pointSource?: string;
 }
+
+export interface PiPointSearchRequest {
+  term?: string;
+  description?: string;
+  pointTypes?: string[];
+  engineeringUnits?: string[];
+  pointSources?: string[];
+  limit?: number;
+}
+
+export interface PiPointSearchResponse {
+  results: PiPointSearchResult[];
+  hasMore: boolean;
+}
+
+export const PI_POINT_SEARCH_MAX_RESULTS = 1000;
+const PI_POINT_SEARCH_DEFAULT_LIMIT = PI_POINT_SEARCH_MAX_RESULTS;
+const PI_POINT_METADATA_CONCURRENCY = 8;
+const piPointMetadataCache = new Map<string, PiPointSearchResult>();
 
 export interface PiPointValue {
   value: unknown;
@@ -112,12 +134,19 @@ export async function checkPiConnection(
 }
 
 export async function searchPiPoints(
-  term: string,
+  termOrRequest: string | PiPointSearchRequest,
   dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
 ): Promise<PiPointSearchResult[]> {
-  const normalizedTerm = term.trim();
-  if (!normalizedTerm) {
-    return [];
+  return (await searchPiPointsWithStatus(termOrRequest, dataSourceSrv)).results;
+}
+
+export async function searchPiPointsWithStatus(
+  termOrRequest: string | PiPointSearchRequest,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
+): Promise<PiPointSearchResponse> {
+  const request = normalizePiPointSearchRequest(termOrRequest);
+  if (!request.term && !hasMetadataFilters(request)) {
+    return { results: [], hasMore: false };
   }
 
   const dataSource = resolvePiDataSource(dataSourceSrv);
@@ -126,36 +155,359 @@ export async function searchPiPoints(
   }
 
   const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
-  if (typeof instance.metricFindQuery !== 'function') {
-    throw new Error('A Data Source PI não expõe pesquisa de PI Points');
-  }
-
-  const servers = await instance.metricFindQuery({ type: 'dataserver' }, { isPiPoint: true });
-  const serverWebId = getMetricField(servers[0], 'WebId');
-  if (!serverWebId) {
-    return [];
-  }
-
-  const pointName = normalizedTerm.endsWith('*') ? normalizedTerm : `${normalizedTerm}*`;
-  const points = await instance.metricFindQuery(
-    { path: '', webId: serverWebId, pointName, type: 'pipoint' },
-    { isPiPoint: true },
-  );
-
-  return points.flatMap((point) => {
-    const name = getMetricField(point, 'text');
-    if (!name) {
-      return [];
+  const resourceApi = instance as PiDataSourceResourceApi;
+  let serverWebId: string | undefined;
+  if (typeof instance.metricFindQuery === 'function') {
+    try {
+      const servers = await instance.metricFindQuery({ type: 'dataserver' }, { isPiPoint: true });
+      serverWebId = getMetricField(servers[0], 'WebId') ?? getMetricField(servers[0], 'value');
+    } catch {
+      // A mensagem de fallback abaixo será usada se não houver outra estratégia.
     }
-    const pointType = getMetricField(point, 'PointType');
-    return [{
-      name,
-      webId: getMetricField(point, 'WebId'),
-      path: getMetricField(point, 'Path'),
-      ...(pointType ? { pointType } : {}),
-      dataSourceUid: dataSource.uid,
-    }];
+  }
+
+  if (serverWebId && typeof resourceApi.getResource === 'function') {
+    try {
+      const advancedResults = await searchPiPointsAdvanced(resourceApi, request, dataSource.uid, serverWebId);
+      const filteredAdvancedResults = filterPiPointSearchResults(advancedResults.results, request);
+      // Alguns adaptadores aceitam o endpoint, mas ignoram parte dos filtros
+      // e respondem vazio. Se há um nome, ainda podemos usar o fallback seguro
+      // por nome para não esconder uma PI Point existente.
+      if (filteredAdvancedResults.length > 0 || !request.term) {
+        return { results: filteredAdvancedResults.slice(0, request.limit), hasMore: advancedResults.hasMore };
+      }
+    } catch {
+      // Instalações antigas do PI Web API não expõem pesquisa avançada.
+    }
+  }
+
+  if (!request.term) {
+    if (request.description) {
+      throw new Error('A pesquisa por descrição não é suportada por esta versão do PI Web API.');
+    }
+    throw new Error('A pesquisa por metadados não é suportada por esta versão do PI Web API.');
+  }
+
+  // O datasource GridProtectionAlliance fixa maxCount=100 em piPointSearch().
+  // Para buscas por nome, use diretamente o endpoint legado do mesmo PI Web
+  // API, preservando o datasource/proxy configurado e permitindo paginação.
+  if (serverWebId && typeof resourceApi.getResource === 'function') {
+    try {
+      const legacyResults = await searchPiPointsByDataServer(resourceApi, request, dataSource.uid, serverWebId);
+      return {
+        results: filterPiPointSearchResults(legacyResults.results, request),
+        hasMore: legacyResults.hasMore,
+      };
+    } catch {
+      // Somente instalações sem esse recurso precisam usar metricFindQuery.
+    }
+  }
+
+  if (typeof instance.metricFindQuery !== 'function') throw new Error('A Data Source PI não expõe pesquisa de PI Points');
+  if (!serverWebId) return { results: [], hasMore: false };
+  const pointNameCandidates = request.term.includes('*') || request.term.includes('?')
+    ? [request.term]
+    : [`${request.term}*`, `*${request.term}*`, request.term];
+  let points: MetricFindValue[] = [];
+  for (const pointName of pointNameCandidates) {
+    try {
+      points = await instance.metricFindQuery(
+        { path: '', webId: serverWebId, pointName, type: 'pipoint' },
+        { isPiPoint: true },
+      );
+    } catch {
+      points = [];
+    }
+    if (points.length > 0) break;
+  }
+  const hasMore = points.length > request.limit;
+  const candidates = points.slice(0, request.limit).flatMap((point) => {
+    const result = normalizePiPointMetadata(point, dataSource.uid);
+    return result ? [result] : [];
   });
+  const enriched = await enrichPiPointMetadata(candidates, resourceApi, dataSource.uid);
+  return { results: filterPiPointSearchResults(enriched, request), hasMore };
+}
+
+async function searchPiPointsByDataServer(
+  resourceApi: PiDataSourceResourceApi,
+  request: ReturnType<typeof normalizePiPointSearchRequest>,
+  dataSourceUid: string,
+  serverWebId: string,
+): Promise<PiPointSearchResponse> {
+  const pointName = request.term.includes('*') || request.term.includes('?') ? request.term : `${request.term}*`;
+  const baseParams = new URLSearchParams({
+    nameFilter: pointName,
+    selectedFields: 'Items.WebId;Items.Name;Items.Path;Items.Descriptor;Items.PointType;Items.EngineeringUnits;Items.PointSource',
+  });
+  const basePath = `/dataservers/${encodeURIComponent(serverWebId)}/points`;
+  const results: PiPointSearchResult[] = [];
+  const identities = new Set<string>();
+  let startIndex = 0;
+
+  while (results.length < request.limit) {
+    const params = new URLSearchParams(baseParams);
+    params.set('startIndex', String(startIndex));
+    params.set('maxCount', String(request.limit - results.length));
+    const response = await resourceApi.getResource(`${basePath}?${params.toString()}`);
+    assertPiPointSearchResponse(response);
+    const rawItems = getResourceItems(response);
+    if (rawItems.length === 0) break;
+
+    let added = 0;
+    for (const item of rawItems) {
+      const result = normalizePiPointMetadata(item, dataSourceUid);
+      if (!result) continue;
+      const identity = result.webId ?? `${result.path ?? ''}:${result.name}`;
+      if (identities.has(identity)) continue;
+      identities.add(identity);
+      results.push(result);
+      added += 1;
+      if (results.length === request.limit) break;
+    }
+    startIndex += rawItems.length;
+    if (added === 0) break;
+  }
+
+  let hasMore = false;
+  if (results.length === request.limit) {
+    const probeParams = new URLSearchParams(baseParams);
+    probeParams.set('startIndex', String(startIndex));
+    probeParams.set('maxCount', '1');
+    const probeResponse = await resourceApi.getResource(`${basePath}?${probeParams.toString()}`);
+    assertPiPointSearchResponse(probeResponse);
+    hasMore = getResourceItems(probeResponse).some((item) => {
+      const result = normalizePiPointMetadata(item, dataSourceUid);
+      const identity = result?.webId ?? (result ? `${result.path ?? ''}:${result.name}` : undefined);
+      return Boolean(identity && !identities.has(identity));
+    });
+  }
+  return { results, hasMore };
+}
+
+function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Required<Pick<PiPointSearchRequest, 'term' | 'description' | 'pointTypes' | 'engineeringUnits' | 'pointSources' | 'limit'>> {
+  const request = typeof value === 'string' ? { term: value } : value;
+  return {
+    term: request.term?.trim() ?? '',
+    description: request.description?.trim() ?? '',
+    pointTypes: normalizeSearchValues(request.pointTypes),
+    engineeringUnits: normalizeSearchValues(request.engineeringUnits),
+    pointSources: normalizeSearchValues(request.pointSources),
+    limit: Math.min(PI_POINT_SEARCH_MAX_RESULTS, Math.max(1, request.limit ?? PI_POINT_SEARCH_DEFAULT_LIMIT)),
+  };
+}
+
+function normalizeSearchValues(values: string[] | undefined): string[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+function hasMetadataFilters(request: Pick<PiPointSearchRequest, 'description' | 'pointTypes' | 'engineeringUnits' | 'pointSources'>): boolean {
+  return Boolean(request.description?.trim() || request.pointTypes?.length || request.engineeringUnits?.length || request.pointSources?.length);
+}
+
+async function searchPiPointsAdvanced(
+  resourceApi: PiDataSourceResourceApi,
+  request: ReturnType<typeof normalizePiPointSearchRequest>,
+  dataSourceUid: string,
+  serverWebId: string,
+): Promise<PiPointSearchResponse> {
+  const baseParams = new URLSearchParams({
+    dataServerWebId: serverWebId,
+    selectedFields: 'WebId;Name;Path;Descriptor;PointType;EngineeringUnits;PointSource',
+  });
+  baseParams.set('query', buildPiPointSearchQuery(request));
+
+  const results: PiPointSearchResult[] = [];
+  const identities = new Set<string>();
+  let startIndex = 0;
+  let knownTotal: number | undefined;
+
+  while (results.length < request.limit) {
+    const params = new URLSearchParams(baseParams);
+    params.set('startIndex', String(startIndex));
+    params.set('maxCount', String(request.limit - results.length));
+    const response = await resourceApi.getResource(`/points/search?${params.toString()}`);
+    assertPiPointSearchResponse(response);
+    const rawItems = getResourceItems(response);
+    if (rawItems.length === 0) break;
+
+    knownTotal = getResourceTotal(response) ?? knownTotal;
+    let added = 0;
+    for (const item of rawItems) {
+      const result = normalizePiPointMetadata(item, dataSourceUid);
+      if (!result) continue;
+      const identity = result.webId ?? `${result.path ?? ''}:${result.name}`;
+      if (identities.has(identity)) continue;
+      identities.add(identity);
+      results.push(result);
+      added += 1;
+      if (results.length === request.limit) break;
+    }
+    startIndex += rawItems.length;
+    // Protege contra adaptadores antigos que ignoram startIndex e repetem a página.
+    if (added === 0) break;
+  }
+
+  let hasMore = knownTotal !== undefined && knownTotal > request.limit;
+  if (!hasMore && results.length === request.limit) {
+    const probeParams = new URLSearchParams(baseParams);
+    probeParams.set('startIndex', String(startIndex));
+    probeParams.set('maxCount', '1');
+    const probeResponse = await resourceApi.getResource(`/points/search?${probeParams.toString()}`);
+    assertPiPointSearchResponse(probeResponse);
+    hasMore = getResourceItems(probeResponse).some((item) => {
+      const result = normalizePiPointMetadata(item, dataSourceUid);
+      const identity = result?.webId ?? (result ? `${result.path ?? ''}:${result.name}` : undefined);
+      return Boolean(identity && !identities.has(identity));
+    });
+  }
+  return { results, hasMore };
+}
+
+function assertPiPointSearchResponse(response: unknown): void {
+  if (!Array.isArray(response) && (!response || typeof response !== 'object' || !Array.isArray((response as Record<string, unknown>).Items))) {
+    throw new Error('Pesquisa avançada de PI Points indisponível');
+  }
+}
+
+function buildPiPointSearchQuery(request: ReturnType<typeof normalizePiPointSearchRequest>): string {
+  const criteria: string[] = [];
+  if (request.term) {
+    const term = request.term.includes('*') || request.term.includes('?') ? request.term : `${request.term}*`;
+    criteria.push(`Tag:=${escapePiSearchValue(term)}`);
+  }
+  if (request.description) criteria.push(`Descriptor:=*${escapePiSearchValue(request.description)}*`);
+  if (request.pointTypes.length) {
+    criteria.push(`(${request.pointTypes.map((type) => `PointType:=${escapePiSearchValue(type)}`).join(' OR ')})`);
+  }
+  if (request.engineeringUnits.length) {
+    criteria.push(`(${request.engineeringUnits.map((unit) => `EngineeringUnits:=${escapePiSearchValue(unit)}`).join(' OR ')})`);
+  }
+  if (request.pointSources.length) {
+    criteria.push(`(${request.pointSources.map((source) => `PointSource:=${escapePiSearchValue(source)}`).join(' OR ')})`);
+  }
+  return criteria.join(' AND ');
+}
+
+function escapePiSearchValue(value: string): string {
+  return value.replace(/([\\"])/g, '\\$1');
+}
+
+async function enrichPiPointMetadata(
+  candidates: PiPointSearchResult[],
+  resourceApi: PiDataSourceResourceApi,
+  dataSourceUid: string,
+): Promise<PiPointSearchResult[]> {
+  if (typeof resourceApi.getResource !== 'function') return candidates;
+  const tasks = candidates.map((candidate) => async () => {
+    if (!candidate.webId) return candidate;
+    const cacheKey = `${dataSourceUid}:${candidate.webId}`;
+    const cached = piPointMetadataCache.get(cacheKey);
+    if (cached) return { ...candidate, ...cached };
+    try {
+      const response = await resourceApi.getResource(`/points/${encodeURIComponent(candidate.webId)}`);
+      const metadata = normalizePiPointMetadata(response, dataSourceUid);
+      if (metadata) {
+        piPointMetadataCache.set(cacheKey, metadata);
+        return { ...candidate, ...metadata };
+      }
+    } catch {
+      // Um PI Point sem metadados não deve invalidar toda a pesquisa.
+    }
+    return candidate;
+  });
+  return runLimited(tasks, PI_POINT_METADATA_CONCURRENCY);
+}
+
+function normalizePiPointMetadata(value: unknown, dataSourceUid: string): PiPointSearchResult | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const fields = value as Record<string, unknown>;
+  const name = getUnknownString(fields.Name) ?? getUnknownString(fields.text) ?? getUnknownString(fields.Text);
+  if (!name) return undefined;
+  const webId = getUnknownString(fields.WebId);
+  const path = getUnknownString(fields.Path);
+  const pointType = getUnknownString(fields.PointType);
+  const description = getUnknownString(fields.Descriptor) ?? getUnknownString(fields.Description);
+  const engineeringUnit = getUnknownString(fields.EngineeringUnits)
+    ?? getUnknownString(fields.EngineeringUnit)
+    ?? getUnknownString(fields.EngUnits);
+  const pointSource = getUnknownString(fields.PointSource);
+  return {
+    name,
+    ...(webId ? { webId } : {}),
+    ...(path ? { path } : {}),
+    ...(pointType ? { pointType } : {}),
+    ...(description ? { description } : {}),
+    ...(engineeringUnit ? { engineeringUnit } : {}),
+    ...(pointSource ? { pointSource } : {}),
+    dataSourceUid,
+  };
+}
+
+function getResourceItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== 'object') return [];
+  const items = (value as Record<string, unknown>).Items;
+  return Array.isArray(items) ? items : [];
+}
+
+function getResourceTotal(value: unknown): number | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const fields = value as Record<string, unknown>;
+  // Em algumas versões/adapters, `Total` representa apenas o tamanho da
+  // página atual (normalmente 100), não o total da consulta. Somente
+  // `TotalCount` é tratado como total global.
+  const total = typeof fields.TotalCount === 'number' ? fields.TotalCount : undefined;
+  return total !== undefined && Number.isFinite(total) && total >= 0 ? total : undefined;
+}
+
+function getUnknownString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function filterPiPointSearchResults(
+  results: PiPointSearchResult[],
+  request: ReturnType<typeof normalizePiPointSearchRequest>,
+): PiPointSearchResult[] {
+  return results.filter((result) => (
+    matchesTagSearch(result.name, request.term)
+    && includesIgnoreCase(result.description, request.description)
+    && matchesAny(result.pointType, request.pointTypes)
+    && matchesAny(result.engineeringUnit, request.engineeringUnits)
+    && matchesAny(result.pointSource, request.pointSources)
+  ));
+}
+
+function matchesTagSearch(name: string, term: string): boolean {
+  if (!term) return true;
+  if (!term.includes('*') && !term.includes('?')) {
+    return name.toLocaleLowerCase().startsWith(term.toLocaleLowerCase());
+  }
+  const pattern = term
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${pattern}$`, 'i').test(name);
+}
+
+function includesIgnoreCase(value: string | undefined, expected: string): boolean {
+  return !expected || Boolean(value && value.toLocaleLowerCase().includes(expected.toLocaleLowerCase()));
+}
+
+function matchesAny(value: string | undefined, expected: string[]): boolean {
+  return expected.length === 0 || Boolean(value && expected.some((item) => item.localeCompare(value, undefined, { sensitivity: 'accent' }) === 0));
+}
+
+async function runLimited<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
+  const results = new Array<T>(tasks.length);
+  let cursor = 0;
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
+    while (cursor < tasks.length) {
+      const index = cursor++;
+      results[index] = await tasks[index]();
+    }
+  }));
+  return results;
 }
 
 export async function getPiPointCurrentValue(
@@ -885,7 +1237,7 @@ function normalizeQuality(frame: DataFrame): Record<string, unknown> | undefined
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
-function getMetricField(value: MetricFindValue | undefined, field: 'text' | 'WebId' | 'Path' | 'PointType'): string | undefined {
+function getMetricField(value: MetricFindValue | undefined, field: string): string | undefined {
   if (!value) {
     return undefined;
   }

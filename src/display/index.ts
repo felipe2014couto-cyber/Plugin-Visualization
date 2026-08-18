@@ -109,9 +109,11 @@ export {
   DisplayImportError,
   getDisplayExportFileName,
   parseImportedDisplay,
+  serializeDisplayCsv,
+  serializeDisplayXml,
   serializeDisplay,
 } from './displayTransfer';
-export type { DisplayExportEnvelope } from './displayTransfer';
+export type { DisplayExportEnvelope, DisplayExportFileFormat } from './displayTransfer';
 
 export {
   createDefaultMultistateRule,

@@ -1,38 +1,73 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
-import { searchPiPoints, type PiPointSearchResult } from './piDataSource';
+import { searchPiPointsWithStatus, type PiPointSearchResult } from './piDataSource';
 import { PI_POINT_DRAG_MIME, serializePiPointDragData } from './piPointDrag';
 
 type SearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
 
+// Tipos reconhecidos pelo PI Web API. Os tipos retornados pela pesquisa são
+// acrescentados à lista, preservando também tipos específicos do servidor.
+const INITIAL_PI_POINT_TYPES = ['Float32', 'Float64', 'Int16', 'Int32', 'Digital', 'String', 'Timestamp'];
+
 export interface PiPointSearchProps {
   enabled: boolean;
   onSelect?: (result: PiPointSearchResult) => void;
+  filtersOpen?: boolean;
 }
 
-export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
+export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPointSearchProps) {
   const styles = useStyles2(getStyles);
   const [term, setTerm] = useState('');
   const [results, setResults] = useState<PiPointSearchResult[]>([]);
   const [selected, setSelected] = useState<PiPointSearchResult | null>(null);
   const [status, setStatus] = useState<SearchStatus>('idle');
+  const [selectedPointTypes, setSelectedPointTypes] = useState<string[]>([]);
+  const [descriptionFilter, setDescriptionFilter] = useState('');
+  const [engineeringUnitFilter, setEngineeringUnitFilter] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [hasMoreResults, setHasMoreResults] = useState(false);
+  const requestSequence = useRef(0);
+
+  const pointTypes = useMemo(() => [...new Set([
+    ...INITIAL_PI_POINT_TYPES,
+    ...getFilterOptions(results, (result) => result.pointType),
+  ])], [results]);
+  const filteredResults = useMemo(() => results.filter((result) => (
+    includesFilter(result.description, descriptionFilter)
+    && matchesFilter(result.pointType, selectedPointTypes)
+    && includesFilter(result.engineeringUnit, engineeringUnitFilter)
+  )), [results, descriptionFilter, selectedPointTypes, engineeringUnitFilter]);
+  const hasActiveFilters = Boolean(descriptionFilter || selectedPointTypes.length || engineeringUnitFilter);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const normalizedTerm = term.trim();
-    if (!enabled || !normalizedTerm) {
-      setStatus(normalizedTerm ? 'error' : 'idle');
+    if (!enabled || (!normalizedTerm && !hasActiveFilters)) {
+      setStatus(normalizedTerm || hasActiveFilters ? 'error' : 'idle');
       return;
     }
 
+    const requestId = ++requestSequence.current;
     setStatus('loading');
+    setErrorMessage('');
     try {
-      const nextResults = await searchPiPoints(normalizedTerm);
+      const response = await searchPiPointsWithStatus({
+        term: normalizedTerm,
+        description: descriptionFilter,
+        pointTypes: selectedPointTypes,
+        engineeringUnits: engineeringUnitFilter ? [engineeringUnitFilter] : [],
+      });
+      if (requestId !== requestSequence.current) return;
+      const nextResults = response.results;
       setResults(nextResults);
+      setHasMoreResults(response.hasMore);
+      setSelected(null);
       setStatus(nextResults.length > 0 ? 'success' : 'empty');
-    } catch {
+    } catch (error) {
+      if (requestId !== requestSequence.current) return;
+      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível pesquisar PI Points.');
       setStatus('error');
     }
   };
@@ -59,7 +94,7 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
             data-testid="pi-point-search-submit"
             aria-label="Pesquisar"
             title="Pesquisar"
-            disabled={!enabled || status === 'loading' || term.trim().length === 0}
+            disabled={!enabled || status === 'loading' || (!term.trim() && !hasActiveFilters)}
           >
             <SearchIcon />
           </button>
@@ -68,12 +103,77 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
 
       {status === 'loading' && <p data-testid="pi-point-search-loading">Pesquisando...</p>}
       {status === 'empty' && <p data-testid="pi-point-search-empty">Nenhum PI Point encontrado.</p>}
-      {status === 'error' && <p data-testid="pi-point-search-error">Não foi possível pesquisar PI Points.</p>}
+      {status === 'error' && <p data-testid="pi-point-search-error">{errorMessage || 'Não foi possível pesquisar PI Points.'}</p>}
       {!enabled && <p data-testid="pi-point-search-disabled">Pesquisa PI indisponível.</p>}
 
+      {filtersOpen && (
+        <>
+          <div className={styles.filters} data-testid="pi-point-search-filters">
+            <div className={styles.filterHeader}>
+              <span>Filtros</span>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className={styles.clearFilters}
+                  onClick={() => {
+                    setSelectedPointTypes([]);
+                    setDescriptionFilter('');
+                    setEngineeringUnitFilter('');
+                  }}
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+            <TextFilter
+              label="Descrição contém"
+              value={descriptionFilter}
+              onChange={setDescriptionFilter}
+              styles={styles}
+              testId="description"
+            />
+            <FilterGroup
+              label="Tipo de dados"
+              options={pointTypes}
+              selectedOptions={selectedPointTypes}
+              onToggle={(value) => setSelectedPointTypes((current) => toggleFilter(current, value))}
+              styles={styles}
+              testId="point-type"
+            />
+            <TextFilter
+              label="Unidade de Eng."
+              value={engineeringUnitFilter}
+              onChange={setEngineeringUnitFilter}
+              styles={styles}
+              testId="engineering-unit"
+            />
+          </div>
+
+          {results.length === 0 && status === 'idle' ? (
+            <p className={styles.noFilterOptions} data-testid="pi-point-filter-awaiting-search">
+              Pesquise uma tag para carregar as opções de filtro.
+            </p>
+          ) : filteredResults.length === 0 && (
+            <p className={styles.filteredEmpty} data-testid="pi-point-search-filtered-empty">
+              Nenhum PI Point corresponde aos filtros.
+            </p>
+          )}
+        </>
+      )}
+
       {results.length > 0 && (
-        <ul className={styles.results} data-testid="pi-point-search-results">
-          {results.map((result) => (
+        <>
+          <p className={styles.resultCount} data-testid="pi-point-search-count">
+            {results.length} PI Points {hasMoreResults ? 'exibidos' : 'encontrados'}
+          </p>
+          {hasMoreResults && (
+            <div className={styles.resultLimitWarning} data-testid="pi-point-search-limit-warning">
+              A pesquisa encontrou mais de 1000 PI Points. Estão sendo exibidos somente os primeiros 1000 pontos.
+              Refine a pesquisa ou utilize mais filtros para reduzir os resultados.
+            </div>
+          )}
+          <ul className={styles.results} data-testid="pi-point-search-results">
+          {filteredResults.map((result) => (
             <li key={result.webId ?? `${result.name}-${result.path ?? ''}`}>
               <button
                 type="button"
@@ -106,11 +206,17 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
                   onSelect?.(result);
                 }}
               >
-                {result.name}
+                <span className={styles.resultName}>{result.name}</span>
+                {(result.description || result.pointType || result.engineeringUnit) && (
+                  <span className={styles.resultMetadata}>
+                    {[result.description, result.pointType, result.engineeringUnit].filter(Boolean).join(' · ')}
+                  </span>
+                )}
               </button>
             </li>
           ))}
-        </ul>
+          </ul>
+        </>
       )}
 
       {selected && (
@@ -201,6 +307,99 @@ const getStyles = (theme: GrafanaTheme2) => ({
     list-style: none;
     border-top: 1px solid var(--border-color);
   `,
+  filters: css`
+    display: flex;
+    flex-direction: column;
+    gap: ${theme.spacing(0.75)};
+    margin-top: ${theme.spacing(1)};
+    padding: ${theme.spacing(0.75)};
+    border: 1px solid var(--border-subtle);
+    background: var(--card-bg);
+  `,
+  filterHeader: css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+  `,
+  filterGroup: css`
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  `,
+  filterLabel: css`
+    color: var(--text-secondary);
+    font-size: 11px;
+  `,
+  filterOptions: css`
+    display: flex;
+    flex-direction: column;
+    max-height: 88px;
+    overflow-y: auto;
+  `,
+  filterOption: css`
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 2px 0;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 12px;
+
+    input {
+      margin: 0;
+    }
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  `,
+  noFilterOptions: css`
+    color: var(--text-disabled);
+    font-size: 11px;
+  `,
+  filterInput: css`
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 2px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 12px;
+  `,
+  clearFilters: css`
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 11px;
+  `,
+  filteredEmpty: css`
+    margin: ${theme.spacing(1, 0, 0)};
+    color: var(--text-secondary);
+    font-size: 12px;
+  `,
+  resultCount: css`
+    margin: ${theme.spacing(1, 0, 0)};
+    color: var(--text-secondary);
+    font-size: 12px;
+  `,
+  resultLimitWarning: css`
+    margin-top: ${theme.spacing(0.75)};
+    padding: ${theme.spacing(0.75)};
+    border: 1px solid var(--warning);
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.4;
+  `,
   result: css`
     width: 100%;
     padding: 7px 8px;
@@ -211,6 +410,10 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--accent);
     text-align: left;
     cursor: grab;
+
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 
     &:hover {
       background: var(--button-hover);
@@ -225,8 +428,102 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--accent);
     text-align: left;
     cursor: grab;
+
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  `,
+  resultName: css`
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  `,
+  resultMetadata: css`
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   `,
 });
+
+type SearchStyles = ReturnType<typeof getStyles>;
+
+interface FilterGroupProps {
+  label: string;
+  options: string[];
+  selectedOptions: string[];
+  onToggle: (value: string) => void;
+  styles: SearchStyles;
+  testId: string;
+}
+
+interface TextFilterProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  styles: SearchStyles;
+  testId: string;
+}
+
+function TextFilter({ label, value, onChange, styles, testId }: TextFilterProps) {
+  return (
+    <label className={styles.filterGroup}>
+      <span className={styles.filterLabel}>{label}</span>
+      <input
+        className={styles.filterInput}
+        data-testid={`pi-point-filter-${testId}`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function FilterGroup({ label, options, selectedOptions, onToggle, styles, testId }: FilterGroupProps) {
+  return (
+    <div className={styles.filterGroup}>
+      <span className={styles.filterLabel}>{label}</span>
+      {options.length > 0 ? (
+        <div className={styles.filterOptions} data-testid={`pi-point-filter-${testId}`}>
+          {options.map((option) => (
+            <label key={option} className={styles.filterOption} title={option}>
+              <input
+                type="checkbox"
+                checked={selectedOptions.includes(option)}
+                onChange={() => onToggle(option)}
+              />
+              <span>{option}</span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <span className={styles.noFilterOptions}>Não informado nos resultados</span>
+      )}
+    </div>
+  );
+}
+
+function getFilterOptions(
+  results: PiPointSearchResult[],
+  getValue: (result: PiPointSearchResult) => string | undefined,
+): string[] {
+  return [...new Set(results.map(getValue).filter((value): value is string => Boolean(value)))].sort((first, second) => (
+    first.localeCompare(second, 'pt-BR', { sensitivity: 'base' })
+  ));
+}
+
+function matchesFilter(value: string | undefined, selectedValues: string[]): boolean {
+  return selectedValues.length === 0 || (value !== undefined && selectedValues.includes(value));
+}
+
+function includesFilter(value: string | undefined, filter: string): boolean {
+  return !filter.trim() || Boolean(value && value.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()));
+}
+
+function toggleFilter(values: string[], value: string): string[] {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
 
 function SearchIcon() {
   return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

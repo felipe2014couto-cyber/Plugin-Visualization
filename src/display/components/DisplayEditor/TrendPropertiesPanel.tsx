@@ -4,16 +4,13 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendLineStyle, type TrendMarker, type TrendNumberFormat, type TrendScaleMode } from '../../createTrend';
 import { ColorControl } from './ColorControl';
-import { LinkField } from './LinkField';
 
-export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onSeriesRemove, onClose, linkUrl, onLinkChange }: {
+export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onSeriesRemove, onClose }: {
   element: TrendElement;
   onVisualChange: (patch: Partial<ReturnType<typeof getTrendVisualOptions>>) => void;
   onSeriesChange: (key: string, patch: { color?: string; legendLabel?: string; lineWidth?: number; lineStyle?: TrendLineStyle; marker?: TrendMarker; primaryScale?: boolean; scaleMin?: number; scaleMax?: number }) => void;
   onSeriesRemove: (key: string) => void;
   onClose: () => void;
-  linkUrl?: string;
-  onLinkChange?: (value: string) => void;
 }) {
   const styles = useStyles2(getStyles);
   const series = getTrendSeries(element);
@@ -44,7 +41,6 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
     <label>Título<input value={visual.title} onChange={(e) => onVisualChange({ title: e.currentTarget.value })} placeholder="Título do gráfico" /></label>
     <label>Rótulo da legenda<input value={selected.legendLabel ?? selected.binding.pointName} onChange={(e) => onSeriesChange(selectedKey, { legendLabel: e.currentTarget.value })} /></label>
     <ColorControl label="Cor" color={selected.color} onChange={(color) => onSeriesChange(selectedKey, { color })} />
-    {onLinkChange && <LinkField value={linkUrl} onChange={onLinkChange} testId="trend-link-url" />}
     <label>Espessura <span className={styles.rangeValue}>{selected.lineWidth ?? 2}</span><input type="range" min="1" max="8" value={selected.lineWidth ?? 2} onChange={(e) => onSeriesChange(selectedKey, { lineWidth: Number(e.currentTarget.value) })} /></label>
     <button type="button" className={styles.removeButton} disabled={series.length <= 1} onClick={() => onSeriesRemove(selectedKey)}>Excluir tag selecionada</button>
     <label>Estilo<select value={selected.lineStyle ?? 'solid'} onChange={(e) => onSeriesChange(selectedKey, { lineStyle: e.currentTarget.value as TrendLineStyle })}><option value="solid">Sólido</option><option value="dashed">Tracejado</option><option value="dotted">Pontilhado</option></select></label>

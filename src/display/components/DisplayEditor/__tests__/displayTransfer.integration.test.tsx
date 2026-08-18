@@ -73,10 +73,32 @@ describe('DisplayEditor - Exportar e Importar', () => {
 
     render(<DisplayEditor document={document} onChange={onChange} />);
     fireEvent.click(screen.getByTestId('display-export'));
+    fireEvent.click(screen.getByTestId('display-export-format-json'));
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:display');
     expect(onChange).not.toHaveBeenCalled();
+    click.mockRestore();
+  });
+
+  it('exporta CSV quando o formato é selecionado', async () => {
+    const document = appendDisplayElement(createDisplayDocument({ id: 'csv-export', name: 'Exportável' }), createRectangle({ id: 'rectangle', binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'TAG_A' } }));
+    const createObjectURL = jest.fn(() => 'blob:csv');
+    Object.assign(URL, { createObjectURL, revokeObjectURL: jest.fn() });
+    const downloads: string[] = [];
+    const click = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function captureDownload(this: HTMLAnchorElement) {
+      downloads.push(this.download);
+    });
+
+    render(<DisplayEditor document={document} onChange={jest.fn()} trendTimeRange={{ from: 1_000, to: 2_000 }} loadRecordedData={async () => ({})} />);
+    fireEvent.click(screen.getByTestId('display-export'));
+    fireEvent.click(screen.getByTestId('display-export-format-csv'));
+
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+
+    const blob = (createObjectURL.mock.calls as unknown as Array<[Blob]>)[0][0];
+    expect(blob.type).toBe('text/csv;charset=utf-8');
+    expect(downloads).toEqual(['Exportável.pims-vision.csv']);
     click.mockRestore();
   });
 });

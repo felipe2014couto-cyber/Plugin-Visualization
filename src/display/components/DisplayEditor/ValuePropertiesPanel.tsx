@@ -10,6 +10,7 @@ import {
 import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 import type { MultistateConfig } from '../../multistate';
 import { ColorControl } from './ColorControl';
+import { LinkField } from './LinkField';
 
 export interface ValuePropertiesPanelProps {
   options: ValueVisualOptions;
@@ -19,9 +20,11 @@ export interface ValuePropertiesPanelProps {
   onMultistateChange: (config: MultistateConfig) => void;
   linkUrl?: string;
   onLinkChange: (value: string) => void;
+  openInNewTab?: boolean;
+  onOpenInNewTabChange: (value: boolean) => void;
 }
 
-export function ValuePropertiesPanel({ options, pointName, onChange, multistate, onMultistateChange, linkUrl, onLinkChange }: ValuePropertiesPanelProps) {
+export function ValuePropertiesPanel({ options, pointName, onChange, multistate, onMultistateChange, linkUrl, onLinkChange, openInNewTab = true, onOpenInNewTabChange }: ValuePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const visual = getValueVisualOptions({ visual: options });
 
@@ -64,7 +67,7 @@ export function ValuePropertiesPanel({ options, pointName, onChange, multistate,
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid="value-show-unit" /><span>Unidades</span></label>
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showTimestamp} onChange={(event) => onChange({ showTimestamp: event.target.checked })} data-testid="value-show-timestamp" /><span>Timestamp</span></label>
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid="value-show-value" /><span>Valor</span></label>
-        <label className={styles.field}><span>Link</span><input type="url" value={linkUrl ?? ''} placeholder="https://..." onChange={(event) => onLinkChange(event.target.value)} data-testid="value-link-url" /></label>
+        <LinkField value={linkUrl} openInNewTab={openInNewTab} onChange={onLinkChange} onOpenInNewTabChange={onOpenInNewTabChange} testId="value-link-url" />
         <label className={styles.field}>
           <span>Tamanho da fonte</span>
           <input

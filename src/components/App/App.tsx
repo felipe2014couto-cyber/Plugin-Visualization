@@ -68,6 +68,7 @@ export function App() {
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
   const [assetsTab, setAssetsTab] = useState<AssetsTab>('assets');
+  const [isPiPointFiltersOpen, setIsPiPointFiltersOpen] = useState(false);
   const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
   const [dashboardUid, setDashboardUid] = useState<string>();
   const [folders, setFolders] = useState<GrafanaDashboardFolder[]>([]);
@@ -441,11 +442,25 @@ export function App() {
               </div>
               <div className={styles.assetsContent}>
                 <div className={styles.assetsPiSearch}>
-                  <div className={styles.assetsSectionLabel}>PI System</div>
+                  <div className={styles.assetsSectionHeader}>
+                    <span className={styles.assetsSectionLabel}>PI System</span>
+                    <button
+                      type="button"
+                      className={isPiPointFiltersOpen ? styles.piFilterButtonActive : styles.piFilterButton}
+                      data-testid="pi-point-filter-toggle"
+                      aria-label="Filtros da pesquisa de PI Points"
+                      aria-expanded={isPiPointFiltersOpen}
+                      title="Filtros"
+                      onClick={() => setIsPiPointFiltersOpen((open) => !open)}
+                    >
+                      <FilterIcon />
+                    </button>
+                  </div>
                   {editorMode === 'edit' ? (
                     <PiPointSearch
                       enabled={piConnection.status === 'connected'}
                       onSelect={setSelectedPiPoint}
+                      filtersOpen={isPiPointFiltersOpen}
                     />
                   ) : (
                     <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
@@ -485,6 +500,8 @@ export function App() {
             loadValues={hasPiConnection ? getPiPointsCurrentValues : undefined}
             loadTrend={hasPiConnection ? loadTrend : undefined}
             loadRecordedTrend={hasPiConnection ? loadTrend : undefined}
+            loadRecordedData={hasPiConnection ? (bindings, range, options) => getPiTrendsRecordedHistoryForRange(bindings, range, options) : undefined}
+            loadInterpolatedData={hasPiConnection ? (bindings, range, options) => getPiTrendsPreviewForRange(bindings, range, options) : undefined}
             showToolbar={isAssetsPanelOpen}
             dropSymbolType={dropSymbolType}
             onDropSymbolTypeChange={setDropSymbolType}
@@ -1155,12 +1172,49 @@ const getStyles = (theme: GrafanaTheme2) => ({
       svg { width: 52px; height: 52px; stroke-width: 1.45; }
     }
   `,
+  assetsSectionHeader: css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 39px;
+    padding: ${theme.spacing(0.75, 1.25, 0.25, 1.5)};
+  `,
   assetsSectionLabel: css`
-    padding: ${theme.spacing(1.5, 1.5, 0.5)};
     color: var(--text-secondary);
     font-size: 13px;
     font-weight: ${theme.typography.fontWeightMedium};
     letter-spacing: 0.01em;
+  `,
+  piFilterButton: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--button-bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--text-primary);
+      background: var(--button-hover);
+    }
+  `,
+  piFilterButtonActive: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    background: var(--selection-bg);
+    color: var(--accent);
+    cursor: pointer;
   `,
   editorArea: css`
     display: flex;
@@ -1205,6 +1259,14 @@ function SearchIcon() {
   return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
     <circle cx="10.5" cy="10.5" r="6.5" />
     <path d="m16 16 5 5" />
+  </svg>;
+}
+
+function FilterIcon() {
+  return <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 5h18" />
+    <path d="M6 12h12" />
+    <path d="M10 19h4" />
   </svg>;
 }
 

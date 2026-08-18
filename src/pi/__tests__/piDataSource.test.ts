@@ -88,7 +88,14 @@ describe('PI data source integration', () => {
     const metricFindQuery = jest.fn()
       .mockResolvedValueOnce([{ text: 'pims', WebId: 'server-webid' }])
       .mockResolvedValueOnce([
-        { text: 'LFI_A268SV_TEMPERATURA_AMBIENTE', WebId: 'point-webid', Path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE', PointType: 'Float32' },
+        {
+          text: 'LFI_A268SV_TEMPERATURA_AMBIENTE',
+          WebId: 'point-webid',
+          Path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE',
+          PointType: 'Float32',
+          Description: 'Temperatura ambiente',
+          EngineeringUnits: '°C',
+        },
       ]);
     const dataSourceSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ isDefault: true })],
@@ -102,6 +109,8 @@ describe('PI data source integration', () => {
         webId: 'point-webid',
         path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE',
         pointType: 'Float32',
+        description: 'Temperatura ambiente',
+        engineeringUnit: '°C',
         dataSourceUid: 'pi-default',
       },
     ]);
@@ -124,6 +133,130 @@ describe('PI data source integration', () => {
 
     await expect(searchPiPoints('   ', dataSourceSrv)).resolves.toEqual([]);
     expect(dataSourceSrv.getList).not.toHaveBeenCalled();
+  });
+
+  it('usa a pesquisa avançada do PI Web API com os filtros e normaliza Descriptor', async () => {
+    const metricFindQuery = jest.fn().mockResolvedValue([{ text: 'pims', WebId: 'server-webid' }]);
+    const getResource = jest.fn(async () => ({ Items: [{
+      Name: 'LFS_RB2_MOTOR', WebId: 'motor-id', Path: '\\\\pims\\LFS_RB2_MOTOR',
+      Descriptor: 'Motor principal', PointType: 'Float32', EngineeringUnits: 'mm/s',
+    }] }));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPoints } = await import('../piDataSource');
+
+    await expect(searchPiPoints({ term: 'LFS_RB2', description: 'motor', pointTypes: ['Float32'], engineeringUnits: ['mm/s'] }, dataSourceSrv))
+      .resolves.toEqual([expect.objectContaining({ name: 'LFS_RB2_MOTOR', description: 'Motor principal', pointType: 'Float32', engineeringUnit: 'mm/s' })]);
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('/points/search?'));
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('dataServerWebId=server-webid'));
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('query=Tag%3A%3DLFS_RB2*'));
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('Descriptor%3A%3D*motor*'));
+  });
+
+  it('enriquece os candidatos do fallback por WebId sem falhar se um metadata falhar', async () => {
+    const metricFindQuery = jest.fn()
+      .mockResolvedValueOnce([{ text: 'pims', WebId: 'server-webid' }])
+      .mockResolvedValueOnce([
+        { text: 'TAG_MOTOR', WebId: 'a', Path: '\\\\pims\\TAG_MOTOR' },
+        { text: 'TAG_SEM_METADATA', WebId: 'b', Path: '\\\\pims\\TAG_SEM_METADATA' },
+      ]);
+    const getResource = jest.fn(async (path: string) => {
+      if (path.includes('/points/search?')) throw new Error('404');
+      if (path === '/points/a') return { Name: 'TAG_MOTOR', WebId: 'a', Descriptor: 'Motor', PointType: 'Float32', EngineeringUnits: 'mm/s' };
+      throw new Error('metadata unavailable');
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPoints } = await import('../piDataSource');
+
+    await expect(searchPiPoints({ term: 'TAG', description: 'motor' }, dataSourceSrv)).resolves.toEqual([
+      expect.objectContaining({ name: 'TAG_MOTOR', description: 'Motor', pointType: 'Float32', engineeringUnit: 'mm/s' }),
+    ]);
+    expect(getResource).toHaveBeenCalledWith('/points/a');
+    expect(getResource).toHaveBeenCalledWith('/points/b');
+  });
+
+  it('usa o fallback por nome quando a pesquisa avançada responde vazia', async () => {
+    const metricFindQuery = jest.fn()
+      .mockResolvedValueOnce([{ text: 'pims', WebId: 'server-webid' }])
+      .mockResolvedValueOnce([{ text: 'LFS_RB2_ARCF_TEMP', WebId: 'point-id', Path: '\\\\pims\\LFS_RB2_ARCF_TEMP' }]);
+    const getResource = jest.fn(async (path: string) => {
+      if (path.includes('/points/search?')) return { Items: [] };
+      return { Name: 'LFS_RB2_ARCF_TEMP', WebId: 'point-id', Descriptor: 'Temperatura do motor', PointType: 'Float32', EngineeringUnits: '°C' };
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPoints } = await import('../piDataSource');
+
+    await expect(searchPiPoints({ term: 'LFS_RB2', pointTypes: ['Float32'], engineeringUnits: ['°C'] }, dataSourceSrv))
+      .resolves.toEqual([expect.objectContaining({ name: 'LFS_RB2_ARCF_TEMP', pointType: 'Float32', engineeringUnit: '°C' })]);
+  });
+
+  it('limita a 1000 e consulta somente o 1001º resultado para detectar truncamento', async () => {
+    const metricFindQuery = jest.fn().mockResolvedValue([{ text: 'pims', WebId: 'server-webid' }]);
+    const items = Array.from({ length: 1000 }, (_, index) => ({ Name: `LFS_${index}`, WebId: `id-${index}` }));
+    const getResource = jest.fn(async (path: string) => path.includes('startIndex=1000')
+      ? { Items: [{ Name: 'LFS_1000', WebId: 'id-1000' }] }
+      : { Items: items });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPointsWithStatus } = await import('../piDataSource');
+
+    await expect(searchPiPointsWithStatus('LFS', dataSourceSrv)).resolves.toEqual({ results: expect.any(Array), hasMore: true });
+    expect(getResource).toHaveBeenCalledTimes(2);
+    expect(getResource).toHaveBeenLastCalledWith(expect.stringContaining('maxCount=1'));
+  });
+
+  it('não informa truncamento quando existem exatamente 1000 resultados', async () => {
+    const metricFindQuery = jest.fn().mockResolvedValue([{ text: 'pims', WebId: 'server-webid' }]);
+    const items = Array.from({ length: 1000 }, (_, index) => ({ Name: `TAG_${index}`, WebId: `exact-${index}` }));
+    const getResource = jest.fn(async (path: string) => path.includes('startIndex=1000') ? { Items: [] } : { Items: items });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPointsWithStatus } = await import('../piDataSource');
+
+    const response = await searchPiPointsWithStatus('TAG', dataSourceSrv);
+    expect(response.results).toHaveLength(1000);
+    expect(response.hasMore).toBe(false);
+  });
+
+  it('pagina quando o PI Web API limita cada resposta a 100 pontos', async () => {
+    const metricFindQuery = jest.fn().mockResolvedValue([{ text: 'pims', WebId: 'server-webid' }]);
+    const allItems = Array.from({ length: 1001 }, (_, index) => ({ Name: `LFS_RB2_${index}`, WebId: `paged-${index}` }));
+    const getResource = jest.fn(async (path: string) => {
+      const params = new URL(path, 'http://pi.local').searchParams;
+      const startIndex = Number(params.get('startIndex') ?? 0);
+      const requested = Number(params.get('maxCount') ?? 1000);
+      const Items = allItems.slice(startIndex, startIndex + Math.min(100, requested));
+      return { Items, Total: Items.length, TotalCount: Items.length };
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPointsWithStatus } = await import('../piDataSource');
+
+    const response = await searchPiPointsWithStatus('LFS_RB2', dataSourceSrv);
+    expect(response.results).toHaveLength(1000);
+    expect(response.hasMore).toBe(true);
+    expect(getResource).toHaveBeenCalledTimes(11);
+  });
+
+  it('ignora o limite fixo de 100 do metricFindQuery usando o endpoint legado do Data Server', async () => {
+    const metricFindQuery = jest.fn().mockResolvedValue([{ text: 'pims', WebId: 'server-webid' }]);
+    const allItems = Array.from({ length: 1001 }, (_, index) => ({
+      Name: `LFS_RB2_${index}`,
+      WebId: `legacy-${index}`,
+      Descriptor: `Ponto ${index}`,
+      PointType: 'Float32',
+    }));
+    const getResource = jest.fn(async (path: string) => {
+      if (path.startsWith('/points/search?')) throw new Error('404');
+      const params = new URL(path, 'http://pi.local').searchParams;
+      const startIndex = Number(params.get('startIndex') ?? 0);
+      const requested = Number(params.get('maxCount') ?? 1000);
+      return { Items: allItems.slice(startIndex, startIndex + Math.min(100, requested)) };
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPointsWithStatus } = await import('../piDataSource');
+
+    const response = await searchPiPointsWithStatus('LFS_RB2*', dataSourceSrv);
+    expect(response.results).toHaveLength(1000);
+    expect(response.hasMore).toBe(true);
+    expect(metricFindQuery).toHaveBeenCalledTimes(1);
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('/dataservers/server-webid/points?'));
   });
 
   it('consulta o valor atual pela query de PI Point e normaliza o DataFrame', async () => {
