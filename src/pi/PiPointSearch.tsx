@@ -7,6 +7,10 @@ import { PI_POINT_DRAG_MIME, serializePiPointDragData } from './piPointDrag';
 
 type SearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
 
+// Tipos reconhecidos pelo PI Web API. Os tipos retornados pela pesquisa são
+// acrescentados à lista, preservando também tipos específicos do servidor.
+const INITIAL_PI_POINT_TYPES = ['Float32', 'Float64', 'Int16', 'Int32', 'Digital', 'String', 'Timestamp'];
+
 export interface PiPointSearchProps {
   enabled: boolean;
   onSelect?: (result: PiPointSearchResult) => void;
@@ -25,7 +29,10 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
   const [errorMessage, setErrorMessage] = useState('');
   const requestSequence = useRef(0);
 
-  const pointTypes = useMemo(() => getFilterOptions(results, (result) => result.pointType), [results]);
+  const pointTypes = useMemo(() => [...new Set([
+    ...INITIAL_PI_POINT_TYPES,
+    ...getFilterOptions(results, (result) => result.pointType),
+  ])], [results]);
   const filteredResults = useMemo(() => results.filter((result) => (
     includesFilter(result.description, descriptionFilter)
     && matchesFilter(result.pointType, selectedPointTypes)

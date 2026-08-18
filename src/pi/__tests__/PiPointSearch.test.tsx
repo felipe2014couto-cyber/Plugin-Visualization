@@ -90,4 +90,11 @@ describe('PiPointSearch', () => {
     expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('PRESSAO_A');
     expect(screen.getByTestId('pi-point-search-results')).not.toHaveTextContent('TEMPERATURA_A');
   });
+
+  it('disponibiliza os tipos de dados antes da primeira pesquisa', () => {
+    render(<PiPointSearch enabled filtersOpen />);
+
+    expect(screen.getByLabelText('Float32')).toBeInTheDocument();
+    expect(screen.getByLabelText('Digital')).toBeInTheDocument();
+  });
 });
