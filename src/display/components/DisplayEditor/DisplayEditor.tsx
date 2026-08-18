@@ -687,6 +687,9 @@ export function DisplayEditor({
   const selectedLibrarySymbol = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === 'library-symbol') as LibrarySymbolElement | undefined
       : undefined;
+  const selectedTrend = mode === 'edit' && state.selectedElementId
+    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TREND_TYPE) as TrendElement | undefined
+    : undefined;
   const handleGaugeChange = useCallback((patch: Parameters<typeof updateGaugeOptions>[2]) => {
     commitDocument(updateGaugeOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
@@ -1098,7 +1101,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedRectangle && !selectedLibrarySymbol && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
+        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedRectangle && !selectedLibrarySymbol && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} linkUrl={typeof optionsTrend.properties.linkUrl === 'string' ? optionsTrend.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (

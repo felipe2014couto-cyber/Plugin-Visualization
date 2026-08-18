@@ -77,6 +77,12 @@ describe('DisplayEditor - histórico de edição', () => {
     expect(screen.getByTestId(`display-element-${id}`)).toBeInTheDocument();
   });
 
+  it('não mostra o painel de Link genérico ao inserir uma Trend', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId('display-insert-trend'));
+    expect(screen.queryByTestId('link-properties-panel')).toBeNull();
+  });
+
   it('agrupa muitos pointermove de drag em uma operação e restaura/repete geometria', () => {
     render(<Harness />);
     fireEvent.click(screen.getByTestId('display-insert-rectangle'));
