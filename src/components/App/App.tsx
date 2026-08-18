@@ -635,6 +635,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     --top-header-bg: linear-gradient(110deg, #0b131e 0%, #111a25 100%);
     --assets-header-bg: linear-gradient(105deg, rgba(156, 31, 119, 0.92), rgba(95, 26, 79, 0.8));
     --assets-header-text: #ffffff;
+    --assets-header-muted: rgba(255, 255, 255, 0.72);
   `,
   themeLight: css`
     color-scheme: light;
@@ -670,6 +671,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     --top-header-bg: #ffffff;
     --assets-header-bg: var(--panel-header-bg);
     --assets-header-text: var(--text-primary);
+    --assets-header-muted: #64748b;
   `,
   authGate: css`
     display: flex;
@@ -1122,14 +1124,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: 0 6px;
     border: 0;
     border-right: 1px solid rgba(255, 255, 255, 0.22);
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--assets-header-muted);
     background: transparent;
     cursor: pointer;
     font: inherit;
     white-space: nowrap;
     &:last-child { flex: 1.25; }
     &:last-child { border-right: 0; }
-    &:hover { color: #ffffff; background: rgba(255, 255, 255, 0.08); }
+    &:hover { color: var(--assets-header-text); background: var(--button-hover); }
     @container (min-width: 560px) {
       gap: 20px;
       padding: 0 30px;
