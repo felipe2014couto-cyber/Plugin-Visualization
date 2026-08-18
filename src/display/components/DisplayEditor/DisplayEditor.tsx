@@ -1111,7 +1111,7 @@ export function DisplayEditor({
           />
         )}
         {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
-        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} linkUrl={typeof optionsTrend.properties.linkUrl === 'string' ? optionsTrend.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
+        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
         <TrendPopup

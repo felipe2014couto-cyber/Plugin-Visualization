@@ -234,13 +234,6 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
-    const linkUrl = typeof (element.properties as { linkUrl?: unknown }).linkUrl === 'string'
-      ? (element.properties as { linkUrl: string }).linkUrl.trim()
-      : '';
-    if (linkUrl) {
-      window.open(linkUrl, '_blank', 'noopener,noreferrer');
-      return;
-    }
     if (!onTrendOpen) {
       return;
     }

@@ -167,7 +167,7 @@ function portableElement(input: unknown): DisplayElement {
         ...portableLink(input.properties),
       } };
     case TREND_TYPE:
-      return { ...base, type: TREND_TYPE, properties: { series: portableTrendSeries(input.properties), ...portableLink(input.properties) } };
+      return { ...base, type: TREND_TYPE, properties: { series: portableTrendSeries(input.properties) } };
     case GAUGE_TYPE:
       return { ...base, type: GAUGE_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
