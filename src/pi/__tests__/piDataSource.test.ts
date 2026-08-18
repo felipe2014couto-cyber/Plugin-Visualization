@@ -222,7 +222,8 @@ describe('PI data source integration', () => {
       const params = new URL(path, 'http://pi.local').searchParams;
       const startIndex = Number(params.get('startIndex') ?? 0);
       const requested = Number(params.get('maxCount') ?? 1000);
-      return { Items: allItems.slice(startIndex, startIndex + Math.min(100, requested)) };
+      const Items = allItems.slice(startIndex, startIndex + Math.min(100, requested));
+      return { Items, Total: Items.length, TotalCount: Items.length };
     });
     const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
     const { searchPiPointsWithStatus } = await import('../piDataSource');

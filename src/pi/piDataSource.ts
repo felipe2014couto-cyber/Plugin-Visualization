@@ -272,7 +272,6 @@ async function searchPiPointsAdvanced(
       if (results.length === request.limit) break;
     }
     startIndex += rawItems.length;
-    if (knownTotal !== undefined && startIndex >= knownTotal) break;
     // Protege contra adaptadores antigos que ignoram startIndex e repetem a página.
     if (added === 0) break;
   }
@@ -383,9 +382,10 @@ function getResourceItems(value: unknown): unknown[] {
 function getResourceTotal(value: unknown): number | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const fields = value as Record<string, unknown>;
-  const total = typeof fields.TotalCount === 'number'
-    ? fields.TotalCount
-    : typeof fields.Total === 'number' ? fields.Total : undefined;
+  // Em algumas versões/adapters, `Total` representa apenas o tamanho da
+  // página atual (normalmente 100), não o total da consulta. Somente
+  // `TotalCount` é tratado como total global.
+  const total = typeof fields.TotalCount === 'number' ? fields.TotalCount : undefined;
   return total !== undefined && Number.isFinite(total) && total >= 0 ? total : undefined;
 }
 
