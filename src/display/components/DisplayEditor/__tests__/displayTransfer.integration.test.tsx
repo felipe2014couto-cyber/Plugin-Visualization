@@ -73,6 +73,7 @@ describe('DisplayEditor - Exportar e Importar', () => {
 
     render(<DisplayEditor document={document} onChange={onChange} />);
     fireEvent.click(screen.getByTestId('display-export'));
+    fireEvent.click(screen.getByTestId('display-export-format-json'));
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:display');
@@ -90,8 +91,8 @@ describe('DisplayEditor - Exportar e Importar', () => {
     });
 
     render(<DisplayEditor document={document} onChange={jest.fn()} />);
-    fireEvent.change(screen.getByTestId('display-export-format'), { target: { value: 'csv' } });
     fireEvent.click(screen.getByTestId('display-export'));
+    fireEvent.click(screen.getByTestId('display-export-format-csv'));
 
     const blob = (createObjectURL.mock.calls as unknown as Array<[Blob]>)[0][0];
     expect(blob.type).toBe('text/csv;charset=utf-8');

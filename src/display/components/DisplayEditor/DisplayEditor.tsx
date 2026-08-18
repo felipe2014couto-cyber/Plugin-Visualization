@@ -177,7 +177,7 @@ export function DisplayEditor({
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
-  const [exportFormat, setExportFormat] = useState<DisplayExportFileFormat>('json');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [surfaceZoom, setSurfaceZoom] = useState(1);
   const [surfaceViewCenter, setSurfaceViewCenter] = useState({
     x: displayDocument.surface.width / 2,
@@ -622,7 +622,7 @@ export function DisplayEditor({
     [dispatch, onModeChange],
   );
 
-  const handleExport = useCallback(() => {
+  const handleExport = useCallback((exportFormat: DisplayExportFileFormat) => {
     const serializers: Record<DisplayExportFileFormat, () => string> = {
       json: () => serializeDisplay(documentRef.current),
       csv: () => serializeDisplayCsv(documentRef.current),
@@ -640,7 +640,8 @@ export function DisplayEditor({
     anchor.download = getDisplayExportFileName(documentRef.current.name, exportFormat);
     anchor.click();
     URL.revokeObjectURL(objectUrl);
-  }, [exportFormat]);
+    setExportMenuOpen(false);
+  }, []);
 
   const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -1008,10 +1009,17 @@ export function DisplayEditor({
               <button type="button" title="Reduzir" aria-label="Reduzir" className={styles.iconButton} data-testid="display-zoom-out" disabled={surfaceZoom <= DISPLAY_ZOOM_MIN} onClick={() => setSurfaceZoom((zoom) => Math.max(DISPLAY_ZOOM_MIN, Number((zoom - DISPLAY_ZOOM_STEP).toFixed(1))))}><ZoomOutIcon /></button>
               <button type="button" title="Ajustar à tela" aria-label="Ajustar à tela" className={styles.iconButton} data-testid="display-zoom-fit" onClick={handleZoomFit}><ZoomFitIcon /></button>
             </div>
-            <label className={styles.exportFormatLabel}>Formato<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as DisplayExportFileFormat)} data-testid="display-export-format" aria-label="Formato de exportação"><option value="json">JSON</option><option value="csv">CSV</option><option value="xml">XML</option></select></label>
-            <button type="button" title="Exportar Display" aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" onClick={handleExport}>
-              <ExportIcon />
-            </button>
+            <div className={styles.exportControl}>
+              <button type="button" title="Exportar Display" aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" aria-expanded={exportMenuOpen} onClick={() => setExportMenuOpen((open) => !open)}>
+                <ExportIcon />
+              </button>
+              {exportMenuOpen && <div className={styles.exportMenu} data-testid="display-export-format" role="menu" aria-label="Formato de exportação">
+                <span>Exportar como</span>
+                <button type="button" role="menuitem" data-testid="display-export-format-json" onClick={() => handleExport('json')}>JSON</button>
+                <button type="button" role="menuitem" data-testid="display-export-format-csv" onClick={() => handleExport('csv')}>CSV</button>
+                <button type="button" role="menuitem" data-testid="display-export-format-xml" onClick={() => handleExport('xml')}>XML</button>
+              </div>}
+            </div>
             <button type="button" title="Importar Display" aria-label="Importar Display" className={styles.iconButton} data-testid="display-import" disabled={!onChange} onClick={() => importInputRef.current?.click()}>
               <ImportIcon />
             </button>
@@ -1614,22 +1622,23 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: 8px;
     margin-left: auto;
   `,
-  exportFormatLabel: css`
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    color: var(--text-secondary);
-    font-size: 10px;
-    white-space: nowrap;
-    select {
-      height: 30px;
-      min-width: 74px;
-      padding: 2px 5px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      background: var(--input-bg);
-      color: var(--text-primary);
-    }
+  exportControl: css`position:relative; display:flex;`,
+  exportMenu: css`
+    position:absolute;
+    z-index:20;
+    right:0;
+    top:calc(100% + 6px);
+    display:flex;
+    flex-direction:column;
+    min-width:132px;
+    padding:8px;
+    border:1px solid var(--border-color);
+    border-radius:5px;
+    background:var(--panel-bg);
+    box-shadow:0 8px 20px rgba(0, 0, 0, 0.28);
+    span { padding:2px 5px 6px; color:var(--text-secondary); font-size:10px; }
+    button { min-height:28px; padding:3px 6px; border:0; border-radius:3px; background:transparent; color:var(--text-primary); text-align:left; cursor:pointer; font-size:11px; }
+    button:hover { background:var(--button-hover); }
   `,
   zoomControls: css`
     display: flex;
