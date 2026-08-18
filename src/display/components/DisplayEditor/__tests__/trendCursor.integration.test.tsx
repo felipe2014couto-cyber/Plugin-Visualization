@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { createDisplayDocument, createTrend, type DisplayDocument } from '../../../index';
+import { createDisplayDocument, createRectangle, createTrend, type DisplayDocument } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
 import {
   DATA_QUERY_BATCH_WINDOW_MS,
@@ -61,6 +61,20 @@ function getSurface(): SVGSVGElement {
 }
 
 describe('DisplayEditor - cursores de Trend', () => {
+  it('fecha as opções do Trend ao selecionar outro elemento', async () => {
+    const document = makeDocument();
+    document.elements.push(createRectangle({ id: 'shape-a', x: 680, y: 100, width: 100, height: 100 }));
+    render(<Harness document={document} loadTrend={createLoader()} />);
+    await waitFor(() => expect(screen.getByTestId('trend-line-trend-a')).toBeInTheDocument());
+
+    fireEvent.contextMenu(screen.getByTestId('display-element-trend-a'));
+    expect(screen.getByTestId('trend-properties-panel')).toBeInTheDocument();
+
+    fireEvent.pointerDown(screen.getByTestId('display-element-shape-a'), { clientX: 720, clientY: 140, pointerId: 1 });
+    fireEvent.pointerUp(getSurface(), { clientX: 720, clientY: 140, pointerId: 1 });
+    await waitFor(() => expect(screen.queryByTestId('trend-properties-panel')).toBeNull());
+  });
+
   it('cria, seleciona, arrasta e remove múltiplos cursores sem nova query', async () => {
     const loadTrend = createLoader();
     render(<Harness document={makeDocument()} loadTrend={loadTrend} />);

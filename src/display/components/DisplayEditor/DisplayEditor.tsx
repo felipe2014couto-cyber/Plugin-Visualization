@@ -188,6 +188,12 @@ export function DisplayEditor({
   const pasteCountRef = useRef(0);
 
   useEffect(() => {
+    if (optionsTrendId && state.selectedElementId !== optionsTrendId) {
+      setOptionsTrendId(null);
+    }
+  }, [optionsTrendId, state.selectedElementId]);
+
+  useEffect(() => {
     documentRef.current = displayDocument;
     if (expectedDocumentRef.current === displayDocument) {
       expectedDocumentRef.current = null;
@@ -1023,7 +1029,10 @@ export function DisplayEditor({
             trendRefreshKey={trendRefreshKey}
             trendTimeRange={trendTimeRange}
             onTrendOpen={handleTrendOpen}
-            onTrendContextMenu={(trend) => setOptionsTrendId(trend.id)}
+            onTrendContextMenu={(trend) => {
+              dispatch({ type: 'SELECT', elementId: trend.id });
+              setOptionsTrendId(trend.id);
+            }}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
             zoom={surfaceZoom}
             viewCenter={surfaceViewCenter}
