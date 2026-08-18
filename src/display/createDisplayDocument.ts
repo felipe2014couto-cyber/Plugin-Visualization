@@ -17,5 +17,6 @@ export function createDisplayDocument(options: CreateDisplayDocumentOptions = {}
     name: options.name ?? 'Untitled Display',
     surface: { ...DEFAULT_DISPLAY_SURFACE },
     elements: [],
+    calculations: [],
   };
 }
