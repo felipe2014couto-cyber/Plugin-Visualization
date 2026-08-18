@@ -53,7 +53,7 @@ describe('PiPointSearch', () => {
 
   it('trata resultado vazio, erro e pesquisa indisponível sem quebrar a UI', async () => {
     searchMock.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('failed'));
-    render(<PiPointSearch enabled />);
+    render(<PiPointSearch enabled filtersOpen />);
 
     const input = screen.getByTestId('pi-point-search-input');
     const submit = screen.getByTestId('pi-point-search-submit');
@@ -75,7 +75,7 @@ describe('PiPointSearch', () => {
       { name: 'PRESSAO_A', webId: 'point-b', description: 'Forno', pointType: 'Float32', engineeringUnit: 'bar' },
       { name: 'ESTADO_A', webId: 'point-c', description: 'Bomba', pointType: 'Digital', engineeringUnit: 'estado' },
     ]);
-    render(<PiPointSearch enabled />);
+    render(<PiPointSearch enabled filtersOpen />);
 
     fireEvent.change(screen.getByTestId('pi-point-search-input'), { target: { value: '*' } });
     fireEvent.click(screen.getByTestId('pi-point-search-submit'));

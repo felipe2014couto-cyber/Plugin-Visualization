@@ -10,9 +10,10 @@ type SearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
 export interface PiPointSearchProps {
   enabled: boolean;
   onSelect?: (result: PiPointSearchResult) => void;
+  filtersOpen?: boolean;
 }
 
-export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
+export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPointSearchProps) {
   const styles = useStyles2(getStyles);
   const [term, setTerm] = useState('');
   const [results, setResults] = useState<PiPointSearchResult[]>([]);
@@ -45,9 +46,6 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
       const nextResults = await searchPiPoints(normalizedTerm);
       setResults(nextResults);
       setSelected(null);
-      setSelectedDescriptions([]);
-      setSelectedPointTypes([]);
-      setSelectedEngineeringUnits([]);
       setStatus(nextResults.length > 0 ? 'success' : 'empty');
     } catch {
       setStatus('error');
@@ -88,7 +86,7 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
       {status === 'error' && <p data-testid="pi-point-search-error">Não foi possível pesquisar PI Points.</p>}
       {!enabled && <p data-testid="pi-point-search-disabled">Pesquisa PI indisponível.</p>}
 
-      {results.length > 0 && (
+      {filtersOpen && (
         <>
           <div className={styles.filters} data-testid="pi-point-search-filters">
             <div className={styles.filterHeader}>
@@ -133,12 +131,20 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
             />
           </div>
 
-          {filteredResults.length === 0 && (
+          {results.length === 0 && status !== 'loading' ? (
+            <p className={styles.noFilterOptions} data-testid="pi-point-filter-awaiting-search">
+              Pesquise uma tag para carregar as opções de filtro.
+            </p>
+          ) : filteredResults.length === 0 && (
             <p className={styles.filteredEmpty} data-testid="pi-point-search-filtered-empty">
               Nenhum PI Point corresponde aos filtros.
             </p>
           )}
+        </>
+      )}
 
+      {results.length > 0 && (
+        <>
           <ul className={styles.results} data-testid="pi-point-search-results">
           {filteredResults.map((result) => (
             <li key={result.webId ?? `${result.name}-${result.path ?? ''}`}>
