@@ -3,6 +3,8 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import type { DisplayDocument } from '../../displayDocument';
+import type { DisplayElement } from '../../displayElement';
+import { generateId } from '../../ids';
 import {
   createDisplayHistory,
   hasRedo,
@@ -182,6 +184,8 @@ export function DisplayEditor({
   });
   const trendPopupRequest = useRef(0);
   const trendPopupRef = useRef<TrendPopupState | null>(null);
+  const copiedElementsRef = useRef<DisplayElement[]>([]);
+  const pasteCountRef = useRef(0);
 
   useEffect(() => {
     documentRef.current = displayDocument;
@@ -748,11 +752,61 @@ export function DisplayEditor({
     });
   }, [commitDocument, dispatch, mode]);
 
+  const handleCopySelectedElements = useCallback(() => {
+    if (mode !== 'edit') {
+      return;
+    }
+    const selectedIds = new Set(stateRef.current.selectedElementIds);
+    const selectedElements = documentRef.current.elements.filter((element) => selectedIds.has(element.id));
+    if (selectedElements.length === 0) {
+      return;
+    }
+    copiedElementsRef.current = selectedElements.map((element) => JSON.parse(JSON.stringify(element)) as DisplayElement);
+    pasteCountRef.current = 0;
+  }, [mode]);
+
+  const handlePasteElements = useCallback(() => {
+    if (mode !== 'edit' || copiedElementsRef.current.length === 0) {
+      return;
+    }
+    const currentDocument = documentRef.current;
+    const existingIds = new Set(currentDocument.elements.map((element) => element.id));
+    const offset = 16 * (pasteCountRef.current + 1);
+    const pastedElements = copiedElementsRef.current.map((element) => {
+      let id = generateId();
+      while (existingIds.has(id)) {
+        id = generateId();
+      }
+      existingIds.add(id);
+      return {
+        ...element,
+        id,
+        x: Math.max(0, Math.min(element.x + offset, Math.max(0, currentDocument.surface.width - element.width))),
+        y: Math.max(0, Math.min(element.y + offset, Math.max(0, currentDocument.surface.height - element.height))),
+        properties: JSON.parse(JSON.stringify(element.properties)),
+      } as DisplayElement;
+    });
+    pasteCountRef.current += 1;
+    if (commitDocument({ ...currentDocument, elements: [...currentDocument.elements, ...pastedElements] })) {
+      dispatch({ type: 'SELECT_MANY', elementIds: pastedElements.map((element) => element.id) });
+    }
+  }, [commitDocument, dispatch, mode]);
+
   const handleEditorKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (isEditableTarget(event.target)) {
       return;
     }
     const modifier = event.ctrlKey || event.metaKey;
+    if (modifier && event.key.toLowerCase() === 'c' && mode === 'edit') {
+      event.preventDefault();
+      handleCopySelectedElements();
+      return;
+    }
+    if (modifier && event.key.toLowerCase() === 'v' && mode === 'edit') {
+      event.preventDefault();
+      handlePasteElements();
+      return;
+    }
     if (modifier && event.key.toLowerCase() === 'z') {
       event.preventDefault();
       if (event.shiftKey) {
@@ -771,7 +825,7 @@ export function DisplayEditor({
       event.preventDefault();
       handleDeleteSelectedElement();
     }
-  }, [handleDeleteSelectedElement, handleRedo, handleUndo, mode]);
+  }, [handleCopySelectedElements, handleDeleteSelectedElement, handlePasteElements, handleRedo, handleUndo, mode]);
 
   useEffect(() => {
     if (state.selectedElementId && !displayDocument.elements.some((element) => element.id === state.selectedElementId)) {

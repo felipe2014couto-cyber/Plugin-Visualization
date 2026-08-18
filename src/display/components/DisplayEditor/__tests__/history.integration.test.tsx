@@ -150,6 +150,25 @@ describe('DisplayEditor - histórico de edição', () => {
     expect(screen.queryByTestId(`display-element-${id}`)).toBeNull();
   });
 
+  it('copia e cola os elementos selecionados com novos IDs', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    const original = screen.getByTestId(/^display-element-/);
+    const originalId = original.getAttribute('data-element-id');
+    const originalX = Number(original.getAttribute('x'));
+    const originalY = Number(original.getAttribute('y'));
+
+    fireEvent.keyDown(getSurface(), { key: 'c', ctrlKey: true });
+    fireEvent.keyDown(getSurface(), { key: 'v', ctrlKey: true });
+
+    const elements = screen.getAllByTestId(/^display-element-/);
+    expect(elements).toHaveLength(2);
+    const pasted = elements.find((element) => element.getAttribute('data-element-id') !== originalId);
+    expect(pasted).toBeDefined();
+    expect(Number(pasted?.getAttribute('x'))).toBe(originalX + 16);
+    expect(Number(pasted?.getAttribute('y'))).toBe(originalY + 16);
+  });
+
   it('nova edição depois de Undo invalida Redo e input não aciona histórico do editor', () => {
     render(<Harness />);
     fireEvent.click(screen.getByTestId('display-insert-rectangle'));
