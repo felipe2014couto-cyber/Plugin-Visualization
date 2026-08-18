@@ -1056,6 +1056,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   assetsPiSearch: css`
     display: flex;
     flex: 1;
+    flex-direction: column;
     min-height: 0;
     overflow: hidden;
   `,
