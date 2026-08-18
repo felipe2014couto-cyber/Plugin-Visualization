@@ -9,6 +9,7 @@ describe('TableElement', () => {
     const table = createTable({ id: 'table-1', item: { binding: first, description: 'Primeira tag', engineeringUnit: '°C' } });
     expect(table).toMatchObject({ id: 'table-1', type: TABLE_TYPE, width: 520, height: 260, properties: { items: [{ binding: first, description: 'Primeira tag', engineeringUnit: '°C' }] } });
     expect(table.properties.columns.filter((column) => column.visible).map((column) => column.id)).toEqual(['name', 'value', 'units']);
+    expect(table.properties.style).toBe('dark');
   });
 
   it('adiciona linhas, não duplica binding e preserva ao remover', () => {

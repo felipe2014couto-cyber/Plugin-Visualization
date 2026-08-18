@@ -278,7 +278,7 @@ function portableElement(input: unknown): DisplayElement {
   }
 }
 
-function portableTable(properties: Record<string, unknown>): { items: TableDataItem[]; columns: TableColumnConfig[]; decimals: number | null } {
+function portableTable(properties: Record<string, unknown>): { items: TableDataItem[]; columns: TableColumnConfig[]; decimals: number | null; style: 'dark' | 'light' | 'striped' } {
   if (!Array.isArray(properties.items) || properties.items.length === 0) throw new DisplayImportError('Tabela de Display inválida.');
   const seen = new Set<string>();
   const items = properties.items.map((input) => {
@@ -294,7 +294,7 @@ function portableTable(properties: Record<string, unknown>): { items: TableDataI
     if (!isRecord(input) || typeof input.id !== 'string' || !TABLE_COLUMNS.includes(input.id as typeof TABLE_COLUMNS[number])) return [];
     return [{ id: input.id as typeof TABLE_COLUMNS[number], visible: input.visible !== false, align: input.align === 'center' || input.align === 'right' ? input.align as TableColumnAlign : 'left', wrapText: input.wrapText !== false }];
   }) : fallback;
-  return { items, columns: columns.length > 0 && columns.some((column) => column.visible) ? columns : fallback, decimals: isFiniteNumber(properties.decimals) ? Math.max(0, Math.min(10, properties.decimals)) : null };
+  return { items, columns: columns.length > 0 && columns.some((column) => column.visible) ? columns : fallback, decimals: isFiniteNumber(properties.decimals) ? Math.max(0, Math.min(10, properties.decimals)) : null, style: properties.style === 'light' || properties.style === 'striped' ? properties.style : 'dark' };
 }
 
 function normalizeRotation(value: unknown): number {
@@ -369,7 +369,10 @@ function portableScale(input: Record<string, unknown>) {
   if (input.decimals !== undefined && input.decimals !== null && !isFiniteNumber(input.decimals)) {
     throw new DisplayImportError('Arquivo de Display inválido.');
   }
-  return normalizeScaleOptions(input);
+  return {
+    ...normalizeScaleOptions(input),
+    ...(input.scaleMode === 'custom' || input.scaleMode === 'database' ? { scaleMode: input.scaleMode } : {}),
+  };
 }
 
 function portableGauge(input: Record<string, unknown>) {

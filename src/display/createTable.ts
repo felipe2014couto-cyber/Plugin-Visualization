@@ -8,9 +8,10 @@ export const TABLE_TYPE = 'table' as const;
 export const TABLE_COLUMNS = ['path', 'name', 'description', 'value', 'units', 'time', 'trend', 'average', 'minimum', 'maximum', 'stdDev', 'range', 'pStdDev'] as const;
 export type TableColumnId = typeof TABLE_COLUMNS[number];
 export type TableColumnAlign = 'left' | 'center' | 'right';
+export type TableStyle = 'dark' | 'light' | 'striped';
 export interface TableColumnConfig { id: TableColumnId; visible: boolean; align: TableColumnAlign; wrapText: boolean; }
 export interface TableDataItem { binding: PiPointBinding; path?: string; description?: string; engineeringUnit?: string; pointType?: string; }
-export interface TableProperties extends Record<string, unknown> { items: TableDataItem[]; columns: TableColumnConfig[]; decimals: number | null; }
+export interface TableProperties extends Record<string, unknown> { items: TableDataItem[]; columns: TableColumnConfig[]; decimals: number | null; style: TableStyle; }
 export type TableElement = DisplayElement<typeof TABLE_TYPE, TableProperties>;
 export interface CreateTableOptions { item: TableDataItem; id?: string; x?: number; y?: number; width?: number; height?: number; surface?: DisplaySurface; existingIds?: readonly string[]; generateId?: () => string; }
 
@@ -22,7 +23,7 @@ export function createTable(options: CreateTableOptions): TableElement {
   const width = Math.max(1, Math.min(options.width ?? DEFAULT_WIDTH, options.surface?.width ?? DEFAULT_WIDTH));
   const height = Math.max(1, Math.min(options.height ?? DEFAULT_HEIGHT, options.surface?.height ?? DEFAULT_HEIGHT));
   const ids = new Set(options.existingIds ?? []); const make = options.generateId ?? generateId; let id = options.id ?? make(); while (ids.has(id)) id = make();
-  return { id, type: TABLE_TYPE, x: options.x ?? Math.max(0, ((options.surface?.width ?? width) - width) / 2), y: options.y ?? Math.max(0, ((options.surface?.height ?? height) - height) / 2), width, height, properties: { items: [copyItem(options.item)], columns: defaultTableColumns(), decimals: null } };
+  return { id, type: TABLE_TYPE, x: options.x ?? Math.max(0, ((options.surface?.width ?? width) - width) / 2), y: options.y ?? Math.max(0, ((options.surface?.height ?? height) - height) / 2), width, height, properties: { items: [copyItem(options.item)], columns: defaultTableColumns(), decimals: null, style: 'dark' } };
 }
 export function appendTable(document: DisplayDocument, element: TableElement): DisplayDocument { return { ...document, elements: [...document.elements, element] }; }
 export function tableBindingKey(binding: PiPointBinding): string { return `${binding.dataSourceUid}\u0000${binding.webId ?? `${binding.serverPath}\u0000${binding.pointName}`}`; }

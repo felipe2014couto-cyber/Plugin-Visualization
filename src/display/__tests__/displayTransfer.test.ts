@@ -84,6 +84,7 @@ describe('displayTransfer', () => {
   it('preserva linhas, metadados e colunas da Tabela', () => {
     const document = createDisplayDocument({ id: 'table-display', name: 'Tabela' });
     const table = createTable({ id: 'table', item: { binding, path: '\\\\pims\\TAG', description: 'Temperatura', engineeringUnit: '°C', pointType: 'Float32' } });
+    table.properties.style = 'striped';
     table.properties.columns.find((column) => column.id === 'description')!.visible = true;
     document.elements = [table];
     expect(parseImportedDisplay(serializeDisplay(document))).toEqual(document);

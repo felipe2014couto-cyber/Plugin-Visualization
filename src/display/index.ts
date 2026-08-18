@@ -71,7 +71,7 @@ export {
 export type { BarElement, BarProperties, CreateBarOptions } from './createBar';
 
 export { addTableItem, appendTable, createTable, defaultTableColumns, removeTableItem, moveTableItem, TABLE_COLUMNS, TABLE_COLUMN_LABELS, TABLE_TYPE, updateTableProperties } from './createTable';
-export type { CreateTableOptions, TableColumnAlign, TableColumnConfig, TableColumnId, TableDataItem, TableElement, TableProperties } from './createTable';
+export type { CreateTableOptions, TableColumnAlign, TableColumnConfig, TableColumnId, TableDataItem, TableElement, TableProperties, TableStyle } from './createTable';
 
 export {
   DEFAULT_SCALE_OPTIONS,

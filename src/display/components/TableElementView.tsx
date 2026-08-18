@@ -16,6 +16,7 @@ export function getTableItemConsumerId(tableId: string, index: number): string {
 export function getTableTrendConsumerId(tableId: string, index: number): string { return `${tableId}:table-trend:${index}`; }
 
 export const TableElementView = React.memo(function TableElementView({ element, runtimeStates, trendStates }: TableElementViewProps) {
+  const style = getTableStyle(element.properties.style);
   const columns = visibleColumns(element.properties.columns);
   const headerHeight = 28;
   const rowHeight = Math.max(24, (element.height - headerHeight) / Math.max(1, element.properties.items.length));
@@ -23,25 +24,25 @@ export const TableElementView = React.memo(function TableElementView({ element, 
   const clipId = `table-clip-${element.id}`;
   return <g data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>
     <defs><clipPath id={clipId}><rect x={element.x} y={element.y} width={element.width} height={element.height} rx={4} /></clipPath></defs>
-    <rect x={element.x} y={element.y} width={element.width} height={element.height} rx={4} fill="var(--element-bg, rgba(255,255,255,.06))" stroke="var(--element-border, rgba(255,255,255,.35))" />
+    <rect x={element.x} y={element.y} width={element.width} height={element.height} rx={4} fill={style.background} stroke={style.border} />
     <g clipPath={`url(#${clipId})`} pointerEvents="all">
-      <rect x={element.x} y={element.y} width={element.width} height={headerHeight} fill="rgba(110,159,255,.20)" />
-      {columns.map((column, index) => <text key={column.id} x={cellX(element.x, columnWidth, index, column, 6)} y={element.y + headerHeight / 2} fill="var(--text-primary, #fff)" fontSize={12} fontWeight={600} textAnchor={textAnchor(column)} dominantBaseline="middle">{TABLE_COLUMN_LABELS[column.id]}</text>)}
+      <rect x={element.x} y={element.y} width={element.width} height={headerHeight} fill={style.header} />
+      {columns.map((column, index) => <text key={column.id} x={cellX(element.x, columnWidth, index, column, 6)} y={element.y + headerHeight / 2} fill={style.headerText} fontSize={12} fontWeight={600} textAnchor={textAnchor(column)} dominantBaseline="middle">{TABLE_COLUMN_LABELS[column.id]}</text>)}
       {element.properties.items.map((item, rowIndex) => {
         const state = runtimeStates.get(getTableItemConsumerId(element.id, rowIndex));
         return <g key={`${item.binding.dataSourceUid}-${item.binding.pointName}-${rowIndex}`}>
-          <rect x={element.x} y={element.y + headerHeight + rowIndex * rowHeight} width={element.width} height={rowHeight} fill={rowIndex % 2 ? 'rgba(255,255,255,.035)' : 'transparent'} stroke="rgba(255,255,255,.10)" />
-          {columns.map((column, index) => <TableCell key={column.id} column={column} x={element.x + index * columnWidth} y={element.y + headerHeight + rowIndex * rowHeight} width={columnWidth} height={rowHeight} item={item} current={state?.status === 'success' ? state.result : undefined} trend={trendStates?.get(getTableTrendConsumerId(element.id, rowIndex))} decimals={element.properties.decimals} />)}
+          <rect x={element.x} y={element.y + headerHeight + rowIndex * rowHeight} width={element.width} height={rowHeight} fill={style.row(rowIndex)} stroke={style.grid} />
+          {columns.map((column, index) => <TableCell key={column.id} textColor={style.text(rowIndex)} column={column} x={element.x + index * columnWidth} y={element.y + headerHeight + rowIndex * rowHeight} width={columnWidth} height={rowHeight} item={item} current={state?.status === 'success' ? state.result : undefined} trend={trendStates?.get(getTableTrendConsumerId(element.id, rowIndex))} decimals={element.properties.decimals} />)}
         </g>;
       })}
     </g>
   </g>;
 });
 
-function TableCell({ column, x, y, width, height, item, current, trend, decimals }: { column: TableColumnConfig; x: number; y: number; width: number; height: number; item: TableElement['properties']['items'][number]; current?: PiPointValue; trend?: TrendRuntimeState; decimals: number | null }) {
+function TableCell({ column, textColor, x, y, width, height, item, current, trend, decimals }: { column: TableColumnConfig; textColor: string; x: number; y: number; width: number; height: number; item: TableElement['properties']['items'][number]; current?: PiPointValue; trend?: TrendRuntimeState; decimals: number | null }) {
   if (column.id === 'trend') return <Sparkline x={x + 5} y={y + 5} width={Math.max(1, width - 10)} height={Math.max(1, height - 10)} trend={trend} />;
   const value = truncate(tableCellValue(column.id, item, current, decimals, trend), Math.max(4, Math.floor(width / 7)));
-  return <text x={cellX(x, width, 0, column, 6)} y={y + height / 2} fill="var(--text-primary, #fff)" fontSize={12} textAnchor={textAnchor(column)} dominantBaseline="middle">{value}</text>;
+  return <text x={cellX(x, width, 0, column, 6)} y={y + height / 2} fill={textColor} fontSize={12} textAnchor={textAnchor(column)} dominantBaseline="middle">{value}</text>;
 }
 function Sparkline({ x, y, width, height, trend }: { x: number; y: number; width: number; height: number; trend?: TrendRuntimeState }) {
   const points = trend?.status === 'success' ? trend.data.points : [];
@@ -77,3 +78,8 @@ function tableCellValue(column: TableColumnConfig['id'], item: TableElement['pro
 }
 function formatValue(value: unknown, decimals: number | null): string { return typeof value === 'number' && Number.isFinite(value) && decimals !== null ? value.toFixed(decimals) : String(value ?? ''); }
 function formatTime(value: string): string { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : date.toLocaleString('pt-BR'); }
+function getTableStyle(style: TableElement['properties']['style'] | undefined) {
+  if (style === 'light') return { background: '#f8fafc', border: '#9ca3af', header: '#e5e7eb', headerText: '#111827', text: () => '#111827', grid: '#cbd5e1', row: () => '#ffffff' };
+  if (style === 'striped') return { background: '#3f3f46', border: '#71717a', header: '#3f3f46', headerText: '#ffffff', text: (index: number) => index % 2 === 0 ? '#111827' : '#f8fafc', grid: '#52525b', row: (index: number) => index % 2 === 0 ? '#d4d4d8' : '#52525b' };
+  return { background: '#1f2937', border: '#64748b', header: '#374151', headerText: '#f8fafc', text: () => '#f8fafc', grid: '#4b5563', row: (index: number) => index % 2 === 0 ? '#1f2937' : '#303b4d' };
+}
