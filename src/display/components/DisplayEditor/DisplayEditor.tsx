@@ -49,7 +49,7 @@ import {
   updateBarOptions,
   type BarElement,
 } from '../../createBar';
-import { addTableItem, appendTable, createTable, moveTableItem, removeTableItem, TABLE_TYPE, updateTableProperties, type TableElement, type TableDataItem, type TableProperties } from '../../createTable';
+import { addTableItem, appendTable, createTable, moveTableItem, removeTableItem, TABLE_TYPE, updateTableProperties, type TableColumnConfig, type TableElement, type TableDataItem, type TableProperties } from '../../createTable';
 import {
   appendDisplayElement,
   createRectangle,
@@ -741,6 +741,9 @@ export function DisplayEditor({
   const handleTableChange = useCallback((patch: Partial<TableProperties>) => {
     commitDocument(updateTableProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
+  const handleTableColumnsChange = useCallback((elementId: string, columns: TableColumnConfig[]) => {
+    commitDocument(updateTableProperties(documentRef.current, elementId, { columns }));
+  }, [commitDocument]);
   const selectedRectangle = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === RECTANGLE_TYPE) as RectangleElement | undefined
     : undefined;
@@ -1108,6 +1111,7 @@ export function DisplayEditor({
               setOptionsTrendId(trend.id);
             }}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
+            onTableColumnsChange={handleTableColumnsChange}
             zoom={surfaceZoom}
             viewCenter={surfaceViewCenter}
           />

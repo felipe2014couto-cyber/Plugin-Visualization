@@ -325,7 +325,7 @@ function portableTable(properties: Record<string, unknown>): { items: TableDataI
   const fallback = defaultTableColumns();
   const columns = Array.isArray(properties.columns) ? properties.columns.flatMap((input): TableColumnConfig[] => {
     if (!isRecord(input) || typeof input.id !== 'string' || !TABLE_COLUMNS.includes(input.id as typeof TABLE_COLUMNS[number])) return [];
-    return [{ id: input.id as typeof TABLE_COLUMNS[number], visible: input.visible !== false, align: input.align === 'center' || input.align === 'right' ? input.align as TableColumnAlign : 'left', wrapText: input.wrapText !== false }];
+    return [{ id: input.id as typeof TABLE_COLUMNS[number], visible: input.visible !== false, ...(isFiniteNumber(input.width) ? { width: Math.max(60, input.width) } : {}), align: input.align === 'center' || input.align === 'right' ? input.align as TableColumnAlign : 'left', wrapText: input.wrapText !== false }];
   }) : fallback;
   return { items, columns: columns.length > 0 && columns.some((column) => column.visible) ? columns : fallback, decimals: isFiniteNumber(properties.decimals) ? Math.max(0, Math.min(10, properties.decimals)) : null, style: properties.style === 'light' || properties.style === 'striped' ? properties.style : 'dark' };
 }

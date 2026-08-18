@@ -8,7 +8,7 @@ import { CalculationElementView } from '../CalculationElementView';
 import { evaluateCalculation, type CalculationDefinition } from '../../../calculations/calculationEngine';
 import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
-import { TABLE_TYPE, type TableElement } from '../../createTable';
+import { TABLE_TYPE, type TableColumnConfig, type TableElement } from '../../createTable';
 import { TableElementView, getTableItemConsumerId, getTableTrendConsumerId } from '../TableElementView';
 import { GAUGE_TYPE, getGaugeOptions, type GaugeElement } from '../../createGauge';
 import { ValueElementView } from '../ValueElementView';
@@ -108,6 +108,7 @@ export interface DisplaySurfaceProps {
   onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors?: readonly TrendCursor[]) => void;
   onTrendContextMenu?: (element: TrendElement) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement) => void;
+  onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
   zoom?: number;
   viewCenter?: Point;
 }
@@ -160,6 +161,7 @@ export function DisplaySurface({
   onTrendOpen,
   onTrendContextMenu,
   onLibrarySymbolContextMenu,
+  onTableColumnsChange,
   zoom = 1,
   viewCenter,
 }: DisplaySurfaceProps) {
@@ -682,7 +684,7 @@ export function DisplaySurface({
           );
         }
         if (element.type === TABLE_TYPE) {
-          return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} />;
+          return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onColumnsChange={editable ? (columns) => onTableColumnsChange?.(element.id, columns) : undefined} />;
         }
         if (element.type === TREND_TYPE) {
           const trendElement = element as unknown as TrendElement;

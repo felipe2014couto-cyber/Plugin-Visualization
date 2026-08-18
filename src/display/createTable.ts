@@ -9,7 +9,7 @@ export const TABLE_COLUMNS = ['path', 'name', 'description', 'value', 'units', '
 export type TableColumnId = typeof TABLE_COLUMNS[number];
 export type TableColumnAlign = 'left' | 'center' | 'right';
 export type TableStyle = 'dark' | 'light' | 'striped';
-export interface TableColumnConfig { id: TableColumnId; visible: boolean; align: TableColumnAlign; wrapText: boolean; }
+export interface TableColumnConfig { id: TableColumnId; visible: boolean; width?: number; align: TableColumnAlign; wrapText: boolean; }
 export interface TableDataItem { binding: PiPointBinding; path?: string; description?: string; engineeringUnit?: string; pointType?: string; nameMode?: 'tag' | 'custom'; customName?: string; }
 export interface TableProperties extends Record<string, unknown> { items: TableDataItem[]; columns: TableColumnConfig[]; decimals: number | null; style: TableStyle; }
 export type TableElement = DisplayElement<typeof TABLE_TYPE, TableProperties>;
@@ -17,13 +17,22 @@ export interface CreateTableOptions { item: TableDataItem; id?: string; x?: numb
 
 const DEFAULT_WIDTH = 520; const DEFAULT_HEIGHT = 260;
 export const TABLE_COLUMN_LABELS: Record<TableColumnId, string> = { path: 'Caminho', name: 'Nome', description: 'Descrição', value: 'Valor', units: 'Unidades', time: 'Tempo', trend: 'Tendência', average: 'Média', minimum: 'Mínimo', maximum: 'Máximo', stdDev: 'StdDev', range: 'Intervalo', pStdDev: 'pStdDev' };
-export function defaultTableColumns(): TableColumnConfig[] { return TABLE_COLUMNS.map((id) => ({ id, visible: id === 'name' || id === 'value' || id === 'units', align: id === 'value' ? 'right' : 'left', wrapText: ['path', 'name', 'description', 'value', 'units', 'time'].includes(id) })); }
+export function defaultTableColumns(tableWidth = DEFAULT_WIDTH): TableColumnConfig[] {
+  const visibleCount = 3;
+  return TABLE_COLUMNS.map((id) => ({
+    id,
+    visible: id === 'name' || id === 'value' || id === 'units',
+    ...(id === 'name' || id === 'value' || id === 'units' ? { width: tableWidth / visibleCount } : {}),
+    align: id === 'value' ? 'right' : 'left',
+    wrapText: ['path', 'name', 'description', 'value', 'units', 'time'].includes(id),
+  }));
+}
 export function createTable(options: CreateTableOptions): TableElement {
   if (!isPiPointBinding(options.item.binding)) throw new Error('Table requer um binding de PI Point válido');
   const width = Math.max(1, Math.min(options.width ?? DEFAULT_WIDTH, options.surface?.width ?? DEFAULT_WIDTH));
   const height = Math.max(1, Math.min(options.height ?? DEFAULT_HEIGHT, options.surface?.height ?? DEFAULT_HEIGHT));
   const ids = new Set(options.existingIds ?? []); const make = options.generateId ?? generateId; let id = options.id ?? make(); while (ids.has(id)) id = make();
-  return { id, type: TABLE_TYPE, x: options.x ?? Math.max(0, ((options.surface?.width ?? width) - width) / 2), y: options.y ?? Math.max(0, ((options.surface?.height ?? height) - height) / 2), width, height, properties: { items: [copyItem(options.item)], columns: defaultTableColumns(), decimals: null, style: 'dark' } };
+  return { id, type: TABLE_TYPE, x: options.x ?? Math.max(0, ((options.surface?.width ?? width) - width) / 2), y: options.y ?? Math.max(0, ((options.surface?.height ?? height) - height) / 2), width, height, properties: { items: [copyItem(options.item)], columns: defaultTableColumns(width), decimals: null, style: 'dark' } };
 }
 export function appendTable(document: DisplayDocument, element: TableElement): DisplayDocument { return { ...document, elements: [...document.elements, element] }; }
 export function tableBindingKey(binding: PiPointBinding): string { return `${binding.dataSourceUid}\u0000${binding.webId ?? `${binding.serverPath}\u0000${binding.pointName}`}`; }
