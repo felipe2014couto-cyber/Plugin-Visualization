@@ -135,6 +135,42 @@ describe('PI data source integration', () => {
     expect(dataSourceSrv.getList).not.toHaveBeenCalled();
   });
 
+  it('usa a pesquisa avançada do PI Web API com os filtros e normaliza Descriptor', async () => {
+    const getResource = jest.fn(async () => ({ Items: [{
+      Name: 'LFS_RB2_MOTOR', WebId: 'motor-id', Path: '\\\\pims\\LFS_RB2_MOTOR',
+      Descriptor: 'Motor principal', PointType: 'Float32', EngineeringUnits: 'mm/s',
+    }] }));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    const { searchPiPoints } = await import('../piDataSource');
+
+    await expect(searchPiPoints({ term: 'LFS_RB2', description: 'motor', pointTypes: ['Float32'], engineeringUnits: ['mm/s'] }, dataSourceSrv))
+      .resolves.toEqual([expect.objectContaining({ name: 'LFS_RB2_MOTOR', description: 'Motor principal', pointType: 'Float32', engineeringUnit: 'mm/s' })]);
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('/points/search?'));
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('descriptionFilter=*motor*'));
+  });
+
+  it('enriquece os candidatos do fallback por WebId sem falhar se um metadata falhar', async () => {
+    const metricFindQuery = jest.fn()
+      .mockResolvedValueOnce([{ text: 'pims', WebId: 'server-webid' }])
+      .mockResolvedValueOnce([
+        { text: 'TAG_MOTOR', WebId: 'a', Path: '\\\\pims\\TAG_MOTOR' },
+        { text: 'TAG_SEM_METADATA', WebId: 'b', Path: '\\\\pims\\TAG_SEM_METADATA' },
+      ]);
+    const getResource = jest.fn(async (path: string) => {
+      if (path.includes('/points/search?')) throw new Error('404');
+      if (path === '/points/a') return { Name: 'TAG_MOTOR', WebId: 'a', Descriptor: 'Motor', PointType: 'Float32', EngineeringUnits: 'mm/s' };
+      throw new Error('metadata unavailable');
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPoints } = await import('../piDataSource');
+
+    await expect(searchPiPoints({ term: 'TAG', description: 'motor' }, dataSourceSrv)).resolves.toEqual([
+      expect.objectContaining({ name: 'TAG_MOTOR', description: 'Motor', pointType: 'Float32', engineeringUnit: 'mm/s' }),
+    ]);
+    expect(getResource).toHaveBeenCalledWith('/points/a');
+    expect(getResource).toHaveBeenCalledWith('/points/b');
+  });
+
   it('consulta o valor atual pela query de PI Point e normaliza o DataFrame', async () => {
     const query = jest.fn(async (_request: unknown) => ({
       data: [{

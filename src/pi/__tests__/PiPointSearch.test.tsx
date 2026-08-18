@@ -29,7 +29,7 @@ describe('PiPointSearch', () => {
     fireEvent.click(screen.getByTestId('pi-point-search-submit'));
 
     await waitFor(() => expect(screen.getByTestId('pi-point-search-results')).toBeInTheDocument());
-    expect(searchMock).toHaveBeenCalledWith('LFI_A268SV_TEMPERATURA_AMBIENTE');
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ term: 'LFI_A268SV_TEMPERATURA_AMBIENTE' }));
 
     fireEvent.click(screen.getByTestId('pi-point-result-point-webid'));
     expect(screen.getByTestId('pi-point-selected')).toHaveTextContent(
@@ -81,12 +81,12 @@ describe('PiPointSearch', () => {
     fireEvent.click(screen.getByTestId('pi-point-search-submit'));
     await waitFor(() => expect(screen.getByTestId('pi-point-search-filters')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByLabelText('Forno'));
+    fireEvent.change(screen.getByTestId('pi-point-filter-description'), { target: { value: 'forno' } });
     expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('TEMPERATURA_A');
     expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('PRESSAO_A');
     expect(screen.getByTestId('pi-point-search-results')).not.toHaveTextContent('ESTADO_A');
 
-    fireEvent.click(screen.getByLabelText('bar'));
+    fireEvent.change(screen.getByTestId('pi-point-filter-engineering-unit'), { target: { value: 'bar' } });
     expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('PRESSAO_A');
     expect(screen.getByTestId('pi-point-search-results')).not.toHaveTextContent('TEMPERATURA_A');
   });

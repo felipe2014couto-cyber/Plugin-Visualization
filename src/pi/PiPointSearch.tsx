@@ -1,4 +1,4 @@
-import React, { FormEvent, useMemo, useState } from 'react';
+import React, { FormEvent, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -19,35 +19,45 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
   const [results, setResults] = useState<PiPointSearchResult[]>([]);
   const [selected, setSelected] = useState<PiPointSearchResult | null>(null);
   const [status, setStatus] = useState<SearchStatus>('idle');
-  const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>([]);
   const [selectedPointTypes, setSelectedPointTypes] = useState<string[]>([]);
-  const [selectedEngineeringUnits, setSelectedEngineeringUnits] = useState<string[]>([]);
+  const [descriptionFilter, setDescriptionFilter] = useState('');
+  const [engineeringUnitFilter, setEngineeringUnitFilter] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const requestSequence = useRef(0);
 
-  const descriptions = useMemo(() => getFilterOptions(results, (result) => result.description), [results]);
   const pointTypes = useMemo(() => getFilterOptions(results, (result) => result.pointType), [results]);
-  const engineeringUnits = useMemo(() => getFilterOptions(results, (result) => result.engineeringUnit), [results]);
   const filteredResults = useMemo(() => results.filter((result) => (
-    matchesFilter(result.description, selectedDescriptions)
+    includesFilter(result.description, descriptionFilter)
     && matchesFilter(result.pointType, selectedPointTypes)
-    && matchesFilter(result.engineeringUnit, selectedEngineeringUnits)
-  )), [results, selectedDescriptions, selectedPointTypes, selectedEngineeringUnits]);
-  const hasActiveFilters = selectedDescriptions.length > 0 || selectedPointTypes.length > 0 || selectedEngineeringUnits.length > 0;
+    && includesFilter(result.engineeringUnit, engineeringUnitFilter)
+  )), [results, descriptionFilter, selectedPointTypes, engineeringUnitFilter]);
+  const hasActiveFilters = Boolean(descriptionFilter || selectedPointTypes.length || engineeringUnitFilter);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const normalizedTerm = term.trim();
-    if (!enabled || !normalizedTerm) {
-      setStatus(normalizedTerm ? 'error' : 'idle');
+    if (!enabled || (!normalizedTerm && !hasActiveFilters)) {
+      setStatus(normalizedTerm || hasActiveFilters ? 'error' : 'idle');
       return;
     }
 
+    const requestId = ++requestSequence.current;
     setStatus('loading');
+    setErrorMessage('');
     try {
-      const nextResults = await searchPiPoints(normalizedTerm);
+      const nextResults = await searchPiPoints({
+        term: normalizedTerm,
+        description: descriptionFilter,
+        pointTypes: selectedPointTypes,
+        engineeringUnits: engineeringUnitFilter ? [engineeringUnitFilter] : [],
+      });
+      if (requestId !== requestSequence.current) return;
       setResults(nextResults);
       setSelected(null);
       setStatus(nextResults.length > 0 ? 'success' : 'empty');
-    } catch {
+    } catch (error) {
+      if (requestId !== requestSequence.current) return;
+      setErrorMessage(error instanceof Error ? error.message : 'Não foi possível pesquisar PI Points.');
       setStatus('error');
     }
   };
@@ -74,7 +84,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
             data-testid="pi-point-search-submit"
             aria-label="Pesquisar"
             title="Pesquisar"
-            disabled={!enabled || status === 'loading' || term.trim().length === 0}
+            disabled={!enabled || status === 'loading' || (!term.trim() && !hasActiveFilters)}
           >
             <SearchIcon />
           </button>
@@ -83,7 +93,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
 
       {status === 'loading' && <p data-testid="pi-point-search-loading">Pesquisando...</p>}
       {status === 'empty' && <p data-testid="pi-point-search-empty">Nenhum PI Point encontrado.</p>}
-      {status === 'error' && <p data-testid="pi-point-search-error">Não foi possível pesquisar PI Points.</p>}
+      {status === 'error' && <p data-testid="pi-point-search-error">{errorMessage || 'Não foi possível pesquisar PI Points.'}</p>}
       {!enabled && <p data-testid="pi-point-search-disabled">Pesquisa PI indisponível.</p>}
 
       {filtersOpen && (
@@ -96,20 +106,19 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
                   type="button"
                   className={styles.clearFilters}
                   onClick={() => {
-                    setSelectedDescriptions([]);
                     setSelectedPointTypes([]);
-                    setSelectedEngineeringUnits([]);
+                    setDescriptionFilter('');
+                    setEngineeringUnitFilter('');
                   }}
                 >
                   Limpar
                 </button>
               )}
             </div>
-            <FilterGroup
-              label="Descrição"
-              options={descriptions}
-              selectedOptions={selectedDescriptions}
-              onToggle={(value) => setSelectedDescriptions((current) => toggleFilter(current, value))}
+            <TextFilter
+              label="Descrição contém"
+              value={descriptionFilter}
+              onChange={setDescriptionFilter}
               styles={styles}
               testId="description"
             />
@@ -121,11 +130,10 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
               styles={styles}
               testId="point-type"
             />
-            <FilterGroup
+            <TextFilter
               label="Unidade de Eng."
-              options={engineeringUnits}
-              selectedOptions={selectedEngineeringUnits}
-              onToggle={(value) => setSelectedEngineeringUnits((current) => toggleFilter(current, value))}
+              value={engineeringUnitFilter}
+              onChange={setEngineeringUnitFilter}
               styles={styles}
               testId="engineering-unit"
             />
@@ -336,6 +344,16 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--text-disabled);
     font-size: 11px;
   `,
+  filterInput: css`
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 2px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 12px;
+  `,
   clearFilters: css`
     padding: 0;
     border: 0;
@@ -407,6 +425,28 @@ interface FilterGroupProps {
   testId: string;
 }
 
+interface TextFilterProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  styles: SearchStyles;
+  testId: string;
+}
+
+function TextFilter({ label, value, onChange, styles, testId }: TextFilterProps) {
+  return (
+    <label className={styles.filterGroup}>
+      <span className={styles.filterLabel}>{label}</span>
+      <input
+        className={styles.filterInput}
+        data-testid={`pi-point-filter-${testId}`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
 function FilterGroup({ label, options, selectedOptions, onToggle, styles, testId }: FilterGroupProps) {
   return (
     <div className={styles.filterGroup}>
@@ -442,6 +482,10 @@ function getFilterOptions(
 
 function matchesFilter(value: string | undefined, selectedValues: string[]): boolean {
   return selectedValues.length === 0 || (value !== undefined && selectedValues.includes(value));
+}
+
+function includesFilter(value: string | undefined, filter: string): boolean {
+  return !filter.trim() || Boolean(value && value.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()));
 }
 
 function toggleFilter(values: string[], value: string): string[] {
