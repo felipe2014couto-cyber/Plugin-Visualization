@@ -31,7 +31,7 @@ export function LibrarySymbolPropertiesPanel({ properties, selectedPiPoint, onCh
       </div>
       <div className={styles.fields}>
         <RotationControl value={properties.rotation} onChange={(rotation) => onChange({ rotation })} testId="library-symbol-rotation" />
-        <LinkField value={typeof properties.linkUrl === 'string' ? properties.linkUrl : undefined} onChange={(linkUrl) => onChange({ linkUrl })} testId="library-symbol-link-url" />
+        <LinkField value={typeof properties.linkUrl === 'string' ? properties.linkUrl : undefined} openInNewTab={properties.openInNewTab !== false} onChange={(linkUrl) => onChange({ linkUrl })} onOpenInNewTabChange={(openInNewTab) => onChange({ openInNewTab })} testId="library-symbol-link-url" />
         <label className={styles.field}>
           <span>Cor do símbolo</span>
           <TransparentColorPicker color={properties.color} fallbackColor={DEFAULT_LIBRARY_SYMBOL_COLOR} testId="library-symbol-color" onChange={(color) => onChange({ color })} />

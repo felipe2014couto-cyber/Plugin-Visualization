@@ -192,9 +192,9 @@ function normalizeRotation(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value % 360 : 0;
 }
 
-function portableLink(properties: Record<string, unknown>): { linkUrl?: string } {
+function portableLink(properties: Record<string, unknown>): { linkUrl?: string; openInNewTab?: boolean } {
   return typeof properties.linkUrl === 'string' && properties.linkUrl.trim().length > 0
-    ? { linkUrl: properties.linkUrl.trim() }
+    ? { linkUrl: properties.linkUrl.trim(), ...(properties.openInNewTab === false ? { openInNewTab: false } : {}) }
     : {};
 }
 

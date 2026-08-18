@@ -9,7 +9,7 @@ export function ImagePropertiesPanel({ properties, onChange }: { properties: Ima
     <div className={styles.header}>Imagem</div>
     <div className={styles.fields}>
       <RotationControl value={properties.rotation} onChange={(rotation) => onChange({ rotation })} testId="image-rotation" />
-      <LinkField value={typeof properties.linkUrl === 'string' ? properties.linkUrl : undefined} onChange={(linkUrl) => onChange({ linkUrl })} testId="image-link-url" />
+      <LinkField value={typeof properties.linkUrl === 'string' ? properties.linkUrl : undefined} openInNewTab={properties.openInNewTab !== false} onChange={(linkUrl) => onChange({ linkUrl })} onOpenInNewTabChange={(openInNewTab) => onChange({ openInNewTab })} testId="image-link-url" />
     </div>
   </aside>;
 }

@@ -716,6 +716,11 @@ export function DisplayEditor({
     if (!selectedId) return;
     commitDocument({ ...documentRef.current, elements: documentRef.current.elements.map((element) => element.id === selectedId ? { ...element, properties: { ...element.properties, linkUrl: linkUrl.trim() || undefined } } : element) });
   }, [commitDocument]);
+  const handleLinkOpenInNewTabChange = useCallback((openInNewTab: boolean) => {
+    const selectedId = stateRef.current.selectedElementId;
+    if (!selectedId) return;
+    commitDocument({ ...documentRef.current, elements: documentRef.current.elements.map((element) => element.id === selectedId ? { ...element, properties: { ...element.properties, openInNewTab } } : element) });
+  }, [commitDocument]);
   const handleLibrarySymbolChange = useCallback((patch: Partial<LibrarySymbolProperties>) => {
     commitDocument(updateLibrarySymbolProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
@@ -1078,13 +1083,15 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
             linkUrl={typeof selectedValue.properties.linkUrl === 'string' ? selectedValue.properties.linkUrl : undefined}
             onLinkChange={handleLinkChange}
+            openInNewTab={selectedValue.properties.openInNewTab !== false}
+            onOpenInNewTabChange={handleLinkOpenInNewTabChange}
           />
         )}
         {selectedGauge && (
-          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedBar && (
-          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} onLinkChange={handleLinkChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} openInNewTab={selectedBar.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedRectangle && (
           <RectanglePropertiesPanel
@@ -1094,7 +1101,9 @@ export function DisplayEditor({
             rotation={selectedRectangle.properties.rotation}
             pointName={isPiPointBinding(selectedRectangle.properties.binding) ? selectedRectangle.properties.binding.pointName : undefined}
             linkUrl={typeof selectedRectangle.properties.linkUrl === 'string' ? selectedRectangle.properties.linkUrl : undefined}
+            openInNewTab={selectedRectangle.properties.openInNewTab !== false}
             onLinkChange={handleLinkChange}
+            onOpenInNewTabChange={handleLinkOpenInNewTabChange}
             multistate={selectedRectangle.properties.multistate}
             onChange={handleRectangleChange}
             onMultistateChange={handleMultistateChange}
@@ -1110,7 +1119,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} onChange={handleLinkChange} />}
+        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (

@@ -37,7 +37,9 @@ export interface ScalePropertiesPanelProps {
   scaleDisplay?: 'all' | 'endpoints';
   gaugeAngle?: number;
   linkUrl?: string;
+  openInNewTab?: boolean;
   onLinkChange?: (value: string) => void;
+  onOpenInNewTabChange?: (value: boolean) => void;
   onChange: (patch: {
     minimum?: number;
     maximum?: number;
@@ -96,7 +98,9 @@ export function ScalePropertiesPanel({
   scaleDisplay = 'all',
   gaugeAngle = 270,
   linkUrl,
+  openInNewTab = true,
   onLinkChange,
+  onOpenInNewTabChange,
   onChange,
   multistate,
   onMultistateChange,
@@ -166,7 +170,7 @@ export function ScalePropertiesPanel({
         <label className={styles.checkbox}><input type="checkbox" checked={showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-value`} /><span>Valor</span></label>
         {kind === 'Bar' && <label className={styles.checkbox}><input type="checkbox" checked={showScale} onChange={(event) => onChange({ showScale: event.target.checked })} data-testid="bar-show-scale" /><span>Mostrar escala</span></label>}
         <label className={styles.checkbox}><input type="checkbox" checked={showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-unit`} /><span>Unidades</span></label>
-        {onLinkChange && <LinkField value={linkUrl} onChange={onLinkChange} testId={`${kind.toLowerCase()}-link-url`} />}
+        {onLinkChange && <LinkField value={linkUrl} openInNewTab={openInNewTab} onChange={onLinkChange} onOpenInNewTabChange={onOpenInNewTabChange} testId={`${kind.toLowerCase()}-link-url`} />}
       </div>
       <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />
     </aside>
