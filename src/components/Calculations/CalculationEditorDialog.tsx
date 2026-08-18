@@ -18,11 +18,12 @@ export interface CalculationEditorDialogProps {
   initialCalculation?: CalculationDefinition;
   selectedPiPoint?: PiPointSearchResult | null;
   resolvePiPoint?: (name: string) => Promise<PiPointSearchResult | undefined>;
+  isNameTaken?: (name: string) => boolean;
   onCancel: () => void;
   onSave: (draft: CalculationDraft) => void;
 }
 
-export function CalculationEditorDialog({ initialCalculation, selectedPiPoint, resolvePiPoint, onCancel, onSave }: CalculationEditorDialogProps) {
+export function CalculationEditorDialog({ initialCalculation, selectedPiPoint, resolvePiPoint, isNameTaken, onCancel, onSave }: CalculationEditorDialogProps) {
   const styles = useStyles2(getStyles);
   const [name, setName] = useState(initialCalculation?.name ?? '');
   const [description, setDescription] = useState(initialCalculation?.description ?? '');
@@ -66,6 +67,10 @@ export function CalculationEditorDialog({ initialCalculation, selectedPiPoint, r
     const normalizedExpression = expression.trim();
     if (!normalizedName || !normalizedExpression) {
       setValidationError('Informe um nome e uma expressão para o cálculo.');
+      return;
+    }
+    if (isNameTaken?.(normalizedName)) {
+      setValidationError('Já existe um cálculo com esse nome. Escolha outro nome.');
       return;
     }
     setIsResolvingInputs(true);

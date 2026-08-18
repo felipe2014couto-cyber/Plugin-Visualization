@@ -15,9 +15,10 @@ export interface PiPointSearchProps {
   enabled: boolean;
   onSelect?: (result: PiPointSearchResult) => void;
   filtersOpen?: boolean;
+  onSearchInteraction?: () => void;
 }
 
-export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPointSearchProps) {
+export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearchInteraction }: PiPointSearchProps) {
   const styles = useStyles2(getStyles);
   const [term, setTerm] = useState('');
   const [results, setResults] = useState<PiPointSearchResult[]>([]);
@@ -43,6 +44,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    onSearchInteraction?.();
     const normalizedTerm = term.trim();
     if (!enabled || (!normalizedTerm && !hasActiveFilters)) {
       setStatus(normalizedTerm || hasActiveFilters ? 'error' : 'idle');
@@ -84,7 +86,11 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
             className={styles.input}
             data-testid="pi-point-search-input"
             value={term}
-            onChange={(event) => setTerm(event.target.value)}
+            onFocus={onSearchInteraction}
+            onChange={(event) => {
+              onSearchInteraction?.();
+              setTerm(event.target.value);
+            }}
             placeholder="Pesquisar tag..."
             disabled={!enabled || status === 'loading'}
           />
@@ -231,7 +237,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
 const getStyles = (theme: GrafanaTheme2) => ({
   container: css`
     display: flex;
-    flex: 1;
+    flex: 0 0 auto;
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
@@ -302,8 +308,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   results: css`
-    flex: 1 1 160px;
-    min-height: 120px;
+    flex: 0 1 auto;
+    max-height: 280px;
+    min-height: 0;
     margin: ${theme.spacing(1, 0, 0)};
     padding: 0;
     overflow-y: auto;
