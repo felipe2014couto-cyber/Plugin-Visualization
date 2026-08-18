@@ -36,7 +36,8 @@ export const DEFAULT_VALUE_VISUAL_OPTIONS: ValueVisualOptions = {
 };
 
 export interface ValueProperties extends Record<string, unknown> {
-  binding: PiPointBinding;
+  binding?: PiPointBinding;
+  calculationId?: string;
   visual: ValueVisualOptions;
   multistate?: MultistateConfig;
 }
@@ -47,7 +48,8 @@ const DEFAULT_VALUE_WIDTH = 240;
 const DEFAULT_VALUE_HEIGHT = 100;
 
 export interface CreateValueOptions {
-  binding: PiPointBinding;
+  binding?: PiPointBinding;
+  calculationId?: string;
   visual?: Partial<ValueVisualOptions>;
   multistate?: MultistateConfig;
   id?: string;
@@ -61,7 +63,7 @@ export interface CreateValueOptions {
 }
 
 export function createValue(options: CreateValueOptions): ValueElement {
-  if (!isPiPointBinding(options.binding)) {
+  if (!isPiPointBinding(options.binding) && !options.calculationId) {
     throw new Error('Value requer um binding de PI Point válido');
   }
 
@@ -88,7 +90,8 @@ export function createValue(options: CreateValueOptions): ValueElement {
     width: safeWidth,
     height: safeHeight,
     properties: {
-      binding: { ...options.binding },
+      ...(options.binding ? { binding: { ...options.binding } } : {}),
+      ...(options.calculationId ? { calculationId: options.calculationId } : {}),
       visual: normalizeValueVisualOptions(options.visual),
       ...(options.multistate ? { multistate: options.multistate } : {}),
     },

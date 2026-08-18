@@ -18,9 +18,10 @@ export interface ValueElementViewProps {
   element: ValueElement;
   loadValue?: (binding: PiPointBinding) => Promise<PiPointValue>;
   runtimeState?: ValueRuntimeState;
+  label?: string;
 }
 
-export const ValueElementView = React.memo(function ValueElementView({ element, loadValue, runtimeState }: ValueElementViewProps) {
+export const ValueElementView = React.memo(function ValueElementView({ element, loadValue, runtimeState, label }: ValueElementViewProps) {
   const [state, setState] = useState<ValueLoadState>({ status: 'loading' });
   const { binding } = element.properties;
 
@@ -31,7 +32,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
     let active = true;
     setState({ status: 'loading' });
 
-    (loadValue ? loadValue(binding) : Promise.reject(new Error('Consulta PI indisponível')))
+    (binding && loadValue ? loadValue(binding) : Promise.reject(new Error('Consulta PI indisponível')))
       .then((result) => {
         if (active) {
           setState({ status: 'success', result });
@@ -46,11 +47,11 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
     return () => {
       active = false;
     };
-  }, [binding, binding.dataSourceUid, binding.serverPath, binding.pointName, loadValue, runtimeState]);
+  }, [binding, binding?.dataSourceUid, binding?.serverPath, binding?.pointName, loadValue, runtimeState]);
 
   const visual = getValueVisualOptions(element.properties);
   const currentState = runtimeState ?? state;
-  const lines = getValueLines(currentState, visual, binding.pointName);
+  const lines = getValueLines(currentState, visual, label ?? binding?.pointName ?? '');
   const color = getMultistateColor(getRuntimeValue(runtimeState ?? state), element.properties.multistate, visual.color);
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';

@@ -10,9 +10,10 @@ export interface BarElementViewProps {
   element: BarElement;
   runtimeState?: ValueRuntimeState;
   databaseScale?: PiPointDatabaseLimits;
+  label?: string;
 }
 
-export const BarElementView = React.memo(function BarElementView({ element, runtimeState, databaseScale }: BarElementViewProps) {
+export const BarElementView = React.memo(function BarElementView({ element, runtimeState, databaseScale, label }: BarElementViewProps) {
   const options = element.properties;
   const binding = options.binding;
   const barOptions = getBarOptions(element.properties);
@@ -34,12 +35,12 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const plotHeight = Math.max(1, element.height - (horizontal ? 104 : 90) - borderClearance * 4);
   const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
-  const valueText = getValueText(binding, runtimeState, value, options.decimals);
+  const valueText = getValueText(binding, label, runtimeState, value, options.decimals);
   const detailLines = getDetailLines(valueText, runtimeState, barOptions.showValue, barOptions.showUnit, false);
   const activeColor = getMultistateColor(value, options.multistate, barOptions.fillColor);
   const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
     ? barOptions.customTagName
-    : binding && isPiPointBinding(binding) ? binding.pointName : '';
+    : label ?? (binding && isPiPointBinding(binding) ? binding.pointName : '');
 
   return (
     <g
@@ -61,7 +62,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         data-element-id={element.id}
         pointerEvents="all"
       />
-      {binding && isPiPointBinding(binding) && options.showTagName && (
+      {tagLabel && options.showTagName && (
         <text x={element.x + element.width / 2} y={element.y + (horizontal ? 16 : 22)} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
           {tagLabel}
         </text>
@@ -115,11 +116,12 @@ function getNumericValue(state: ValueRuntimeState | undefined): number | undefin
 
 function getValueText(
   binding: BarElement['properties']['binding'],
+  label: string | undefined,
   state: ValueRuntimeState | undefined,
   value: number | undefined,
   decimals: number | null,
 ): string {
-  if (!binding || !isPiPointBinding(binding)) {
+  if (!binding && !label) {
     return 'Sem tag';
   }
   if (state?.status === 'loading') {
@@ -134,8 +136,12 @@ function getValueText(
 function getDetailLines(valueText: string, state: ValueRuntimeState | undefined, showValue: boolean, showUnit: boolean, showTimestamp: boolean): string[] {
   const lines = showValue ? [valueText] : [];
   const result = state?.result;
-  if (showUnit && result?.unit) lines.push(result.unit);
-  if (showTimestamp && result?.timestamp) lines.push(formatTimestamp(result.timestamp));
+  if (showUnit && result?.unit) {
+    lines.push(result.unit);
+  }
+  if (showTimestamp && result?.timestamp) {
+    lines.push(formatTimestamp(result.timestamp));
+  }
   return lines;
 }
 

@@ -203,7 +203,13 @@ function portableCalculations(input: unknown): CalculationDefinition[] {
       }
       return { name: inputItem.name, binding: portableBinding(inputItem.binding) };
     });
-    return { id: item.id, name: item.name, expression: item.expression, inputs };
+    return {
+      id: item.id,
+      name: item.name,
+      ...(typeof item.description === 'string' ? { description: item.description } : {}),
+      expression: item.expression,
+      inputs,
+    };
   });
 }
 
@@ -273,7 +279,9 @@ function portableElement(input: unknown): DisplayElement {
       };
     case VALUE_TYPE:
       return { ...base, type: VALUE_TYPE, properties: {
-        binding: portableBinding(input.properties.binding),
+        ...(isNonEmptyString(input.properties.calculationId)
+          ? { calculationId: input.properties.calculationId }
+          : { binding: portableBinding(input.properties.binding) }),
         visual: portableVisual(input.properties.visual),
         ...portableMultistate(input.properties.multistate),
         ...portableLink(input.properties),
@@ -294,6 +302,7 @@ function portableElement(input: unknown): DisplayElement {
     case GAUGE_TYPE:
       return { ...base, type: GAUGE_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
+        ...(isNonEmptyString(input.properties.calculationId) ? { calculationId: input.properties.calculationId } : {}),
         ...portableGauge(input.properties),
         ...portableMultistate(input.properties.multistate),
         ...portableLink(input.properties),
@@ -301,6 +310,7 @@ function portableElement(input: unknown): DisplayElement {
     case BAR_TYPE:
       return { ...base, type: BAR_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
+        ...(isNonEmptyString(input.properties.calculationId) ? { calculationId: input.properties.calculationId } : {}),
         ...portableScale(input.properties),
         orientation: input.properties.orientation === 'horizontal' ? 'horizontal' : 'vertical',
         ...portableMultistate(input.properties.multistate),
@@ -379,6 +389,8 @@ function portableTrendSeries(properties: Record<string, unknown>): TrendSeries[]
         color: typeof input.color === 'string' && input.color.trim().length > 0
           ? input.color
           : trendSeriesColor(index),
+        ...(isNonEmptyString(input.calculationId) ? { calculationId: input.calculationId } : {}),
+        ...(typeof input.legendLabel === 'string' && input.legendLabel.trim() ? { legendLabel: input.legendLabel } : {}),
         ...(input.primaryScale === true ? { primaryScale: true } : {}),
       });
     }

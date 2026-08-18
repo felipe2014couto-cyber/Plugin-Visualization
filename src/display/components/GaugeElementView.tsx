@@ -10,11 +10,12 @@ export interface GaugeElementViewProps {
   element: GaugeElement;
   runtimeState?: ValueRuntimeState;
   databaseScale?: PiPointDatabaseLimits;
+  label?: string;
 }
 
 const DEFAULT_TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.86))';
 
-export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState, databaseScale }: GaugeElementViewProps) {
+export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState, databaseScale, label }: GaugeElementViewProps) {
   const options = getGaugeOptions(element.properties);
   const binding = element.properties.binding;
   const numericValue = getNumericValue(runtimeState);
@@ -29,7 +30,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const sweepAngle = options.gaugeAngle;
   const startAngle = 90 + (360 - sweepAngle) / 2;
   const track = arcPath(cx, cy, radius, startAngle, sweepAngle);
-  const valueText = getValueText(binding, runtimeState, numericValue, options.decimals);
+  const valueText = getValueText(binding, label, runtimeState, numericValue, options.decimals);
   const detailLines = getDetailLines(valueText, runtimeState, options.showValue, options.showUnit, false);
   const activeColor = getMultistateColor(numericValue, element.properties.multistate, options.color);
   const valueY = options.labelPosition === 'below'
@@ -40,7 +41,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const showGaugeScale = element.width >= 180 && element.height >= 160;
   const scaleColor = options.gaugeScaleColor || '#ffffff';
   const borderColor = options.gaugeBorderColor || '#ffffff';
-  const title = options.title.trim() || (binding && isPiPointBinding(binding) ? binding.pointName : '');
+  const title = options.title.trim() || label || (binding && isPiPointBinding(binding) ? binding.pointName : '');
   const titleY = options.labelPosition === 'below' ? element.y + element.height - 52 : element.y + 20;
 
   return (
@@ -63,7 +64,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         data-element-id={element.id}
         pointerEvents="all"
       />
-      {binding && isPiPointBinding(binding) && options.showTagName && title && (
+      {title && options.showTagName && (
         <text x={cx} y={titleY} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(15, Math.min(22, element.height * 0.085))} fontWeight={500} pointerEvents="none">
           {title}
         </text>
@@ -147,11 +148,12 @@ function getNumericValue(state: ValueRuntimeState | undefined): number | undefin
 
 function getValueText(
   binding: GaugeElement['properties']['binding'],
+  label: string | undefined,
   state: ValueRuntimeState | undefined,
   value: number | undefined,
   decimals: number | null,
 ): string {
-  if (!binding || !isPiPointBinding(binding)) {
+  if (!binding && !label) {
     return 'Sem tag';
   }
   if (state?.status === 'loading') {
