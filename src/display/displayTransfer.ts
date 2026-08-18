@@ -20,6 +20,7 @@ import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE } from './createLibrarySymbo
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../library';
 import type { CalculationDefinition } from '../calculations/calculationEngine';
 import { CALCULATION_TYPE } from './createCalculation';
+import { defaultTableColumns, TABLE_COLUMNS, TABLE_TYPE, type TableColumnAlign, type TableColumnConfig, type TableDataItem } from './createTable';
 
 export const DISPLAY_EXPORT_FORMAT = 'pims-vision-display';
 export const DISPLAY_EXPORT_VERSION = 1;
@@ -288,6 +289,8 @@ function portableElement(input: unknown): DisplayElement {
       } };
     case TREND_TYPE:
       return { ...base, type: TREND_TYPE, properties: { series: portableTrendSeries(input.properties) } };
+    case TABLE_TYPE:
+      return { ...base, type: TABLE_TYPE, properties: portableTable(input.properties) };
     case GAUGE_TYPE:
       return { ...base, type: GAUGE_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
@@ -306,6 +309,25 @@ function portableElement(input: unknown): DisplayElement {
     default:
       throw new DisplayImportError('Tipo de elemento não suportado.');
   }
+}
+
+function portableTable(properties: Record<string, unknown>): { items: TableDataItem[]; columns: TableColumnConfig[]; decimals: number | null } {
+  if (!Array.isArray(properties.items) || properties.items.length === 0) throw new DisplayImportError('Tabela de Display inválida.');
+  const seen = new Set<string>();
+  const items = properties.items.map((input) => {
+    if (!isRecord(input)) throw new DisplayImportError('Tabela de Display inválida.');
+    const binding = portableBinding(input.binding);
+    const key = `${binding.dataSourceUid}\u0000${binding.webId ?? binding.serverPath}\u0000${binding.pointName}`;
+    if (seen.has(key)) throw new DisplayImportError('Tabela de Display inválida.');
+    seen.add(key);
+    return { binding, ...(typeof input.path === 'string' ? { path: input.path } : {}), ...(typeof input.description === 'string' ? { description: input.description } : {}), ...(typeof input.engineeringUnit === 'string' ? { engineeringUnit: input.engineeringUnit } : {}), ...(typeof input.pointType === 'string' ? { pointType: input.pointType } : {}) };
+  });
+  const fallback = defaultTableColumns();
+  const columns = Array.isArray(properties.columns) ? properties.columns.flatMap((input): TableColumnConfig[] => {
+    if (!isRecord(input) || typeof input.id !== 'string' || !TABLE_COLUMNS.includes(input.id as typeof TABLE_COLUMNS[number])) return [];
+    return [{ id: input.id as typeof TABLE_COLUMNS[number], visible: input.visible !== false, align: input.align === 'center' || input.align === 'right' ? input.align as TableColumnAlign : 'left', wrapText: input.wrapText !== false }];
+  }) : fallback;
+  return { items, columns: columns.length > 0 && columns.some((column) => column.visible) ? columns : fallback, decimals: isFiniteNumber(properties.decimals) ? Math.max(0, Math.min(10, properties.decimals)) : null };
 }
 
 function normalizeRotation(value: unknown): number {
@@ -380,7 +402,10 @@ function portableScale(input: Record<string, unknown>) {
   if (input.decimals !== undefined && input.decimals !== null && !isFiniteNumber(input.decimals)) {
     throw new DisplayImportError('Arquivo de Display inválido.');
   }
-  return normalizeScaleOptions(input);
+  return {
+    ...normalizeScaleOptions(input),
+    ...(input.scaleMode === 'custom' || input.scaleMode === 'database' ? { scaleMode: input.scaleMode } : {}),
+  };
 }
 
 function portableGauge(input: Record<string, unknown>) {

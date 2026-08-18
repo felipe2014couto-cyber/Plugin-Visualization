@@ -22,6 +22,9 @@ export function parsePiPointDragData(value: string): PiPointSearchResult | undef
       ...(typeof candidate.path === 'string' ? { path: candidate.path } : {}),
       ...(typeof candidate.dataSourceUid === 'string' ? { dataSourceUid: candidate.dataSourceUid } : {}),
       ...(typeof candidate.pointType === 'string' ? { pointType: candidate.pointType } : {}),
+      ...(typeof candidate.description === 'string' ? { description: candidate.description } : {}),
+      ...(typeof candidate.engineeringUnit === 'string' ? { engineeringUnit: candidate.engineeringUnit } : {}),
+      ...(typeof candidate.pointSource === 'string' ? { pointSource: candidate.pointSource } : {}),
     };
   } catch {
     return undefined;

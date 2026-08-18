@@ -5,6 +5,7 @@ import { formatAbsoluteTime } from '../time/timeRange';
 import type { DisplayDocument } from './displayDocument';
 import { isPiPointBinding } from '../pi/piPointBinding';
 import { getTrendSeries, TREND_TYPE } from './createTrend';
+import { TABLE_TYPE, type TableElement } from './createTable';
 
 export const DISPLAY_DATA_EXPORT_MAX_POINTS = 3600;
 export type DisplayDataLoader = (bindings: readonly PiPointBinding[], range: DisplayTimeRange, options: { maxDataPoints: number }) => Promise<Record<string, PiTrendSeriesResult>>;
@@ -19,6 +20,7 @@ export function collectDisplayDataBindings(document: DisplayDocument): PiPointBi
   };
   document.elements.forEach((element) => {
     if (element.type === TREND_TYPE) getTrendSeries(element).forEach((series) => add(series.binding));
+    else if (element.type === TABLE_TYPE) (element as TableElement).properties.items.forEach((item) => add(item.binding));
     else add(element.properties.binding);
   });
   return output;
