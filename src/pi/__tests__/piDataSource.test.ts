@@ -88,7 +88,14 @@ describe('PI data source integration', () => {
     const metricFindQuery = jest.fn()
       .mockResolvedValueOnce([{ text: 'pims', WebId: 'server-webid' }])
       .mockResolvedValueOnce([
-        { text: 'LFI_A268SV_TEMPERATURA_AMBIENTE', WebId: 'point-webid', Path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE', PointType: 'Float32' },
+        {
+          text: 'LFI_A268SV_TEMPERATURA_AMBIENTE',
+          WebId: 'point-webid',
+          Path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE',
+          PointType: 'Float32',
+          Description: 'Temperatura ambiente',
+          EngineeringUnits: '°C',
+        },
       ]);
     const dataSourceSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ isDefault: true })],
@@ -102,6 +109,8 @@ describe('PI data source integration', () => {
         webId: 'point-webid',
         path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE',
         pointType: 'Float32',
+        description: 'Temperatura ambiente',
+        engineeringUnit: '°C',
         dataSourceUid: 'pi-default',
       },
     ]);

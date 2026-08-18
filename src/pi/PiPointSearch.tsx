@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useMemo, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -18,6 +18,19 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
   const [results, setResults] = useState<PiPointSearchResult[]>([]);
   const [selected, setSelected] = useState<PiPointSearchResult | null>(null);
   const [status, setStatus] = useState<SearchStatus>('idle');
+  const [selectedDescriptions, setSelectedDescriptions] = useState<string[]>([]);
+  const [selectedPointTypes, setSelectedPointTypes] = useState<string[]>([]);
+  const [selectedEngineeringUnits, setSelectedEngineeringUnits] = useState<string[]>([]);
+
+  const descriptions = useMemo(() => getFilterOptions(results, (result) => result.description), [results]);
+  const pointTypes = useMemo(() => getFilterOptions(results, (result) => result.pointType), [results]);
+  const engineeringUnits = useMemo(() => getFilterOptions(results, (result) => result.engineeringUnit), [results]);
+  const filteredResults = useMemo(() => results.filter((result) => (
+    matchesFilter(result.description, selectedDescriptions)
+    && matchesFilter(result.pointType, selectedPointTypes)
+    && matchesFilter(result.engineeringUnit, selectedEngineeringUnits)
+  )), [results, selectedDescriptions, selectedPointTypes, selectedEngineeringUnits]);
+  const hasActiveFilters = selectedDescriptions.length > 0 || selectedPointTypes.length > 0 || selectedEngineeringUnits.length > 0;
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -31,6 +44,10 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
     try {
       const nextResults = await searchPiPoints(normalizedTerm);
       setResults(nextResults);
+      setSelected(null);
+      setSelectedDescriptions([]);
+      setSelectedPointTypes([]);
+      setSelectedEngineeringUnits([]);
       setStatus(nextResults.length > 0 ? 'success' : 'empty');
     } catch {
       setStatus('error');
@@ -72,8 +89,58 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
       {!enabled && <p data-testid="pi-point-search-disabled">Pesquisa PI indisponível.</p>}
 
       {results.length > 0 && (
-        <ul className={styles.results} data-testid="pi-point-search-results">
-          {results.map((result) => (
+        <>
+          <div className={styles.filters} data-testid="pi-point-search-filters">
+            <div className={styles.filterHeader}>
+              <span>Filtros</span>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  className={styles.clearFilters}
+                  onClick={() => {
+                    setSelectedDescriptions([]);
+                    setSelectedPointTypes([]);
+                    setSelectedEngineeringUnits([]);
+                  }}
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+            <FilterGroup
+              label="Descrição"
+              options={descriptions}
+              selectedOptions={selectedDescriptions}
+              onToggle={(value) => setSelectedDescriptions((current) => toggleFilter(current, value))}
+              styles={styles}
+              testId="description"
+            />
+            <FilterGroup
+              label="Tipo de dados"
+              options={pointTypes}
+              selectedOptions={selectedPointTypes}
+              onToggle={(value) => setSelectedPointTypes((current) => toggleFilter(current, value))}
+              styles={styles}
+              testId="point-type"
+            />
+            <FilterGroup
+              label="Unidade de Eng."
+              options={engineeringUnits}
+              selectedOptions={selectedEngineeringUnits}
+              onToggle={(value) => setSelectedEngineeringUnits((current) => toggleFilter(current, value))}
+              styles={styles}
+              testId="engineering-unit"
+            />
+          </div>
+
+          {filteredResults.length === 0 && (
+            <p className={styles.filteredEmpty} data-testid="pi-point-search-filtered-empty">
+              Nenhum PI Point corresponde aos filtros.
+            </p>
+          )}
+
+          <ul className={styles.results} data-testid="pi-point-search-results">
+          {filteredResults.map((result) => (
             <li key={result.webId ?? `${result.name}-${result.path ?? ''}`}>
               <button
                 type="button"
@@ -106,11 +173,17 @@ export function PiPointSearch({ enabled, onSelect }: PiPointSearchProps) {
                   onSelect?.(result);
                 }}
               >
-                {result.name}
+                <span className={styles.resultName}>{result.name}</span>
+                {(result.description || result.pointType || result.engineeringUnit) && (
+                  <span className={styles.resultMetadata}>
+                    {[result.description, result.pointType, result.engineeringUnit].filter(Boolean).join(' · ')}
+                  </span>
+                )}
               </button>
             </li>
           ))}
-        </ul>
+          </ul>
+        </>
       )}
 
       {selected && (
@@ -201,6 +274,75 @@ const getStyles = (theme: GrafanaTheme2) => ({
     list-style: none;
     border-top: 1px solid var(--border-color);
   `,
+  filters: css`
+    display: flex;
+    flex-direction: column;
+    gap: ${theme.spacing(0.75)};
+    margin-top: ${theme.spacing(1)};
+    padding: ${theme.spacing(0.75)};
+    border: 1px solid var(--border-subtle);
+    background: var(--card-bg);
+  `,
+  filterHeader: css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+  `,
+  filterGroup: css`
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  `,
+  filterLabel: css`
+    color: var(--text-secondary);
+    font-size: 11px;
+  `,
+  filterOptions: css`
+    display: flex;
+    flex-direction: column;
+    max-height: 88px;
+    overflow-y: auto;
+  `,
+  filterOption: css`
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 2px 0;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 12px;
+
+    input {
+      margin: 0;
+    }
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  `,
+  noFilterOptions: css`
+    color: var(--text-disabled);
+    font-size: 11px;
+  `,
+  clearFilters: css`
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 11px;
+  `,
+  filteredEmpty: css`
+    margin: ${theme.spacing(1, 0, 0)};
+    color: var(--text-secondary);
+    font-size: 12px;
+  `,
   result: css`
     width: 100%;
     padding: 7px 8px;
@@ -211,6 +353,10 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--accent);
     text-align: left;
     cursor: grab;
+
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 
     &:hover {
       background: var(--button-hover);
@@ -225,8 +371,76 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--accent);
     text-align: left;
     cursor: grab;
+
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  `,
+  resultName: css`
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  `,
+  resultMetadata: css`
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   `,
 });
+
+type SearchStyles = ReturnType<typeof getStyles>;
+
+interface FilterGroupProps {
+  label: string;
+  options: string[];
+  selectedOptions: string[];
+  onToggle: (value: string) => void;
+  styles: SearchStyles;
+  testId: string;
+}
+
+function FilterGroup({ label, options, selectedOptions, onToggle, styles, testId }: FilterGroupProps) {
+  return (
+    <div className={styles.filterGroup}>
+      <span className={styles.filterLabel}>{label}</span>
+      {options.length > 0 ? (
+        <div className={styles.filterOptions} data-testid={`pi-point-filter-${testId}`}>
+          {options.map((option) => (
+            <label key={option} className={styles.filterOption} title={option}>
+              <input
+                type="checkbox"
+                checked={selectedOptions.includes(option)}
+                onChange={() => onToggle(option)}
+              />
+              <span>{option}</span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <span className={styles.noFilterOptions}>Não informado nos resultados</span>
+      )}
+    </div>
+  );
+}
+
+function getFilterOptions(
+  results: PiPointSearchResult[],
+  getValue: (result: PiPointSearchResult) => string | undefined,
+): string[] {
+  return [...new Set(results.map(getValue).filter((value): value is string => Boolean(value)))].sort((first, second) => (
+    first.localeCompare(second, 'pt-BR', { sensitivity: 'base' })
+  ));
+}
+
+function matchesFilter(value: string | undefined, selectedValues: string[]): boolean {
+  return selectedValues.length === 0 || (value !== undefined && selectedValues.includes(value));
+}
+
+function toggleFilter(values: string[], value: string): string[] {
+  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
+}
 
 function SearchIcon() {
   return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

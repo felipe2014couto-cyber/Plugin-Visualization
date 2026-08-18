@@ -37,6 +37,8 @@ export interface PiPointSearchResult {
   path?: string;
   dataSourceUid?: string;
   pointType?: string;
+  description?: string;
+  engineeringUnit?: string;
 }
 
 export interface PiPointValue {
@@ -148,11 +150,20 @@ export async function searchPiPoints(
       return [];
     }
     const pointType = getMetricField(point, 'PointType');
+    const description = getMetricField(point, 'Description');
+    // Os provedores PI usam nomes diferentes para a unidade de engenharia.
+    // Aceitamos os aliases retornados pelo datasource para manter a busca
+    // compatível com as versões já instaladas.
+    const engineeringUnit = getMetricField(point, 'EngineeringUnits')
+      ?? getMetricField(point, 'EngineeringUnit')
+      ?? getMetricField(point, 'EngUnits');
     return [{
       name,
       webId: getMetricField(point, 'WebId'),
       path: getMetricField(point, 'Path'),
       ...(pointType ? { pointType } : {}),
+      ...(description ? { description } : {}),
+      ...(engineeringUnit ? { engineeringUnit } : {}),
       dataSourceUid: dataSource.uid,
     }];
   });
@@ -885,7 +896,7 @@ function normalizeQuality(frame: DataFrame): Record<string, unknown> | undefined
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
-function getMetricField(value: MetricFindValue | undefined, field: 'text' | 'WebId' | 'Path' | 'PointType'): string | undefined {
+function getMetricField(value: MetricFindValue | undefined, field: string): string | undefined {
   if (!value) {
     return undefined;
   }

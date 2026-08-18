@@ -68,4 +68,26 @@ describe('PiPointSearch', () => {
     expect(screen.getAllByTestId('pi-point-search-disabled')).toHaveLength(1);
     expect(screen.getAllByTestId('pi-point-search-submit')[1]).toBeDisabled();
   });
+
+  it('filtra cumulativamente por descrição, tipo de dados e unidade de engenharia', async () => {
+    searchMock.mockResolvedValue([
+      { name: 'TEMPERATURA_A', webId: 'point-a', description: 'Forno', pointType: 'Float32', engineeringUnit: '°C' },
+      { name: 'PRESSAO_A', webId: 'point-b', description: 'Forno', pointType: 'Float32', engineeringUnit: 'bar' },
+      { name: 'ESTADO_A', webId: 'point-c', description: 'Bomba', pointType: 'Digital', engineeringUnit: 'estado' },
+    ]);
+    render(<PiPointSearch enabled />);
+
+    fireEvent.change(screen.getByTestId('pi-point-search-input'), { target: { value: '*' } });
+    fireEvent.click(screen.getByTestId('pi-point-search-submit'));
+    await waitFor(() => expect(screen.getByTestId('pi-point-search-filters')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByLabelText('Forno'));
+    expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('TEMPERATURA_A');
+    expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('PRESSAO_A');
+    expect(screen.getByTestId('pi-point-search-results')).not.toHaveTextContent('ESTADO_A');
+
+    fireEvent.click(screen.getByLabelText('bar'));
+    expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('PRESSAO_A');
+    expect(screen.getByTestId('pi-point-search-results')).not.toHaveTextContent('TEMPERATURA_A');
+  });
 });
