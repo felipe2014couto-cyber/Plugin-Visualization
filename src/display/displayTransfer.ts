@@ -320,7 +320,7 @@ function portableTable(properties: Record<string, unknown>): { items: TableDataI
     const key = `${binding.dataSourceUid}\u0000${binding.webId ?? binding.serverPath}\u0000${binding.pointName}`;
     if (seen.has(key)) throw new DisplayImportError('Tabela de Display inválida.');
     seen.add(key);
-    return { binding, ...(typeof input.path === 'string' ? { path: input.path } : {}), ...(typeof input.description === 'string' ? { description: input.description } : {}), ...(typeof input.engineeringUnit === 'string' ? { engineeringUnit: input.engineeringUnit } : {}), ...(typeof input.pointType === 'string' ? { pointType: input.pointType } : {}) };
+    return { binding, ...(typeof input.path === 'string' ? { path: input.path } : {}), ...(typeof input.description === 'string' ? { description: input.description } : {}), ...(typeof input.engineeringUnit === 'string' ? { engineeringUnit: input.engineeringUnit } : {}), ...(typeof input.pointType === 'string' ? { pointType: input.pointType } : {}), ...(input.nameMode === 'custom' ? { nameMode: 'custom' as const, customName: typeof input.customName === 'string' && input.customName.trim() ? input.customName : binding.pointName } : {}) };
   });
   const fallback = defaultTableColumns();
   const columns = Array.isArray(properties.columns) ? properties.columns.flatMap((input): TableColumnConfig[] => {

@@ -10,7 +10,7 @@ export type TableColumnId = typeof TABLE_COLUMNS[number];
 export type TableColumnAlign = 'left' | 'center' | 'right';
 export type TableStyle = 'dark' | 'light' | 'striped';
 export interface TableColumnConfig { id: TableColumnId; visible: boolean; align: TableColumnAlign; wrapText: boolean; }
-export interface TableDataItem { binding: PiPointBinding; path?: string; description?: string; engineeringUnit?: string; pointType?: string; }
+export interface TableDataItem { binding: PiPointBinding; path?: string; description?: string; engineeringUnit?: string; pointType?: string; nameMode?: 'tag' | 'custom'; customName?: string; }
 export interface TableProperties extends Record<string, unknown> { items: TableDataItem[]; columns: TableColumnConfig[]; decimals: number | null; style: TableStyle; }
 export type TableElement = DisplayElement<typeof TABLE_TYPE, TableProperties>;
 export interface CreateTableOptions { item: TableDataItem; id?: string; x?: number; y?: number; width?: number; height?: number; surface?: DisplaySurface; existingIds?: readonly string[]; generateId?: () => string; }
@@ -45,4 +45,4 @@ export function moveTableItem(document: DisplayDocument, elementId: string, inde
   const items = [...table.properties.items]; [items[index], items[nextIndex]] = [items[nextIndex], items[index]];
   return updateTableProperties(document, elementId, { items });
 }
-function copyItem(item: TableDataItem): TableDataItem { return { binding: { ...item.binding }, ...(item.path ? { path: item.path } : {}), ...(item.description ? { description: item.description } : {}), ...(item.engineeringUnit ? { engineeringUnit: item.engineeringUnit } : {}), ...(item.pointType ? { pointType: item.pointType } : {}) }; }
+function copyItem(item: TableDataItem): TableDataItem { return { binding: { ...item.binding }, ...(item.path ? { path: item.path } : {}), ...(item.description ? { description: item.description } : {}), ...(item.engineeringUnit ? { engineeringUnit: item.engineeringUnit } : {}), ...(item.pointType ? { pointType: item.pointType } : {}), ...(item.nameMode === 'custom' ? { nameMode: 'custom', customName: item.customName?.trim() || item.binding.pointName } : {}) }; }

@@ -62,7 +62,7 @@ function textAnchor(column: TableColumnConfig): 'start' | 'middle' | 'end' { ret
 function cellX(x: number, width: number, index: number, column: TableColumnConfig, padding: number): number { return column.align === 'right' ? x + (index + 1) * width - padding : column.align === 'center' ? x + (index + .5) * width : x + index * width + padding; }
 function truncate(value: string, max: number): string { return value.length > max ? `${value.slice(0, Math.max(1, max - 1))}…` : value; }
 function tableCellValue(column: TableColumnConfig['id'], item: TableElement['properties']['items'][number], result: PiPointValue | undefined, decimals: number | null, trend?: TrendRuntimeState): string {
-  if (column === 'name') return item.binding.pointName;
+  if (column === 'name') return item.nameMode === 'custom' && item.customName?.trim() ? item.customName : item.binding.pointName;
   if (column === 'path') return item.path ?? item.binding.serverPath;
   if (column === 'description') return item.description ?? '';
   if (column === 'units') return result?.unit ?? item.engineeringUnit ?? '';
