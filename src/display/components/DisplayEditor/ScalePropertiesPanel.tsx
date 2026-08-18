@@ -199,8 +199,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
   fields: css`
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px;
+    gap: 10px;
+    padding: 12px;
   `,
   field: css`
     display: flex;

@@ -74,7 +74,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   title: css`font-size: 12px; font-weight: ${theme.typography.fontWeightMedium};`,
   name: css`color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere;`,
-  fields: css`display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;`,
+  fields: css`display: flex; flex-direction: column; gap: 10px; padding: 12px;`,
   field: css`
     display: flex;
     flex-direction: column;
