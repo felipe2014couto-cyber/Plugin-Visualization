@@ -143,9 +143,19 @@ export async function searchPiPoints(
 
   const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
   const resourceApi = instance as PiDataSourceResourceApi;
-  if (typeof resourceApi.getResource === 'function') {
+  let serverWebId: string | undefined;
+  if (typeof instance.metricFindQuery === 'function') {
     try {
-      const advancedResults = await searchPiPointsAdvanced(resourceApi, request, dataSource.uid);
+      const servers = await instance.metricFindQuery({ type: 'dataserver' }, { isPiPoint: true });
+      serverWebId = getMetricField(servers[0], 'WebId') ?? getMetricField(servers[0], 'value');
+    } catch {
+      // A mensagem de fallback abaixo será usada se não houver outra estratégia.
+    }
+  }
+
+  if (serverWebId && typeof resourceApi.getResource === 'function') {
+    try {
+      const advancedResults = await searchPiPointsAdvanced(resourceApi, request, dataSource.uid, serverWebId);
       const filteredAdvancedResults = filterPiPointSearchResults(advancedResults, request);
       // Alguns adaptadores aceitam o endpoint, mas ignoram parte dos filtros
       // e respondem vazio. Se há um nome, ainda podemos usar o fallback seguro
@@ -160,15 +170,22 @@ export async function searchPiPoints(
     throw new Error('A pesquisa por metadados não é suportada por esta versão do PI Web API. Informe também parte do nome da tag.');
   }
   if (typeof instance.metricFindQuery !== 'function') throw new Error('A Data Source PI não expõe pesquisa de PI Points');
-
-  const servers = await instance.metricFindQuery({ type: 'dataserver' }, { isPiPoint: true });
-  const serverWebId = getMetricField(servers[0], 'WebId');
   if (!serverWebId) return [];
-  const pointName = request.term.includes('*') || request.term.includes('?') ? request.term : `${request.term}*`;
-  const points = await instance.metricFindQuery(
-    { path: '', webId: serverWebId, pointName, type: 'pipoint' },
-    { isPiPoint: true },
-  );
+  const pointNameCandidates = request.term.includes('*') || request.term.includes('?')
+    ? [request.term]
+    : [`${request.term}*`, `*${request.term}*`, request.term];
+  let points: MetricFindValue[] = [];
+  for (const pointName of pointNameCandidates) {
+    try {
+      points = await instance.metricFindQuery(
+        { path: '', webId: serverWebId, pointName, type: 'pipoint' },
+        { isPiPoint: true },
+      );
+    } catch {
+      points = [];
+    }
+    if (points.length > 0) break;
+  }
   const candidates = points.slice(0, request.limit).flatMap((point) => {
     const result = normalizePiPointMetadata(point, dataSource.uid);
     return result ? [result] : [];
@@ -201,16 +218,14 @@ async function searchPiPointsAdvanced(
   resourceApi: PiDataSourceResourceApi,
   request: ReturnType<typeof normalizePiPointSearchRequest>,
   dataSourceUid: string,
+  serverWebId: string,
 ): Promise<PiPointSearchResult[]> {
   const params = new URLSearchParams({
+    dataServerWebId: serverWebId,
     maxCount: String(request.limit),
     selectedFields: 'WebId;Name;Path;Descriptor;PointType;EngineeringUnits;PointSource',
   });
-  if (request.term) params.set('nameFilter', request.term.includes('*') || request.term.includes('?') ? request.term : `${request.term}*`);
-  if (request.description) params.set('descriptionFilter', `*${request.description}*`);
-  if (request.pointTypes.length) params.set('pointType', request.pointTypes.join(','));
-  if (request.engineeringUnits.length) params.set('engineeringUnits', request.engineeringUnits.join(','));
-  if (request.pointSources.length) params.set('pointSource', request.pointSources.join(','));
+  params.set('query', buildPiPointSearchQuery(request));
   const response = await resourceApi.getResource(`/points/search?${params.toString()}`);
   if (!Array.isArray(response) && (!response || typeof response !== 'object' || !Array.isArray((response as Record<string, unknown>).Items))) {
     throw new Error('Pesquisa avançada de PI Points indisponível');
@@ -219,6 +234,29 @@ async function searchPiPointsAdvanced(
     const result = normalizePiPointMetadata(item, dataSourceUid);
     return result ? [result] : [];
   }).slice(0, request.limit);
+}
+
+function buildPiPointSearchQuery(request: ReturnType<typeof normalizePiPointSearchRequest>): string {
+  const criteria: string[] = [];
+  if (request.term) {
+    const term = request.term.includes('*') || request.term.includes('?') ? request.term : `${request.term}*`;
+    criteria.push(`Tag:=${escapePiSearchValue(term)}`);
+  }
+  if (request.description) criteria.push(`Descriptor:=*${escapePiSearchValue(request.description)}*`);
+  if (request.pointTypes.length) {
+    criteria.push(`(${request.pointTypes.map((type) => `PointType:=${escapePiSearchValue(type)}`).join(' OR ')})`);
+  }
+  if (request.engineeringUnits.length) {
+    criteria.push(`(${request.engineeringUnits.map((unit) => `EngineeringUnits:=${escapePiSearchValue(unit)}`).join(' OR ')})`);
+  }
+  if (request.pointSources.length) {
+    criteria.push(`(${request.pointSources.map((source) => `PointSource:=${escapePiSearchValue(source)}`).join(' OR ')})`);
+  }
+  return criteria.join(' AND ');
+}
+
+function escapePiSearchValue(value: string): string {
+  return value.replace(/([\\"])/g, '\\$1');
 }
 
 async function enrichPiPointMetadata(
