@@ -15,7 +15,7 @@ export function ImagePropertiesPanel({ properties, onChange }: { properties: Ima
 }
 
 const styles = {
-  panel: css`flex:0 0 232px; min-width:0; border-left:1px solid var(--border-color); background:var(--panel-bg); color:var(--text-primary); overflow:auto;`,
+  panel: css`width:280px; flex:0 0 280px; min-width:0; border-left:1px solid var(--border-color); background:var(--panel-bg); color:var(--text-primary); overflow-x:hidden; overflow-y:auto;`,
   header: css`padding:10px 12px; border-bottom:1px solid var(--border-color); background:var(--panel-header-bg); font-size:12px; font-weight:600;`,
   fields: css`display:flex; flex-direction:column; gap:12px; padding:12px;`,
 };

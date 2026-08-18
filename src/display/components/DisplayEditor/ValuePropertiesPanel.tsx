@@ -100,12 +100,14 @@ export function ValuePropertiesPanel({ options, pointName, onChange, multistate,
 
 const getStyles = (theme: GrafanaTheme2) => ({
   panel: css`
-    flex: 0 0 232px;
+    flex: 0 0 280px;
+    width: 280px;
     min-width: 0;
     border-left: 1px solid var(--border-color);
     background: var(--panel-bg);
     color: var(--text-primary);
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
   `,
   panelHeader: css`
     display: flex;

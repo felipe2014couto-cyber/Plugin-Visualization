@@ -1772,7 +1772,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
       flex-direction: column;
       overflow-y: auto;
 
-      & > aside {
+      & > aside,
+      & > section {
         width: 100% !important;
         max-width: none !important;
         max-height: 46vh;
