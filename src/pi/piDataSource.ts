@@ -239,29 +239,64 @@ async function searchPiPointsAdvanced(
   dataSourceUid: string,
   serverWebId: string,
 ): Promise<PiPointSearchResponse> {
-  const params = new URLSearchParams({
+  const baseParams = new URLSearchParams({
     dataServerWebId: serverWebId,
-    maxCount: String(request.limit),
     selectedFields: 'WebId;Name;Path;Descriptor;PointType;EngineeringUnits;PointSource',
   });
-  params.set('query', buildPiPointSearchQuery(request));
-  const response = await resourceApi.getResource(`/points/search?${params.toString()}`);
+  baseParams.set('query', buildPiPointSearchQuery(request));
+
+  const results: PiPointSearchResult[] = [];
+  const identities = new Set<string>();
+  let startIndex = 0;
+  let knownTotal: number | undefined;
+
+  while (results.length < request.limit) {
+    const params = new URLSearchParams(baseParams);
+    params.set('startIndex', String(startIndex));
+    params.set('maxCount', String(request.limit - results.length));
+    const response = await resourceApi.getResource(`/points/search?${params.toString()}`);
+    assertPiPointSearchResponse(response);
+    const rawItems = getResourceItems(response);
+    if (rawItems.length === 0) break;
+
+    knownTotal = getResourceTotal(response) ?? knownTotal;
+    let added = 0;
+    for (const item of rawItems) {
+      const result = normalizePiPointMetadata(item, dataSourceUid);
+      if (!result) continue;
+      const identity = result.webId ?? `${result.path ?? ''}:${result.name}`;
+      if (identities.has(identity)) continue;
+      identities.add(identity);
+      results.push(result);
+      added += 1;
+      if (results.length === request.limit) break;
+    }
+    startIndex += rawItems.length;
+    if (knownTotal !== undefined && startIndex >= knownTotal) break;
+    // Protege contra adaptadores antigos que ignoram startIndex e repetem a página.
+    if (added === 0) break;
+  }
+
+  let hasMore = knownTotal !== undefined && knownTotal > request.limit;
+  if (!hasMore && results.length === request.limit) {
+    const probeParams = new URLSearchParams(baseParams);
+    probeParams.set('startIndex', String(startIndex));
+    probeParams.set('maxCount', '1');
+    const probeResponse = await resourceApi.getResource(`/points/search?${probeParams.toString()}`);
+    assertPiPointSearchResponse(probeResponse);
+    hasMore = getResourceItems(probeResponse).some((item) => {
+      const result = normalizePiPointMetadata(item, dataSourceUid);
+      const identity = result?.webId ?? (result ? `${result.path ?? ''}:${result.name}` : undefined);
+      return Boolean(identity && !identities.has(identity));
+    });
+  }
+  return { results, hasMore };
+}
+
+function assertPiPointSearchResponse(response: unknown): void {
   if (!Array.isArray(response) && (!response || typeof response !== 'object' || !Array.isArray((response as Record<string, unknown>).Items))) {
     throw new Error('Pesquisa avançada de PI Points indisponível');
   }
-  const items = getResourceItems(response).flatMap((item) => {
-    const result = normalizePiPointMetadata(item, dataSourceUid);
-    return result ? [result] : [];
-  }).slice(0, request.limit);
-  let hasMore = resourceResponseHasMore(response, request.limit);
-  if (!hasMore && items.length === request.limit && !resourceResponseHasKnownTotal(response)) {
-    const probeParams = new URLSearchParams(params);
-    probeParams.set('startIndex', String(request.limit));
-    probeParams.set('maxCount', '1');
-    const probeResponse = await resourceApi.getResource(`/points/search?${probeParams.toString()}`);
-    hasMore = getResourceItems(probeResponse).length > 0;
-  }
-  return { results: items, hasMore };
 }
 
 function buildPiPointSearchQuery(request: ReturnType<typeof normalizePiPointSearchRequest>): string {
@@ -345,22 +380,13 @@ function getResourceItems(value: unknown): unknown[] {
   return Array.isArray(items) ? items : [];
 }
 
-function resourceResponseHasKnownTotal(value: unknown): boolean {
-  if (!value || typeof value !== 'object') return false;
-  const fields = value as Record<string, unknown>;
-  return typeof fields.TotalCount === 'number' || typeof fields.Total === 'number';
-}
-
-function resourceResponseHasMore(value: unknown, limit: number): boolean {
-  if (!value || typeof value !== 'object') return false;
+function getResourceTotal(value: unknown): number | undefined {
+  if (!value || typeof value !== 'object') return undefined;
   const fields = value as Record<string, unknown>;
   const total = typeof fields.TotalCount === 'number'
     ? fields.TotalCount
     : typeof fields.Total === 'number' ? fields.Total : undefined;
-  if (total !== undefined) return total > limit;
-  const links = fields.Links;
-  if (links && typeof links === 'object' && getUnknownString((links as Record<string, unknown>).Next)) return true;
-  return Boolean(getUnknownString(fields.Next));
+  return total !== undefined && Number.isFinite(total) && total >= 0 ? total : undefined;
 }
 
 function getUnknownString(value: unknown): string | undefined {

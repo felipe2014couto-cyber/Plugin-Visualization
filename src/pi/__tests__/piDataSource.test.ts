@@ -215,6 +215,24 @@ describe('PI data source integration', () => {
     expect(response.hasMore).toBe(false);
   });
 
+  it('pagina quando o PI Web API limita cada resposta a 100 pontos', async () => {
+    const metricFindQuery = jest.fn().mockResolvedValue([{ text: 'pims', WebId: 'server-webid' }]);
+    const allItems = Array.from({ length: 1001 }, (_, index) => ({ Name: `LFS_RB2_${index}`, WebId: `paged-${index}` }));
+    const getResource = jest.fn(async (path: string) => {
+      const params = new URL(path, 'http://pi.local').searchParams;
+      const startIndex = Number(params.get('startIndex') ?? 0);
+      const requested = Number(params.get('maxCount') ?? 1000);
+      return { Items: allItems.slice(startIndex, startIndex + Math.min(100, requested)) };
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPointsWithStatus } = await import('../piDataSource');
+
+    const response = await searchPiPointsWithStatus('LFS_RB2', dataSourceSrv);
+    expect(response.results).toHaveLength(1000);
+    expect(response.hasMore).toBe(true);
+    expect(getResource).toHaveBeenCalledTimes(11);
+  });
+
   it('consulta o valor atual pela query de PI Point e normaliza o DataFrame', async () => {
     const query = jest.fn(async (_request: unknown) => ({
       data: [{
