@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
-import { createDisplayDocument } from '../../display';
+import { appendCalculationValue, createCalculationValue, createDisplayDocument } from '../../display';
 import { DisplayEditor } from '../../display/components/DisplayEditor';
 import {
   DisplayEditorMode,
@@ -27,6 +27,8 @@ import { isStatePiPointBinding } from '../../pi/piPointBinding';
 import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
 import { LibraryPanel } from '../Library/LibraryPanel';
+import { CalculationsPanel } from '../Calculations/CalculationsPanel';
+import type { CalculationDefinition } from '../../calculations/calculationEngine';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
@@ -43,7 +45,7 @@ export type VisualizationTheme = 'dark' | 'light';
 export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
 
 type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
-type AssetsTab = 'assets' | 'library';
+type AssetsTab = 'assets' | 'library' | 'calculations';
 
 function getInitialTheme(): VisualizationTheme {
   try {
@@ -394,7 +396,7 @@ export function App() {
         <aside
           className={isAssetsPanelOpen ? styles.assetsPanel : styles.assetsPanelCollapsed}
           data-testid="pims-vision-assets-panel"
-          aria-label="Ativos e Library"
+          aria-label="Data, Library e Calculation"
         >
           <div className={styles.assetsRail} aria-label="Navegação de ativos">
             <button
@@ -419,7 +421,7 @@ export function App() {
                   className={assetsTab === 'assets' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
                   data-testid="pims-vision-assets-tab"
                   onClick={() => setAssetsTab('assets')}
-                ><span className={styles.assetsIcon} aria-hidden="true"><CubeIcon /></span><span>Ativos</span></button>
+                ><span className={styles.assetsIcon} aria-hidden="true"><CubeIcon /></span><span>Data</span></button>
                 <button
                   type="button"
                   role="tab"
@@ -428,6 +430,14 @@ export function App() {
                   data-testid="pims-vision-library-tab"
                   onClick={() => setAssetsTab('library')}
                 ><span className={styles.assetsIcon} aria-hidden="true"><FactoryIcon /></span><span>Library</span></button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={assetsTab === 'calculations'}
+                  className={assetsTab === 'calculations' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
+                  data-testid="pims-vision-calculations-tab"
+                  onClick={() => setAssetsTab('calculations')}
+                ><span className={styles.assetsIcon} aria-hidden="true"><CalculatorIcon /></span><span>Calculation</span></button>
               </div>
               <div className={styles.assetsContent}>
                 <div className={styles.assetsPiSearch}>
@@ -443,6 +453,22 @@ export function App() {
                 </div>
                 <div className={styles.libraryTabContent} hidden={assetsTab !== 'library'}>
                   <LibraryPanel />
+                </div>
+                <div className={styles.libraryTabContent} hidden={assetsTab !== 'calculations'}>
+                  <CalculationsPanel
+                    selectedPiPoint={selectedPiPoint}
+                    document={document}
+                    onChange={setDocument}
+                    onAddToDisplay={(calculation: CalculationDefinition) => {
+                      setDocument((current) => current.elements.some((element) => (
+                        element.type === 'calculation' && element.properties.calculationId === calculation.id
+                      )) ? current : appendCalculationValue(current, createCalculationValue({
+                        calculationId: calculation.id,
+                        surface: current.surface,
+                        existingIds: current.elements.map((element) => element.id),
+                      })));
+                    }}
+                  />
                 </div>
               </div>
             </div>
@@ -1019,6 +1045,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   assetsBody: css`
+    container-type: inline-size;
     display: flex;
     flex-direction: column;
     flex: 1;
@@ -1052,54 +1079,81 @@ const getStyles = (theme: GrafanaTheme2) => ({
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: ${theme.spacing(1.25)};
-    padding: 0 ${theme.spacing(1.5)};
+    gap: 0;
+    padding: 0;
     color: var(--assets-header-text);
     background: var(--assets-header-bg);
     border-bottom: 1px solid var(--border-color);
-    font-size: 18px;
-    font-weight: ${theme.typography.fontWeightMedium};
+    font-size: 14px;
+    font-weight: ${theme.typography.fontWeightRegular};
+    @container (min-width: 560px) {
+      height: 105px;
+      font-size: 24px;
+    }
   `,
   assetsHeaderTab: css`
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     align-self: stretch;
     min-width: 0;
     flex: 1;
-    gap: ${theme.spacing(1)};
-    padding: 0 ${theme.spacing(1)};
+    gap: 5px;
+    padding: 0 6px;
     border: 0;
-    border-bottom: 3px solid transparent;
-    color: var(--text-secondary);
+    border-right: 1px solid rgba(255, 255, 255, 0.22);
+    color: rgba(255, 255, 255, 0.72);
     background: transparent;
     cursor: pointer;
     font: inherit;
-    &:hover { color: var(--assets-header-text); background: var(--selection-bg); }
+    white-space: nowrap;
+    &:last-child { flex: 1.25; }
+    &:last-child { border-right: 0; }
+    &:hover { color: #ffffff; background: rgba(255, 255, 255, 0.08); }
+    @container (min-width: 560px) {
+      gap: 20px;
+      padding: 0 30px;
+    }
   `,
   assetsHeaderTabActive: css`
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     align-self: stretch;
     min-width: 0;
     flex: 1;
-    gap: ${theme.spacing(1)};
-    padding: 0 ${theme.spacing(1)};
+    gap: 5px;
+    padding: 0 6px;
     border: 0;
-    border-bottom: 3px solid var(--accent);
-    color: var(--assets-header-text);
-    background: var(--selection-bg);
+    border-right: 1px solid rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    background: linear-gradient(135deg, #b4167e 0%, #9d126e 100%);
     cursor: pointer;
     font: inherit;
+    font-weight: ${theme.typography.fontWeightRegular};
+    white-space: nowrap;
+    &:last-child { flex: 1.25; }
+    &:last-child { border-right: 0; }
+    @container (min-width: 560px) {
+      gap: 20px;
+      padding: 0 30px;
+    }
   `,
   assetsIcon: css`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
-    color: var(--assets-header-text);
+    flex: 0 0 32px;
+    width: 32px;
+    height: 40px;
+    color: currentColor;
+    svg { width: 32px; height: 32px; stroke-width: 1.55; }
+    @container (min-width: 560px) {
+      flex-basis: 52px;
+      width: 52px;
+      height: 60px;
+      svg { width: 52px; height: 52px; stroke-width: 1.45; }
+    }
   `,
   assetsSectionLabel: css`
     padding: ${theme.spacing(1.5, 1.5, 0.5)};
@@ -1165,6 +1219,13 @@ function FactoryIcon() {
   return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" aria-hidden="true">
     <path d="M3 20V9l6 3V8l6 3V5h4v15" />
     <path d="M2 20h20M6 16v4M11 16v4M16 16v4M19 8h2v12" />
+  </svg>;
+}
+
+function CalculatorIcon() {
+  return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+    <rect x="5" y="3" width="14" height="18" rx="2" />
+    <path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 18h2M14 18h2" />
   </svg>;
 }
 

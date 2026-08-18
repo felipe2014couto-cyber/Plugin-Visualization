@@ -3,6 +3,9 @@ import { css } from '@emotion/css';
 import type { DisplayDocument } from '../../displayDocument';
 import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE, type RectangleElement } from '../../createRectangle';
 import { VALUE_TYPE, type ValueElement } from '../../createValue';
+import { CALCULATION_TYPE, type CalculationElement } from '../../createCalculation';
+import { CalculationElementView } from '../CalculationElementView';
+import { evaluateCalculation, type CalculationDefinition } from '../../../calculations/calculationEngine';
 import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
 import { GAUGE_TYPE, getGaugeOptions, type GaugeElement } from '../../createGauge';
@@ -16,9 +19,8 @@ import {
   type TrendSeriesViewState,
 } from '../TrendElementView';
 import type { PiPointValue, PiPointValueResult, PiTrendSeriesResult } from '../../../pi/piDataSource';
-import type { PiPointDatabaseLimits } from '../../../pi/piPointBinding';
+import { isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { DisplayTimeRange } from '../../../time/timeRange';
-import { isPiPointBinding, type PiPointBinding } from '../../../pi/piPointBinding';
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
 import { getMultistateColor } from '../../multistate';
 import { TEXT_TYPE, type TextElement } from '../../createText';
@@ -57,6 +59,23 @@ const DEFAULT_SURFACE_BACKGROUND = '#1f1f1f';
 const themedDefaultSurface = css`
   fill: var(--canvas-bg);
 `;
+
+function evaluateCalculationFromRuntime(
+  calculation: CalculationDefinition,
+  states: Array<ValueRuntimeState | undefined>,
+) {
+  const values = new Map<string, unknown>();
+  for (const [index, state] of states.entries()) {
+    if (!state || state.status === 'loading') {
+      return { status: 'loading' as const };
+    }
+    if (state.status === 'error') {
+      return { status: 'error' as const, error: new Error('Consulta PI indisponível.') };
+    }
+    values.set(calculation.inputs[index].name, state.result.value);
+  }
+  return evaluateCalculation(calculation, values);
+}
 
 interface CursorSelection {
   trendElementId: string;
@@ -151,7 +170,9 @@ export function DisplaySurface({
   const [cursorDrag, setCursorDrag] = useState<CursorDrag | null>(null);
   const [databaseScales, setDatabaseScales] = useState<Record<string, PiPointDatabaseLimits>>({});
   useEffect(() => {
-    if (!loadPiPointDatabaseLimits) return;
+    if (!loadPiPointDatabaseLimits) {
+      return;
+    }
     const databaseElements = elements.filter((element): element is BarElement | GaugeElement => {
       if (element.type === BAR_TYPE) return getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
       if (element.type === GAUGE_TYPE) return getGaugeOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
@@ -173,12 +194,17 @@ export function DisplaySurface({
     setCursorDrag(null);
   }, [editable]);
 
-  const valueConsumers: ValueRuntimeConsumer[] = elements.flatMap((element) => (
-    (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE)
+  const calculations = displayDocument.calculations ?? [];
+  const valueConsumers: ValueRuntimeConsumer[] = elements.flatMap((element) => {
+    if (element.type === CALCULATION_TYPE) {
+      const calculation = calculations.find((item) => item.id === element.properties.calculationId);
+      return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
+    }
+    return (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE)
       && isPiPointBinding(element.properties.binding)
       ? [{ elementId: element.id, binding: element.properties.binding }]
-      : []
-  ));
+      : [];
+  });
   const fallbackLoader = useCallback<LoadCurrentValues>(async (bindings) => {
     if (!loadValue) {
       return Object.fromEntries(bindings.map((binding) => [
@@ -628,6 +654,15 @@ export function DisplaySurface({
               runtimeState={runtimeStates.get(element.id) ?? { status: 'loading' }}
             />
           );
+        }
+        if (element.type === CALCULATION_TYPE) {
+          const calculation = calculations.find((item) => item.id === element.properties.calculationId);
+          if (!calculation) {
+            return null;
+          }
+          const inputStates = calculation.inputs.map((input) => runtimeStates.get(`${element.id}:${input.name}`));
+          const evaluation = evaluateCalculationFromRuntime(calculation, inputStates);
+          return <CalculationElementView key={element.id} element={element as CalculationElement} calculationName={calculation.name} evaluation={evaluation} />;
         }
         if (element.type === GAUGE_TYPE) {
           return (

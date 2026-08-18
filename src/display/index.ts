@@ -6,6 +6,8 @@ export type { DisplaySurface } from './displaySurface';
 export type { DisplayElement } from './displayElement';
 
 export type { DisplayDocument } from './displayDocument';
+export { appendCalculationValue, createCalculationValue, CALCULATION_TYPE } from './createCalculation';
+export type { CalculationElement, CalculationProperties, CreateCalculationOptions } from './createCalculation';
 
 export { DEFAULT_DISPLAY_SURFACE } from './defaults';
 

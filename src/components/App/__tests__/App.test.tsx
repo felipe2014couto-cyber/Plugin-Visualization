@@ -84,7 +84,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
 
     expect(screen.getByTestId('pims-vision-header')).toHaveTextContent('Visualization');
-    expect(screen.getByTestId('pims-vision-assets-panel')).toHaveTextContent('Ativos');
+    expect(screen.getByTestId('pims-vision-assets-panel')).toHaveTextContent('Data');
     expect(screen.getByTestId('pi-point-search')).toBeInTheDocument();
     expect(screen.getByTestId('pims-vision-editor-area')).toContainElement(screen.getByTestId('display-editor'));
     expect(screen.getByTestId('time-range-bar')).toBeInTheDocument();
@@ -165,6 +165,19 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('pims-vision-library-tab'));
 
     expect(screen.getByTestId('library-symbol-search')).toHaveValue('PV003B');
+  });
+
+  it('exibe o módulo de Cálculos à direita de Library', async () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('pims-vision-calculations-tab'));
+
+    expect(screen.getByTestId('pims-vision-calculations-tab')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('calculations-panel')).toBeVisible();
+    expect(screen.getByTestId('pims-vision-library-tab')).toHaveAttribute('aria-selected', 'false');
   });
 
   it('salva diretamente as alterações do dashboard atual', async () => {

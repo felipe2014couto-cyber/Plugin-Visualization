@@ -18,6 +18,8 @@ import { DEFAULT_TEXT_PROPERTIES, TEXT_TYPE } from './createText';
 import { IMAGE_TYPE } from './createImage';
 import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE } from './createLibrarySymbol';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../library';
+import type { CalculationDefinition } from '../calculations/calculationEngine';
+import { CALCULATION_TYPE } from './createCalculation';
 
 export const DISPLAY_EXPORT_FORMAT = 'pims-vision-display';
 export const DISPLAY_EXPORT_VERSION = 1;
@@ -92,7 +94,29 @@ function portableDocument(input: unknown): DisplayDocument {
     name: input.name,
     surface: { width: surface.width, height: surface.height, backgroundColor: surface.backgroundColor },
     elements,
+    calculations: portableCalculations(input.calculations),
   };
+}
+
+function portableCalculations(input: unknown): CalculationDefinition[] {
+  if (input === undefined) {
+    return [];
+  }
+  if (!Array.isArray(input)) {
+    throw new DisplayImportError('Cálculos de Display inválidos.');
+  }
+  return input.map((item) => {
+    if (!isRecord(item) || !isNonEmptyString(item.id) || !isNonEmptyString(item.name) || !isNonEmptyString(item.expression) || !Array.isArray(item.inputs)) {
+      throw new DisplayImportError('Cálculo de Display inválido.');
+    }
+    const inputs = item.inputs.map((inputItem) => {
+      if (!isRecord(inputItem) || !isNonEmptyString(inputItem.name)) {
+        throw new DisplayImportError('Entrada de cálculo inválida.');
+      }
+      return { name: inputItem.name, binding: portableBinding(inputItem.binding) };
+    });
+    return { id: item.id, name: item.name, expression: item.expression, inputs };
+  });
 }
 
 function portableElement(input: unknown): DisplayElement {
@@ -164,6 +188,15 @@ function portableElement(input: unknown): DisplayElement {
         binding: portableBinding(input.properties.binding),
         visual: portableVisual(input.properties.visual),
         ...portableMultistate(input.properties.multistate),
+        ...portableLink(input.properties),
+      } };
+    case CALCULATION_TYPE:
+      if (!isNonEmptyString(input.properties.calculationId)) {
+        throw new DisplayImportError('Elemento de cálculo inválido.');
+      }
+      return { ...base, type: CALCULATION_TYPE, properties: {
+        calculationId: input.properties.calculationId,
+        visual: portableVisual(input.properties.visual),
         ...portableLink(input.properties),
       } };
     case TREND_TYPE:
