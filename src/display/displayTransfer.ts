@@ -39,6 +39,64 @@ export function serializeDisplay(document: DisplayDocument): string {
   return JSON.stringify(envelope, null, 2);
 }
 
+export function serializeDisplayCsv(document: DisplayDocument): string {
+  const portable = portableDocument(document);
+  const headers = ['schemaVersion', 'displayId', 'displayName', 'surfaceWidth', 'surfaceHeight', 'backgroundColor', 'elementOrder', 'elementId', 'elementType', 'x', 'y', 'width', 'height', 'properties'];
+  const rows = portable.elements.length === 0
+    ? [[portable.schemaVersion, portable.id, portable.name, portable.surface.width, portable.surface.height, portable.surface.backgroundColor, '', '', '', '', '', '', '', '']]
+    : portable.elements.map((element, index) => [
+      portable.schemaVersion,
+      portable.id,
+      portable.name,
+      portable.surface.width,
+      portable.surface.height,
+      portable.surface.backgroundColor,
+      index,
+      element.id,
+      element.type,
+      element.x,
+      element.y,
+      element.width,
+      element.height,
+      JSON.stringify(element.properties),
+    ]);
+  return [headers, ...rows].map((row) => row.map(escapeCsvValue).join(',')).join('\r\n') + '\r\n';
+}
+
+export function serializeDisplayXml(document: DisplayDocument): string {
+  const portable = portableDocument(document);
+  const elements = portable.elements.map((element, index) => [
+    `      <element order="${index}" type="${escapeXml(element.type)}">`,
+    `        <id>${escapeXml(element.id)}</id>`,
+    '        <geometry>',
+    `          <x>${element.x}</x>`,
+    `          <y>${element.y}</y>`,
+    `          <width>${element.width}</width>`,
+    `          <height>${element.height}</height>`,
+    '        </geometry>',
+    serializeXmlValue('properties', element.properties, 8),
+    '      </element>',
+  ].join('\n')).join('\n');
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<displayExport format="pims-vision-display" version="1">',
+    '  <document>',
+    `    <schemaVersion>${portable.schemaVersion}</schemaVersion>`,
+    `    <id>${escapeXml(portable.id)}</id>`,
+    `    <name>${escapeXml(portable.name)}</name>`,
+    '    <surface>',
+    `      <width>${portable.surface.width}</width>`,
+    `      <height>${portable.surface.height}</height>`,
+    `      <backgroundColor>${escapeXml(portable.surface.backgroundColor)}</backgroundColor>`,
+    '    </surface>',
+    '    <elements>',
+    elements,
+    '    </elements>',
+    '  </document>',
+    '</displayExport>',
+  ].join('\n') + '\n';
+}
+
 export function parseImportedDisplay(input: string): DisplayDocument {
   if (input.trim() === '') {
     throw new DisplayImportError('Arquivo de Display inválido.');
@@ -58,12 +116,41 @@ export function parseImportedDisplay(input: string): DisplayDocument {
   return portableDocument(parsed.document);
 }
 
-export function getDisplayExportFileName(name: string): string {
+export type DisplayExportFileFormat = 'json' | 'csv' | 'xml';
+
+export function getDisplayExportFileName(name: string, format: DisplayExportFileFormat = 'json'): string {
   const safe = name.trim()
     .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-')
     .replace(/\s+/g, ' ')
     .replace(/^[. ]+|[. ]+$/g, '');
-  return `${safe || 'display'}.pims-vision.json`;
+  return `${safe || 'display'}.pims-vision.${format}`;
+}
+
+function escapeCsvValue(value: unknown): string {
+  const text = value === undefined || value === null ? '' : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function escapeXml(value: unknown): string {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function serializeXmlValue(name: string, value: unknown, indent: number): string {
+  const padding = ' '.repeat(indent);
+  const tag = toXmlName(name);
+  if (Array.isArray(value)) {
+    return value.map((item) => serializeXmlValue(tag, item, indent)).join('\n');
+  }
+  if (value !== null && typeof value === 'object') {
+    const children = Object.entries(value as Record<string, unknown>).map(([key, item]) => serializeXmlValue(key, item, indent + 2)).join('\n');
+    return children ? `${padding}<${tag}>\n${children}\n${padding}</${tag}>` : `${padding}<${tag}/>`;
+  }
+  return `${padding}<${tag}>${escapeXml(value ?? '')}</${tag}>`;
+}
+
+function toXmlName(name: string): string {
+  const safe = name.replace(/[^A-Za-z0-9_.-]/g, '_');
+  return /^[A-Za-z_]/.test(safe) ? safe : `item_${safe}`;
 }
 
 function portableDocument(input: unknown): DisplayDocument {

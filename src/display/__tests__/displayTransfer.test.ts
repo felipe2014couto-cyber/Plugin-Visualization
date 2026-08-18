@@ -15,7 +15,9 @@ import {
   DISPLAY_EXPORT_VERSION,
   getDisplayExportFileName,
   parseImportedDisplay,
+  serializeDisplayCsv,
   serializeDisplay,
+  serializeDisplayXml,
 } from '../index';
 
 const binding = { dataSourceUid: 'datasource-uid', serverPath: 'pims', pointName: 'SINUSOID' };
@@ -113,5 +115,29 @@ describe('displayTransfer', () => {
   it('cria nome de download portátil', () => {
     expect(getDisplayExportFileName(' Display / produção ')).toBe('Display - produção.pims-vision.json');
     expect(getDisplayExportFileName('')).toBe('display.pims-vision.json');
+    expect(getDisplayExportFileName('Display', 'csv')).toBe('Display.pims-vision.csv');
+    expect(getDisplayExportFileName('Display', 'xml')).toBe('Display.pims-vision.xml');
+  });
+
+  it('serializa CSV com metadados, ordem visual e propriedades portáteis', () => {
+    const document = createDisplayDocument({ id: 'csv-display', name: 'Display, produção' });
+    const first = createRectangle({ id: 'first', x: 10, y: 20, properties: { fill: '#123456', linkUrl: 'https://example.test/a?x=1,2' } });
+    const second = createRectangle({ id: 'second', x: 30, y: 40 });
+    document.elements = [first, second];
+    const csv = serializeDisplayCsv(document);
+    expect(csv.split('\r\n')[0]).toContain('schemaVersion,displayId,displayName');
+    expect(csv).toContain('"Display, produção"');
+    expect(csv).toContain('""fill"":""#123456""');
+    expect(csv.indexOf('first')).toBeLessThan(csv.indexOf('second'));
+  });
+
+  it('serializa XML real e escapa valores especiais', () => {
+    const document = createDisplayDocument({ id: 'xml-display', name: 'Display & produção' });
+    document.elements = [createRectangle({ id: 'xml-rectangle', properties: { fill: '#123456', stroke: '<white>' } })];
+    const xml = serializeDisplayXml(document);
+    expect(xml).toContain('<displayExport format="pims-vision-display" version="1">');
+    expect(xml).toContain('<name>Display &amp; produção</name>');
+    expect(xml).toContain('<stroke>&lt;white&gt;</stroke>');
+    expect(xml).not.toContain('<![CDATA[');
   });
 });

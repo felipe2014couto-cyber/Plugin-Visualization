@@ -80,7 +80,7 @@ import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
 import { updateMultistateConfig, type MultistateConfig } from '../../multistate';
-import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay } from '../../displayTransfer';
+import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay, serializeDisplayCsv, serializeDisplayXml, type DisplayExportFileFormat } from '../../displayTransfer';
 import { editorReducer, initialEditorState, type EditorAction, type EditorState } from './editorState';
 import {
   computeDragGeometry,
@@ -177,6 +177,7 @@ export function DisplayEditor({
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
+  const [exportFormat, setExportFormat] = useState<DisplayExportFileFormat>('json');
   const [surfaceZoom, setSurfaceZoom] = useState(1);
   const [surfaceViewCenter, setSurfaceViewCenter] = useState({
     x: displayDocument.surface.width / 2,
@@ -622,14 +623,24 @@ export function DisplayEditor({
   );
 
   const handleExport = useCallback(() => {
-    const blob = new Blob([serializeDisplay(documentRef.current)], { type: 'application/json;charset=utf-8' });
+    const serializers: Record<DisplayExportFileFormat, () => string> = {
+      json: () => serializeDisplay(documentRef.current),
+      csv: () => serializeDisplayCsv(documentRef.current),
+      xml: () => serializeDisplayXml(documentRef.current),
+    };
+    const mimeTypes: Record<DisplayExportFileFormat, string> = {
+      json: 'application/json;charset=utf-8',
+      csv: 'text/csv;charset=utf-8',
+      xml: 'application/xml;charset=utf-8',
+    };
+    const blob = new Blob([serializers[exportFormat]()], { type: mimeTypes[exportFormat] });
     const objectUrl = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = objectUrl;
-    anchor.download = getDisplayExportFileName(documentRef.current.name);
+    anchor.download = getDisplayExportFileName(documentRef.current.name, exportFormat);
     anchor.click();
     URL.revokeObjectURL(objectUrl);
-  }, []);
+  }, [exportFormat]);
 
   const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -997,6 +1008,7 @@ export function DisplayEditor({
               <button type="button" title="Reduzir" aria-label="Reduzir" className={styles.iconButton} data-testid="display-zoom-out" disabled={surfaceZoom <= DISPLAY_ZOOM_MIN} onClick={() => setSurfaceZoom((zoom) => Math.max(DISPLAY_ZOOM_MIN, Number((zoom - DISPLAY_ZOOM_STEP).toFixed(1))))}><ZoomOutIcon /></button>
               <button type="button" title="Ajustar à tela" aria-label="Ajustar à tela" className={styles.iconButton} data-testid="display-zoom-fit" onClick={handleZoomFit}><ZoomFitIcon /></button>
             </div>
+            <label className={styles.exportFormatLabel}>Formato<select value={exportFormat} onChange={(event) => setExportFormat(event.target.value as DisplayExportFileFormat)} data-testid="display-export-format" aria-label="Formato de exportação"><option value="json">JSON</option><option value="csv">CSV</option><option value="xml">XML</option></select></label>
             <button type="button" title="Exportar Display" aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" onClick={handleExport}>
               <ExportIcon />
             </button>
@@ -1601,6 +1613,23 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     gap: 8px;
     margin-left: auto;
+  `,
+  exportFormatLabel: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    white-space: nowrap;
+    select {
+      height: 30px;
+      min-width: 74px;
+      padding: 2px 5px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      background: var(--input-bg);
+      color: var(--text-primary);
+    }
   `,
   zoomControls: css`
     display: flex;
