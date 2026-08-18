@@ -81,6 +81,7 @@ import type { LoadTrendSeries } from '../../runtime/trendRuntime';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
 import { updateMultistateConfig, type MultistateConfig } from '../../multistate';
 import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay, serializeDisplayCsv, serializeDisplayXml, type DisplayExportFileFormat } from '../../displayTransfer';
+import { collectDisplayDataBindings, DISPLAY_DATA_EXPORT_MAX_POINTS, serializePiDataCsv, serializePiDataXml, type DisplayDataLoader } from '../../displayDataExport';
 import { editorReducer, initialEditorState, type EditorAction, type EditorState } from './editorState';
 import {
   computeDragGeometry,
@@ -112,6 +113,8 @@ export interface DisplayEditorProps {
   timeSelection?: DisplayTimeSelection;
   onTimeSelectionChange?: (selection: DisplayTimeSelection) => void;
   showToolbar?: boolean;
+  loadRecordedData?: DisplayDataLoader;
+  loadInterpolatedData?: DisplayDataLoader;
 }
 
 interface PendingDocumentTransaction {
@@ -159,6 +162,8 @@ export function DisplayEditor({
   timeSelection,
   onTimeSelectionChange,
   showToolbar = true,
+  loadRecordedData,
+  loadInterpolatedData,
 }: DisplayEditorProps) {
   const styles = useStyles2(getStyles);
   const [state, baseDispatch] = useReducer(editorReducer, initialEditorState);
@@ -178,6 +183,7 @@ export function DisplayEditor({
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [surfaceZoom, setSurfaceZoom] = useState(1);
   const [surfaceViewCenter, setSurfaceViewCenter] = useState({
     x: displayDocument.surface.width / 2,
@@ -622,7 +628,28 @@ export function DisplayEditor({
     [dispatch, onModeChange],
   );
 
-  const handleExport = useCallback((exportFormat: DisplayExportFileFormat) => {
+  const handleExport = useCallback(async (exportFormat: DisplayExportFileFormat) => {
+    if (exporting) return;
+    if (exportFormat !== 'json') {
+      const bindings = collectDisplayDataBindings(documentRef.current);
+      if (bindings.length === 0) { setImportError('Nenhuma fonte de dados PI encontrada no Display.'); setExportMenuOpen(false); return; }
+      if (!trendTimeRange || !loadRecordedData || (exportFormat === 'xml' && !loadInterpolatedData)) { setImportError('Consulta histórica PI indisponível.'); setExportMenuOpen(false); return; }
+      setExporting(true);
+      setImportError(null);
+      try {
+        const recorded = await loadRecordedData(bindings, trendTimeRange, { maxDataPoints: DISPLAY_DATA_EXPORT_MAX_POINTS });
+        let content: string;
+        if (exportFormat === 'csv') {
+          content = serializePiDataCsv(bindings, recorded);
+        } else {
+          const interpolated = await loadInterpolatedData!(bindings, trendTimeRange, { maxDataPoints: DISPLAY_DATA_EXPORT_MAX_POINTS });
+          content = serializePiDataXml(bindings, interpolated, recorded);
+        }
+        downloadExport(content, exportFormat, documentRef.current.name);
+      } catch { setImportError('Não foi possível exportar os dados PI do Display.'); }
+      finally { setExporting(false); setExportMenuOpen(false); }
+      return;
+    }
     const serializers: Record<DisplayExportFileFormat, () => string> = {
       json: () => serializeDisplay(documentRef.current),
       csv: () => serializeDisplayCsv(documentRef.current),
@@ -633,15 +660,9 @@ export function DisplayEditor({
       csv: 'text/csv;charset=utf-8',
       xml: 'application/xml;charset=utf-8',
     };
-    const blob = new Blob([serializers[exportFormat]()], { type: mimeTypes[exportFormat] });
-    const objectUrl = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = objectUrl;
-    anchor.download = getDisplayExportFileName(documentRef.current.name, exportFormat);
-    anchor.click();
-    URL.revokeObjectURL(objectUrl);
+    downloadExport(serializers[exportFormat](), exportFormat, documentRef.current.name, mimeTypes[exportFormat]);
     setExportMenuOpen(false);
-  }, []);
+  }, [exporting, loadInterpolatedData, loadRecordedData, trendTimeRange]);
 
   const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -1010,14 +1031,14 @@ export function DisplayEditor({
               <button type="button" title="Ajustar à tela" aria-label="Ajustar à tela" className={styles.iconButton} data-testid="display-zoom-fit" onClick={handleZoomFit}><ZoomFitIcon /></button>
             </div>
             <div className={styles.exportControl}>
-              <button type="button" title="Exportar Display" aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" aria-expanded={exportMenuOpen} onClick={() => setExportMenuOpen((open) => !open)}>
+              <button type="button" title={exporting ? 'Exportando dados PI...' : 'Exportar Display'} aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" disabled={exporting} aria-expanded={exportMenuOpen} onClick={() => setExportMenuOpen((open) => !open)}>
                 <ExportIcon />
               </button>
               {exportMenuOpen && <div className={styles.exportMenu} data-testid="display-export-format" role="menu" aria-label="Formato de exportação">
-                <span>Exportar como</span>
-                <button type="button" role="menuitem" data-testid="display-export-format-json" onClick={() => handleExport('json')}>JSON</button>
-                <button type="button" role="menuitem" data-testid="display-export-format-csv" onClick={() => handleExport('csv')}>CSV</button>
-                <button type="button" role="menuitem" data-testid="display-export-format-xml" onClick={() => handleExport('xml')}>XML</button>
+                {exporting ? <span>Exportando dados PI...</span> : <><span>Exportar como</span>
+                  <button type="button" role="menuitem" data-testid="display-export-format-json" onClick={() => void handleExport('json')}>JSON — Configuração</button>
+                  <button type="button" role="menuitem" data-testid="display-export-format-csv" onClick={() => void handleExport('csv')}>CSV — Dados</button>
+                  <button type="button" role="menuitem" data-testid="display-export-format-xml" onClick={() => void handleExport('xml')}>XML — Dados</button></>}
               </div>}
             </div>
             <button type="button" title="Importar Display" aria-label="Importar Display" className={styles.iconButton} data-testid="display-import" disabled={!onChange} onClick={() => importInputRef.current?.click()}>
@@ -1165,6 +1186,16 @@ function readFileText(file: File): Promise<string> {
     reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
     reader.readAsText(file, 'UTF-8');
   });
+}
+
+function downloadExport(content: string, format: DisplayExportFileFormat, name: string, mimeType?: string): void {
+  const types: Record<DisplayExportFileFormat, string> = { json: 'application/json;charset=utf-8', csv: 'text/csv;charset=utf-8', xml: 'application/xml;charset=utf-8' };
+  const objectUrl = URL.createObjectURL(new Blob([content], { type: mimeType ?? types[format] }));
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = getDisplayExportFileName(name, format);
+  anchor.click();
+  URL.revokeObjectURL(objectUrl);
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

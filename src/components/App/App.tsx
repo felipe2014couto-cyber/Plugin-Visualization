@@ -459,6 +459,8 @@ export function App() {
             loadValues={hasPiConnection ? getPiPointsCurrentValues : undefined}
             loadTrend={hasPiConnection ? loadTrend : undefined}
             loadRecordedTrend={hasPiConnection ? loadTrend : undefined}
+            loadRecordedData={hasPiConnection ? (bindings, range, options) => getPiTrendsRecordedHistoryForRange(bindings, range, options) : undefined}
+            loadInterpolatedData={hasPiConnection ? (bindings, range, options) => getPiTrendsPreviewForRange(bindings, range, options) : undefined}
             showToolbar={isAssetsPanelOpen}
             dropSymbolType={dropSymbolType}
             onDropSymbolTypeChange={setDropSymbolType}
