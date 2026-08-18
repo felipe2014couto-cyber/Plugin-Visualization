@@ -9,6 +9,7 @@ import {
   createDisplayDocument,
   createGauge,
   createRectangle,
+  createTable,
   createTrend,
   createValue,
   DISPLAY_EXPORT_FORMAT,
@@ -78,6 +79,14 @@ describe('displayTransfer', () => {
     const document = createDisplayDocument({ id: 'old', name: 'Old' });
     const imported = parseImportedDisplay(serializeDisplay(appendValue(document, createValue({ id: 'value', binding }))));
     expect(imported.elements[0].properties.multistate).toBeUndefined();
+  });
+
+  it('preserva linhas, metadados e colunas da Tabela', () => {
+    const document = createDisplayDocument({ id: 'table-display', name: 'Tabela' });
+    const table = createTable({ id: 'table', item: { binding, path: '\\\\pims\\TAG', description: 'Temperatura', engineeringUnit: '°C', pointType: 'Float32' } });
+    table.properties.columns.find((column) => column.id === 'description')!.visible = true;
+    document.elements = [table];
+    expect(parseImportedDisplay(serializeDisplay(document))).toEqual(document);
   });
 
   it('carrega binding único legado e salva várias séries no contrato canônico', () => {

@@ -49,6 +49,7 @@ import {
   updateBarOptions,
   type BarElement,
 } from '../../createBar';
+import { addTableItem, appendTable, createTable, moveTableItem, removeTableItem, TABLE_TYPE, updateTableProperties, type TableElement, type TableDataItem, type TableProperties } from '../../createTable';
 import {
   appendDisplayElement,
   createRectangle,
@@ -75,6 +76,7 @@ import { LibrarySymbolPropertiesPanel } from './LibrarySymbolPropertiesPanel';
 import { appendLibrarySymbol, createLibrarySymbol, updateLibrarySymbolProperties, type LibrarySymbolElement, type LibrarySymbolProperties } from '../../createLibrarySymbol';
 import { appendText, createText, TEXT_TYPE, updateTextProperties, type TextElement } from '../../createText';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
+import { TablePropertiesPanel } from './TablePropertiesPanel';
 import type { TrendCursor } from '../../runtime/trendCursor';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
@@ -94,7 +96,7 @@ import {
 } from './editorGeometry';
 
 export type DisplayEditorMode = 'edit' | 'view';
-export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar';
+export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'table';
 
 export interface DisplayEditorProps {
   document: DisplayDocument;
@@ -131,6 +133,8 @@ interface PiPointDragPreview {
   symbolType: PiPointDropSymbolType;
   targetTrend: boolean;
   targetTrendId?: string;
+  targetTable?: boolean;
+  targetTableId?: string;
 }
 
 interface TrendPopupState {
@@ -436,14 +440,17 @@ export function DisplayEditor({
     }
     const currentDocument = documentRef.current;
     const options = { binding: binding!, surface: currentDocument.surface, existingIds: currentDocument.elements.map(({ id }) => id) };
+    const item: TableDataItem = { binding, ...(selectedPiPoint?.path ? { path: selectedPiPoint.path } : {}), ...(selectedPiPoint?.description ? { description: selectedPiPoint.description } : {}), ...(selectedPiPoint?.engineeringUnit ? { engineeringUnit: selectedPiPoint.engineeringUnit } : {}), ...(selectedPiPoint?.pointType ? { pointType: selectedPiPoint.pointType } : {}) };
     const element = type === 'value' ? createValue(options)
       : type === 'trend' ? createTrend(options)
         : type === 'gauge' ? createGauge({ ...options, binding })
-          : createBar({ ...options, binding });
+          : type === 'bar' ? createBar({ ...options, binding })
+            : createTable({ item, surface: currentDocument.surface, existingIds: currentDocument.elements.map(({ id }) => id) });
     const next = type === 'value' ? appendValue(currentDocument, element as ValueElement)
       : type === 'trend' ? appendTrend(currentDocument, element as TrendElement)
         : type === 'gauge' ? appendGauge(currentDocument, element as GaugeElement)
-          : appendBar(currentDocument, element as BarElement);
+          : type === 'bar' ? appendBar(currentDocument, element as BarElement)
+            : appendTable(currentDocument, element as TableElement);
     if (!onChangeRef.current) {
       return;
     }
@@ -556,8 +563,9 @@ export function DisplayEditor({
       )
       : undefined;
     const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
+    const targetTable = dropSymbolType === 'table' ? resolveTableDropTarget(currentDocument, event.target, point) : undefined;
     const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
-    if (!binding || (!point && !targetTrend && !targetShape && !targetLibrarySymbol)) {
+    if (!binding || (!point && !targetTrend && !targetShape && !targetLibrarySymbol && !targetTable)) {
       return;
     }
     event.preventDefault();
@@ -574,6 +582,12 @@ export function DisplayEditor({
     if (targetTrend) {
       commitDocument(addTrendSeries(currentDocument, targetTrend.id, binding));
       dispatch({ type: 'SELECT', elementId: targetTrend.id });
+      return;
+    }
+    if (targetTable) {
+      const item: TableDataItem = { binding, ...(pointResult?.path ? { path: pointResult.path } : {}), ...(pointResult?.description ? { description: pointResult.description } : {}), ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}), ...(pointResult?.pointType ? { pointType: pointResult.pointType } : {}) };
+      commitDocument(addTableItem(currentDocument, targetTable.id, item));
+      dispatch({ type: 'SELECT', elementId: targetTable.id });
       return;
     }
 
@@ -610,6 +624,13 @@ export function DisplayEditor({
       case 'value': {
         const element = positionElementAt(createValue(createOptions), point!, currentDocument);
         commitDocument(appendValue(currentDocument, element));
+        dispatch({ type: 'SELECT', elementId: element.id });
+        break;
+      }
+      case 'table': {
+        const item: TableDataItem = { binding, ...(pointResult?.path ? { path: pointResult.path } : {}), ...(pointResult?.description ? { description: pointResult.description } : {}), ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}), ...(pointResult?.pointType ? { pointType: pointResult.pointType } : {}) };
+        const element = positionElementAt(createTable({ item, surface: currentDocument.surface, existingIds: currentDocument.elements.map((candidate) => candidate.id) }), point!, currentDocument);
+        commitDocument(appendTable(currentDocument, element));
         dispatch({ type: 'SELECT', elementId: element.id });
         break;
       }
@@ -714,6 +735,12 @@ export function DisplayEditor({
   const selectedBar = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === BAR_TYPE) as BarElement | undefined
     : undefined;
+  const selectedTable = mode === 'edit' && state.selectedElementId
+    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TABLE_TYPE) as TableElement | undefined
+    : undefined;
+  const handleTableChange = useCallback((patch: Partial<TableProperties>) => {
+    commitDocument(updateTableProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
+  }, [commitDocument]);
   const selectedRectangle = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === RECTANGLE_TYPE) as RectangleElement | undefined
     : undefined;
@@ -1014,6 +1041,7 @@ export function DisplayEditor({
                 <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertBoundElement('gauge'); }}><GaugeIcon /></button>
                 <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBoundElement('bar'); }}><BarIcon /></button>
                 <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('trend'); handleInsertBoundElement('trend'); }}><TrendIcon /></button>
+                <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('table'); handleInsertBoundElement('table'); }}>▦</button>
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
@@ -1134,6 +1162,7 @@ export function DisplayEditor({
         {selectedBar && (
           <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} openInNewTab={selectedBar.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
+        {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} />}
         {selectedRectangle && (
           <RectanglePropertiesPanel
             fill={selectedRectangle.properties.fill ?? DEFAULT_RECTANGLE_PROPERTIES.fill}
@@ -1160,7 +1189,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
+        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
@@ -1391,6 +1420,24 @@ function resolveLibrarySymbolDropTarget(
   return topmostElement as LibrarySymbolElement | undefined;
 }
 
+function resolveTableDropTarget(
+  document: DisplayDocument,
+  eventTarget: EventTarget | null,
+  point: Point | undefined,
+): TableElement | undefined {
+  const tableNode = eventTarget instanceof Element
+    ? eventTarget.closest('[data-element-id][data-element-type="table"]')
+    : null;
+  const elementId = tableNode?.getAttribute('data-element-id');
+  if (elementId) {
+    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === TABLE_TYPE);
+    if (element) return element as TableElement;
+  }
+  if (!point) return undefined;
+  const element = [...document.elements].reverse().find((candidate) => candidate.type === TABLE_TYPE && point.x >= candidate.x && point.x <= candidate.x + candidate.width && point.y >= candidate.y && point.y <= candidate.y + candidate.height);
+  return element as TableElement | undefined;
+}
+
 function findTrendAtClientPoint(
   clientX: number,
   clientY: number,
@@ -1481,6 +1528,8 @@ function createDropPreviewElement(
       return createBar(options);
     case 'value':
       return createValue(options);
+    case 'table':
+      return createTable({ item: { binding }, surface: document.surface });
   }
 }
 
@@ -1877,6 +1926,8 @@ function DropPreviewIcon({ symbolType }: { symbolType: PiPointDropSymbolType }) 
       return <BarIcon />;
     case 'value':
       return <ValueIcon />;
+    case 'table':
+      return <span aria-hidden="true">▦</span>;
   }
 }
 

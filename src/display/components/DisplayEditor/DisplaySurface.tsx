@@ -5,6 +5,8 @@ import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE, type RectangleElement } f
 import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
+import { TABLE_TYPE, type TableElement } from '../../createTable';
+import { TableElementView, getTableItemConsumerId, getTableTrendConsumerId } from '../TableElementView';
 import { GAUGE_TYPE, getGaugeOptions, type GaugeElement } from '../../createGauge';
 import { ValueElementView } from '../ValueElementView';
 import { GaugeElementView } from '../GaugeElementView';
@@ -178,7 +180,9 @@ export function DisplaySurface({
       && isPiPointBinding(element.properties.binding)
       ? [{ elementId: element.id, binding: element.properties.binding }]
       : []
-  ));
+  )).concat(elements.flatMap((element) => element.type === TABLE_TYPE
+    ? (element as TableElement).properties.items.map((item, index) => ({ elementId: getTableItemConsumerId(element.id, index), binding: item.binding }))
+    : []));
   const fallbackLoader = useCallback<LoadCurrentValues>(async (bindings) => {
     if (!loadValue) {
       return Object.fromEntries(bindings.map((binding) => [
@@ -203,9 +207,8 @@ export function DisplaySurface({
   }, [loadValue]);
   const runtimeStates = useValueRuntime(valueConsumers, loadValues ?? fallbackLoader);
   const trendConsumers: TrendRuntimeConsumer[] = elements.flatMap((element) => {
-    if (element.type !== TREND_TYPE) {
-      return [];
-    }
+    if (element.type === TABLE_TYPE) return (element as TableElement).properties.items.map((item, index) => ({ elementId: element.id, consumerId: getTableTrendConsumerId(element.id, index), binding: item.binding, width: Math.max(80, element.width / 4) }));
+    if (element.type !== TREND_TYPE) return [];
     return getTrendSeries(element as TrendElement).map(({ binding }) => ({
       elementId: element.id,
       consumerId: getTrendSeriesConsumerId(element.id, binding),
@@ -642,6 +645,9 @@ export function DisplaySurface({
               databaseScale={databaseScales[element.id]}
             />
           );
+        }
+        if (element.type === TABLE_TYPE) {
+          return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} />;
         }
         if (element.type === TREND_TYPE) {
           const trendElement = element as unknown as TrendElement;
