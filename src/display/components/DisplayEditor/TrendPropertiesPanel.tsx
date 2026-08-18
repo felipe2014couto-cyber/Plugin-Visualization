@@ -49,7 +49,7 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
     <button type="button" className={styles.removeButton} disabled={series.length <= 1} onClick={() => onSeriesRemove(selectedKey)}>Excluir tag selecionada</button>
     <label>Estilo<select value={selected.lineStyle ?? 'solid'} onChange={(e) => onSeriesChange(selectedKey, { lineStyle: e.currentTarget.value as TrendLineStyle })}><option value="solid">Sólido</option><option value="dashed">Tracejado</option><option value="dotted">Pontilhado</option></select></label>
     <label>Marcador<select value={selected.marker ?? 'none'} onChange={(e) => onSeriesChange(selectedKey, { marker: e.currentTarget.value as TrendMarker })}><option value="none">Nenhum</option><option value="circle">Círculo</option><option value="square">Quadrado</option></select></label>
-    {series.length > 1 && <label className={styles.check}><input type="checkbox" checked={selected.primaryScale === true} onChange={(e) => onSeriesChange(selectedKey, { primaryScale: e.currentTarget.checked })} />★ Escala principal (esquerda)</label>}
+    {series.length > 1 && <label className={styles.check}><input type="checkbox" checked={selected.primaryScale === true} onChange={(e) => onSeriesChange(selectedKey, { primaryScale: e.currentTarget.checked })} />★ Escala principal</label>}
     <label className={styles.check}><input type="checkbox" checked={visual.showRegression} onChange={(e) => onVisualChange({ showRegression: e.currentTarget.checked })} />Linha de regressão</label>
     <label>Formato<select value={visual.numberFormat} onChange={(e) => onVisualChange({ numberFormat: e.currentTarget.value as TrendNumberFormat })}><option value="automatic">Automático</option><option value="integer">Inteiro</option><option value="oneDecimal">1 decimal</option><option value="twoDecimals">2 decimais</option></select></label>
     <label>Escala Y<select value={visual.scaleMode === 'multiple' ? 'individual' : visual.scaleMode} onChange={(e) => onVisualChange({ scaleMode: e.currentTarget.value as TrendScaleMode })}><option value="single">Única</option><option value="individual">Individual por série</option><option value="configurable">Escala configurável</option></select></label>
@@ -63,11 +63,13 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
     <label>Tamanho<input type="number" min="10" max="24" value={fontSizeDraft} onChange={(e) => setFontSizeDraft(e.currentTarget.value)} onBlur={commitFontSize} onKeyDown={(e) => { if (e.key === 'Enter') { e.currentTarget.blur(); } }} /></label>
   </aside>;
 }
-const getStyles = (theme: GrafanaTheme2) => ({ panel: css`
+const getStyles = (theme: GrafanaTheme2) => ({
+  panel: css`
   width: 230px; flex: 0 0 230px; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; scrollbar-gutter:stable; padding:8px 12px; box-sizing:border-box; color:var(--text-primary); background:var(--surface-primary); border-left:1px solid var(--border-color); font-size:11px;
   label { display:flex; flex-direction:column; gap:2px; margin:4px 0; color:var(--text-secondary); } input, select { height:25px; min-height:25px; box-sizing:border-box; color:var(--text-primary); background:var(--input-bg); border:1px solid var(--border-color); } input[type='color'] { padding:2px; } input[type='range'] { accent-color:var(--accent); }`,
   heading: css`display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; strong { font-size:14px; } button { width:24px; height:24px; border:1px solid var(--border-color); border-radius:4px; color:var(--text-secondary); background:var(--button-bg); font-size:20px; line-height:18px; cursor:pointer; } button:hover { color:var(--text-primary); background:var(--button-hover); }`,
   removeButton: css`width:100%; min-height:26px; margin:3px 0 6px; border:1px solid var(--border-color); border-radius:3px; color:var(--text-primary); background:var(--button-bg); cursor:pointer; &:disabled { opacity:0.5; cursor:not-allowed; }`,
   rangeValue: css`float:right; color:var(--text-primary); font-weight:600;`,
   fontHeading: css`display:block; margin:7px 0 3px; font-size:13px;`,
-  check: css`flex-direction:row !important; align-items:center; input { width:14px; height:14px; min-height:14px; }` });
+  check: css`flex-direction:row !important; align-items:center; input { width:14px; height:14px; min-height:14px; }`
+});
