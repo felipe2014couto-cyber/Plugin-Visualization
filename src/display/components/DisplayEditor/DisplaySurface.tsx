@@ -225,7 +225,7 @@ export function DisplaySurface({
     event: React.MouseEvent<SVGGElement>,
     elementId: string,
   ) => {
-    if (editable || !onTrendOpen) {
+    if (editable) {
       return;
     }
     const element = elements.find((candidate) => candidate.id === elementId);
@@ -234,6 +234,16 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
+    const linkUrl = typeof (element.properties as { linkUrl?: unknown }).linkUrl === 'string'
+      ? (element.properties as { linkUrl: string }).linkUrl.trim()
+      : '';
+    if (linkUrl) {
+      window.open(linkUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (!onTrendOpen) {
+      return;
+    }
     onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, trendRuntimeStates), cursorsByTrend[element.id] ?? []);
   }, [cursorsByTrend, editable, elements, onTrendOpen, trendRuntimeStates]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
@@ -378,6 +388,9 @@ export function DisplaySurface({
     const target = event.target as Element;
     const elementId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
     const element = elementId ? displayDocument.elements.find((candidate) => candidate.id === elementId) : undefined;
+    if (element?.type === TREND_TYPE) {
+      return;
+    }
     const linkUrl = element && typeof (element.properties as { linkUrl?: unknown }).linkUrl === 'string' ? (element.properties as { linkUrl: string }).linkUrl.trim() : '';
     if (linkUrl) {
       event.preventDefault();
