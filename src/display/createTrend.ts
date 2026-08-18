@@ -8,6 +8,7 @@ export const TREND_TYPE = 'trend' as const;
 
 export interface TrendSeries {
   binding: PiPointBinding;
+  calculationId?: string;
   color: string;
   legendLabel?: string;
   lineWidth?: number;
@@ -78,7 +79,9 @@ export const TREND_SERIES_COLORS = [
 ] as const;
 
 export interface CreateTrendOptions {
-  binding: PiPointBinding;
+  binding?: PiPointBinding;
+  calculationId?: string;
+  calculationName?: string;
   id?: string;
   x?: number;
   y?: number;
@@ -90,7 +93,7 @@ export interface CreateTrendOptions {
 }
 
 export function createTrend(options: CreateTrendOptions): TrendElement {
-  if (!isPiPointBinding(options.binding)) {
+  if (!isPiPointBinding(options.binding) && !options.calculationId) {
     throw new Error('Trend requer um binding de PI Point válido');
   }
 
@@ -117,7 +120,11 @@ export function createTrend(options: CreateTrendOptions): TrendElement {
     width: safeWidth,
     height: safeHeight,
     properties: {
-      series: [{ binding: { ...options.binding }, color: trendSeriesColor(0) }],
+      series: [{
+        binding: options.binding ? { ...options.binding } : createCalculationTrendBinding(options.calculationId!),
+        ...(options.calculationId ? { calculationId: options.calculationId, legendLabel: options.calculationName } : {}),
+        color: trendSeriesColor(0),
+      }],
     },
   };
 }
@@ -183,7 +190,9 @@ export function updateTrendSeriesOptions(document: DisplayDocument, elementId: s
 export function removeTrendSeries(document: DisplayDocument, elementId: string, bindingKey: string): DisplayDocument {
   return updateTrendElement(document, elementId, (element) => {
     const series = getTrendSeries(element);
-    if (series.length <= 1) return element;
+    if (series.length <= 1) {
+      return element;
+    }
     const remaining = series.filter((item) => trendBindingKey(item.binding) !== bindingKey);
     if (remaining.length > 0 && !remaining.some((item) => item.primaryScale === true)) {
       remaining[0] = { ...remaining[0], primaryScale: true };
@@ -227,6 +236,10 @@ export function addTrendSeries(
 
 export function trendBindingKey(binding: PiPointBinding): string {
   return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
+}
+
+export function createCalculationTrendBinding(calculationId: string): PiPointBinding {
+  return { dataSourceUid: '__pims_calculation__', serverPath: calculationId, pointName: calculationId };
 }
 
 export function trendSeriesColor(index: number): string {

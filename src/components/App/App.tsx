@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
-import { appendCalculationValue, createCalculationValue, createDisplayDocument } from '../../display';
+import { createDisplayDocument } from '../../display';
 import { DisplayEditor } from '../../display/components/DisplayEditor';
 import {
   DisplayEditorMode,
@@ -13,6 +13,7 @@ import {
   getPiPointCurrentValue,
   getPiPointDatabaseLimits,
   getPiPointsCurrentValues,
+  searchPiPointsWithStatus,
   getPiTrendsHistoryForRange,
   getPiTrendsPlotDataForRange,
   getPiTrendsPreviewForRange,
@@ -28,7 +29,6 @@ import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
 import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
-import type { CalculationDefinition } from '../../calculations/calculationEngine';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
@@ -68,6 +68,7 @@ export function App() {
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
   const [assetsTab, setAssetsTab] = useState<AssetsTab>('assets');
+  const [openCalculationId, setOpenCalculationId] = useState<string>();
   const [isPiPointFiltersOpen, setIsPiPointFiltersOpen] = useState(false);
   const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
   const [dashboardUid, setDashboardUid] = useState<string>();
@@ -88,6 +89,11 @@ export function App() {
     );
   }
   const progressiveTrendLoader = progressiveTrendLoaderRef.current;
+  const resolveCalculationPiPoint = useCallback(async (name: string): Promise<PiPointSearchResult | undefined> => {
+    const response = await searchPiPointsWithStatus({ term: name, limit: 20 });
+    const exactMatch = response.results.find((result) => result.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0);
+    return exactMatch ?? (response.results.length === 1 ? response.results[0] : undefined);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -474,15 +480,9 @@ export function App() {
                     selectedPiPoint={selectedPiPoint}
                     document={document}
                     onChange={setDocument}
-                    onAddToDisplay={(calculation: CalculationDefinition) => {
-                      setDocument((current) => current.elements.some((element) => (
-                        element.type === 'calculation' && element.properties.calculationId === calculation.id
-                      )) ? current : appendCalculationValue(current, createCalculationValue({
-                        calculationId: calculation.id,
-                        surface: current.surface,
-                        existingIds: current.elements.map((element) => element.id),
-                      })));
-                    }}
+                    resolvePiPoint={resolveCalculationPiPoint}
+                    openCalculationId={openCalculationId}
+                    onCalculationOpenHandled={() => setOpenCalculationId(undefined)}
                   />
                 </div>
               </div>
@@ -503,12 +503,18 @@ export function App() {
             loadRecordedData={hasPiConnection ? (bindings, range, options) => getPiTrendsRecordedHistoryForRange(bindings, range, options) : undefined}
             loadInterpolatedData={hasPiConnection ? (bindings, range, options) => getPiTrendsPreviewForRange(bindings, range, options) : undefined}
             showToolbar={isAssetsPanelOpen}
+            symbolModeOnly={assetsTab === 'calculations'}
             dropSymbolType={dropSymbolType}
             onDropSymbolTypeChange={setDropSymbolType}
             trendRefreshKey={`${rangeFrom}:${rangeTo}`}
             trendTimeRange={{ from: rangeFrom, to: rangeTo }}
             timeSelection={timeSelection}
             onTimeSelectionChange={setTimeSelection}
+            onCalculationOpen={(calculationId) => {
+              setAssetsTab('calculations');
+              setIsAssetsPanelOpen(true);
+              setOpenCalculationId(calculationId);
+            }}
           />
         </main>
       </div>

@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { css } from '@emotion/css';
 import type { DisplayDocument } from '../../displayDocument';
 import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE, type RectangleElement } from '../../createRectangle';
@@ -20,7 +20,7 @@ import {
   trendTimeForX,
   type TrendSeriesViewState,
 } from '../TrendElementView';
-import type { PiPointValue, PiPointValueResult, PiTrendSeriesResult } from '../../../pi/piDataSource';
+import type { PiPointValue, PiPointValueResult, PiTrendSeries, PiTrendSeriesResult } from '../../../pi/piDataSource';
 import { isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { DisplayTimeRange } from '../../../time/timeRange';
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
@@ -77,6 +77,24 @@ function evaluateCalculationFromRuntime(
     values.set(calculation.inputs[index].name, state.result.value);
   }
   return evaluateCalculation(calculation, values);
+}
+
+function calculationValueRuntimeState(
+  calculation: CalculationDefinition,
+  elementId: string,
+  runtimeStates: ReadonlyMap<string, ValueRuntimeState>,
+): ValueRuntimeState {
+  const evaluation = evaluateCalculationFromRuntime(
+    calculation,
+    calculation.inputs.map((input) => runtimeStates.get(`${elementId}:${input.name}`)),
+  );
+  if (evaluation.status === 'loading') {
+    return { status: 'loading' };
+  }
+  if (evaluation.status === 'error') {
+    return { status: 'error' };
+  }
+  return { status: 'success', result: { value: evaluation.value } };
 }
 
 interface CursorSelection {
@@ -178,8 +196,12 @@ export function DisplaySurface({
       return;
     }
     const databaseElements = elements.filter((element): element is BarElement | GaugeElement => {
-      if (element.type === BAR_TYPE) return getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
-      if (element.type === GAUGE_TYPE) return getGaugeOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
+      if (element.type === BAR_TYPE) {
+        return getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
+      }
+      if (element.type === GAUGE_TYPE) {
+        return getGaugeOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
+      }
       return false;
     });
     void Promise.all(databaseElements.map(async (item) => {
@@ -198,10 +220,17 @@ export function DisplaySurface({
     setCursorDrag(null);
   }, [editable]);
 
-  const calculations = displayDocument.calculations ?? [];
+  const calculations = useMemo(() => displayDocument.calculations ?? [], [displayDocument.calculations]);
   const valueConsumers: ValueRuntimeConsumer[] = elements.flatMap((element) => {
     if (element.type === CALCULATION_TYPE) {
       const calculation = calculations.find((item) => item.id === element.properties.calculationId);
+      return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
+    }
+    const calculationId = typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
+      ? (element.properties as { calculationId: string }).calculationId
+      : undefined;
+    if (calculationId && (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE)) {
+      const calculation = calculations.find((item) => item.id === calculationId);
       return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
     }
     return (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE)
@@ -235,9 +264,13 @@ export function DisplaySurface({
   }, [loadValue]);
   const runtimeStates = useValueRuntime(valueConsumers, loadValues ?? fallbackLoader);
   const trendConsumers: TrendRuntimeConsumer[] = elements.flatMap((element) => {
-    if (element.type === TABLE_TYPE) return (element as TableElement).properties.items.map((item, index) => ({ elementId: element.id, consumerId: getTableTrendConsumerId(element.id, index), binding: item.binding, width: Math.max(80, element.width / 4) }));
-    if (element.type !== TREND_TYPE) return [];
-    return getTrendSeries(element as TrendElement).map(({ binding }) => ({
+    if (element.type === TABLE_TYPE) {
+      return (element as TableElement).properties.items.map((item, index) => ({ elementId: element.id, consumerId: getTableTrendConsumerId(element.id, index), binding: item.binding, width: Math.max(80, element.width / 4) }));
+    }
+    if (element.type !== TREND_TYPE) {
+      return [];
+    }
+    return getTrendSeries(element as TrendElement).filter((series) => !series.calculationId).map(({ binding }) => ({
       elementId: element.id,
       consumerId: getTrendSeriesConsumerId(element.id, binding),
       binding,
@@ -251,6 +284,60 @@ export function DisplaySurface({
     ]),
   ), []);
   const trendRuntimeStates = useTrendRuntime(trendConsumers, loadTrend ?? fallbackTrendLoader, trendRefreshKey);
+  const calculationTrendElements = useMemo(() => elements.flatMap((element) => {
+    if (element.type !== TREND_TYPE) {
+      return [];
+    }
+    return getTrendSeries(element as TrendElement)
+      .filter((series) => Boolean(series.calculationId))
+      .map((series) => ({ element: element as TrendElement, series }));
+  }), [elements]);
+  const calculationTrendSignature = calculationTrendElements.map(({ element, series }) => `${element.id}:${series.calculationId}`).join('|');
+  const [calculationTrendStates, setCalculationTrendStates] = useState<Map<string, TrendRuntimeState>>(new Map());
+  useEffect(() => {
+    let active = true;
+    const next = new Map<string, TrendRuntimeState>();
+    if (calculationTrendElements.length === 0) {
+      setCalculationTrendStates(next);
+      return () => { active = false; };
+    }
+    if (!loadTrend) {
+      calculationTrendElements.forEach(({ element, series }) => {
+        next.set(getTrendSeriesConsumerId(element.id, series.binding), { status: 'error', error: new Error('Consulta histórica PI indisponível') });
+      });
+      setCalculationTrendStates(next);
+      return () => { active = false; };
+    }
+    const calculationsById = new Map(calculations.map((calculation) => [calculation.id, calculation]));
+    void Promise.all(calculationTrendElements.map(async ({ element, series }) => {
+      const calculation = series.calculationId ? calculationsById.get(series.calculationId) : undefined;
+      if (!calculation) {
+        return [element, series, { status: 'error', error: new Error('Cálculo não encontrado') } as TrendRuntimeState] as const;
+      }
+      const results = await loadTrend(calculation.inputs.map((input) => input.binding), undefined, { maxDataPoints: 1000 });
+      const inputSeries = calculation.inputs.map((input) => results[getPiBindingKey(input.binding)]);
+      if (inputSeries.some((result) => !result || result.status !== 'success')) {
+        return [element, series, { status: 'error', error: new Error('Não foi possível carregar o histórico do cálculo') } as TrendRuntimeState] as const;
+      }
+      const points = calculateHistoricalPoints(calculation, inputSeries.map((result) => result.status === 'success' ? result.series : undefined));
+      return [element, series, { status: 'success', data: { pointName: calculation.name, points } } as TrendRuntimeState] as const;
+    })).then((results) => {
+      if (!active) {
+        return;
+      }
+      results.forEach(([element, series, state]) => next.set(getTrendSeriesConsumerId(element.id, series.binding), state));
+      setCalculationTrendStates(next);
+    }).catch(() => {
+      if (active) {
+        setCalculationTrendStates(next);
+      }
+    });
+    return () => { active = false; };
+  }, [calculationTrendElements, calculationTrendSignature, calculations, loadTrend, trendRefreshKey]);
+  const allTrendRuntimeStates = useMemo(
+    () => new Map([...trendRuntimeStates, ...calculationTrendStates]),
+    [calculationTrendStates, trendRuntimeStates],
+  );
 
   const handleTrendDoubleClick = useCallback((
     event: React.MouseEvent<SVGGElement>,
@@ -268,8 +355,8 @@ export function DisplaySurface({
     if (!onTrendOpen) {
       return;
     }
-    onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, trendRuntimeStates), cursorsByTrend[element.id] ?? []);
-  }, [cursorsByTrend, editable, elements, onTrendOpen, trendRuntimeStates]);
+    onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, allTrendRuntimeStates), cursorsByTrend[element.id] ?? []);
+  }, [allTrendRuntimeStates, cursorsByTrend, editable, elements, onTrendOpen]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
     if (!editable) {
       return;
@@ -306,7 +393,7 @@ export function DisplaySurface({
           continue;
         }
         const element = elements.find((candidate) => candidate.id === elementId) as TrendElement | undefined;
-        const points = element ? getTrendPoints(element, trendRuntimeStates) : undefined;
+        const points = element ? getTrendPoints(element, allTrendRuntimeStates) : undefined;
         const retained = points ? cursors.filter((cursor) => isTrendCursorWithinSeries(points, cursor.time)) : cursors;
         if (retained.length > 0) {
           next[elementId] = retained;
@@ -317,7 +404,7 @@ export function DisplaySurface({
       }
       return changed ? next : current;
     });
-  }, [elements, trendRuntimeStates]);
+  }, [allTrendRuntimeStates, elements]);
 
   useEffect(() => {
     if (selectedCursor && !(cursorsByTrend[selectedCursor.trendElementId] ?? [])
@@ -336,7 +423,7 @@ export function DisplaySurface({
     }
     const svg = svgRef.current;
     const element = elements.find((candidate) => candidate.id === elementId) as TrendElement | undefined;
-    const points = element ? getTrendPoints(element, trendRuntimeStates) : undefined;
+    const points = element ? getTrendPoints(element, allTrendRuntimeStates) : undefined;
     if (!svg || !points || points.length === 0 || cursorDrag) {
       return;
     }
@@ -358,7 +445,7 @@ export function DisplaySurface({
     });
     setSelectedCursor({ trendElementId: elementId, cursorId: cursor.id });
     svg.focus();
-  }, [cursorDrag, editable, elements, trendRuntimeStates]);
+  }, [allTrendRuntimeStates, cursorDrag, editable, elements]);
 
   const handleTrendCursorPointerDown = useCallback((
     event: React.PointerEvent<SVGLineElement>,
@@ -408,7 +495,9 @@ export function DisplaySurface({
     ? getElementById(displayDocument, selectedElementId) ?? null
     : null;
   const handleElementClick = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
-    if (editable) return;
+    if (editable) {
+      return;
+    }
     const target = event.target as Element;
     const elementId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
     const element = elementId ? displayDocument.elements.find((candidate) => candidate.id === elementId) : undefined;
@@ -494,7 +583,7 @@ export function DisplaySurface({
           return;
         }
         const trendElement = element as TrendElement;
-        const seriesPoints = getTrendSeriesStates(trendElement, trendRuntimeStates)
+        const seriesPoints = getTrendSeriesStates(trendElement, allTrendRuntimeStates)
           .flatMap(({ runtimeState }) => runtimeState.data?.points ? [runtimeState.data.points] : []);
         const points = seriesPoints.flat().sort((left, right) => left.time - right.time);
         if (points.length === 0) {
@@ -526,7 +615,7 @@ export function DisplaySurface({
       }
       onPointerMove(svgPointFromEvent(svg, e.clientX, e.clientY));
     },
-    [cursorDrag, editable, elements, onPointerMove, selectionBox, trendRuntimeStates, trendTimeRange],
+    [allTrendRuntimeStates, cursorDrag, editable, elements, onPointerMove, selectionBox, trendTimeRange],
   );
 
   const handleSvgPointerEnd = useCallback(
@@ -617,7 +706,7 @@ export function DisplaySurface({
           const symbol = element as LibrarySymbolElement;
           const source = getLibrarySymbolSource(symbol);
           return (
-            <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height} mask-type="alpha">
+            <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height}>
               <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" />
             </mask>
           );
@@ -645,12 +734,18 @@ export function DisplaySurface({
       )}
 
       {elements.map((element) => {
-        if (element.type === VALUE_TYPE && isPiPointBinding(element.properties.binding)) {
+        if (element.type === VALUE_TYPE && (isPiPointBinding(element.properties.binding) || typeof element.properties.calculationId === 'string')) {
+          const calculation = typeof element.properties.calculationId === 'string'
+            ? calculations.find((item) => item.id === element.properties.calculationId)
+            : undefined;
           return (
             <ValueElementView
               key={element.id}
               element={element as unknown as ValueElement}
-              runtimeState={runtimeStates.get(element.id) ?? { status: 'loading' }}
+              runtimeState={calculation
+                ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+                : runtimeStates.get(element.id) ?? { status: 'loading' }}
+              label={calculation?.name}
             />
           );
         }
@@ -664,22 +759,34 @@ export function DisplaySurface({
           return <CalculationElementView key={element.id} element={element as CalculationElement} calculationName={calculation.name} evaluation={evaluation} />;
         }
         if (element.type === GAUGE_TYPE) {
+          const calculation = typeof element.properties.calculationId === 'string'
+            ? calculations.find((item) => item.id === element.properties.calculationId)
+            : undefined;
           return (
             <GaugeElementView
               key={element.id}
               element={element as unknown as GaugeElement}
-              runtimeState={runtimeStates.get(element.id)}
+              runtimeState={calculation
+                ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+                : runtimeStates.get(element.id)}
               databaseScale={databaseScales[element.id]}
+              label={calculation?.name}
             />
           );
         }
         if (element.type === BAR_TYPE) {
+          const calculation = typeof element.properties.calculationId === 'string'
+            ? calculations.find((item) => item.id === element.properties.calculationId)
+            : undefined;
           return (
             <BarElementView
               key={element.id}
               element={element as unknown as BarElement}
-              runtimeState={runtimeStates.get(element.id)}
+              runtimeState={calculation
+                ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+                : runtimeStates.get(element.id)}
               databaseScale={databaseScales[element.id]}
+              label={calculation?.name}
             />
           );
         }
@@ -688,7 +795,7 @@ export function DisplaySurface({
         }
         if (element.type === TREND_TYPE) {
           const trendElement = element as unknown as TrendElement;
-          const seriesStates = getTrendSeriesStates(trendElement, trendRuntimeStates);
+          const seriesStates = getTrendSeriesStates(trendElement, allTrendRuntimeStates);
           if (seriesStates.length === 0) {
             return null;
           }
@@ -825,6 +932,30 @@ function getTrendSeriesStates(
     series,
     runtimeState: runtimeStates.get(getTrendSeriesConsumerId(element.id, series.binding)) ?? { status: 'loading' },
   }));
+}
+
+function calculateHistoricalPoints(
+  calculation: CalculationDefinition,
+  inputSeries: Array<PiTrendSeries | undefined>,
+): PiTrendSeries['points'] {
+  const times = [...new Set(inputSeries.flatMap((series) => series?.points.map((point) => point.time) ?? []))].sort((left, right) => left - right);
+  return times.flatMap((time) => {
+    const values = new Map<string, unknown>();
+    for (const [index, input] of calculation.inputs.entries()) {
+      const series = inputSeries[index];
+      const point = series?.points.filter((candidate) => candidate.time <= time).at(-1);
+      if (!point) {
+        return [];
+      }
+      values.set(input.name, point.value);
+    }
+    const evaluation = evaluateCalculation(calculation, values);
+    return evaluation.status === 'success' ? [{ time, value: evaluation.value }] : [];
+  });
+}
+
+function getPiBindingKey(binding: PiPointBinding): string {
+  return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
 }
 
 function getTrendPoints(
