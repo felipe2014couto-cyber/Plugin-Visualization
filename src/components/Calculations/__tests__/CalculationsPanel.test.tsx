@@ -36,6 +36,24 @@ describe('CalculationsPanel', () => {
     expect(screen.getByTestId('calculations-empty')).toBeInTheDocument();
   });
 
+  it('impede salvar dois cálculos com o mesmo nome', async () => {
+    render(<CalculationsPanel />);
+
+    fireEvent.click(screen.getByTestId('calculation-new'));
+    fireEvent.change(screen.getByTestId('calculation-editor-name'), { target: { value: 'Teste' } });
+    fireEvent.change(screen.getByTestId('calculation-editor-expression'), { target: { value: '1 + 1' } });
+    fireEvent.click(screen.getByTestId('calculation-editor-save'));
+    await waitFor(() => expect(screen.getByTestId('calculation-1')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('calculation-new'));
+    fireEvent.change(screen.getByTestId('calculation-editor-name'), { target: { value: ' teste ' } });
+    fireEvent.change(screen.getByTestId('calculation-editor-expression'), { target: { value: '2 + 2' } });
+    fireEvent.click(screen.getByTestId('calculation-editor-save'));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Já existe um cálculo com esse nome');
+    expect(screen.queryByTestId('calculation-2')).toBeNull();
+  });
+
   it('remove um cálculo salvo', async () => {
     render(<CalculationsPanel />);
     fireEvent.click(screen.getByTestId('calculation-new'));
