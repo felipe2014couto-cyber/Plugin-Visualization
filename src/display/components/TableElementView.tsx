@@ -18,8 +18,10 @@ export function getTableTrendConsumerId(tableId: string, index: number): string 
 export const TableElementView = React.memo(function TableElementView({ element, runtimeStates, trendStates }: TableElementViewProps) {
   const style = getTableStyle(element.properties.style);
   const columns = visibleColumns(element.properties.columns);
-  const headerHeight = 28;
+  const headerHeight = Math.max(28, Math.min(48, element.height * 0.15));
   const rowHeight = Math.max(24, (element.height - headerHeight) / Math.max(1, element.properties.items.length));
+  const headerFontSize = Math.max(12, Math.min(22, headerHeight * 0.5));
+  const rowFontSize = Math.max(12, Math.min(24, rowHeight * 0.42));
   const columnWidth = element.width / columns.length;
   const clipId = `table-clip-${element.id}`;
   return <g data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>
@@ -27,22 +29,22 @@ export const TableElementView = React.memo(function TableElementView({ element, 
     <rect x={element.x} y={element.y} width={element.width} height={element.height} rx={4} fill={style.background} stroke={style.border} />
     <g clipPath={`url(#${clipId})`} pointerEvents="all">
       <rect x={element.x} y={element.y} width={element.width} height={headerHeight} fill={style.header} />
-      {columns.map((column, index) => <text key={column.id} x={cellX(element.x, columnWidth, index, column, 6)} y={element.y + headerHeight / 2} fill={style.headerText} fontSize={12} fontWeight={600} textAnchor={textAnchor(column)} dominantBaseline="middle">{TABLE_COLUMN_LABELS[column.id]}</text>)}
+      {columns.map((column, index) => <text key={column.id} x={cellX(element.x, columnWidth, index, column, 8)} y={element.y + headerHeight / 2} fill={style.headerText} fontSize={headerFontSize} fontWeight={600} textAnchor={textAnchor(column)} dominantBaseline="middle">{TABLE_COLUMN_LABELS[column.id]}</text>)}
       {element.properties.items.map((item, rowIndex) => {
         const state = runtimeStates.get(getTableItemConsumerId(element.id, rowIndex));
         return <g key={`${item.binding.dataSourceUid}-${item.binding.pointName}-${rowIndex}`}>
           <rect x={element.x} y={element.y + headerHeight + rowIndex * rowHeight} width={element.width} height={rowHeight} fill={style.row(rowIndex)} stroke={style.grid} />
-          {columns.map((column, index) => <TableCell key={column.id} textColor={style.text(rowIndex)} column={column} x={element.x + index * columnWidth} y={element.y + headerHeight + rowIndex * rowHeight} width={columnWidth} height={rowHeight} item={item} current={state?.status === 'success' ? state.result : undefined} trend={trendStates?.get(getTableTrendConsumerId(element.id, rowIndex))} decimals={element.properties.decimals} />)}
+          {columns.map((column, index) => <TableCell key={column.id} textColor={style.text(rowIndex)} fontSize={rowFontSize} column={column} x={element.x + index * columnWidth} y={element.y + headerHeight + rowIndex * rowHeight} width={columnWidth} height={rowHeight} item={item} current={state?.status === 'success' ? state.result : undefined} trend={trendStates?.get(getTableTrendConsumerId(element.id, rowIndex))} decimals={element.properties.decimals} />)}
         </g>;
       })}
     </g>
   </g>;
 });
 
-function TableCell({ column, textColor, x, y, width, height, item, current, trend, decimals }: { column: TableColumnConfig; textColor: string; x: number; y: number; width: number; height: number; item: TableElement['properties']['items'][number]; current?: PiPointValue; trend?: TrendRuntimeState; decimals: number | null }) {
+function TableCell({ column, textColor, fontSize, x, y, width, height, item, current, trend, decimals }: { column: TableColumnConfig; textColor: string; fontSize: number; x: number; y: number; width: number; height: number; item: TableElement['properties']['items'][number]; current?: PiPointValue; trend?: TrendRuntimeState; decimals: number | null }) {
   if (column.id === 'trend') return <Sparkline x={x + 5} y={y + 5} width={Math.max(1, width - 10)} height={Math.max(1, height - 10)} trend={trend} />;
   const value = truncate(tableCellValue(column.id, item, current, decimals, trend), Math.max(4, Math.floor(width / 7)));
-  return <text x={cellX(x, width, 0, column, 6)} y={y + height / 2} fill={textColor} fontSize={12} textAnchor={textAnchor(column)} dominantBaseline="middle">{value}</text>;
+  return <text x={cellX(x, width, 0, column, 8)} y={y + height / 2} fill={textColor} fontSize={fontSize} textAnchor={textAnchor(column)} dominantBaseline="middle">{value}</text>;
 }
 function Sparkline({ x, y, width, height, trend }: { x: number; y: number; width: number; height: number; trend?: TrendRuntimeState }) {
   const points = trend?.status === 'success' ? trend.data.points : [];
