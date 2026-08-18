@@ -231,8 +231,10 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
 const getStyles = (theme: GrafanaTheme2) => ({
   container: css`
     display: flex;
+    flex: 1;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
     padding: ${theme.spacing(0.75, 1.5, 1.5)};
     color: var(--text-secondary);
   `,
@@ -300,10 +302,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   results: css`
-    max-height: 320px;
+    flex: 1 1 160px;
+    min-height: 120px;
     margin: ${theme.spacing(1, 0, 0)};
     padding: 0;
-    overflow: auto;
+    overflow-y: auto;
     list-style: none;
     border-top: 1px solid var(--border-color);
   `,
@@ -398,7 +401,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     background: color-mix(in srgb, var(--warning) 10%, transparent);
     color: var(--text-primary);
     font-size: 12px;
-    line-height: 1.4;
+    line-height: 1.35;
   `,
   result: css`
     width: 100%;
