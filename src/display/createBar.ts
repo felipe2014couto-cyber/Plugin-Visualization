@@ -10,6 +10,7 @@ export const BAR_TYPE = 'bar' as const;
 
 export interface BarProperties extends Record<string, unknown> {
   binding?: PiPointBinding;
+  calculationId?: string;
   minimum: number;
   maximum: number;
   showValue: boolean;
@@ -36,6 +37,7 @@ const DEFAULT_BAR_HEIGHT = 300;
 
 export interface CreateBarOptions {
   binding?: PiPointBinding;
+  calculationId?: string;
   multistate?: MultistateConfig;
   id?: string;
   x?: number;
@@ -73,6 +75,7 @@ export function createBar(options: CreateBarOptions): BarElement {
     height: safeHeight,
     properties: {
       ...(options.binding ? { binding: { ...options.binding } } : {}),
+      ...(options.calculationId ? { calculationId: options.calculationId } : {}),
       ...normalizeScaleOptions(options.options),
       scaleMode: 'database',
       orientation: options.orientation ?? 'vertical',

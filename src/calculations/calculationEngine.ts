@@ -8,6 +8,7 @@ export interface CalculationInput {
 export interface CalculationDefinition {
   id: string;
   name: string;
+  description?: string;
   expression: string;
   inputs: CalculationInput[];
 }
@@ -52,7 +53,7 @@ export function evaluateCalculation(
 
 function replaceToken(expression: string, token: string, replacement: string): string {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return expression.replace(new RegExp(`(?<![A-Za-z0-9_.:-])${escaped}(?![A-Za-z0-9_.:-])`, 'g'), replacement);
+  return expression.replace(new RegExp(`(?<![A-Za-z0-9_.:-])${escaped}(?![A-Za-z0-9_.:-])`, 'gi'), replacement);
 }
 
 function parseArithmeticExpression(expression: string, variables: ReadonlyMap<string, number>): number {

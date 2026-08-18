@@ -60,6 +60,7 @@ import {
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
+import { CALCULATION_DRAG_MIME, parseCalculationDragData } from '../../../calculations/calculationDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
 import { DisplaySurface } from './DisplaySurface';
 import { TrendPopup } from '../TrendPopup';
@@ -112,6 +113,8 @@ export interface DisplayEditorProps {
   trendTimeRange?: DisplayTimeRange;
   timeSelection?: DisplayTimeSelection;
   onTimeSelectionChange?: (selection: DisplayTimeSelection) => void;
+  onCalculationOpen?: (calculationId: string) => void;
+  symbolModeOnly?: boolean;
   showToolbar?: boolean;
   loadRecordedData?: DisplayDataLoader;
   loadInterpolatedData?: DisplayDataLoader;
@@ -161,6 +164,8 @@ export function DisplayEditor({
   trendTimeRange,
   timeSelection,
   onTimeSelectionChange,
+  onCalculationOpen,
+  symbolModeOnly = false,
   showToolbar = true,
   loadRecordedData,
   loadInterpolatedData,
@@ -273,8 +278,15 @@ export function DisplayEditor({
   const handleSelect = useCallback(
     (elementId: string | null) => {
       dispatch({ type: 'SELECT', elementId });
+      const element = elementId ? documentRef.current.elements.find((item) => item.id === elementId) : undefined;
+      const calculationId = element && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
+        ? (element.properties as { calculationId: string }).calculationId
+        : element?.type === 'calculation' && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
+          ? (element.properties as { calculationId: string }).calculationId
+          : undefined;
+      if (calculationId) onCalculationOpen?.(calculationId);
     },
-    [dispatch],
+    [dispatch, onCalculationOpen],
   );
   const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
     dispatch({ type: 'SELECT_MANY', elementIds, additive });
@@ -462,6 +474,29 @@ export function DisplayEditor({
       event.dataTransfer.dropEffect = 'copy';
       return;
     }
+    if (Array.from(event.dataTransfer.types).includes(CALCULATION_DRAG_MIME)) {
+      event.preventDefault();
+      const svg = event.currentTarget.querySelector('svg');
+      const preview = svg
+        ? createCalculationDragPreview(
+          svg,
+          event.currentTarget,
+          event.clientX,
+          event.clientY,
+          documentRef.current,
+          dropSymbolType,
+        )
+        : undefined;
+      event.dataTransfer.dropEffect = preview?.valid ? 'copy' : 'none';
+      setPiPointDragPreview(preview ?? createInvalidDragPreview(
+        event.currentTarget,
+        event.clientX,
+        event.clientY,
+        'Cálculo',
+        dropSymbolType,
+      ));
+      return;
+    }
     if (!Array.from(event.dataTransfer.types).includes(PI_POINT_DRAG_MIME)) {
       return;
     }
@@ -519,6 +554,34 @@ export function DisplayEditor({
   const handlePiPointDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     setPiPointDragPreview(null);
     if (mode !== 'edit' || !onChangeRef.current) {
+      return;
+    }
+    const calculationId = parseCalculationDragData(event.dataTransfer.getData(CALCULATION_DRAG_MIME));
+    if (calculationId) {
+      const currentDocument = documentRef.current;
+      const calculation = currentDocument.calculations?.find((item) => item.id === calculationId);
+      const svg = event.currentTarget.querySelector('svg');
+      const point = svg ? getDropPoint(svg, event.clientX, event.clientY, currentDocument) : undefined;
+      if (!calculation || !point) {
+        return;
+      }
+      event.preventDefault();
+      const options = {
+        calculationId,
+        surface: currentDocument.surface,
+        existingIds: currentDocument.elements.map((item) => item.id),
+      };
+      const element = dropSymbolType === 'value' ? createValue(options)
+        : dropSymbolType === 'trend' ? createTrend({ ...options, calculationName: calculation.name })
+          : dropSymbolType === 'gauge' ? createGauge(options)
+            : createBar(options);
+      const positioned = positionElementAt(element, point, currentDocument);
+      const nextDocument = dropSymbolType === 'value' ? appendValue(currentDocument, positioned as ValueElement)
+        : dropSymbolType === 'trend' ? appendTrend(currentDocument, positioned as TrendElement)
+          : dropSymbolType === 'gauge' ? appendGauge(currentDocument, positioned as GaugeElement)
+            : appendBar(currentDocument, positioned as BarElement);
+      commitDocument(nextDocument);
+      dispatch({ type: 'SELECT', elementId: positioned.id });
       return;
     }
     const librarySymbolId = parseLibrarySymbolDragData(event.dataTransfer.getData(LIBRARY_SYMBOL_DRAG_MIME));
@@ -1010,10 +1073,10 @@ export function DisplayEditor({
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
                 <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
                 <input ref={imageInputRef} type="file" accept="image/*" data-testid="display-image-input" className={styles.fileInput} onChange={handleImageFile} />
-                <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('value'); handleInsertBoundElement('value'); }}><ValueIcon /></button>
-                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertBoundElement('gauge'); }}><GaugeIcon /></button>
-                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBoundElement('bar'); }}><BarIcon /></button>
-                <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} disabled={!createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('trend'); handleInsertBoundElement('trend'); }}><TrendIcon /></button>
+                <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} disabled={!symbolModeOnly && !createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('value'); if (!symbolModeOnly) { handleInsertBoundElement('value'); } }}><ValueIcon /></button>
+                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} disabled={!symbolModeOnly && !createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('gauge'); if (!symbolModeOnly) { handleInsertBoundElement('gauge'); } }}><GaugeIcon /></button>
+                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} disabled={!symbolModeOnly && !createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('bar'); if (!symbolModeOnly) { handleInsertBoundElement('bar'); } }}><BarIcon /></button>
+                <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} disabled={!symbolModeOnly && !createPiPointBinding(selectedPiPoint ?? {})} onClick={() => { onDropSymbolTypeChange?.('trend'); if (!symbolModeOnly) { handleInsertBoundElement('trend'); } }}><TrendIcon /></button>
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
@@ -1118,7 +1181,7 @@ export function DisplayEditor({
         {selectedValue && (
           <ValuePropertiesPanel
             options={selectedValue.properties.visual}
-            pointName={selectedValue.properties.binding.pointName}
+            pointName={selectedValue.properties.binding?.pointName ?? ''}
             onChange={handleValueVisualChange}
             multistate={selectedValue.properties.multistate}
             onMultistateChange={handleMultistateChange}
@@ -1325,6 +1388,35 @@ function createPiPointDragPreview(
   };
 }
 
+function createCalculationDragPreview(
+  svg: SVGSVGElement,
+  wrapper: HTMLDivElement,
+  clientX: number,
+  clientY: number,
+  document: DisplayDocument,
+  symbolType: PiPointDropSymbolType,
+): PiPointDragPreview | undefined {
+  const point = getDropPoint(svg, clientX, clientY, document);
+  if (!point) {
+    return undefined;
+  }
+  const prototype = createCalculationDropPreviewElement(symbolType, document);
+  const svgBounds = svg.getBoundingClientRect();
+  const wrapperBounds = wrapper.getBoundingClientRect();
+  const viewport = getSvgViewport(svgBounds, document);
+  const positioned = positionElementAt(prototype, point, document);
+  return {
+    left: viewport.left - wrapperBounds.left + positioned.x * viewport.scale,
+    top: viewport.top - wrapperBounds.top + positioned.y * viewport.scale,
+    width: positioned.width * viewport.scale,
+    height: positioned.height * viewport.scale,
+    valid: true,
+    label: 'Cálculo',
+    symbolType,
+    targetTrend: false,
+  };
+}
+
 function findTrendAtPoint(document: DisplayDocument, point: Point): TrendElement | undefined {
   const topmostElement = [...document.elements].reverse().find((element) => (
     point.x >= element.x
@@ -1470,6 +1562,26 @@ function createDropPreviewElement(
 ): ElementGeometry {
   const options = {
     binding,
+    surface: document.surface,
+  };
+  switch (symbolType) {
+    case 'trend':
+      return createTrend(options);
+    case 'gauge':
+      return createGauge(options);
+    case 'bar':
+      return createBar(options);
+    case 'value':
+      return createValue(options);
+  }
+}
+
+function createCalculationDropPreviewElement(
+  symbolType: PiPointDropSymbolType,
+  document: DisplayDocument,
+): ElementGeometry {
+  const options = {
+    calculationId: '__preview__',
     surface: document.surface,
   };
   switch (symbolType) {

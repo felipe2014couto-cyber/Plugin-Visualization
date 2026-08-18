@@ -23,6 +23,7 @@ export type GaugeVisualOptions = ScaleVisualOptions & {
 
 export interface GaugeProperties extends Record<string, unknown> {
   binding?: PiPointBinding;
+  calculationId?: string;
   minimum: number;
   maximum: number;
   showValue: boolean;
@@ -48,6 +49,7 @@ const DEFAULT_GAUGE_HEIGHT = 220;
 
 export interface CreateGaugeOptions {
   binding?: PiPointBinding;
+  calculationId?: string;
   multistate?: MultistateConfig;
   id?: string;
   x?: number;
@@ -84,6 +86,7 @@ export function createGauge(options: CreateGaugeOptions): GaugeElement {
     height: safeHeight,
     properties: {
       ...(options.binding ? { binding: { ...options.binding } } : {}),
+      ...(options.calculationId ? { calculationId: options.calculationId } : {}),
       ...normalizeGaugeOptions(options.options),
     scaleMode: 'database',
       ...(options.multistate ? { multistate: options.multistate } : {}),
