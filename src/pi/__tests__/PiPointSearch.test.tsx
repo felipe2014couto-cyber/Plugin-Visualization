@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
 import { PiPointSearch } from '../PiPointSearch';
-import { searchPiPoints } from '../piDataSource';
+import { searchPiPointsWithStatus } from '../piDataSource';
 import { PI_POINT_DRAG_MIME } from '../piPointDrag';
 
 jest.mock('@grafana/ui', () => ({
@@ -10,16 +10,16 @@ jest.mock('@grafana/ui', () => ({
 }));
 
 jest.mock('../piDataSource', () => ({
-  searchPiPoints: jest.fn(),
+  searchPiPointsWithStatus: jest.fn(),
 }));
 
 describe('PiPointSearch', () => {
-  const searchMock = searchPiPoints as jest.MockedFunction<typeof searchPiPoints>;
+  const searchMock = searchPiPointsWithStatus as jest.MockedFunction<typeof searchPiPointsWithStatus>;
 
   it('pesquisa, exibe resultados e identifica o PI Point selecionado', async () => {
-    searchMock.mockResolvedValue([
+    searchMock.mockResolvedValue({ results: [
       { name: 'LFI_A268SV_TEMPERATURA_AMBIENTE', webId: 'point-webid', path: '\\\\pims\\LFI_A268SV_TEMPERATURA_AMBIENTE' },
-    ]);
+    ], hasMore: false });
     const onSelect = jest.fn();
     render(<PiPointSearch enabled onSelect={onSelect} />);
 
@@ -52,7 +52,7 @@ describe('PiPointSearch', () => {
   });
 
   it('trata resultado vazio, erro e pesquisa indisponível sem quebrar a UI', async () => {
-    searchMock.mockResolvedValueOnce([]).mockRejectedValueOnce(new Error('failed'));
+    searchMock.mockResolvedValueOnce({ results: [], hasMore: false }).mockRejectedValueOnce(new Error('failed'));
     render(<PiPointSearch enabled filtersOpen />);
 
     const input = screen.getByTestId('pi-point-search-input');
@@ -70,11 +70,11 @@ describe('PiPointSearch', () => {
   });
 
   it('filtra cumulativamente por descrição, tipo de dados e unidade de engenharia', async () => {
-    searchMock.mockResolvedValue([
+    searchMock.mockResolvedValue({ results: [
       { name: 'TEMPERATURA_A', webId: 'point-a', description: 'Forno', pointType: 'Float32', engineeringUnit: '°C' },
       { name: 'PRESSAO_A', webId: 'point-b', description: 'Forno', pointType: 'Float32', engineeringUnit: 'bar' },
       { name: 'ESTADO_A', webId: 'point-c', description: 'Bomba', pointType: 'Digital', engineeringUnit: 'estado' },
-    ]);
+    ], hasMore: false });
     render(<PiPointSearch enabled filtersOpen />);
 
     fireEvent.change(screen.getByTestId('pi-point-search-input'), { target: { value: '*' } });
@@ -96,5 +96,19 @@ describe('PiPointSearch', () => {
 
     expect(screen.getByLabelText('Float32')).toBeInTheDocument();
     expect(screen.getByLabelText('Digital')).toBeInTheDocument();
+  });
+
+  it('mostra contador e aviso quando existem mais de 1000 resultados', async () => {
+    searchMock.mockResolvedValue({
+      results: Array.from({ length: 1000 }, (_, index) => ({ name: `TAG_${index}`, webId: `id-${index}` })),
+      hasMore: true,
+    });
+    render(<PiPointSearch enabled />);
+
+    fireEvent.change(screen.getByTestId('pi-point-search-input'), { target: { value: 'TAG' } });
+    fireEvent.click(screen.getByTestId('pi-point-search-submit'));
+
+    await waitFor(() => expect(screen.getByTestId('pi-point-search-count')).toHaveTextContent('1000 PI Points exibidos'));
+    expect(screen.getByTestId('pi-point-search-limit-warning')).toHaveTextContent('mais de 1000 PI Points');
   });
 });

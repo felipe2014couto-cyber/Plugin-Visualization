@@ -2,7 +2,7 @@ import React, { FormEvent, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
-import { searchPiPoints, type PiPointSearchResult } from './piDataSource';
+import { searchPiPointsWithStatus, type PiPointSearchResult } from './piDataSource';
 import { PI_POINT_DRAG_MIME, serializePiPointDragData } from './piPointDrag';
 
 type SearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
@@ -27,6 +27,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
   const [descriptionFilter, setDescriptionFilter] = useState('');
   const [engineeringUnitFilter, setEngineeringUnitFilter] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [hasMoreResults, setHasMoreResults] = useState(false);
   const requestSequence = useRef(0);
 
   const pointTypes = useMemo(() => [...new Set([
@@ -52,14 +53,16 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
     setStatus('loading');
     setErrorMessage('');
     try {
-      const nextResults = await searchPiPoints({
+      const response = await searchPiPointsWithStatus({
         term: normalizedTerm,
         description: descriptionFilter,
         pointTypes: selectedPointTypes,
         engineeringUnits: engineeringUnitFilter ? [engineeringUnitFilter] : [],
       });
       if (requestId !== requestSequence.current) return;
+      const nextResults = response.results;
       setResults(nextResults);
+      setHasMoreResults(response.hasMore);
       setSelected(null);
       setStatus(nextResults.length > 0 ? 'success' : 'empty');
     } catch (error) {
@@ -146,7 +149,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
             />
           </div>
 
-          {results.length === 0 && status !== 'loading' ? (
+          {results.length === 0 && status === 'idle' ? (
             <p className={styles.noFilterOptions} data-testid="pi-point-filter-awaiting-search">
               Pesquise uma tag para carregar as opções de filtro.
             </p>
@@ -160,6 +163,15 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false }: PiPoin
 
       {results.length > 0 && (
         <>
+          <p className={styles.resultCount} data-testid="pi-point-search-count">
+            {results.length} PI Points {hasMoreResults ? 'exibidos' : 'encontrados'}
+          </p>
+          {hasMoreResults && (
+            <div className={styles.resultLimitWarning} data-testid="pi-point-search-limit-warning">
+              A pesquisa encontrou mais de 1000 PI Points. Estão sendo exibidos somente os primeiros 1000 pontos.
+              Refine a pesquisa ou utilize mais filtros para reduzir os resultados.
+            </div>
+          )}
           <ul className={styles.results} data-testid="pi-point-search-results">
           {filteredResults.map((result) => (
             <li key={result.webId ?? `${result.name}-${result.path ?? ''}`}>
@@ -373,6 +385,20 @@ const getStyles = (theme: GrafanaTheme2) => ({
     margin: ${theme.spacing(1, 0, 0)};
     color: var(--text-secondary);
     font-size: 12px;
+  `,
+  resultCount: css`
+    margin: ${theme.spacing(1, 0, 0)};
+    color: var(--text-secondary);
+    font-size: 12px;
+  `,
+  resultLimitWarning: css`
+    margin-top: ${theme.spacing(0.75)};
+    padding: ${theme.spacing(0.75)};
+    border: 1px solid var(--warning);
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    color: var(--text-primary);
+    font-size: 12px;
+    line-height: 1.4;
   `,
   result: css`
     width: 100%;

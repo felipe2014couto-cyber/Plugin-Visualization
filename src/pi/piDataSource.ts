@@ -51,7 +51,13 @@ export interface PiPointSearchRequest {
   limit?: number;
 }
 
-const PI_POINT_SEARCH_DEFAULT_LIMIT = 100;
+export interface PiPointSearchResponse {
+  results: PiPointSearchResult[];
+  hasMore: boolean;
+}
+
+export const PI_POINT_SEARCH_MAX_RESULTS = 1000;
+const PI_POINT_SEARCH_DEFAULT_LIMIT = PI_POINT_SEARCH_MAX_RESULTS;
 const PI_POINT_METADATA_CONCURRENCY = 8;
 const piPointMetadataCache = new Map<string, PiPointSearchResult>();
 
@@ -131,9 +137,16 @@ export async function searchPiPoints(
   termOrRequest: string | PiPointSearchRequest,
   dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
 ): Promise<PiPointSearchResult[]> {
+  return (await searchPiPointsWithStatus(termOrRequest, dataSourceSrv)).results;
+}
+
+export async function searchPiPointsWithStatus(
+  termOrRequest: string | PiPointSearchRequest,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
+): Promise<PiPointSearchResponse> {
   const request = normalizePiPointSearchRequest(termOrRequest);
   if (!request.term && !hasMetadataFilters(request)) {
-    return [];
+    return { results: [], hasMore: false };
   }
 
   const dataSource = resolvePiDataSource(dataSourceSrv);
@@ -156,21 +169,26 @@ export async function searchPiPoints(
   if (serverWebId && typeof resourceApi.getResource === 'function') {
     try {
       const advancedResults = await searchPiPointsAdvanced(resourceApi, request, dataSource.uid, serverWebId);
-      const filteredAdvancedResults = filterPiPointSearchResults(advancedResults, request);
+      const filteredAdvancedResults = filterPiPointSearchResults(advancedResults.results, request);
       // Alguns adaptadores aceitam o endpoint, mas ignoram parte dos filtros
       // e respondem vazio. Se há um nome, ainda podemos usar o fallback seguro
       // por nome para não esconder uma PI Point existente.
-      if (filteredAdvancedResults.length > 0 || !request.term) return filteredAdvancedResults;
+      if (filteredAdvancedResults.length > 0 || !request.term) {
+        return { results: filteredAdvancedResults.slice(0, request.limit), hasMore: advancedResults.hasMore };
+      }
     } catch {
       // Instalações antigas do PI Web API não expõem pesquisa avançada.
     }
   }
 
   if (!request.term) {
-    throw new Error('A pesquisa por metadados não é suportada por esta versão do PI Web API. Informe também parte do nome da tag.');
+    if (request.description) {
+      throw new Error('A pesquisa por descrição não é suportada por esta versão do PI Web API.');
+    }
+    throw new Error('A pesquisa por metadados não é suportada por esta versão do PI Web API.');
   }
   if (typeof instance.metricFindQuery !== 'function') throw new Error('A Data Source PI não expõe pesquisa de PI Points');
-  if (!serverWebId) return [];
+  if (!serverWebId) return { results: [], hasMore: false };
   const pointNameCandidates = request.term.includes('*') || request.term.includes('?')
     ? [request.term]
     : [`${request.term}*`, `*${request.term}*`, request.term];
@@ -186,12 +204,13 @@ export async function searchPiPoints(
     }
     if (points.length > 0) break;
   }
+  const hasMore = points.length > request.limit;
   const candidates = points.slice(0, request.limit).flatMap((point) => {
     const result = normalizePiPointMetadata(point, dataSource.uid);
     return result ? [result] : [];
   });
   const enriched = await enrichPiPointMetadata(candidates, resourceApi, dataSource.uid);
-  return filterPiPointSearchResults(enriched, request);
+  return { results: filterPiPointSearchResults(enriched, request), hasMore };
 }
 
 function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Required<Pick<PiPointSearchRequest, 'term' | 'description' | 'pointTypes' | 'engineeringUnits' | 'pointSources' | 'limit'>> {
@@ -202,7 +221,7 @@ function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Re
     pointTypes: normalizeSearchValues(request.pointTypes),
     engineeringUnits: normalizeSearchValues(request.engineeringUnits),
     pointSources: normalizeSearchValues(request.pointSources),
-    limit: Math.min(PI_POINT_SEARCH_DEFAULT_LIMIT, Math.max(1, request.limit ?? PI_POINT_SEARCH_DEFAULT_LIMIT)),
+    limit: Math.min(PI_POINT_SEARCH_MAX_RESULTS, Math.max(1, request.limit ?? PI_POINT_SEARCH_DEFAULT_LIMIT)),
   };
 }
 
@@ -219,7 +238,7 @@ async function searchPiPointsAdvanced(
   request: ReturnType<typeof normalizePiPointSearchRequest>,
   dataSourceUid: string,
   serverWebId: string,
-): Promise<PiPointSearchResult[]> {
+): Promise<PiPointSearchResponse> {
   const params = new URLSearchParams({
     dataServerWebId: serverWebId,
     maxCount: String(request.limit),
@@ -230,10 +249,19 @@ async function searchPiPointsAdvanced(
   if (!Array.isArray(response) && (!response || typeof response !== 'object' || !Array.isArray((response as Record<string, unknown>).Items))) {
     throw new Error('Pesquisa avançada de PI Points indisponível');
   }
-  return getResourceItems(response).flatMap((item) => {
+  const items = getResourceItems(response).flatMap((item) => {
     const result = normalizePiPointMetadata(item, dataSourceUid);
     return result ? [result] : [];
   }).slice(0, request.limit);
+  let hasMore = resourceResponseHasMore(response, request.limit);
+  if (!hasMore && items.length === request.limit && !resourceResponseHasKnownTotal(response)) {
+    const probeParams = new URLSearchParams(params);
+    probeParams.set('startIndex', String(request.limit));
+    probeParams.set('maxCount', '1');
+    const probeResponse = await resourceApi.getResource(`/points/search?${probeParams.toString()}`);
+    hasMore = getResourceItems(probeResponse).length > 0;
+  }
+  return { results: items, hasMore };
 }
 
 function buildPiPointSearchQuery(request: ReturnType<typeof normalizePiPointSearchRequest>): string {
@@ -317,6 +345,24 @@ function getResourceItems(value: unknown): unknown[] {
   return Array.isArray(items) ? items : [];
 }
 
+function resourceResponseHasKnownTotal(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const fields = value as Record<string, unknown>;
+  return typeof fields.TotalCount === 'number' || typeof fields.Total === 'number';
+}
+
+function resourceResponseHasMore(value: unknown, limit: number): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const fields = value as Record<string, unknown>;
+  const total = typeof fields.TotalCount === 'number'
+    ? fields.TotalCount
+    : typeof fields.Total === 'number' ? fields.Total : undefined;
+  if (total !== undefined) return total > limit;
+  const links = fields.Links;
+  if (links && typeof links === 'object' && getUnknownString((links as Record<string, unknown>).Next)) return true;
+  return Boolean(getUnknownString(fields.Next));
+}
+
 function getUnknownString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
@@ -326,12 +372,24 @@ function filterPiPointSearchResults(
   request: ReturnType<typeof normalizePiPointSearchRequest>,
 ): PiPointSearchResult[] {
   return results.filter((result) => (
-    includesIgnoreCase(result.name, request.term.replace(/[?*]/g, ''))
+    matchesTagSearch(result.name, request.term)
     && includesIgnoreCase(result.description, request.description)
     && matchesAny(result.pointType, request.pointTypes)
     && matchesAny(result.engineeringUnit, request.engineeringUnits)
     && matchesAny(result.pointSource, request.pointSources)
   ));
+}
+
+function matchesTagSearch(name: string, term: string): boolean {
+  if (!term) return true;
+  if (!term.includes('*') && !term.includes('?')) {
+    return name.toLocaleLowerCase().startsWith(term.toLocaleLowerCase());
+  }
+  const pattern = term
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${pattern}$`, 'i').test(name);
 }
 
 function includesIgnoreCase(value: string | undefined, expected: string): boolean {

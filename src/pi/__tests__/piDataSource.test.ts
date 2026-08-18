@@ -189,6 +189,32 @@ describe('PI data source integration', () => {
       .resolves.toEqual([expect.objectContaining({ name: 'LFS_RB2_ARCF_TEMP', pointType: 'Float32', engineeringUnit: '°C' })]);
   });
 
+  it('limita a 1000 e consulta somente o 1001º resultado para detectar truncamento', async () => {
+    const metricFindQuery = jest.fn().mockResolvedValue([{ text: 'pims', WebId: 'server-webid' }]);
+    const items = Array.from({ length: 1000 }, (_, index) => ({ Name: `LFS_${index}`, WebId: `id-${index}` }));
+    const getResource = jest.fn(async (path: string) => path.includes('startIndex=1000')
+      ? { Items: [{ Name: 'LFS_1000', WebId: 'id-1000' }] }
+      : { Items: items });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPointsWithStatus } = await import('../piDataSource');
+
+    await expect(searchPiPointsWithStatus('LFS', dataSourceSrv)).resolves.toEqual({ results: expect.any(Array), hasMore: true });
+    expect(getResource).toHaveBeenCalledTimes(2);
+    expect(getResource).toHaveBeenLastCalledWith(expect.stringContaining('maxCount=1'));
+  });
+
+  it('não informa truncamento quando existem exatamente 1000 resultados', async () => {
+    const metricFindQuery = jest.fn().mockResolvedValue([{ text: 'pims', WebId: 'server-webid' }]);
+    const items = Array.from({ length: 1000 }, (_, index) => ({ Name: `TAG_${index}`, WebId: `exact-${index}` }));
+    const getResource = jest.fn(async (path: string) => path.includes('startIndex=1000') ? { Items: [] } : { Items: items });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource });
+    const { searchPiPointsWithStatus } = await import('../piDataSource');
+
+    const response = await searchPiPointsWithStatus('TAG', dataSourceSrv);
+    expect(response.results).toHaveLength(1000);
+    expect(response.hasMore).toBe(false);
+  });
+
   it('consulta o valor atual pela query de PI Point e normaliza o DataFrame', async () => {
     const query = jest.fn(async (_request: unknown) => ({
       data: [{
