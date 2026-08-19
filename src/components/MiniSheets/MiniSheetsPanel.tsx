@@ -120,6 +120,9 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
 
   // Emit updated MiniSheetsDocument when cells or colWidths change
   const notifyDocumentChange = useCallback(() => {
+    if (resizingColRef.current) {
+      return;
+    }
     if (onChangeRef.current) {
       const doc = serializeMiniSheets(cellsRef.current, colWidthsRef.current, TOTAL_COLS, TOTAL_ROWS);
       lastEmittedDocRef.current = doc;
@@ -998,6 +1001,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     };
 
     const handleGlobalDragEnd = () => {
+      const wasResizing = Boolean(resizingColRef.current);
       if (resizingColRef.current) {
         resizingColRef.current = null;
       }
@@ -1008,6 +1012,9 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       dragAnchorRef.current = null;
       isAppendingRangeRef.current = false;
       setAutofillRange(null);
+      if (wasResizing) {
+        notifyDocumentChange();
+      }
     };
 
     window.addEventListener('pointermove', handleGlobalPointerMove);
