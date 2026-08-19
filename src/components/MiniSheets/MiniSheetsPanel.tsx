@@ -599,29 +599,18 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
             });
           }
           if (oCell) {
-            if (oCell.format) {
-              next.set(oKey, { rawValue: '', displayValue: '', format: oCell.format });
-            } else {
-              next.delete(oKey);
-            }
+            next.delete(oKey);
           }
         }
       });
 
-      // Clear directly selected cells (keeping cell format if present)
+      // Clear directly selected cells (completely removing values and custom formats, returning cell to default)
       ranges.forEach((range) => {
         const norm = normalizeRange(range);
         for (let r = norm.top; r <= norm.bottom; r++) {
           for (let c = norm.left; c <= norm.right; c++) {
             const key = `${c},${r}`;
-            const cell = next.get(key);
-            if (cell) {
-              if (cell.format) {
-                next.set(key, { rawValue: '', displayValue: '', format: cell.format });
-              } else {
-                next.delete(key);
-              }
-            }
+            next.delete(key);
           }
         }
       });

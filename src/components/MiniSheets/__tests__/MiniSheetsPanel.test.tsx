@@ -650,6 +650,17 @@ describe('MiniSheetsPanel', () => {
         expect(cellA1).toHaveStyle('font-weight: bold');
         expect(cellA1).toHaveStyle('font-style: italic');
       });
+
+      // Press Delete -> should reset both value and custom formatting
+      const panel = screen.getByTestId('mini-sheets-panel');
+      fireEvent.keyDown(panel, { key: 'Delete' });
+
+      await waitFor(() => {
+        const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+        expect(cellA1).toHaveTextContent('');
+        expect(cellA1).not.toHaveStyle('font-weight: bold');
+        expect(cellA1).not.toHaveStyle('font-style: italic');
+      });
     });
 
     it('renders fill handle on the primary selected range', () => {
