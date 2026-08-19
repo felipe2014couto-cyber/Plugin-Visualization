@@ -180,27 +180,39 @@ describe('App', () => {
     expect(screen.getByTestId('pims-vision-library-tab')).toHaveAttribute('aria-selected', 'false');
   });
 
-  it('exibe o módulo de Sheets ao clicar no botão do rail ou na aba', async () => {
+  it('exibe o módulo de Sheets na área central e mantém Data/Library/Calculation no painel', async () => {
     checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
 
     render(<App />);
     await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
 
+    // Verify Sheets is NOT in the assets tab header
+    expect(screen.queryByTestId('pims-vision-sheets-header-tab')).toBeNull();
+    expect(screen.getByTestId('pims-vision-assets-tab')).toBeInTheDocument();
+    expect(screen.getByTestId('pims-vision-library-tab')).toBeInTheDocument();
+    expect(screen.getByTestId('pims-vision-calculations-tab')).toBeInTheDocument();
+
+    // Click sheets icon in vertical rail
     fireEvent.click(screen.getByTestId('pims-vision-sheets-tab'));
 
     expect(screen.getByTestId('pims-vision-sheets-tab')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('mini-sheets-panel')).toBeVisible();
     expect(screen.getByTestId('mini-sheets-cell-A1')).toBeInTheDocument();
 
-    // Data, Library and Calculation tabs remain fully functional
-    fireEvent.click(screen.getByTestId('pims-vision-assets-tab'));
-    expect(screen.getByTestId('pims-vision-assets-tab')).toHaveAttribute('aria-selected', 'true');
+    // Switch back to visualization
+    fireEvent.click(screen.getByTestId('pims-vision-toggle-assets-panel'));
+    expect(screen.getByTestId('pims-vision-toggle-assets-panel')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('display-editor')).toBeVisible();
 
+    // Data, Library and Calculation tabs remain fully functional
     fireEvent.click(screen.getByTestId('pims-vision-library-tab'));
     expect(screen.getByTestId('pims-vision-library-tab')).toHaveAttribute('aria-selected', 'true');
 
     fireEvent.click(screen.getByTestId('pims-vision-calculations-tab'));
     expect(screen.getByTestId('pims-vision-calculations-tab')).toHaveAttribute('aria-selected', 'true');
+
+    fireEvent.click(screen.getByTestId('pims-vision-assets-tab'));
+    expect(screen.getByTestId('pims-vision-assets-tab')).toHaveAttribute('aria-selected', 'true');
   });
 
   it('salva diretamente as alterações do dashboard atual', async () => {

@@ -628,17 +628,18 @@ const getStyles = (theme: GrafanaTheme2) => ({
     justify-content: space-between;
     padding: ${theme.spacing(1, 1.5)};
     border-bottom: 1px solid var(--border-color);
-    background: var(--assets-header-bg, #1f232b);
+    background: var(--panel-header-bg, var(--surface-secondary));
   `,
   titleRow: css`
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--assets-header-text, #ffffff);
+    color: var(--text-primary);
     h2 {
       margin: 0;
       font-size: 15px;
       font-weight: 600;
+      color: var(--text-primary);
     }
   `,
   badge: css`
@@ -646,9 +647,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-weight: 600;
     padding: 2px 6px;
     border-radius: 4px;
-    background: rgba(180, 22, 126, 0.25);
-    color: #ff7ad1;
-    border: 1px solid rgba(180, 22, 126, 0.4);
+    background: var(--selection-bg);
+    color: var(--accent);
+    border: 1px solid var(--accent);
     text-transform: uppercase;
   `,
   recalculateButton: css`
@@ -658,16 +659,16 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: 4px 10px;
     font-size: 12px;
     font-weight: 500;
-    color: var(--text-primary, #ffffff);
-    background: var(--button-bg, rgba(255, 255, 255, 0.08));
-    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+    color: var(--text-primary);
+    background: var(--button-bg);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
 
     &:hover {
-      background: var(--button-hover, rgba(255, 255, 255, 0.15));
-      border-color: var(--accent, #b4167e);
+      background: var(--button-hover);
+      border-color: var(--accent);
     }
   `,
   formulaBarRow: css`
@@ -675,8 +676,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     padding: 6px 12px;
     gap: 8px;
-    background: var(--body-bg, #111217);
-    border-bottom: 1px solid var(--border-color, #2c323f);
+    background: var(--surface-secondary, var(--panel-bg));
+    border-bottom: 1px solid var(--border-color);
   `,
   activeCellBox: css`
     display: flex;
@@ -688,9 +689,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-family: monospace;
     font-size: 12px;
     font-weight: bold;
-    color: var(--accent, #b4167e);
-    background: var(--panel-bg, #181b1f);
-    border: 1px solid var(--border-color, #2c323f);
+    color: var(--accent);
+    background: var(--input-bg, var(--panel-bg));
+    border: 1px solid var(--border-color);
     border-radius: 3px;
     user-select: none;
   `,
@@ -699,13 +700,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     flex: 1;
     height: 28px;
-    background: var(--panel-bg, #181b1f);
-    border: 1px solid var(--border-color, #2c323f);
+    background: var(--input-bg, var(--panel-bg));
+    border: 1px solid var(--border-color);
     border-radius: 3px;
     padding: 0 8px;
 
     &:focus-within {
-      border-color: var(--accent, #b4167e);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
     }
   `,
   fxSymbol: css`
@@ -713,7 +715,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-family: serif;
     font-size: 13px;
     font-weight: bold;
-    color: var(--text-secondary, #8e95a5);
+    color: var(--text-secondary);
     margin-right: 6px;
     user-select: none;
   `,
@@ -723,34 +725,35 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border: none;
     outline: none;
     background: transparent;
-    color: var(--text-primary, #ffffff);
+    color: var(--text-primary);
     font-size: 12px;
     font-family: monospace;
 
     &::placeholder {
-      color: var(--text-secondary, #606775);
+      color: var(--text-muted, var(--text-secondary));
       font-family: inherit;
     }
   `,
   statusToast: css`
     padding: 4px 12px;
     font-size: 11px;
-    color: var(--accent, #b4167e);
-    background: rgba(180, 22, 126, 0.1);
-    border-bottom: 1px solid rgba(180, 22, 126, 0.2);
+    color: var(--accent);
+    background: var(--selection-bg);
+    border-bottom: 1px solid var(--border-subtle, var(--border-color));
   `,
   gridWrapper: css`
     display: flex;
     flex: 1;
     min-height: 0;
     overflow: auto;
-    background: var(--panel-bg, #181b1f);
+    background: var(--canvas-bg, var(--panel-bg));
   `,
   table: css`
     border-collapse: collapse;
     table-layout: fixed;
     width: max-content;
     user-select: none;
+    background: var(--surface-primary, var(--panel-bg));
   `,
   cornerHeader: css`
     position: sticky;
@@ -759,9 +762,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     z-index: 3;
     width: 42px;
     height: 24px;
-    background: #1e222a;
-    border-right: 1px solid #2e3440;
-    border-bottom: 1px solid #2e3440;
+    background: var(--surface-secondary, var(--panel-header-bg));
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
   `,
   colHeader: css`
     position: sticky;
@@ -773,15 +776,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: 2px 4px;
     font-size: 11px;
     font-weight: 600;
-    color: var(--text-secondary, #8e95a5);
-    background: #1e222a;
-    border-right: 1px solid #2e3440;
-    border-bottom: 1px solid #2e3440;
+    color: var(--text-secondary);
+    background: var(--surface-secondary, var(--panel-header-bg));
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
     text-align: center;
   `,
   colHeaderSelected: css`
-    color: #ffffff;
-    background: rgba(180, 22, 126, 0.35);
+    color: var(--accent) !important;
+    background: var(--selection-bg) !important;
   `,
   rowHeader: css`
     position: sticky;
@@ -793,15 +796,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: 2px 4px;
     font-size: 11px;
     font-weight: 600;
-    color: var(--text-secondary, #8e95a5);
-    background: #1e222a;
-    border-right: 1px solid #2e3440;
-    border-bottom: 1px solid #2e3440;
+    color: var(--text-secondary);
+    background: var(--surface-secondary, var(--panel-header-bg));
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
     text-align: center;
   `,
   rowHeaderSelected: css`
-    color: #ffffff;
-    background: rgba(180, 22, 126, 0.35);
+    color: var(--accent) !important;
+    background: var(--selection-bg) !important;
   `,
   cell: css`
     width: 100px;
@@ -810,30 +813,30 @@ const getStyles = (theme: GrafanaTheme2) => ({
     height: 24px;
     padding: 2px 6px;
     font-size: 11px;
-    color: var(--text-primary, #d8d9da);
-    border-right: 1px solid #282d37;
-    border-bottom: 1px solid #282d37;
+    color: var(--text-primary);
+    border-right: 1px solid var(--border-subtle, var(--border-color));
+    border-bottom: 1px solid var(--border-subtle, var(--border-color));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    background: #14171c;
+    background: var(--surface-primary, var(--panel-bg));
     cursor: cell;
 
     &:hover {
-      background: #1c2027;
+      background: var(--button-hover, var(--surface-secondary));
     }
   `,
   cellSelected: css`
-    outline: 2px solid #b4167e;
+    outline: 2px solid var(--accent);
     outline-offset: -2px;
-    background: rgba(180, 22, 126, 0.15) !important;
+    background: var(--selection-bg) !important;
   `,
   cellSpilled: css`
     font-style: normal;
-    background: rgba(46, 117, 182, 0.08);
+    background: var(--selection-bg);
   `,
   cellError: css`
-    color: #f87171 !important;
+    color: var(--danger, #f87171) !important;
     font-weight: 600;
   `,
   cellText: css`
@@ -848,8 +851,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: 0;
     border: none;
     outline: none;
-    background: #1e222a;
-    color: #ffffff;
+    background: var(--input-bg, var(--panel-bg));
+    color: var(--text-primary);
     font-size: 11px;
     font-family: inherit;
   `,
