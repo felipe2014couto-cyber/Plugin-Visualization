@@ -1355,6 +1355,18 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       {/* Grid */}
       <div className={styles.gridWrapper} data-testid="mini-sheets-grid">
         <table className={styles.table}>
+          <colgroup>
+            <col style={{ width: '42px', minWidth: '42px' }} />
+            {Array.from({ length: TOTAL_COLS }).map((_, cIndex) => {
+              const colWidth = getColWidth(cIndex);
+              return (
+                <col
+                  key={cIndex}
+                  style={{ width: `${colWidth}px`, minWidth: `${colWidth}px` }}
+                />
+              );
+            })}
+          </colgroup>
           <thead>
             <tr>
               <th
@@ -1768,6 +1780,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     position: relative;
   `,
   table: css`
+    table-layout: fixed;
     border-collapse: collapse;
     width: max-content;
     user-select: none;
