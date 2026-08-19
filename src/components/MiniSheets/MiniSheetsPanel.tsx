@@ -48,6 +48,16 @@ import {
   serializeMiniSheets,
 } from './miniSheetsDocument';
 
+import {
+  MiniSheetsHistory,
+  createMiniSheetsHistory,
+  commitMiniSheetsHistory,
+  undoMiniSheetsHistory,
+  redoMiniSheetsHistory,
+  canUndoMiniSheetsHistory,
+  canRedoMiniSheetsHistory,
+} from './miniSheetsHistory';
+
 export interface CellData {
   rawValue: string; // The formula or raw entered string, e.g. '=PICurrVal("TAG")'
   displayValue: string; // The computed result to show
@@ -84,6 +94,11 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     const deserialized = deserializeMiniSheets(initialDocument);
     return deserialized.cells;
   });
+  const [history, setHistory] = useState<MiniSheetsHistory>(() =>
+    createMiniSheetsHistory(initialDocument)
+  );
+  const historyRef = useRef(history);
+  historyRef.current = history;
   const [formulaBarText, setFormulaBarText] = useState('');
   const [editingCellCoord, setEditingCellCoord] = useState<CellCoord | null>(null);
   const [editingCellText, setEditingCellText] = useState('');
@@ -279,7 +294,9 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
           } else {
             next.delete(key);
           }
-          return evaluateStaticFormulas(next).nextMap;
+          const finalMap = evaluateStaticFormulas(next).nextMap;
+          commitStateToHistory(finalMap);
+          return finalMap;
         }
         const existing = next.get(key);
         next.set(key, {
@@ -287,7 +304,9 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
           displayValue: 'Carregando...',
           format: existing?.format,
         });
-        return next;
+        const finalMap = evaluateStaticFormulas(next).nextMap;
+        commitStateToHistory(finalMap);
+        return finalMap;
       });
 
       if (!trimmed) {
@@ -624,6 +643,51 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     [computeCell, evaluateStaticFormulas],
   );
 
+  const commitStateToHistory = useCallback(
+    (nextCellsMap: Map<string, CellData>, nextColWidthsMap?: Map<number, number>) => {
+      const doc = serializeMiniSheets(
+        nextCellsMap,
+        nextColWidthsMap ?? colWidthsRef.current,
+        TOTAL_COLS,
+        TOTAL_ROWS
+      );
+      setHistory((prev) => commitMiniSheetsHistory(prev, doc));
+      lastEmittedDocRef.current = doc;
+      onChangeRef.current?.(doc);
+    },
+    []
+  );
+
+  const handleUndo = useCallback(() => {
+    if (!canUndoMiniSheetsHistory(historyRef.current)) {
+      return;
+    }
+    const next = undoMiniSheetsHistory(historyRef.current);
+    setHistory(next);
+    const deserialized = deserializeMiniSheets(next.present);
+    setCells(deserialized.cells);
+    setColWidths(deserialized.colWidths);
+    recomputeAllFormulas(deserialized.cells);
+    const doc = serializeMiniSheets(deserialized.cells, deserialized.colWidths, TOTAL_COLS, TOTAL_ROWS);
+    lastEmittedDocRef.current = doc;
+    onChangeRef.current?.(doc);
+  }, [recomputeAllFormulas]);
+
+  const handleRedo = useCallback(() => {
+    if (!canRedoMiniSheetsHistory(historyRef.current)) {
+      return;
+    }
+    const next = redoMiniSheetsHistory(historyRef.current);
+    setHistory(next);
+    const deserialized = deserializeMiniSheets(next.present);
+    setCells(deserialized.cells);
+    setColWidths(deserialized.colWidths);
+    recomputeAllFormulas(deserialized.cells);
+    const doc = serializeMiniSheets(deserialized.cells, deserialized.colWidths, TOTAL_COLS, TOTAL_ROWS);
+    lastEmittedDocRef.current = doc;
+    onChangeRef.current?.(doc);
+  }, [recomputeAllFormulas]);
+
   // Sync state if initialDocument changes externally (e.g. loading a saved dashboard)
   const initialDocRef = useRef(initialDocument);
   useEffect(() => {
@@ -634,6 +698,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     ) {
       initialDocRef.current = initialDocument;
       lastEmittedDocRef.current = initialDocument;
+      setHistory(createMiniSheetsHistory(initialDocument));
       const deserialized = deserializeMiniSheets(initialDocument);
       setCells(deserialized.cells);
       setColWidths(deserialized.colWidths);
@@ -713,9 +778,11 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
         }
       });
 
-      return evaluateStaticFormulas(next).nextMap;
+      const finalMap = evaluateStaticFormulas(next).nextMap;
+      commitStateToHistory(finalMap);
+      return finalMap;
     });
-  }, [evaluateStaticFormulas, ranges]);
+  }, [commitStateToHistory, evaluateStaticFormulas, ranges]);
 
   /**
    * COPY: Copies the primary range matrix into internal clipboard & OS clipboard (TSV).
@@ -802,7 +869,9 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
         });
       });
 
-      return evaluateStaticFormulas(next).nextMap;
+      const finalMap = evaluateStaticFormulas(next).nextMap;
+      commitStateToHistory(finalMap);
+      return finalMap;
     });
 
     // Recompute pasted formulas
@@ -822,7 +891,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
         }
       });
     });
-  }, [activeCell.col, activeCell.row, computeCell, evaluateStaticFormulas, internalClipboard]);
+  }, [activeCell.col, activeCell.row, commitStateToHistory, computeCell, evaluateStaticFormulas, internalClipboard]);
 
   /**
    * FORMATTING: Applies partial CellFormat to all cells across all selected ranges.
@@ -846,9 +915,11 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
           }
         }
       });
-      return next;
+      const finalMap = evaluateStaticFormulas(next).nextMap;
+      commitStateToHistory(finalMap);
+      return finalMap;
     });
-  }, [ranges]);
+  }, [commitStateToHistory, evaluateStaticFormulas, ranges]);
 
   // Pointer event handlers for Cell Selection & Dragging
   const handleCellPointerDown = (col: number, row: number, e: React.PointerEvent) => {
@@ -976,7 +1047,9 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
             format: gen.format,
           });
         });
-        return evaluateStaticFormulas(next).nextMap;
+        const finalMap = evaluateStaticFormulas(next).nextMap;
+        commitStateToHistory(finalMap);
+        return finalMap;
       });
 
       // Compute formulas for generated cells
@@ -1025,7 +1098,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       isAppendingRangeRef.current = false;
       setAutofillRange(null);
       if (wasResizing) {
-        notifyDocumentChange();
+        commitStateToHistory(cellsRef.current, colWidthsRef.current);
       }
     };
 
@@ -1223,6 +1296,22 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       return;
     }
 
+    if (isCtrlOrCmd && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      if (e.shiftKey) {
+        handleRedo();
+      } else {
+        handleUndo();
+      }
+      return;
+    }
+
+    if (isCtrlOrCmd && (e.key === 'y' || e.key === 'Y')) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+
     if (isCtrlOrCmd && (e.key === 'c' || e.key === 'C')) {
       e.preventDefault();
       handleCopySelected();
@@ -1326,6 +1415,32 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
 
         {/* Formatting Toolbar */}
         <div className={styles.formattingToolbar} data-testid="mini-sheets-formatting-toolbar">
+          {/* Undo */}
+          <button
+            type="button"
+            className={styles.formatButton}
+            data-testid="mini-sheets-undo"
+            title="Desfazer (Ctrl+Z)"
+            disabled={!canUndoMiniSheetsHistory(history)}
+            onClick={handleUndo}
+          >
+            <UndoIcon />
+          </button>
+
+          {/* Redo */}
+          <button
+            type="button"
+            className={styles.formatButton}
+            data-testid="mini-sheets-redo"
+            title="Refazer (Ctrl+Y)"
+            disabled={!canRedoMiniSheetsHistory(history)}
+            onClick={handleRedo}
+          >
+            <RedoIcon />
+          </button>
+
+          <div className={styles.toolbarDivider} />
+
           {/* Bold */}
           <button
             type="button"
@@ -1630,6 +1745,24 @@ function GridIcon() {
     <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+    </svg>
+  );
+}
+
+function UndoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M3 7v6h6" />
+      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+    </svg>
+  );
+}
+
+function RedoIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M21 7v6h-6" />
+      <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7" />
     </svg>
   );
 }
