@@ -271,34 +271,31 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       const address = formatCellAddress(coord);
       const trimmed = rawValue.trim();
 
-      let finalMapToCommit: Map<string, CellData> | null = null;
-
-      // Clear any previous spill targets created by this cell
-      setCells((prev) => {
-        const next = new Map(baseMap ?? prev);
-        const prevCell = next.get(key);
-        if (prevCell?.spillTargetAddresses) {
-          prevCell.spillTargetAddresses.forEach((targetAddr) => {
-            const c = parseCellAddress(targetAddr);
-            if (c) {
-              const targetKey = `${c.col},${c.row}`;
-              const tCell = next.get(targetKey);
-              if (tCell?.spilledFrom === address) {
-                next.delete(targetKey);
-              }
+      const next = new Map(baseMap ?? cellsRef.current);
+      const prevCell = next.get(key);
+      if (prevCell?.spillTargetAddresses) {
+        prevCell.spillTargetAddresses.forEach((targetAddr) => {
+          const c = parseCellAddress(targetAddr);
+          if (c) {
+            const targetKey = `${c.col},${c.row}`;
+            const tCell = next.get(targetKey);
+            if (tCell?.spilledFrom === address) {
+              next.delete(targetKey);
             }
-          });
-        }
-        if (!trimmed) {
-          const existing = next.get(key);
-          if (existing?.format) {
-            next.set(key, { rawValue: '', displayValue: '', format: existing.format });
-          } else {
-            next.delete(key);
           }
-          finalMapToCommit = evaluateStaticFormulas(next).nextMap;
-          return finalMapToCommit;
+        });
+      }
+
+      let finalMapToCommit: Map<string, CellData>;
+      if (!trimmed) {
+        const existing = next.get(key);
+        if (existing?.format) {
+          next.set(key, { rawValue: '', displayValue: '', format: existing.format });
+        } else {
+          next.delete(key);
         }
+        finalMapToCommit = evaluateStaticFormulas(next).nextMap;
+      } else {
         const existing = next.get(key);
         next.set(key, {
           rawValue,
@@ -306,13 +303,11 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
           format: existing?.format,
         });
         finalMapToCommit = evaluateStaticFormulas(next).nextMap;
-        return finalMapToCommit;
-      });
-
-      if (finalMapToCommit) {
-        cellsRef.current = finalMapToCommit;
-        commitStateToHistory(finalMapToCommit);
       }
+
+      setCells(finalMapToCommit);
+      cellsRef.current = finalMapToCommit;
+      commitStateToHistory(finalMapToCommit);
 
       if (!trimmed) {
         return;
@@ -679,7 +674,9 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     lastEmittedDocRef.current = doc;
     initialDocRef.current = doc;
     onChangeRef.current?.(doc);
-  }, [recomputeAllFormulas]);
+    const activeKeyStr = `${activeCell.col},${activeCell.row}`;
+    setFormulaBarText(deserialized.cells.get(activeKeyStr)?.rawValue ?? '');
+  }, [activeCell.col, activeCell.row, recomputeAllFormulas]);
 
   const handleRedo = useCallback(() => {
     if (!canRedoMiniSheetsHistory(historyRef.current)) {
@@ -694,7 +691,9 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     lastEmittedDocRef.current = doc;
     initialDocRef.current = doc;
     onChangeRef.current?.(doc);
-  }, [recomputeAllFormulas]);
+    const activeKeyStr = `${activeCell.col},${activeCell.row}`;
+    setFormulaBarText(deserialized.cells.get(activeKeyStr)?.rawValue ?? '');
+  }, [activeCell.col, activeCell.row, recomputeAllFormulas]);
 
   const editingCellCoordRef = useRef(editingCellCoord);
   editingCellCoordRef.current = editingCellCoord;
