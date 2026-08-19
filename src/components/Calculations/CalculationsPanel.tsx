@@ -15,13 +15,17 @@ export interface CalculationsPanelProps {
   resolvePiPoint?: (name: string) => Promise<PiPointSearchResult | undefined>;
   openCalculationId?: string;
   onCalculationOpenHandled?: () => void;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
-export function CalculationsPanel({ selectedPiPoint, document, onChange, resolvePiPoint, openCalculationId, onCalculationOpenHandled }: CalculationsPanelProps) {
+export function CalculationsPanel({ selectedPiPoint, document, onChange, resolvePiPoint, openCalculationId, onCalculationOpenHandled, expanded, onExpandedChange }: CalculationsPanelProps) {
   const styles = useStyles2(getStyles);
   const [sessionCalculations, setSessionCalculations] = useState<CalculationDefinition[]>([]);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingCalculation, setEditingCalculation] = useState<CalculationDefinition>();
+  const [internalExpanded, setInternalExpanded] = useState(true);
+  const isExpanded = expanded ?? internalExpanded;
   const calculations = document?.calculations ?? sessionCalculations;
 
   useEffect(() => {
@@ -71,64 +75,78 @@ export function CalculationsPanel({ selectedPiPoint, document, onChange, resolve
 
   return (
     <section className={styles.container} data-testid="calculations-panel" aria-label="Cálculos">
-      <div className={styles.intro}>
-        <div className={styles.titleRow}>
-          <CalculatorIcon />
-          <div>
-            <h2>Cálculos</h2>
-            <p>Crie expressões com PI Points em um editor dedicado.</p>
-          </div>
+      <button
+        type="button"
+        className={styles.collapseHeader}
+        aria-expanded={isExpanded}
+        aria-controls="calculations-panel-content"
+        data-testid="calculations-toggle"
+        onClick={() => {
+          const nextExpanded = !isExpanded;
+          onExpandedChange?.(nextExpanded);
+          if (expanded === undefined) {
+            setInternalExpanded(nextExpanded);
+          }
+        }}
+      >
+        <span className={styles.collapseHeaderTitle}><CalculatorIcon /> <span>Cálculos</span></span>
+        <ChevronIcon expanded={isExpanded} />
+      </button>
+
+      {isExpanded && <div id="calculations-panel-content" className={styles.content}>
+        <div className={styles.intro}>
+          <p>Crie expressões com PI Points em um editor dedicado.</p>
+          <button type="button" className={styles.newButton} data-testid="calculation-new" onClick={openNewCalculation}>
+            <span aria-hidden="true">+</span> Novo cálculo
+          </button>
         </div>
-        <button type="button" className={styles.newButton} data-testid="calculation-new" onClick={openNewCalculation}>
-          <span aria-hidden="true">+</span> Novo cálculo
-        </button>
-      </div>
 
-      <div className={styles.savedSection}>
-        <div className={styles.sectionTitle}>Cálculos salvos</div>
-        {calculations.length === 0 ? (
-          <div className={styles.empty} data-testid="calculations-empty">
-            <CalculatorIcon />
-            <span>Nenhum cálculo criado.</span>
-            <small>Use “Novo cálculo” para abrir o editor.</small>
-          </div>
-        ) : (
-          <ul className={styles.list}>
-            {calculations.map((calculation) => (
-              <li key={calculation.id} className={styles.calculation} data-testid={`calculation-${calculation.id}`}>
-                <button
-                  type="button"
-                  className={styles.calculationOpen}
-                  draggable
-                  title={`Arraste ${calculation.name} para o display`}
-                  onDragStart={(event) => {
-                    event.dataTransfer.effectAllowed = 'copy';
-                    event.dataTransfer.setData(CALCULATION_DRAG_MIME, serializeCalculationDragData(calculation.id));
-                    event.dataTransfer.setData('text/plain', calculation.name);
-                  }}
-                  onClick={() => openExistingCalculation(calculation)}
-                >
-                  <span className={styles.calculationIcon}><CalculatorIcon /></span>
-                  <span className={styles.calculationText}>
-                    <strong>{calculation.name}</strong>
-                  </span>
-                </button>
-                <div className={styles.actions}>
-                  <button type="button" className={styles.removeButton} aria-label={`Remover ${calculation.name}`} onClick={() => updateCalculations(calculations.filter((item) => item.id !== calculation.id))}>Remover</button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <p className={styles.note}>Os PI Points arrastados para o editor ficam vinculados somente ao cálculo selecionado.</p>
+        <div className={styles.savedSection}>
+          <div className={styles.sectionTitle}>Cálculos salvos</div>
+          {calculations.length === 0 ? (
+            <div className={styles.empty} data-testid="calculations-empty">
+              <CalculatorIcon />
+              <span>Nenhum cálculo criado.</span>
+              <small>Use “Novo cálculo” para abrir o editor.</small>
+            </div>
+          ) : (
+            <ul className={styles.list}>
+              {calculations.map((calculation) => (
+                <li key={calculation.id} className={styles.calculation} data-testid={`calculation-${calculation.id}`}>
+                  <button
+                    type="button"
+                    className={styles.calculationOpen}
+                    draggable
+                    title={`Arraste ${calculation.name} para o display`}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = 'copy';
+                      event.dataTransfer.setData(CALCULATION_DRAG_MIME, serializeCalculationDragData(calculation.id));
+                      event.dataTransfer.setData('text/plain', calculation.name);
+                      hideNativeDragImage(event.dataTransfer);
+                    }}
+                    onClick={() => openExistingCalculation(calculation)}
+                  >
+                    <span className={styles.calculationIcon}><CalculatorIcon /></span>
+                    <span className={styles.calculationText}>
+                      <strong>{calculation.name}</strong>
+                    </span>
+                  </button>
+                  <div className={styles.actions}>
+                    <button type="button" className={styles.removeButton} aria-label={`Remover ${calculation.name}`} onClick={() => updateCalculations(calculations.filter((item) => item.id !== calculation.id))}>Remover</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>}
 
       {isEditorOpen && (
         <CalculationEditorDialog
           initialCalculation={editingCalculation}
           selectedPiPoint={selectedPiPoint}
           resolvePiPoint={resolvePiPoint}
+          isNameTaken={(name) => calculations.some((item) => item.id !== editingCalculation?.id && item.name.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase())}
           onCancel={() => { setIsEditorOpen(false); setEditingCalculation(undefined); }}
           onSave={saveCalculation}
         />
@@ -143,26 +161,45 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    gap: ${theme.spacing(1.5)};
     padding: ${theme.spacing(1.5)};
     overflow: auto;
     color: var(--text-primary);
   `,
+  collapseHeader: css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: 32px;
+    padding: 0;
+    border: 0;
+    color: var(--assets-header-text);
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    &:hover { color: var(--text-primary); }
+  `,
+  collapseHeaderTitle: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 16px;
+    font-weight: 600;
+    svg { color: var(--accent-hover); }
+  `,
+  content: css`
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 12px;
+  `,
   intro: css`
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding-bottom: 14px;
+    gap: 12px;
+    padding-bottom: 12px;
     border-bottom: 1px solid var(--border-subtle);
-  `,
-  titleRow: css`
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    color: var(--assets-header-text);
-    svg { flex: 0 0 auto; margin-top: 1px; }
-    h2 { margin: 0; font-size: 16px; }
-    p { margin: 4px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+    p { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
   `,
   newButton: css`
     display: flex;
@@ -180,7 +217,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     &:hover { background: var(--accent-hover); }
     span { font-size: 18px; line-height: 0; }
   `,
-  savedSection: css`display: flex; flex-direction: column; gap: 8px; min-height: 0;`,
+  savedSection: css`display: flex; flex-direction: column; gap: 5px; min-height: 0;`,
   sectionTitle: css`color: var(--text-secondary); font-size: 11px; font-weight: 600;`,
   empty: css`
     display: flex;
@@ -195,19 +232,20 @@ const getStyles = (theme: GrafanaTheme2) => ({
     span { font-size: 12px; }
     small { font-size: 10px; }
   `,
-  list: css`display: flex; flex-direction: column; gap: 7px; margin: 0; padding: 0; list-style: none;`,
+  list: css`display: flex; flex-direction: column; gap: 3px; margin: 0; padding: 0; list-style: none;`,
   calculation: css`
     display: flex;
-    flex-direction: column;
-    gap: 7px;
-    padding: 9px;
+    align-items: center;
+    min-height: 34px;
+    padding: 3px 6px;
     border: 1px solid var(--border-color);
-    border-radius: 6px;
+    border-radius: 5px;
     background: var(--surface-secondary);
   `,
   calculationOpen: css`
     display: flex;
     align-items: center;
+    flex: 1;
     min-width: 0;
     gap: 8px;
     padding: 0;
@@ -225,11 +263,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
   calculationIcon: css`
     display: grid;
     flex: 0 0 auto;
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     place-items: center;
     color: var(--accent-hover);
-    svg { width: 17px; height: 17px; }
+    svg { width: 15px; height: 15px; }
   `,
   calculationText: css`
     display: flex;
@@ -239,7 +277,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   actions: css`display: flex; align-items: center; justify-content: flex-end; gap: 7px;`,
   removeButton: css`
-    padding: 3px 4px;
+    padding: 2px 3px;
     border: 0;
     color: var(--danger);
     background: transparent;
@@ -247,12 +285,28 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-size: 10px;
     &:hover { text-decoration: underline; }
   `,
-  note: css`margin: auto 0 0; padding-top: 10px; border-top: 1px solid var(--border-subtle); color: var(--text-muted); font-size: 10px; line-height: 1.4;`,
 });
+
+function hideNativeDragImage(dataTransfer: DataTransfer): void {
+  if (typeof dataTransfer.setDragImage !== 'function') {
+    return;
+  }
+  const image = document.createElement('span');
+  image.style.cssText = 'position: fixed; top: -1px; left: -1px; width: 1px; height: 1px; opacity: 0; pointer-events: none;';
+  document.body.appendChild(image);
+  dataTransfer.setDragImage(image, 0, 0);
+  globalThis.requestAnimationFrame(() => image.remove());
+}
 
 function CalculatorIcon() {
   return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
     <rect x="5" y="3" width="14" height="18" rx="2" />
     <path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 18h2M14 18h2" />
+  </svg>;
+}
+
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <path d={expanded ? 'm6 9 6 6 6-6' : 'm9 6 6 6-6 6'} />
   </svg>;
 }

@@ -73,6 +73,8 @@ export function App() {
   const [assetsTab, setAssetsTab] = useState<AssetsTab>('assets');
   const [openCalculationId, setOpenCalculationId] = useState<string>();
   const [isPiPointFiltersOpen, setIsPiPointFiltersOpen] = useState(false);
+  const [isPiSearchOpen, setIsPiSearchOpen] = useState(true);
+  const [isCalculationsOpen, setIsCalculationsOpen] = useState(true);
   const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
   const [dashboardUid, setDashboardUid] = useState<string>();
   const [folders, setFolders] = useState<GrafanaDashboardFolder[]>([]);
@@ -472,7 +474,17 @@ export function App() {
               <div className={styles.assetsContent}>
                 <div className={styles.assetsPiSearch} hidden={assetsTab !== 'assets'}>
                   <div className={styles.assetsSectionHeader}>
-                    <span className={styles.assetsSectionLabel}>PI System</span>
+                    <button
+                      type="button"
+                      className={styles.sectionCollapseButton}
+                      aria-expanded={isPiSearchOpen}
+                      aria-controls="pi-system-search-content"
+                      data-testid="pi-system-toggle"
+                      onClick={() => setIsPiSearchOpen((open) => !open)}
+                    >
+                      <span className={styles.assetsSectionLabel}>PI System</span>
+                      <ChevronIcon expanded={isPiSearchOpen} />
+                    </button>
                     <button
                       type="button"
                       className={isPiPointFiltersOpen ? styles.piFilterButtonActive : styles.piFilterButton}
@@ -485,20 +497,23 @@ export function App() {
                       <FilterIcon />
                     </button>
                   </div>
-                  {editorMode === 'edit' ? (
-                    <PiPointSearch
-                      enabled={piConnection.status === 'connected'}
-                      onSelect={setSelectedPiPoint}
-                      filtersOpen={isPiPointFiltersOpen}
-                    />
-                  ) : (
-                    <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
-                  )}
+                  {isPiSearchOpen && <div id="pi-system-search-content" className={styles.piSearchContent}>
+                    {editorMode === 'edit' ? (
+                      <PiPointSearch
+                        enabled={piConnection.status === 'connected'}
+                        onSelect={setSelectedPiPoint}
+                        filtersOpen={isPiPointFiltersOpen}
+                        onSearchInteraction={() => setIsCalculationsOpen(false)}
+                      />
+                    ) : (
+                      <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
+                    )}
+                  </div>}
                 </div>
                 <div className={styles.libraryTabContent} hidden={assetsTab !== 'library'}>
                   <LibraryPanel />
                 </div>
-                <div className={styles.libraryTabContent} hidden={assetsTab !== 'calculations'}>
+                <div className={`${styles.libraryTabContent} ${styles.calculationsTabContent}`} hidden={assetsTab !== 'calculations'}>
                   <CalculationsPanel
                     selectedPiPoint={selectedPiPoint}
                     document={document}
@@ -506,6 +521,8 @@ export function App() {
                     resolvePiPoint={resolveCalculationPiPoint}
                     openCalculationId={openCalculationId}
                     onCalculationOpenHandled={() => setOpenCalculationId(undefined)}
+                    expanded={isCalculationsOpen}
+                    onExpandedChange={setIsCalculationsOpen}
                   />
                 </div>
               </div>
@@ -1134,13 +1151,21 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex: 1;
     flex-direction: column;
     min-height: 0;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
   `,
   assetsPiSearch: css`
     display: flex;
-    flex: 1;
+    flex: 0 0 auto;
     flex-direction: column;
     min-height: 0;
+    overflow: hidden;
+  `,
+  piSearchContent: css`
+    display: flex;
+    flex: 0 0 auto;
+    min-height: 0;
+    flex-direction: column;
     overflow: hidden;
   `,
   libraryTabContent: css`
@@ -1149,6 +1174,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     min-height: 0;
     overflow: hidden;
     &[hidden] { display: none; }
+  `,
+  calculationsTabContent: css`
+    flex: 0 0 auto;
   `,
   assetsHeader: css`
     height: 72px;
@@ -1243,6 +1271,18 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-size: 13px;
     font-weight: ${theme.typography.fontWeightMedium};
     letter-spacing: 0.01em;
+  `,
+  sectionCollapseButton: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+    &:hover { color: var(--text-primary); }
   `,
   piFilterButton: css`
     display: inline-flex;
@@ -1354,6 +1394,12 @@ function SheetsIcon() {
   return <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
     <rect x="3" y="3" width="18" height="18" rx="2" />
     <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+  </svg>;
+}
+
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+    <path d={expanded ? 'm6 9 6 6 6-6' : 'm9 6 6 6-6 6'} />
   </svg>;
 }
 
