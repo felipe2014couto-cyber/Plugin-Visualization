@@ -29,6 +29,7 @@ import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
 import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
+import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
@@ -45,6 +46,7 @@ export type VisualizationTheme = 'dark' | 'light';
 export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
 
 type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
+type ActiveModule = 'visualization' | 'sheets';
 type AssetsTab = 'assets' | 'library' | 'calculations';
 
 function getInitialTheme(): VisualizationTheme {
@@ -58,6 +60,7 @@ function getInitialTheme(): VisualizationTheme {
 export function App() {
   const styles = useStyles2(getStyles);
   const [authenticationState, setAuthenticationState] = useState<AuthenticationState>('checking');
+  const [activeModule, setActiveModule] = useState<ActiveModule>('visualization');
   const [document, setDocument] = useState(() =>
     createDisplayDocument({ name: 'Visualization' }),
   );
@@ -408,13 +411,33 @@ export function App() {
           <div className={styles.assetsRail} aria-label="Navegação de ativos">
             <button
               type="button"
-              className={isAssetsPanelOpen ? styles.assetsRailActive : styles.assetsRailCollapsedToggle}
-              title={isAssetsPanelOpen ? 'Ocultar barra de ferramentas' : 'Mostrar barra de ferramentas'}
-              aria-label={isAssetsPanelOpen ? 'Ocultar barra de ferramentas' : 'Mostrar barra de ferramentas'}
-              aria-pressed={isAssetsPanelOpen}
+              className={
+                activeModule === 'visualization' && isAssetsPanelOpen
+                  ? styles.assetsRailActive
+                  : styles.assetsRailButton
+              }
+              title="Visualização"
+              aria-label="Visualização"
+              aria-pressed={activeModule === 'visualization'}
               data-testid="pims-vision-toggle-assets-panel"
-              onClick={() => setIsAssetsPanelOpen((prev) => !prev)}
+              onClick={() => {
+                if (activeModule !== 'visualization') {
+                  setActiveModule('visualization');
+                  setIsAssetsPanelOpen(true);
+                } else {
+                  setIsAssetsPanelOpen((prev) => !prev);
+                }
+              }}
             ><CubeIcon /></button>
+            <button
+              type="button"
+              className={activeModule === 'sheets' ? styles.assetsRailActive : styles.assetsRailButton}
+              title="Mini-Sheets"
+              aria-label="Mini-Sheets"
+              aria-pressed={activeModule === 'sheets'}
+              data-testid="pims-vision-sheets-tab"
+              onClick={() => setActiveModule('sheets')}
+            ><SheetsIcon /></button>
             <span className={styles.assetsRailItem} title="PI Points" aria-label="PI Points"><DatabaseIcon /></span>
             <span className={styles.assetsRailItem} title="Pesquisa PI" aria-label="Pesquisa PI"><SearchIcon /></span>
           </div>
@@ -447,7 +470,7 @@ export function App() {
                 ><span className={styles.assetsIcon} aria-hidden="true"><CalculatorIcon /></span><span>Calculation</span></button>
               </div>
               <div className={styles.assetsContent}>
-                <div className={styles.assetsPiSearch}>
+                <div className={styles.assetsPiSearch} hidden={assetsTab !== 'assets'}>
                   <div className={styles.assetsSectionHeader}>
                     <span className={styles.assetsSectionLabel}>PI System</span>
                     <button
@@ -490,32 +513,37 @@ export function App() {
           )}
         </aside>
         <main className={styles.editorArea} data-testid="pims-vision-editor-area">
-          <DisplayEditor
-            document={document}
-            onChange={setDocument}
-            onModeChange={setEditorMode}
-            selectedPiPoint={selectedPiPoint}
-            loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
-            loadPiPointDatabaseLimits={hasPiConnection ? getPiPointDatabaseLimits : undefined}
-            loadValues={hasPiConnection ? getPiPointsCurrentValues : undefined}
-            loadTrend={hasPiConnection ? loadTrend : undefined}
-            loadRecordedTrend={hasPiConnection ? loadTrend : undefined}
-            loadRecordedData={hasPiConnection ? (bindings, range, options) => getPiTrendsRecordedHistoryForRange(bindings, range, options) : undefined}
-            loadInterpolatedData={hasPiConnection ? (bindings, range, options) => getPiTrendsPreviewForRange(bindings, range, options) : undefined}
-            showToolbar={isAssetsPanelOpen}
-            symbolModeOnly={assetsTab === 'calculations'}
-            dropSymbolType={dropSymbolType}
-            onDropSymbolTypeChange={setDropSymbolType}
-            trendRefreshKey={`${rangeFrom}:${rangeTo}`}
-            trendTimeRange={{ from: rangeFrom, to: rangeTo }}
-            timeSelection={timeSelection}
-            onTimeSelectionChange={setTimeSelection}
-            onCalculationOpen={(calculationId) => {
-              setAssetsTab('calculations');
-              setIsAssetsPanelOpen(true);
-              setOpenCalculationId(calculationId);
-            }}
-          />
+          <div style={{ display: activeModule === 'visualization' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>
+            <DisplayEditor
+              document={document}
+              onChange={setDocument}
+              onModeChange={setEditorMode}
+              selectedPiPoint={selectedPiPoint}
+              loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
+              loadPiPointDatabaseLimits={hasPiConnection ? getPiPointDatabaseLimits : undefined}
+              loadValues={hasPiConnection ? getPiPointsCurrentValues : undefined}
+              loadTrend={hasPiConnection ? loadTrend : undefined}
+              loadRecordedTrend={hasPiConnection ? loadTrend : undefined}
+              loadRecordedData={hasPiConnection ? (bindings, range, options) => getPiTrendsRecordedHistoryForRange(bindings, range, options) : undefined}
+              loadInterpolatedData={hasPiConnection ? (bindings, range, options) => getPiTrendsPreviewForRange(bindings, range, options) : undefined}
+              showToolbar={isAssetsPanelOpen}
+              symbolModeOnly={assetsTab === 'calculations'}
+              dropSymbolType={dropSymbolType}
+              onDropSymbolTypeChange={setDropSymbolType}
+              trendRefreshKey={`${rangeFrom}:${rangeTo}`}
+              trendTimeRange={{ from: rangeFrom, to: rangeTo }}
+              timeSelection={timeSelection}
+              onTimeSelectionChange={setTimeSelection}
+              onCalculationOpen={(calculationId) => {
+                setAssetsTab('calculations');
+                setIsAssetsPanelOpen(true);
+                setOpenCalculationId(calculationId);
+              }}
+            />
+          </div>
+          <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>
+            <MiniSheetsPanel />
+          </div>
         </main>
       </div>
       <TimeRangeBar selection={timeSelection} onChange={setTimeSelection} />
@@ -1040,6 +1068,24 @@ const getStyles = (theme: GrafanaTheme2) => ({
     background: var(--button-bg);
     color: var(--text-secondary);
   `,
+  assetsRailButton: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border: 1px solid var(--border-color);
+    border-radius: 13px;
+    background: var(--button-bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--accent-hover, var(--text-primary));
+      background: var(--button-hover);
+      border-color: var(--accent, #b4167e);
+    }
+  `,
   assetsRailActive: css`
     display: inline-flex;
     align-items: center;
@@ -1051,6 +1097,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border: 1px solid var(--accent);
     border-radius: 13px;
     box-shadow: 0 0 0 3px var(--focus-ring);
+    cursor: pointer;
   `,
   assetsRailCollapsedToggle: css`
     display: inline-flex;
@@ -1058,15 +1105,16 @@ const getStyles = (theme: GrafanaTheme2) => ({
     justify-content: center;
     width: 48px;
     height: 48px;
-    color: var(--accent);
-    background: var(--selection-bg);
-    border: 1px solid var(--accent);
+    color: var(--text-secondary);
+    background: var(--button-bg);
+    border: 1px solid var(--border-color);
     border-radius: 13px;
     cursor: pointer;
 
     &:hover {
-      color: var(--accent-hover);
+      color: var(--accent-hover, var(--text-primary));
       background: var(--button-hover);
+      border-color: var(--accent, #b4167e);
     }
   `,
   assetsBody: css`
@@ -1299,6 +1347,13 @@ function CalculatorIcon() {
   return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
     <rect x="5" y="3" width="14" height="18" rx="2" />
     <path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 18h2M14 18h2" />
+  </svg>;
+}
+
+function SheetsIcon() {
+  return <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
   </svg>;
 }
 
