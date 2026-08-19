@@ -22,7 +22,7 @@ import {
   type CellCoord,
 } from './miniSheetFormula';
 import { parsePiTime, formatDateTime } from './miniSheetTime';
-import { PiDataLinkToolbar, type PiDataLinkFunctionType } from './PiDataLinkToolbar';
+import type { PiDataLinkFunctionType } from './PiDataLinkToolbar';
 import { PiDataLinkFunctionDialog } from './PiDataLinkFunctionDialog';
 import {
   SheetRange,
@@ -79,9 +79,17 @@ export interface MiniSheetsPanelProps {
   dataSourceSrv?: any;
   initialDocument?: MiniSheetsDocument;
   onChange?: (document: MiniSheetsDocument) => void;
+  externalOpenDialog?: PiDataLinkFunctionType | null;
+  onExternalOpenDialogHandled?: () => void;
 }
 
-export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: MiniSheetsPanelProps) {
+export function MiniSheetsPanel({
+  dataSourceSrv,
+  initialDocument,
+  onChange,
+  externalOpenDialog,
+  onExternalOpenDialogHandled,
+}: MiniSheetsPanelProps) {
   const styles = useStyles2(getStyles);
 
   // Selection state
@@ -108,6 +116,13 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
   const [editingCellText, setEditingCellText] = useState('');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [activeDataLinkDialog, setActiveDataLinkDialog] = useState<PiDataLinkFunctionType | null>(null);
+
+  useEffect(() => {
+    if (externalOpenDialog) {
+      setActiveDataLinkDialog(externalOpenDialog);
+      onExternalOpenDialogHandled?.();
+    }
+  }, [externalOpenDialog, onExternalOpenDialogHandled]);
 
   // Internal clipboard buffer
   const [internalClipboard, setInternalClipboard] = useState<MiniSheetClipboard | null>(null);
@@ -1884,9 +1899,6 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
-      {/* PI DataLink Ribbon */}
-      <PiDataLinkToolbar onOpenFunction={(type) => setActiveDataLinkDialog(type)} />
-
       {/* PI DataLink Dialog Wizard */}
       {activeDataLinkDialog && (
         <PiDataLinkFunctionDialog

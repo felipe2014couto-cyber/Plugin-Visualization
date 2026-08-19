@@ -30,6 +30,8 @@ import { TimeRangeBar } from '../TimeRangeBar';
 import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
+import { PiDataLinkSidebarPanel } from '../MiniSheets/PiDataLinkSidebarPanel';
+import type { PiDataLinkFunctionType } from '../MiniSheets/PiDataLinkToolbar';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
@@ -86,6 +88,7 @@ export function App() {
   const [expandedFolderUids, setExpandedFolderUids] = useState<string[]>([]);
   const [saveValidationError, setSaveValidationError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [activeDataLinkFunction, setActiveDataLinkFunction] = useState<PiDataLinkFunctionType | null>(null);
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
   if (!progressiveTrendLoaderRef.current) {
     progressiveTrendLoaderRef.current = createProgressiveTrendLoader(
@@ -530,13 +533,8 @@ export function App() {
                   </div>
                 </>
               ) : (
-                <div className={styles.assetsContent} style={{ padding: '16px' }}>
-                  <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '8px' }}>
-                    Mini-Sheets PI DataLink
-                  </div>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                    Use a barra contextual do PI DataLink no topo da planilha para inserir e configurar fórmulas de valores atuais, históricos e cálculos estatísticos diretamente nas células.
-                  </p>
+                <div className={styles.assetsContent} style={{ padding: 0, height: '100%', overflowY: 'hidden' }}>
+                  <PiDataLinkSidebarPanel onOpenFunction={(type) => setActiveDataLinkFunction(type)} />
                 </div>
               )}
             </div>
@@ -574,6 +572,8 @@ export function App() {
           <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>
             <MiniSheetsPanel
               initialDocument={document.miniSheets}
+              externalOpenDialog={activeDataLinkFunction}
+              onExternalOpenDialogHandled={() => setActiveDataLinkFunction(null)}
               onChange={(miniSheetsDoc) => {
                 setDocument((prev) => {
                   if (prev.miniSheets === miniSheetsDoc) {
