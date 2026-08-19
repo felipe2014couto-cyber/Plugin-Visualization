@@ -2,30 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
-import type { PiPointSearchResult } from '../../pi/piDataSource';
+import type { PiPointSearchResult, PiPointValue } from '../../pi/piDataSource';
 import type { DisplayDocument } from '../../display/displayDocument';
 import type { CalculationDefinition } from '../../calculations/calculationEngine';
 import { CALCULATION_DRAG_MIME, serializeCalculationDragData } from '../../calculations/calculationDrag';
 import { CalculationEditorDialog, type CalculationDraft } from './CalculationEditorDialog';
 
 export interface CalculationsPanelProps {
-  selectedPiPoint?: PiPointSearchResult | null;
   document?: DisplayDocument;
   onChange?: (document: DisplayDocument) => void;
   resolvePiPoint?: (name: string) => Promise<PiPointSearchResult | undefined>;
+  loadValue?: (binding: CalculationDefinition['inputs'][number]['binding']) => Promise<PiPointValue>;
   openCalculationId?: string;
   onCalculationOpenHandled?: () => void;
-  expanded?: boolean;
-  onExpandedChange?: (expanded: boolean) => void;
 }
 
-export function CalculationsPanel({ selectedPiPoint, document, onChange, resolvePiPoint, openCalculationId, onCalculationOpenHandled, expanded, onExpandedChange }: CalculationsPanelProps) {
+export function CalculationsPanel({ document, onChange, resolvePiPoint, loadValue, openCalculationId, onCalculationOpenHandled }: CalculationsPanelProps) {
   const styles = useStyles2(getStyles);
   const [sessionCalculations, setSessionCalculations] = useState<CalculationDefinition[]>([]);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingCalculation, setEditingCalculation] = useState<CalculationDefinition>();
-  const [internalExpanded, setInternalExpanded] = useState(true);
-  const isExpanded = expanded ?? internalExpanded;
   const calculations = document?.calculations ?? sessionCalculations;
 
   useEffect(() => {
@@ -75,25 +71,7 @@ export function CalculationsPanel({ selectedPiPoint, document, onChange, resolve
 
   return (
     <section className={styles.container} data-testid="calculations-panel" aria-label="Cálculos">
-      <button
-        type="button"
-        className={styles.collapseHeader}
-        aria-expanded={isExpanded}
-        aria-controls="calculations-panel-content"
-        data-testid="calculations-toggle"
-        onClick={() => {
-          const nextExpanded = !isExpanded;
-          onExpandedChange?.(nextExpanded);
-          if (expanded === undefined) {
-            setInternalExpanded(nextExpanded);
-          }
-        }}
-      >
-        <span className={styles.collapseHeaderTitle}><CalculatorIcon /> <span>Cálculos</span></span>
-        <ChevronIcon expanded={isExpanded} />
-      </button>
-
-      {isExpanded && <div id="calculations-panel-content" className={styles.content}>
+      <div className={styles.content}>
         <div className={styles.intro}>
           <p>Crie expressões com PI Points em um editor dedicado.</p>
           <button type="button" className={styles.newButton} data-testid="calculation-new" onClick={openNewCalculation}>
@@ -139,13 +117,13 @@ export function CalculationsPanel({ selectedPiPoint, document, onChange, resolve
             </ul>
           )}
         </div>
-      </div>}
+      </div>
 
       {isEditorOpen && (
         <CalculationEditorDialog
           initialCalculation={editingCalculation}
-          selectedPiPoint={selectedPiPoint}
           resolvePiPoint={resolvePiPoint}
+          loadValue={loadValue}
           isNameTaken={(name) => calculations.some((item) => item.id !== editingCalculation?.id && item.name.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase())}
           onCancel={() => { setIsEditorOpen(false); setEditingCalculation(undefined); }}
           onSave={saveCalculation}
@@ -164,28 +142,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: ${theme.spacing(1.5)};
     overflow: auto;
     color: var(--text-primary);
-  `,
-  collapseHeader: css`
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    min-height: 32px;
-    padding: 0;
-    border: 0;
-    color: var(--assets-header-text);
-    background: transparent;
-    cursor: pointer;
-    text-align: left;
-    &:hover { color: var(--text-primary); }
-  `,
-  collapseHeaderTitle: css`
-    display: inline-flex;
-    align-items: center;
-    gap: 9px;
-    font-size: 16px;
-    font-weight: 600;
-    svg { color: var(--accent-hover); }
   `,
   content: css`
     display: flex;
@@ -302,11 +258,5 @@ function CalculatorIcon() {
   return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
     <rect x="5" y="3" width="14" height="18" rx="2" />
     <path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 18h2M14 18h2" />
-  </svg>;
-}
-
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-    <path d={expanded ? 'm6 9 6 6 6-6' : 'm9 6 6 6-6 6'} />
   </svg>;
 }

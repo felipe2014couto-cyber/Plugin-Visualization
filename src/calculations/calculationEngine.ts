@@ -85,6 +85,33 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
       }
       return value;
     }
+    const functionName = expression.slice(cursor).match(/^[A-Za-z_][A-Za-z0-9_]*/)?.[0];
+    if (functionName) {
+      cursor += functionName.length;
+      skipWhitespace();
+      if (expression[cursor] !== '(') {
+        throw new Error(`Função inválida: ${functionName}.`);
+      }
+      cursor += 1;
+      const argumentsList: number[] = [];
+      skipWhitespace();
+      if (expression[cursor] !== ')') {
+        while (true) {
+          argumentsList.push(parseLogicalOr());
+          skipWhitespace();
+          if (expression[cursor] !== ',') {
+            break;
+          }
+          cursor += 1;
+        }
+      }
+      skipWhitespace();
+      if (expression[cursor] !== ')') {
+        throw new Error(`Parênteses não balanceados na função ${functionName}.`);
+      }
+      cursor += 1;
+      return evaluateFunction(functionName, argumentsList);
+    }
     const number = expression.slice(cursor).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/)?.[0];
     if (number) {
       cursor += number.length;
@@ -130,7 +157,67 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
     return value;
   }
 
-  const result = parseAdditive();
+  function parseComparison(): number {
+    let value = parseAdditive();
+    while (true) {
+      skipWhitespace();
+      const operator = expression.slice(cursor, cursor + 2);
+      const comparison = operator === '>=' || operator === '<=' ? operator : expression[cursor];
+      if (!['>', '<', '>=', '<='].includes(comparison)) {
+        break;
+      }
+      cursor += comparison.length;
+      const right = parseAdditive();
+      value = comparison === '>' ? Number(value > right)
+        : comparison === '<' ? Number(value < right)
+          : comparison === '>=' ? Number(value >= right)
+            : Number(value <= right);
+    }
+    return value;
+  }
+
+  function parseEquality(): number {
+    let value = parseComparison();
+    while (true) {
+      skipWhitespace();
+      const operator = expression.slice(cursor, cursor + 2);
+      if (operator !== '==' && operator !== '!=') {
+        break;
+      }
+      cursor += 2;
+      const right = parseComparison();
+      value = Number(operator === '==' ? value === right : value !== right);
+    }
+    return value;
+  }
+
+  function parseLogicalAnd(): number {
+    let value = parseEquality();
+    while (true) {
+      skipWhitespace();
+      if (expression.slice(cursor, cursor + 2) !== '&&') {
+        break;
+      }
+      cursor += 2;
+      value = Number(Boolean(value) && Boolean(parseEquality()));
+    }
+    return value;
+  }
+
+  function parseLogicalOr(): number {
+    let value = parseLogicalAnd();
+    while (true) {
+      skipWhitespace();
+      if (expression.slice(cursor, cursor + 2) !== '||') {
+        break;
+      }
+      cursor += 2;
+      value = Number(Boolean(value) || Boolean(parseLogicalAnd()));
+    }
+    return value;
+  }
+
+  const result = parseLogicalOr();
   skipWhitespace();
   if (cursor !== expression.length) {
     throw new Error('A expressão contém tokens inválidos.');
@@ -139,4 +226,67 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
     throw new Error('O resultado não é um número finito.');
   }
   return result;
+}
+
+function evaluateFunction(name: string, values: number[]): number {
+  const normalizedName = name.toLocaleUpperCase();
+  if (normalizedName === 'IF' || normalizedName === 'SE') {
+    requireArgumentCount(name, values, 3);
+    return values[0] !== 0 ? values[1] : values[2];
+  }
+  if (normalizedName === 'MIN') {
+    requireMinimumArgumentCount(name, values, 1);
+    return Math.min(...values);
+  }
+  if (normalizedName === 'MAX') {
+    requireMinimumArgumentCount(name, values, 1);
+    return Math.max(...values);
+  }
+  if (normalizedName === 'ABS') {
+    requireArgumentCount(name, values, 1);
+    return Math.abs(values[0]);
+  }
+  if (normalizedName === 'ROUND') {
+    if (values.length < 1 || values.length > 2) {
+      throw new Error('A função ROUND aceita um ou dois argumentos.');
+    }
+    const decimals = values[1] ?? 0;
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 15) {
+      throw new Error('O número de casas decimais em ROUND deve estar entre 0 e 15.');
+    }
+    const factor = 10 ** decimals;
+    return Math.round(values[0] * factor) / factor;
+  }
+  if (normalizedName === 'CLAMP') {
+    requireArgumentCount(name, values, 3);
+    return Math.min(Math.max(values[0], values[1]), values[2]);
+  }
+  if (normalizedName === 'AND') {
+    requireMinimumArgumentCount(name, values, 1);
+    return Number(values.every((value) => value !== 0));
+  }
+  if (normalizedName === 'OR') {
+    requireMinimumArgumentCount(name, values, 1);
+    return Number(values.some((value) => value !== 0));
+  }
+  if (normalizedName === 'NOT') {
+    requireArgumentCount(name, values, 1);
+    return Number(values[0] === 0);
+  }
+  if (normalizedName === 'WHILE') {
+    throw new Error('WHILE não é suportado em cálculos, pois a expressão precisa sempre terminar. Use IF para condições.');
+  }
+  throw new Error(`Função desconhecida: ${name}.`);
+}
+
+function requireArgumentCount(name: string, values: number[], expected: number): void {
+  if (values.length !== expected) {
+    throw new Error(`A função ${name} requer ${expected} argumentos.`);
+  }
+}
+
+function requireMinimumArgumentCount(name: string, values: number[], minimum: number): void {
+  if (values.length < minimum) {
+    throw new Error(`A função ${name} requer ao menos ${minimum} argumento.`);
+  }
 }

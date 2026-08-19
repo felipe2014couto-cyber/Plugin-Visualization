@@ -91,6 +91,7 @@ export type {
 } from './createValue';
 
 export {
+  addCalculationTrendSeries,
   addTrendSeries,
   appendTrend,
   createTrend,

@@ -108,8 +108,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
   searchButton: css`display: inline-flex; align-items: center; justify-content: center; flex: 0 0 40px; color: var(--text-secondary);`,
   catalog: css`flex: 1; min-height: 0; padding: 0 ${theme.spacing(1.5)} ${theme.spacing(1.5)}; overflow-x: hidden; overflow-y: auto; scrollbar-color: var(--border-color) transparent;`,
   category: css`border-bottom: 1px solid var(--border-subtle);`,
-  categoryButton: css`display: flex; align-items: center; width: 100%; min-height: 42px; gap: 8px; padding: 5px 0; border: 0; color: var(--text-primary); background: transparent; cursor: pointer; text-align: left; font-size: 15px; font-weight: 600; &:hover { color: var(--accent-hover); }`,
-  categoryCount: css`margin-left: auto; color: var(--text-muted); font-size: 11px; font-weight: 500;`,
+  categoryButton: css`display: flex; align-items: center; width: 100%; min-height: 32px; gap: 6px; padding: 2px 0; border: 0; color: var(--text-primary); background: transparent; cursor: pointer; text-align: left; font-size: 14px; font-weight: 400; &:hover { color: var(--accent-hover); }`,
+  categoryCount: css`margin-left: auto; color: var(--text-muted); font-size: 11px; font-weight: 400;`,
   cards: css`display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 2px 0 12px;`,
   card: css`display: flex; flex-direction: column; align-items: center; min-width: 0; min-height: 128px; padding: 8px 6px 7px; border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); background: linear-gradient(145deg, var(--surface-secondary), var(--surface-primary)); cursor: grab; text-align: center; &:hover { border-color: var(--accent); background: var(--selection-bg); } &:active { cursor: grabbing; }`,
   symbolPreview: css`display: flex; align-items: center; justify-content: center; width: 100%; height: 86px; margin-bottom: 4px; img { max-width: 76px; max-height: 76px; width: auto; height: auto; }`,
@@ -127,5 +127,5 @@ function SearchIcon() {
 }
 
 function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d={expanded ? 'm5 15 7-7 7 7' : 'm5 9 7 7 7-7'} /></svg>;
+  return <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><path d={expanded ? 'm5 8 7 8 7-8z' : 'm8 5 8 7-8 7z'} /></svg>;
 }
