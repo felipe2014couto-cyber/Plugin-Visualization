@@ -445,87 +445,100 @@ export function App() {
           </div>
           {isAssetsPanelOpen && (
             <div className={styles.assetsBody}>
-              <div className={styles.assetsHeader} role="tablist" aria-label="Módulos do painel">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={assetsTab === 'assets'}
-                  className={assetsTab === 'assets' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
-                  data-testid="pims-vision-assets-tab"
-                  onClick={() => setAssetsTab('assets')}
-                ><span className={styles.assetsIcon} aria-hidden="true"><CubeIcon /></span><span>Data</span></button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={assetsTab === 'library'}
-                  className={assetsTab === 'library' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
-                  data-testid="pims-vision-library-tab"
-                  onClick={() => setAssetsTab('library')}
-                ><span className={styles.assetsIcon} aria-hidden="true"><FactoryIcon /></span><span>Library</span></button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={assetsTab === 'calculations'}
-                  className={assetsTab === 'calculations' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
-                  data-testid="pims-vision-calculations-tab"
-                  onClick={() => setAssetsTab('calculations')}
-                ><span className={styles.assetsIcon} aria-hidden="true"><CalculatorIcon /></span><span>Calculation</span></button>
-              </div>
-              <div className={styles.assetsContent}>
-                <div className={styles.assetsPiSearch} hidden={assetsTab !== 'assets'}>
-                  <div className={styles.assetsSectionHeader}>
+              {activeModule === 'visualization' ? (
+                <>
+                  <div className={styles.assetsHeader} role="tablist" aria-label="Módulos do painel">
                     <button
                       type="button"
-                      className={styles.sectionCollapseButton}
-                      aria-expanded={isPiSearchOpen}
-                      aria-controls="pi-system-search-content"
-                      data-testid="pi-system-toggle"
-                      onClick={() => setIsPiSearchOpen((open) => !open)}
-                    >
-                      <span className={styles.assetsSectionLabel}>PI System</span>
-                      <ChevronIcon expanded={isPiSearchOpen} />
-                    </button>
+                      role="tab"
+                      aria-selected={assetsTab === 'assets'}
+                      className={assetsTab === 'assets' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
+                      data-testid="pims-vision-assets-tab"
+                      onClick={() => setAssetsTab('assets')}
+                    ><span className={styles.assetsIcon} aria-hidden="true"><CubeIcon /></span><span>Data</span></button>
                     <button
                       type="button"
-                      className={isPiPointFiltersOpen ? styles.piFilterButtonActive : styles.piFilterButton}
-                      data-testid="pi-point-filter-toggle"
-                      aria-label="Filtros da pesquisa de PI Points"
-                      aria-expanded={isPiPointFiltersOpen}
-                      title="Filtros"
-                      onClick={() => setIsPiPointFiltersOpen((open) => !open)}
-                    >
-                      <FilterIcon />
-                    </button>
+                      role="tab"
+                      aria-selected={assetsTab === 'library'}
+                      className={assetsTab === 'library' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
+                      data-testid="pims-vision-library-tab"
+                      onClick={() => setAssetsTab('library')}
+                    ><span className={styles.assetsIcon} aria-hidden="true"><FactoryIcon /></span><span>Library</span></button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={assetsTab === 'calculations'}
+                      className={assetsTab === 'calculations' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
+                      data-testid="pims-vision-calculations-tab"
+                      onClick={() => setAssetsTab('calculations')}
+                    ><span className={styles.assetsIcon} aria-hidden="true"><CalculatorIcon /></span><span>Calculation</span></button>
                   </div>
-                  {isPiSearchOpen && <div id="pi-system-search-content" className={styles.piSearchContent}>
-                    {editorMode === 'edit' ? (
-                      <PiPointSearch
-                        enabled={piConnection.status === 'connected'}
-                        onSelect={setSelectedPiPoint}
-                        filtersOpen={isPiPointFiltersOpen}
-                        onSearchInteraction={() => setIsCalculationsOpen(false)}
+                  <div className={styles.assetsContent}>
+                    <div className={styles.assetsPiSearch} hidden={assetsTab !== 'assets'}>
+                      <div className={styles.assetsSectionHeader}>
+                        <button
+                          type="button"
+                          className={styles.sectionCollapseButton}
+                          aria-expanded={isPiSearchOpen}
+                          aria-controls="pi-system-search-content"
+                          data-testid="pi-system-toggle"
+                          onClick={() => setIsPiSearchOpen((open) => !open)}
+                        >
+                          <span className={styles.assetsSectionLabel}>PI System</span>
+                          <ChevronIcon expanded={isPiSearchOpen} />
+                        </button>
+                        <button
+                          type="button"
+                          className={isPiPointFiltersOpen ? styles.piFilterButtonActive : styles.piFilterButton}
+                          data-testid="pi-point-filter-toggle"
+                          aria-label="Filtros da pesquisa de PI Points"
+                          aria-expanded={isPiPointFiltersOpen}
+                          title="Filtros"
+                          onClick={() => setIsPiPointFiltersOpen((open) => !open)}
+                        >
+                          <FilterIcon />
+                        </button>
+                      </div>
+                      {isPiSearchOpen && <div id="pi-system-search-content" className={styles.piSearchContent}>
+                        {editorMode === 'edit' ? (
+                          <PiPointSearch
+                            enabled={piConnection.status === 'connected'}
+                            onSelect={setSelectedPiPoint}
+                            filtersOpen={isPiPointFiltersOpen}
+                            onSearchInteraction={() => setIsCalculationsOpen(false)}
+                          />
+                        ) : (
+                          <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
+                        )}
+                      </div>}
+                    </div>
+                    <div className={styles.libraryTabContent} hidden={assetsTab !== 'library'}>
+                      <LibraryPanel />
+                    </div>
+                    <div className={`${styles.libraryTabContent} ${styles.calculationsTabContent}`} hidden={assetsTab !== 'calculations'}>
+                      <CalculationsPanel
+                        selectedPiPoint={selectedPiPoint}
+                        document={document}
+                        onChange={setDocument}
+                        resolvePiPoint={resolveCalculationPiPoint}
+                        openCalculationId={openCalculationId}
+                        onCalculationOpenHandled={() => setOpenCalculationId(undefined)}
+                        expanded={isCalculationsOpen}
+                        onExpandedChange={setIsCalculationsOpen}
                       />
-                    ) : (
-                      <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
-                    )}
-                  </div>}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className={styles.assetsContent} style={{ padding: '16px' }}>
+                  <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '8px' }}>
+                    Mini-Sheets PI DataLink
+                  </div>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                    Use a barra contextual do PI DataLink no topo da planilha para inserir e configurar fórmulas de valores atuais, históricos e cálculos estatísticos diretamente nas células.
+                  </p>
                 </div>
-                <div className={styles.libraryTabContent} hidden={assetsTab !== 'library'}>
-                  <LibraryPanel />
-                </div>
-                <div className={`${styles.libraryTabContent} ${styles.calculationsTabContent}`} hidden={assetsTab !== 'calculations'}>
-                  <CalculationsPanel
-                    selectedPiPoint={selectedPiPoint}
-                    document={document}
-                    onChange={setDocument}
-                    resolvePiPoint={resolveCalculationPiPoint}
-                    openCalculationId={openCalculationId}
-                    onCalculationOpenHandled={() => setOpenCalculationId(undefined)}
-                    expanded={isCalculationsOpen}
-                    onExpandedChange={setIsCalculationsOpen}
-                  />
-                </div>
-              </div>
+              )}
             </div>
           )}
         </aside>

@@ -26,17 +26,23 @@ export type ParsedFormula =
   | {
       type: 'pi_curr_val';
       tag: string;
+      referencedCells?: CellCoord[];
     }
   | {
       type: 'pi_arc_val';
       tag: string;
       timeExpression: string;
+      mode?: string;
+      referencedCells?: CellCoord[];
     }
   | {
       type: 'pi_comp_dat';
       tag: string;
       startTime: string;
       endTime: string;
+      maxCount?: number;
+      showTimestamp?: boolean;
+      referencedCells?: CellCoord[];
     }
   | {
       type: 'pi_samp_dat';
@@ -44,6 +50,32 @@ export type ParsedFormula =
       startTime: string;
       endTime: string;
       interval: string;
+      showTimestamp?: boolean;
+      referencedCells?: CellCoord[];
+    }
+  | {
+      type: 'pi_time_dat';
+      tag: string;
+      timestampsRange: string;
+      mode?: string;
+      referencedCells?: CellCoord[];
+    }
+  | {
+      type: 'pi_adv_calc_val';
+      tag: string;
+      startTime: string;
+      endTime: string;
+      calculation: string;
+      interval?: string;
+      referencedCells?: CellCoord[];
+    }
+  | {
+      type: 'pi_time_filter';
+      expression: string;
+      startTime: string;
+      endTime: string;
+      unit: string;
+      referencedCells?: CellCoord[];
     }
   | {
       type: 'math_expression';
@@ -108,10 +140,26 @@ export function getRangeCells(start: CellCoord, end: CellCoord): CellCoord[] {
   return cells;
 }
 
+export function parseRangeAddresses(rangeStr: string): CellCoord[] {
+  const parts = rangeStr.split(':');
+  if (parts.length === 1) {
+    const coord = parseCellAddress(parts[0]);
+    return coord ? [coord] : [];
+  }
+  if (parts.length === 2) {
+    const c1 = parseCellAddress(parts[0]);
+    const c2 = parseCellAddress(parts[1]);
+    if (c1 && c2) {
+      return getRangeCells(c1, c2);
+    }
+  }
+  return [];
+}
+
 /**
  * Tokenizes formula arguments respecting strings and parentheses.
  */
-function parseFunctionArguments(argsStr: string): string[] {
+export function parseFunctionArguments(argsStr: string): string[] {
   const args: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -148,7 +196,7 @@ function parseFunctionArguments(argsStr: string): string[] {
   return args;
 }
 
-function stripQuotes(value: string): string {
+export function stripQuotes(value: string): string {
   const trimmed = value.trim();
   if (
     (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
@@ -157,6 +205,22 @@ function stripQuotes(value: string): string {
     return trimmed.slice(1, -1);
   }
   return trimmed;
+}
+
+/**
+ * Resolves a parameter: if it is a cell coordinate (e.g. A1), reads its value; otherwise strips quotes.
+ */
+export function resolveParameter(
+  param: string,
+  getCellValue: (coord: CellCoord) => string | undefined
+): string {
+  const trimmed = param.trim();
+  const coord = parseCellAddress(trimmed);
+  if (coord) {
+    const val = getCellValue(coord);
+    return val !== undefined ? String(val).trim() : '';
+  }
+  return stripQuotes(trimmed);
 }
 
 /**
@@ -174,11 +238,24 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
 
   const formulaBody = trimmed.slice(1).trim();
 
-  // Match PI Functions: =PICurrVal(...), =PIArcVal(...), =PICompDat(...), =PISampDat(...)
+  // Match PI Functions: =PICurrVal(...), =PIArcVal(...), =PICompDat(...), =PISampDat(...), =PITimeDat(...), =PIAdvCalcVal(...), =PITimeFilter(...)
   const piMatch = /^([A-Za-z0-9_]+)\s*\(([\s\S]*)\)$/.exec(formulaBody);
   if (piMatch) {
     const funcName = piMatch[1].toUpperCase();
     const rawArgs = parseFunctionArguments(piMatch[2]);
+
+    const getRefCoords = (args: string[]): CellCoord[] => {
+      const refs: CellCoord[] = [];
+      args.forEach((a) => {
+        if (a.includes(':')) {
+          refs.push(...parseRangeAddresses(a));
+        } else {
+          const c = parseCellAddress(a);
+          if (c) refs.push(c);
+        }
+      });
+      return refs;
+    };
 
     if (funcName === 'PICURRVAL') {
       if (rawArgs.length < 1 || !rawArgs[0]) {
@@ -187,6 +264,7 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
       return {
         type: 'pi_curr_val',
         tag: stripQuotes(rawArgs[0]),
+        referencedCells: getRefCoords(rawArgs),
       };
     }
 
@@ -198,6 +276,8 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         type: 'pi_arc_val',
         tag: stripQuotes(rawArgs[0]),
         timeExpression: stripQuotes(rawArgs[1]),
+        mode: rawArgs[2] ? stripQuotes(rawArgs[2]) : undefined,
+        referencedCells: getRefCoords(rawArgs),
       };
     }
 
@@ -205,11 +285,16 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
       if (rawArgs.length < 3 || !rawArgs[0] || !rawArgs[1] || !rawArgs[2]) {
         return { type: 'error', error: '#FORMULA!' };
       }
+      const maxCount = rawArgs[3] ? parseInt(stripQuotes(rawArgs[3]), 10) : undefined;
+      const showTimestamp = rawArgs[4] ? stripQuotes(rawArgs[4]).toLowerCase() !== 'false' : true;
       return {
         type: 'pi_comp_dat',
         tag: stripQuotes(rawArgs[0]),
         startTime: stripQuotes(rawArgs[1]),
         endTime: stripQuotes(rawArgs[2]),
+        maxCount: !isNaN(maxCount as number) ? maxCount : undefined,
+        showTimestamp,
+        referencedCells: getRefCoords(rawArgs),
       };
     }
 
@@ -217,12 +302,57 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
       if (rawArgs.length < 4 || !rawArgs[0] || !rawArgs[1] || !rawArgs[2] || !rawArgs[3]) {
         return { type: 'error', error: '#FORMULA!' };
       }
+      const showTimestamp = rawArgs[4] ? stripQuotes(rawArgs[4]).toLowerCase() !== 'false' : true;
       return {
         type: 'pi_samp_dat',
         tag: stripQuotes(rawArgs[0]),
         startTime: stripQuotes(rawArgs[1]),
         endTime: stripQuotes(rawArgs[2]),
         interval: stripQuotes(rawArgs[3]),
+        showTimestamp,
+        referencedCells: getRefCoords(rawArgs),
+      };
+    }
+
+    if (funcName === 'PITIMEDAT') {
+      if (rawArgs.length < 2 || !rawArgs[0] || !rawArgs[1]) {
+        return { type: 'error', error: '#FORMULA!' };
+      }
+      return {
+        type: 'pi_time_dat',
+        tag: stripQuotes(rawArgs[0]),
+        timestampsRange: stripQuotes(rawArgs[1]),
+        mode: rawArgs[2] ? stripQuotes(rawArgs[2]) : undefined,
+        referencedCells: getRefCoords(rawArgs),
+      };
+    }
+
+    if (funcName === 'PIADVCALCVAL' || funcName === 'PICALCDAT') {
+      if (rawArgs.length < 4 || !rawArgs[0] || !rawArgs[1] || !rawArgs[2] || !rawArgs[3]) {
+        return { type: 'error', error: '#FORMULA!' };
+      }
+      return {
+        type: 'pi_adv_calc_val',
+        tag: stripQuotes(rawArgs[0]),
+        startTime: stripQuotes(rawArgs[1]),
+        endTime: stripQuotes(rawArgs[2]),
+        calculation: stripQuotes(rawArgs[3]),
+        interval: rawArgs[4] ? stripQuotes(rawArgs[4]) : undefined,
+        referencedCells: getRefCoords(rawArgs),
+      };
+    }
+
+    if (funcName === 'PITIMEFILTER') {
+      if (rawArgs.length < 4 || !rawArgs[0] || !rawArgs[1] || !rawArgs[2] || !rawArgs[3]) {
+        return { type: 'error', error: '#FORMULA!' };
+      }
+      return {
+        type: 'pi_time_filter',
+        expression: stripQuotes(rawArgs[0]),
+        startTime: stripQuotes(rawArgs[1]),
+        endTime: stripQuotes(rawArgs[2]),
+        unit: stripQuotes(rawArgs[3]),
+        referencedCells: getRefCoords(rawArgs),
       };
     }
 

@@ -61,11 +61,14 @@ describe('miniSheetFormula', () => {
     expect(parseFormula('=PICurrVal("LFS_RB2_TAG")')).toEqual({
       type: 'pi_curr_val',
       tag: 'LFS_RB2_TAG',
+      referencedCells: [],
     });
     expect(parseFormula('=PIArcVal("LFS_RB2_MOTOR_TEMP", "*-1h")')).toEqual({
       type: 'pi_arc_val',
       tag: 'LFS_RB2_MOTOR_TEMP',
       timeExpression: '*-1h',
+      mode: undefined,
+      referencedCells: [],
     });
   });
 
@@ -75,6 +78,9 @@ describe('miniSheetFormula', () => {
       tag: 'LFS_RB2_TAG',
       startTime: '*-1h',
       endTime: '*',
+      maxCount: undefined,
+      showTimestamp: true,
+      referencedCells: [],
     });
     expect(parseFormula('=PISampDat("LFS_RB2_TAG", "*-1h", "*", "5m")')).toEqual({
       type: 'pi_samp_dat',
@@ -82,6 +88,8 @@ describe('miniSheetFormula', () => {
       startTime: '*-1h',
       endTime: '*',
       interval: '5m',
+      showTimestamp: true,
+      referencedCells: [],
     });
   });
 

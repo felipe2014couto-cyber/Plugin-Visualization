@@ -1,0 +1,753 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { css } from '@emotion/css';
+import { GrafanaTheme2 } from '@grafana/data';
+import { useStyles2 } from '@grafana/ui';
+import { PiDataLinkFunctionType } from './PiDataLinkToolbar';
+import { searchPiPointsWithStatus } from '../../pi';
+import { parseCellAddress } from './miniSheetFormula';
+
+interface PiDataLinkFunctionDialogProps {
+  functionType: PiDataLinkFunctionType;
+  initialTargetCell: string;
+  currentSelectionAddress?: string;
+  onInsert: (formula: string, targetCell: string) => void;
+  onClose: () => void;
+}
+
+export function PiDataLinkFunctionDialog({
+  functionType,
+  initialTargetCell,
+  currentSelectionAddress,
+  onInsert,
+  onClose,
+}: PiDataLinkFunctionDialogProps) {
+  const styles = useStyles2(getStyles);
+
+  const [tag, setTag] = useState('');
+  const [targetCell, setTargetCell] = useState(initialTargetCell);
+  const [startTime, setStartTime] = useState('*-8h');
+  const [endTime, setEndTime] = useState('*');
+  const [timestamp, setTimestamp] = useState('*-1h');
+  const [interval, setInterval] = useState('5m');
+  const [calcInterval, setCalcInterval] = useState('');
+  const [calculation, setCalculation] = useState('Average');
+  const [mode, setMode] = useState('Interpolated');
+  const [timestampsRange, setTimestampsRange] = useState(currentSelectionAddress ?? 'A1:A4');
+  const [expression, setExpression] = useState("'TAG' > 50");
+  const [unit, setUnit] = useState('hours');
+  const [maxCount, setMaxCount] = useState('500');
+  const [showTimestamp, setShowTimestamp] = useState(true);
+
+  // Autocomplete state
+  const [searchResults, setSearchResults] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  useEffect(() => {
+    if (!tag.trim() || parseCellAddress(tag) || tag.includes("'") || tag.includes('"')) {
+      setSearchResults([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    let active = true;
+    const timer = setTimeout(() => {
+      setIsSearching(true);
+      searchPiPointsWithStatus({ term: tag.trim(), limit: 10 })
+        .then((res) => {
+          if (active) {
+            setSearchResults(res.results.map((r) => r.name));
+            setShowSuggestions(res.results.length > 0);
+          }
+        })
+        .catch(() => {
+          if (active) setSearchResults([]);
+        })
+        .finally(() => {
+          if (active) setIsSearching(false);
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [tag]);
+
+  const formatParam = (val: string, fallback = '') => {
+    const trimmed = (val || fallback).trim();
+    if (!trimmed) return '""';
+    if (parseCellAddress(trimmed)) {
+      return trimmed;
+    }
+    if (trimmed.includes(':')) {
+      const parts = trimmed.split(':');
+      if (parts.length === 2 && parseCellAddress(parts[0]) && parseCellAddress(parts[1])) {
+        return trimmed;
+      }
+    }
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed;
+    }
+    return `"${trimmed}"`;
+  };
+
+  const previewFormula = useMemo(() => {
+    switch (functionType) {
+      case 'PICurrVal': {
+        const pTag = formatParam(tag, 'TAG');
+        return `=PICurrVal(${pTag})`;
+      }
+      case 'PIArcVal': {
+        const pTag = formatParam(tag, 'TAG');
+        const pTime = formatParam(timestamp, '*-1h');
+        const pMode = formatParam(mode, 'Interpolated');
+        return `=PIArcVal(${pTag}, ${pTime}, ${pMode})`;
+      }
+      case 'PICompDat': {
+        const pTag = formatParam(tag, 'TAG');
+        const pStart = formatParam(startTime, '*-1h');
+        const pEnd = formatParam(endTime, '*');
+        const pMax = maxCount ? formatParam(maxCount) : '';
+        const pShow = showTimestamp ? '' : ', false';
+        return `=PICompDat(${pTag}, ${pStart}, ${pEnd}${pMax ? `, ${pMax}` : ''}${pShow})`;
+      }
+      case 'PISampDat': {
+        const pTag = formatParam(tag, 'TAG');
+        const pStart = formatParam(startTime, '*-8h');
+        const pEnd = formatParam(endTime, '*');
+        const pInt = formatParam(interval, '5m');
+        const pShow = showTimestamp ? '' : ', false';
+        return `=PISampDat(${pTag}, ${pStart}, ${pEnd}, ${pInt}${pShow})`;
+      }
+      case 'PITimeDat': {
+        const pTag = formatParam(tag, 'TAG');
+        const pRange = formatParam(timestampsRange, 'A1:A4');
+        const pMode = mode !== 'Interpolated' ? `, ${formatParam(mode)}` : '';
+        return `=PITimeDat(${pTag}, ${pRange}${pMode})`;
+      }
+      case 'PIAdvCalcVal': {
+        const pTag = formatParam(tag, 'TAG');
+        const pStart = formatParam(startTime, '*-8h');
+        const pEnd = formatParam(endTime, '*');
+        const pCalc = formatParam(calculation, 'Average');
+        const pInt = calcInterval ? `, ${formatParam(calcInterval)}` : '';
+        return `=PIAdvCalcVal(${pTag}, ${pStart}, ${pEnd}, ${pCalc}${pInt})`;
+      }
+      case 'PITimeFilter': {
+        const pExpr = formatParam(expression, "'TAG' > 50");
+        const pStart = formatParam(startTime, '*-8h');
+        const pEnd = formatParam(endTime, '*');
+        const pUnit = formatParam(unit, 'hours');
+        return `=PITimeFilter(${pExpr}, ${pStart}, ${pEnd}, ${pUnit})`;
+      }
+      default:
+        return '';
+    }
+  }, [
+    calcInterval,
+    calculation,
+    endTime,
+    expression,
+    functionType,
+    interval,
+    maxCount,
+    mode,
+    showTimestamp,
+    startTime,
+    tag,
+    timestamp,
+    timestampsRange,
+    unit,
+  ]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onInsert(previewFormula, targetCell.trim() || initialTargetCell);
+  };
+
+  const getTitle = () => {
+    switch (functionType) {
+      case 'PICurrVal':
+        return 'Valor atual (PICurrVal)';
+      case 'PIArcVal':
+        return 'Valor de Archive (PIArcVal)';
+      case 'PICompDat':
+        return 'Dados compactados (PICompDat)';
+      case 'PISampDat':
+        return 'Dados de amostragem (PISampDat)';
+      case 'PITimeDat':
+        return 'Dados com marcação de tempo (PITimeDat)';
+      case 'PIAdvCalcVal':
+        return 'Dados calculados (PIAdvCalcVal)';
+      case 'PITimeFilter':
+        return 'Tempo Filtrado (PITimeFilter)';
+    }
+  };
+
+  return (
+    <div className={styles.dialogBackdrop} role="presentation" onClick={onClose}>
+      <form
+        className={styles.dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="datalink-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSubmit}
+      >
+        <div className={styles.header}>
+          <h3 id="datalink-dialog-title" className={styles.title}>
+            {getTitle()}
+          </h3>
+          <button
+            type="button"
+            className={styles.closeButton}
+            aria-label="Fechar"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className={styles.body}>
+          {functionType !== 'PITimeFilter' ? (
+            <div className={styles.formRow}>
+              <label className={styles.label} htmlFor="datalink-tag">
+                Item de dados (PI Point ou Célula)
+              </label>
+              <div className={styles.inputWrapper}>
+                <input
+                  id="datalink-tag"
+                  className={styles.input}
+                  value={tag}
+                  placeholder="Ex: LFS_RB2_TEMP ou A1"
+                  autoFocus
+                  onChange={(e) => setTag(e.target.value)}
+                  onFocus={() => {
+                    if (searchResults.length > 0) setShowSuggestions(true);
+                  }}
+                />
+                {isSearching && <span className={styles.searchIndicator}>...</span>}
+                {showSuggestions && searchResults.length > 0 && (
+                  <ul className={styles.suggestionsList} role="listbox">
+                    {searchResults.map((res) => (
+                      <li
+                        key={res}
+                        role="option"
+                        aria-selected="false"
+                        className={styles.suggestionItem}
+                        onClick={() => {
+                          setTag(res);
+                          setShowSuggestions(false);
+                        }}
+                      >
+                        {res}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className={styles.formRow}>
+              <label className={styles.label} htmlFor="datalink-expr">
+                Expressão booleana
+              </label>
+              <input
+                id="datalink-expr"
+                className={styles.input}
+                value={expression}
+                placeholder="Ex: 'LFS_RB2_TEMP' > 50"
+                autoFocus
+                onChange={(e) => setExpression(e.target.value)}
+              />
+            </div>
+          )}
+
+          {functionType === 'PIArcVal' && (
+            <>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-timestamp">
+                  Timestamp (PI Time ou Célula)
+                </label>
+                <input
+                  id="datalink-timestamp"
+                  className={styles.input}
+                  value={timestamp}
+                  placeholder="Ex: *-1h, 19/08/2026 12:00 ou B1"
+                  onChange={(e) => setTimestamp(e.target.value)}
+                />
+              </div>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-mode">
+                  Modo de recuperação
+                </label>
+                <select
+                  id="datalink-mode"
+                  className={styles.select}
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                >
+                  <option value="Interpolated">Interpolated</option>
+                  <option value="At or before">At or before</option>
+                  <option value="At or after">At or after</option>
+                  <option value="Exact">Exact</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {(functionType === 'PICompDat' ||
+            functionType === 'PISampDat' ||
+            functionType === 'PIAdvCalcVal' ||
+            functionType === 'PITimeFilter') && (
+            <div className={styles.gridTwoCols}>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-start-time">
+                  Tempo inicial
+                </label>
+                <input
+                  id="datalink-start-time"
+                  className={styles.input}
+                  value={startTime}
+                  placeholder="Ex: *-8h ou A2"
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </div>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-end-time">
+                  Tempo final
+                </label>
+                <input
+                  id="datalink-end-time"
+                  className={styles.input}
+                  value={endTime}
+                  placeholder="Ex: * ou A3"
+                  onChange={(e) => setEndTime(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          {functionType === 'PISampDat' && (
+            <div className={styles.formRow}>
+              <label className={styles.label} htmlFor="datalink-interval">
+                Intervalo
+              </label>
+              <input
+                id="datalink-interval"
+                className={styles.input}
+                value={interval}
+                placeholder="Ex: 5m, 1h ou A4"
+                onChange={(e) => setInterval(e.target.value)}
+              />
+            </div>
+          )}
+
+          {functionType === 'PITimeDat' && (
+            <>
+              <div className={styles.formRow}>
+                <div className={styles.labelWithAction}>
+                  <label className={styles.label} htmlFor="datalink-range">
+                    Range de timestamps
+                  </label>
+                  {currentSelectionAddress && (
+                    <button
+                      type="button"
+                      className={styles.linkButton}
+                      onClick={() => setTimestampsRange(currentSelectionAddress)}
+                    >
+                      Usar seleção ({currentSelectionAddress})
+                    </button>
+                  )}
+                </div>
+                <input
+                  id="datalink-range"
+                  className={styles.input}
+                  value={timestampsRange}
+                  placeholder="Ex: A1:A10"
+                  onChange={(e) => setTimestampsRange(e.target.value)}
+                />
+              </div>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-timed-mode">
+                  Modo
+                </label>
+                <select
+                  id="datalink-timed-mode"
+                  className={styles.select}
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                >
+                  <option value="Interpolated">Interpolated</option>
+                  <option value="Actual">Actual (Recorded)</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {functionType === 'PIAdvCalcVal' && (
+            <div className={styles.gridTwoCols}>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-calc">
+                  Cálculo
+                </label>
+                <select
+                  id="datalink-calc"
+                  className={styles.select}
+                  value={calculation}
+                  onChange={(e) => setCalculation(e.target.value)}
+                >
+                  <option value="Average">Média (Average)</option>
+                  <option value="Minimum">Mínimo (Minimum)</option>
+                  <option value="Maximum">Máximo (Maximum)</option>
+                  <option value="Total">Total</option>
+                  <option value="StdDev">Desvio padrão (StdDev)</option>
+                  <option value="Range">Amplitude (Range)</option>
+                  <option value="Count">Contagem (Count)</option>
+                </select>
+              </div>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-calc-interval">
+                  Intervalo (opcional)
+                </label>
+                <input
+                  id="datalink-calc-interval"
+                  className={styles.input}
+                  value={calcInterval}
+                  placeholder="Ex: 1h (para série) ou vazio"
+                  onChange={(e) => setCalcInterval(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          {functionType === 'PITimeFilter' && (
+            <div className={styles.formRow}>
+              <label className={styles.label} htmlFor="datalink-unit">
+                Unidade de retorno
+              </label>
+              <select
+                id="datalink-unit"
+                className={styles.select}
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+              >
+                <option value="hours">Horas (hours)</option>
+                <option value="minutes">Minutos (minutes)</option>
+                <option value="seconds">Segundos (seconds)</option>
+                <option value="days">Dias (days)</option>
+                <option value="percent">Porcentagem (percent)</option>
+              </select>
+            </div>
+          )}
+
+          {functionType === 'PICompDat' && (
+            <div className={styles.formRow}>
+              <label className={styles.label} htmlFor="datalink-max-count">
+                Máximo de valores
+              </label>
+              <input
+                id="datalink-max-count"
+                className={styles.input}
+                value={maxCount}
+                type="number"
+                min={1}
+                max={5000}
+                onChange={(e) => setMaxCount(e.target.value)}
+              />
+            </div>
+          )}
+
+          {(functionType === 'PICompDat' || functionType === 'PISampDat') && (
+            <div className={styles.checkboxRow}>
+              <label className={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  checked={showTimestamp}
+                  onChange={(e) => setShowTimestamp(e.target.checked)}
+                />
+                <span>Mostrar coluna de timestamp</span>
+              </label>
+            </div>
+          )}
+
+          <div className={styles.formRow}>
+            <div className={styles.labelWithAction}>
+              <label className={styles.label} htmlFor="datalink-target-cell">
+                Célula de saída
+              </label>
+              {currentSelectionAddress && (
+                <button
+                  type="button"
+                  className={styles.linkButton}
+                  onClick={() => setTargetCell(currentSelectionAddress.split(':')[0])}
+                >
+                  Usar célula ativa ({currentSelectionAddress.split(':')[0]})
+                </button>
+              )}
+            </div>
+            <input
+              id="datalink-target-cell"
+              className={styles.input}
+              value={targetCell}
+              placeholder="Ex: B4"
+              onChange={(e) => setTargetCell(e.target.value)}
+            />
+          </div>
+
+          <div className={styles.previewBox}>
+            <span className={styles.previewLabel}>Fórmula gerada:</span>
+            <code className={styles.previewCode} data-testid="datalink-preview-formula">
+              {previewFormula}
+            </code>
+          </div>
+        </div>
+
+        <div className={styles.footer}>
+          <button type="button" className={styles.cancelButton} onClick={onClose}>
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            className={styles.submitButton}
+            data-testid="datalink-dialog-insert"
+          >
+            Inserir
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+const getStyles = (theme: GrafanaTheme2) => ({
+  dialogBackdrop: css({
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'rgba(0, 0, 0, 0.55)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    backdropFilter: 'blur(2px)',
+  }),
+  dialog: css({
+    background: theme.colors.background.primary,
+    border: `1px solid ${theme.colors.border.medium}`,
+    borderRadius: theme.shape.borderRadius(6),
+    boxShadow: theme.shadows?.z3 ?? '0 8px 24px rgba(0,0,0,0.4)',
+    width: '460px',
+    maxWidth: '92vw',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    animation: 'fadeIn 0.15s ease-out',
+  }),
+  header: css({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: `${theme.spacing(1.5)} ${theme.spacing(2)}`,
+    background: theme.colors.background.secondary,
+    borderBottom: `1px solid ${theme.colors.border.weak}`,
+  }),
+  title: css({
+    margin: 0,
+    fontSize: '14px',
+    fontWeight: 600,
+    color: theme.colors.text.primary,
+  }),
+  closeButton: css({
+    background: 'transparent',
+    border: 'none',
+    color: theme.colors.text.secondary,
+    cursor: 'pointer',
+    fontSize: '14px',
+    padding: theme.spacing(0.5),
+    '&:hover': {
+      color: theme.colors.text.primary,
+    },
+  }),
+  body: css({
+    padding: theme.spacing(2),
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(1.5),
+    maxHeight: '75vh',
+    overflowY: 'auto',
+  }),
+  formRow: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(0.5),
+  }),
+  gridTwoCols: css({
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: theme.spacing(1.5),
+  }),
+  label: css({
+    fontSize: '12px',
+    fontWeight: 500,
+    color: theme.colors.text.secondary,
+  }),
+  labelWithAction: css({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  }),
+  linkButton: css({
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    fontSize: '11px',
+    color: theme.colors.primary.text,
+    cursor: 'pointer',
+    textDecoration: 'underline',
+    '&:hover': {
+      color: theme.colors.primary.shade,
+    },
+  }),
+  inputWrapper: css({
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  }),
+  input: css({
+    width: '100%',
+    padding: `${theme.spacing(0.75)} ${theme.spacing(1)}`,
+    fontSize: '12px',
+    color: theme.colors.text.primary,
+    background: theme.colors.background.secondary,
+    border: `1px solid ${theme.colors.border.medium}`,
+    borderRadius: theme.shape.borderRadius(3),
+    boxSizing: 'border-box',
+    '&:focus': {
+      borderColor: theme.colors.primary.border,
+      outline: 'none',
+    },
+  }),
+  select: css({
+    width: '100%',
+    padding: `${theme.spacing(0.75)} ${theme.spacing(1)}`,
+    fontSize: '12px',
+    color: theme.colors.text.primary,
+    background: theme.colors.background.secondary,
+    border: `1px solid ${theme.colors.border.medium}`,
+    borderRadius: theme.shape.borderRadius(3),
+    boxSizing: 'border-box',
+    cursor: 'pointer',
+    '&:focus': {
+      borderColor: theme.colors.primary.border,
+      outline: 'none',
+    },
+  }),
+  searchIndicator: css({
+    position: 'absolute',
+    right: theme.spacing(1),
+    fontSize: '12px',
+    color: theme.colors.text.disabled,
+  }),
+  suggestionsList: css({
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    background: theme.colors.background.primary,
+    border: `1px solid ${theme.colors.border.medium}`,
+    borderRadius: theme.shape.borderRadius(3),
+    marginTop: '2px',
+    maxHeight: '160px',
+    overflowY: 'auto',
+    zIndex: 10,
+    listStyle: 'none',
+    padding: 0,
+    margin: 0,
+    boxShadow: theme.shadows?.z2 ?? '0 4px 12px rgba(0,0,0,0.3)',
+  }),
+  suggestionItem: css({
+    padding: `${theme.spacing(0.75)} ${theme.spacing(1)}`,
+    fontSize: '12px',
+    cursor: 'pointer',
+    '&:hover': {
+      background: theme.colors.action.hover,
+      color: theme.colors.text.maxContrast,
+    },
+  }),
+  checkboxRow: css({
+    display: 'flex',
+    alignItems: 'center',
+  }),
+  checkboxLabel: css({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: theme.spacing(0.75),
+    fontSize: '12px',
+    color: theme.colors.text.primary,
+    cursor: 'pointer',
+  }),
+  previewBox: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(0.5),
+    padding: theme.spacing(1),
+    background: theme.colors.background.secondary,
+    border: `1px solid ${theme.colors.border.weak}`,
+    borderRadius: theme.shape.borderRadius(3),
+  }),
+  previewLabel: css({
+    fontSize: '10px',
+    fontWeight: 600,
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    color: theme.colors.text.secondary,
+  }),
+  previewCode: css({
+    fontFamily: 'monospace',
+    fontSize: '12px',
+    color: theme.colors.primary.text,
+    wordBreak: 'break-all',
+  }),
+  footer: css({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: theme.spacing(1),
+    padding: `${theme.spacing(1.25)} ${theme.spacing(2)}`,
+    background: theme.colors.background.secondary,
+    borderTop: `1px solid ${theme.colors.border.weak}`,
+  }),
+  cancelButton: css({
+    padding: `${theme.spacing(0.5)} ${theme.spacing(1.5)}`,
+    fontSize: '12px',
+    fontWeight: 500,
+    color: theme.colors.text.primary,
+    background: 'transparent',
+    border: `1px solid ${theme.colors.border.medium}`,
+    borderRadius: theme.shape.borderRadius(3),
+    cursor: 'pointer',
+    '&:hover': {
+      background: theme.colors.action.hover,
+    },
+  }),
+  submitButton: css({
+    padding: `${theme.spacing(0.5)} ${theme.spacing(1.75)}`,
+    fontSize: '12px',
+    fontWeight: 600,
+    color: theme.colors.primary.contrastText,
+    background: theme.colors.primary.main,
+    border: 'none',
+    borderRadius: theme.shape.borderRadius(3),
+    cursor: 'pointer',
+    '&:hover': {
+      background: theme.colors.primary.shade,
+    },
+  }),
+});

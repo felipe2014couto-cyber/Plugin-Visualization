@@ -14,12 +14,16 @@ import {
   colIndexToLetter,
   formatCellAddress,
   parseCellAddress,
+  parseRangeAddresses,
   parseFormula,
   evaluateMathExpression,
   evaluateAggregate,
+  resolveParameter,
   type CellCoord,
 } from './miniSheetFormula';
 import { parsePiTime, formatDateTime } from './miniSheetTime';
+import { PiDataLinkToolbar, type PiDataLinkFunctionType } from './PiDataLinkToolbar';
+import { PiDataLinkFunctionDialog } from './PiDataLinkFunctionDialog';
 import {
   SheetRange,
   formatRangeAddress,
@@ -103,6 +107,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
   const [editingCellCoord, setEditingCellCoord] = useState<CellCoord | null>(null);
   const [editingCellText, setEditingCellText] = useState('');
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [activeDataLinkDialog, setActiveDataLinkDialog] = useState<PiDataLinkFunctionType | null>(null);
 
   // Internal clipboard buffer
   const [internalClipboard, setInternalClipboard] = useState<MiniSheetClipboard | null>(null);
@@ -356,10 +361,16 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
         return;
       }
 
+      const getCellString = (c: CellCoord) => {
+        const k = `${c.col},${c.row}`;
+        return cellsRef.current.get(k)?.displayValue ?? cellsRef.current.get(k)?.rawValue;
+      };
+
       // Handle PI Formulas
       if (parsed.type === 'pi_curr_val') {
         try {
-          const binding = await resolvePiPointBindingByName(parsed.tag);
+          const resolvedTag = resolveParameter(parsed.tag, getCellString);
+          const binding = await resolvePiPointBindingByName(resolvedTag);
           if (!binding) {
             setCells((prev) => {
               const next = new Map(prev);
@@ -394,8 +405,10 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
 
       if (parsed.type === 'pi_arc_val') {
         try {
-          const binding = await resolvePiPointBindingByName(parsed.tag);
-          const targetTime = parsePiTime(parsed.timeExpression);
+          const resolvedTag = resolveParameter(parsed.tag, getCellString);
+          const resolvedTime = resolveParameter(parsed.timeExpression, getCellString);
+          const binding = await resolvePiPointBindingByName(resolvedTag);
+          const targetTime = parsePiTime(resolvedTime);
           if (!binding || targetTime === undefined) {
             setCells((prev) => {
               const next = new Map(prev);
@@ -440,9 +453,12 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
 
       if (parsed.type === 'pi_comp_dat' || parsed.type === 'pi_samp_dat') {
         try {
-          const binding = await resolvePiPointBindingByName(parsed.tag);
-          const fromTime = parsePiTime(parsed.startTime);
-          const toTime = parsePiTime(parsed.endTime);
+          const resolvedTag = resolveParameter(parsed.tag, getCellString);
+          const resolvedStart = resolveParameter(parsed.startTime, getCellString);
+          const resolvedEnd = resolveParameter(parsed.endTime, getCellString);
+          const binding = await resolvePiPointBindingByName(resolvedTag);
+          const fromTime = parsePiTime(resolvedStart);
+          const toTime = parsePiTime(resolvedEnd);
 
           if (!binding || fromTime === undefined || toTime === undefined || fromTime >= toTime) {
             setCells((prev) => {
@@ -466,7 +482,8 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
             const bindingKey = `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
             const res = results[bindingKey];
             if (res && res.status === 'success' && res.series) {
-              points = res.series.points.slice(0, 500);
+              const limit = parsed.maxCount ?? 500;
+              points = res.series.points.slice(0, Math.min(limit, 500));
             }
           } else {
             const results = await getPiTrendsPreviewForRange([binding], range, dataSourceSrv);
@@ -488,8 +505,8 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
           }
 
           // Check for SPILL collision
-          const neededCol1 = coord.col;
-          const neededCol2 = coord.col + 1;
+          const showTs = parsed.showTimestamp !== false;
+          const neededCol2 = showTs ? coord.col + 1 : coord.col;
           const neededEndRow = coord.row + points.length - 1;
 
           if (neededCol2 >= TOTAL_COLS || neededEndRow >= TOTAL_ROWS) {
@@ -506,7 +523,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
           let hasCollision = false;
           setCells((prev) => {
             for (let r = coord.row; r <= neededEndRow; r++) {
-              for (let c = neededCol1; c <= neededCol2; c++) {
+              for (let c = coord.col; c <= neededCol2; c++) {
                 if (r === coord.row && c === coord.col) {
                   continue;
                 }
@@ -527,51 +544,71 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
             }
 
             const spillTargets: string[] = [];
-
-            // Set origin cell
             const firstPt = points[0];
-            next.set(key, {
-              rawValue,
-              displayValue: formatDateTime(firstPt.time),
-              spillTargetAddresses: [],
-              format: existingOrigin?.format,
-            });
 
-            // Set right cell of origin (value)
-            const rightCoord = { col: coord.col + 1, row: coord.row };
-            const rightKey = `${rightCoord.col},${rightCoord.row}`;
-            const rightAddr = formatCellAddress(rightCoord);
-            spillTargets.push(rightAddr);
-            next.set(rightKey, {
-              rawValue: '',
-              displayValue: String(firstPt.value),
-              spilledFrom: address,
-            });
+            if (showTs) {
+              next.set(key, {
+                rawValue,
+                displayValue: formatDateTime(firstPt.time),
+                spillTargetAddresses: [],
+                format: existingOrigin?.format,
+              });
 
-            // Set remaining rows
-            for (let i = 1; i < points.length; i++) {
-              const pt = points[i];
-              const r = coord.row + i;
-
-              const timeCoord = { col: coord.col, row: r };
-              const timeKey = `${timeCoord.col},${timeCoord.row}`;
-              const timeAddr = formatCellAddress(timeCoord);
-              spillTargets.push(timeAddr);
-              next.set(timeKey, {
+              const rightCoord = { col: coord.col + 1, row: coord.row };
+              const rightKey = `${rightCoord.col},${rightCoord.row}`;
+              const rightAddr = formatCellAddress(rightCoord);
+              spillTargets.push(rightAddr);
+              next.set(rightKey, {
                 rawValue: '',
-                displayValue: formatDateTime(pt.time),
+                displayValue: String(firstPt.value),
                 spilledFrom: address,
               });
 
-              const valCoord = { col: coord.col + 1, row: r };
-              const valKey = `${valCoord.col},${valCoord.row}`;
-              const valAddr = formatCellAddress(valCoord);
-              spillTargets.push(valAddr);
-              next.set(valKey, {
-                rawValue: '',
-                displayValue: String(pt.value),
-                spilledFrom: address,
+              for (let i = 1; i < points.length; i++) {
+                const pt = points[i];
+                const r = coord.row + i;
+
+                const timeCoord = { col: coord.col, row: r };
+                const timeKey = `${timeCoord.col},${timeCoord.row}`;
+                const timeAddr = formatCellAddress(timeCoord);
+                spillTargets.push(timeAddr);
+                next.set(timeKey, {
+                  rawValue: '',
+                  displayValue: formatDateTime(pt.time),
+                  spilledFrom: address,
+                });
+
+                const valCoord = { col: coord.col + 1, row: r };
+                const valKey = `${valCoord.col},${valCoord.row}`;
+                const valAddr = formatCellAddress(valCoord);
+                spillTargets.push(valAddr);
+                next.set(valKey, {
+                  rawValue: '',
+                  displayValue: String(pt.value),
+                  spilledFrom: address,
+                });
+              }
+            } else {
+              next.set(key, {
+                rawValue,
+                displayValue: String(firstPt.value),
+                spillTargetAddresses: [],
+                format: existingOrigin?.format,
               });
+
+              for (let i = 1; i < points.length; i++) {
+                const pt = points[i];
+                const r = coord.row + i;
+                const valCoord = { col: coord.col, row: r };
+                const valKey = `${valCoord.col},${valCoord.row}`;
+                const valAddr = formatCellAddress(valCoord);
+                spillTargets.push(valAddr);
+                next.set(valKey, {
+                  rawValue: '',
+                  displayValue: String(pt.value),
+                  spilledFrom: address,
+                });
+              }
             }
 
             const originCell = next.get(key);
@@ -589,6 +626,413 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
             return evaluateStaticFormulas(next).nextMap;
           });
         }
+        return;
+      }
+
+      if (parsed.type === 'pi_time_dat') {
+        try {
+          const resolvedTag = resolveParameter(parsed.tag, getCellString);
+          const binding = await resolvePiPointBindingByName(resolvedTag);
+          const rangeAddresses = parseRangeAddresses(parsed.timestampsRange);
+          if (!binding || rangeAddresses.length === 0) {
+            setCells((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(key);
+              next.set(key, { rawValue, displayValue: rangeAddresses.length === 0 ? '#REF!' : '#PI!', format: existing?.format });
+              return evaluateStaticFormulas(next).nextMap;
+            });
+            return;
+          }
+
+          const timestampsWithRow: Array<{ time: number; rowIdx: number }> = [];
+          rangeAddresses.forEach((c, idx) => {
+            const tStr = getCellString(c);
+            if (tStr) {
+              const t = parsePiTime(tStr);
+              if (t !== undefined) {
+                timestampsWithRow.push({ time: t, rowIdx: idx });
+              }
+            }
+          });
+
+          if (timestampsWithRow.length === 0) {
+            setCells((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(key);
+              next.set(key, { rawValue, displayValue: 'Sem dados', format: existing?.format });
+              return evaluateStaticFormulas(next).nextMap;
+            });
+            return;
+          }
+
+          const minTime = Math.min(...timestampsWithRow.map((t) => t.time));
+          const maxTime = Math.max(...timestampsWithRow.map((t) => t.time));
+          const range = { from: minTime - 60_000, to: maxTime + 60_000 };
+
+          const results = parsed.mode === 'Actual'
+            ? await getPiTrendsRecordedHistoryForRange([binding], range, dataSourceSrv)
+            : await getPiTrendsPreviewForRange([binding], range, dataSourceSrv);
+          const bindingKey = `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
+          const res = results[bindingKey];
+          const pts = (res && res.status === 'success' && res.series) ? res.series.points : [];
+
+          const timedPoints: Array<{ time: number; value: number | string }> = timestampsWithRow.map((item) => {
+            if (pts.length === 0) return { time: item.time, value: '#PI!' };
+            let closest = pts[0];
+            let minDiff = Math.abs(pts[0].time - item.time);
+            for (let i = 1; i < pts.length; i++) {
+              const diff = Math.abs(pts[i].time - item.time);
+              if (diff < minDiff) {
+                minDiff = diff;
+                closest = pts[i];
+              }
+            }
+            return { time: item.time, value: closest.value };
+          });
+
+          const neededEndRow = coord.row + timedPoints.length - 1;
+          if (neededEndRow >= TOTAL_ROWS) {
+            setCells((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(key);
+              next.set(key, { rawValue, displayValue: '#SPILL!', format: existing?.format });
+              return next;
+            });
+            return;
+          }
+
+          let hasCollision = false;
+          setCells((prev) => {
+            for (let r = coord.row + 1; r <= neededEndRow; r++) {
+              const existing = prev.get(`${coord.col},${r}`);
+              if (existing && !existing.spilledFrom && (existing.rawValue?.trim() || existing.displayValue?.trim())) {
+                hasCollision = true;
+                break;
+              }
+            }
+            const next = new Map(prev);
+            const existingOrigin = next.get(key);
+            if (hasCollision) {
+              next.set(key, { rawValue, displayValue: '#SPILL!', format: existingOrigin?.format });
+              return next;
+            }
+
+            const spillTargets: string[] = [];
+            const firstPt = timedPoints[0];
+            next.set(key, {
+              rawValue,
+              displayValue: String(firstPt.value),
+              spillTargetAddresses: [],
+              format: existingOrigin?.format,
+            });
+
+            for (let i = 1; i < timedPoints.length; i++) {
+              const pt = timedPoints[i];
+              const r = coord.row + i;
+              const tCoord = { col: coord.col, row: r };
+              const tKey = `${tCoord.col},${tCoord.row}`;
+              const tAddr = formatCellAddress(tCoord);
+              spillTargets.push(tAddr);
+              next.set(tKey, {
+                rawValue: '',
+                displayValue: String(pt.value),
+                spilledFrom: address,
+              });
+            }
+
+            const originCell = next.get(key);
+            if (originCell) {
+              originCell.spillTargetAddresses = spillTargets;
+            }
+            return evaluateStaticFormulas(next).nextMap;
+          });
+        } catch {
+          setCells((prev) => {
+            const next = new Map(prev);
+            const existing = next.get(key);
+            next.set(key, { rawValue, displayValue: '#PI!', format: existing?.format });
+            return evaluateStaticFormulas(next).nextMap;
+          });
+        }
+        return;
+      }
+
+      if (parsed.type === 'pi_adv_calc_val') {
+        try {
+          const resolvedTag = resolveParameter(parsed.tag, getCellString);
+          const resolvedStart = resolveParameter(parsed.startTime, getCellString);
+          const resolvedEnd = resolveParameter(parsed.endTime, getCellString);
+          const resolvedCalc = resolveParameter(parsed.calculation, getCellString) || 'Average';
+          const resolvedInt = parsed.interval ? resolveParameter(parsed.interval, getCellString) : undefined;
+
+          const binding = await resolvePiPointBindingByName(resolvedTag);
+          const fromTime = parsePiTime(resolvedStart);
+          const toTime = parsePiTime(resolvedEnd);
+
+          if (!binding || fromTime === undefined || toTime === undefined || fromTime >= toTime) {
+            setCells((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(key);
+              next.set(key, { rawValue, displayValue: fromTime === undefined || toTime === undefined ? '#FORMULA!' : '#PI!', format: existing?.format });
+              return evaluateStaticFormulas(next).nextMap;
+            });
+            return;
+          }
+
+          const computeSummary = (pts: Array<{ time: number; value: number | string }>): number | string => {
+            const numPts = pts.map((p) => Number(p.value)).filter((v) => !isNaN(v));
+            if (numPts.length === 0) return 'Sem dados';
+            const calcType = resolvedCalc.toLowerCase();
+            if (calcType.includes('min')) return Math.min(...numPts);
+            if (calcType.includes('max')) return Math.max(...numPts);
+            if (calcType.includes('tot')) return numPts.reduce((a, b) => a + b, 0);
+            if (calcType.includes('count')) return numPts.length;
+            if (calcType.includes('range')) return Math.max(...numPts) - Math.min(...numPts);
+            if (calcType.includes('std')) {
+              const mean = numPts.reduce((a, b) => a + b, 0) / numPts.length;
+              const variance = numPts.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / numPts.length;
+              return Math.sqrt(variance);
+            }
+            return numPts.reduce((a, b) => a + b, 0) / numPts.length;
+          };
+
+          const range = { from: fromTime, to: toTime };
+          const results = await getPiTrendsRecordedHistoryForRange([binding], range, dataSourceSrv);
+          const bindingKey = `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
+          const res = results[bindingKey];
+          const allPoints = (res && res.status === 'success' && res.series) ? res.series.points : [];
+
+          if (!resolvedInt || resolvedInt.trim() === '') {
+            const summaryVal = computeSummary(allPoints);
+            const formattedVal = typeof summaryVal === 'number' ? summaryVal.toLocaleString('pt-BR', { maximumFractionDigits: 4 }) : String(summaryVal);
+            setCells((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(key);
+              next.set(key, { rawValue, displayValue: formattedVal, format: existing?.format });
+              return evaluateStaticFormulas(next).nextMap;
+            });
+            return;
+          }
+
+          let stepMs = 3600_000;
+          const intMatch = /^(\d+)\s*([a-zA-Z]+)$/.exec(resolvedInt.trim());
+          if (intMatch) {
+            const num = parseInt(intMatch[1], 10);
+            const u = intMatch[2].toLowerCase();
+            if (u.startsWith('s')) stepMs = num * 1000;
+            else if (u.startsWith('m')) stepMs = num * 60_000;
+            else if (u.startsWith('h')) stepMs = num * 3600_000;
+            else if (u.startsWith('d')) stepMs = num * 86400_000;
+          }
+
+          const intervalItems: Array<{ time: number; value: number | string }> = [];
+          for (let cur = fromTime; cur < toTime; cur += stepMs) {
+            const nextStep = Math.min(cur + stepMs, toTime);
+            const stepPts = allPoints.filter((p) => p.time >= cur && p.time < nextStep);
+            const val = computeSummary(stepPts);
+            intervalItems.push({
+              time: cur,
+              value: typeof val === 'number' ? val.toLocaleString('pt-BR', { maximumFractionDigits: 4 }) : String(val),
+            });
+            if (intervalItems.length >= 500) break;
+          }
+
+          if (intervalItems.length === 0) {
+            setCells((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(key);
+              next.set(key, { rawValue, displayValue: 'Sem dados', format: existing?.format });
+              return evaluateStaticFormulas(next).nextMap;
+            });
+            return;
+          }
+
+          const neededCol2 = coord.col + 1;
+          const neededEndRow = coord.row + intervalItems.length - 1;
+          if (neededCol2 >= TOTAL_COLS || neededEndRow >= TOTAL_ROWS) {
+            setCells((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(key);
+              next.set(key, { rawValue, displayValue: '#SPILL!', format: existing?.format });
+              return next;
+            });
+            return;
+          }
+
+          let hasCollision = false;
+          setCells((prev) => {
+            for (let r = coord.row; r <= neededEndRow; r++) {
+              for (let c = coord.col; c <= neededCol2; c++) {
+                if (r === coord.row && c === coord.col) continue;
+                const existing = prev.get(`${c},${r}`);
+                if (existing && !existing.spilledFrom && (existing.rawValue?.trim() || existing.displayValue?.trim())) {
+                  hasCollision = true;
+                  break;
+                }
+              }
+              if (hasCollision) break;
+            }
+            const next = new Map(prev);
+            const existingOrigin = next.get(key);
+            if (hasCollision) {
+              next.set(key, { rawValue, displayValue: '#SPILL!', format: existingOrigin?.format });
+              return next;
+            }
+
+            const spillTargets: string[] = [];
+            const first = intervalItems[0];
+            next.set(key, {
+              rawValue,
+              displayValue: formatDateTime(first.time),
+              spillTargetAddresses: [],
+              format: existingOrigin?.format,
+            });
+
+            const rightCoord = { col: coord.col + 1, row: coord.row };
+            const rightAddr = formatCellAddress(rightCoord);
+            spillTargets.push(rightAddr);
+            next.set(`${rightCoord.col},${rightCoord.row}`, {
+              rawValue: '',
+              displayValue: String(first.value),
+              spilledFrom: address,
+            });
+
+            for (let i = 1; i < intervalItems.length; i++) {
+              const item = intervalItems[i];
+              const r = coord.row + i;
+              const tCoord = { col: coord.col, row: r };
+              const tAddr = formatCellAddress(tCoord);
+              spillTargets.push(tAddr);
+              next.set(`${tCoord.col},${tCoord.row}`, {
+                rawValue: '',
+                displayValue: formatDateTime(item.time),
+                spilledFrom: address,
+              });
+
+              const vCoord = { col: coord.col + 1, row: r };
+              const vAddr = formatCellAddress(vCoord);
+              spillTargets.push(vAddr);
+              next.set(`${vCoord.col},${vCoord.row}`, {
+                rawValue: '',
+                displayValue: String(item.value),
+                spilledFrom: address,
+              });
+            }
+
+            const originCell = next.get(key);
+            if (originCell) originCell.spillTargetAddresses = spillTargets;
+            return evaluateStaticFormulas(next).nextMap;
+          });
+        } catch {
+          setCells((prev) => {
+            const next = new Map(prev);
+            const existing = next.get(key);
+            next.set(key, { rawValue, displayValue: '#PI!', format: existing?.format });
+            return evaluateStaticFormulas(next).nextMap;
+          });
+        }
+        return;
+      }
+
+      if (parsed.type === 'pi_time_filter') {
+        try {
+          const resolvedExpr = resolveParameter(parsed.expression, getCellString);
+          const resolvedStart = resolveParameter(parsed.startTime, getCellString);
+          const resolvedEnd = resolveParameter(parsed.endTime, getCellString);
+          const resolvedUnit = (resolveParameter(parsed.unit, getCellString) || 'hours').toLowerCase();
+
+          const exprMatch = /^\s*['"]?([^'">=<!]+)['"]?\s*([><!=]=?|<>)\s*([0-9.-]+)\s*$/.exec(resolvedExpr);
+          if (!exprMatch) {
+            setCells((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(key);
+              next.set(key, { rawValue, displayValue: '#FORMULA!', format: existing?.format });
+              return evaluateStaticFormulas(next).nextMap;
+            });
+            return;
+          }
+
+          const tagName = exprMatch[1].trim();
+          const operator = exprMatch[2].trim();
+          const threshold = parseFloat(exprMatch[3]);
+
+          const binding = await resolvePiPointBindingByName(tagName);
+          const fromTime = parsePiTime(resolvedStart);
+          const toTime = parsePiTime(resolvedEnd);
+
+          if (!binding || fromTime === undefined || toTime === undefined || fromTime >= toTime) {
+            setCells((prev) => {
+              const next = new Map(prev);
+              const existing = next.get(key);
+              next.set(key, { rawValue, displayValue: fromTime === undefined || toTime === undefined ? '#FORMULA!' : '#PI!', format: existing?.format });
+              return evaluateStaticFormulas(next).nextMap;
+            });
+            return;
+          }
+
+          const range = { from: fromTime, to: toTime };
+          const results = await getPiTrendsRecordedHistoryForRange([binding], range, dataSourceSrv);
+          const bindingKey = `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
+          const res = results[bindingKey];
+          const points = (res && res.status === 'success' && res.series) ? res.series.points : [];
+
+          const evaluateCondition = (val: number) => {
+            switch (operator) {
+              case '>': return val > threshold;
+              case '>=': return val >= threshold;
+              case '<': return val < threshold;
+              case '<=': return val <= threshold;
+              case '=': case '==': return val === threshold;
+              case '<>': case '!=': return val !== threshold;
+              default: return false;
+            }
+          };
+
+          let trueDurationMs = 0;
+          for (let i = 0; i < points.length; i++) {
+            const pt = points[i];
+            const nextTime = i < points.length - 1 ? points[i + 1].time : toTime;
+            const segDuration = Math.max(0, Math.min(nextTime, toTime) - Math.max(pt.time, fromTime));
+            const numVal = Number(pt.value);
+            if (!isNaN(numVal) && evaluateCondition(numVal)) {
+              trueDurationMs += segDuration;
+            }
+          }
+
+          let displayResult = '';
+          const totalPeriodMs = toTime - fromTime;
+          if (resolvedUnit.includes('percent') || resolvedUnit.includes('%')) {
+            const pct = totalPeriodMs > 0 ? (trueDurationMs / totalPeriodMs) * 100 : 0;
+            displayResult = `${pct.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+          } else if (resolvedUnit.startsWith('s')) {
+            const sec = trueDurationMs / 1000;
+            displayResult = `${sec.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} s`;
+          } else if (resolvedUnit.startsWith('m')) {
+            const min = trueDurationMs / 60_000;
+            displayResult = `${min.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} min`;
+          } else if (resolvedUnit.startsWith('d')) {
+            const days = trueDurationMs / 86400_000;
+            displayResult = `${days.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} d`;
+          } else {
+            const hrs = trueDurationMs / 3600_000;
+            displayResult = `${hrs.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} h`;
+          }
+
+          setCells((prev) => {
+            const next = new Map(prev);
+            const existing = next.get(key);
+            next.set(key, { rawValue, displayValue: displayResult, format: existing?.format });
+            return evaluateStaticFormulas(next).nextMap;
+          });
+        } catch {
+          setCells((prev) => {
+            const next = new Map(prev);
+            const existing = next.get(key);
+            next.set(key, { rawValue, displayValue: '#PI!', format: existing?.format });
+            return evaluateStaticFormulas(next).nextMap;
+          });
+        }
+        return;
       }
     },
     [dataSourceSrv, evaluateStaticFormulas, resolvePiPointBindingByName],
@@ -1440,6 +1884,29 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
+      {/* PI DataLink Ribbon */}
+      <PiDataLinkToolbar onOpenFunction={(type) => setActiveDataLinkDialog(type)} />
+
+      {/* PI DataLink Dialog Wizard */}
+      {activeDataLinkDialog && (
+        <PiDataLinkFunctionDialog
+          functionType={activeDataLinkDialog}
+          initialTargetCell={formatCellAddress(activeCell)}
+          currentSelectionAddress={
+            ranges.length > 0 ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS) : undefined
+          }
+          onInsert={(formula, targetAddress) => {
+            const coord = parseCellAddress(targetAddress) ?? activeCell;
+            setActiveCell(coord);
+            setRanges([rangeFromCells(coord, coord)]);
+            computeCell(coord, formula);
+            setFormulaBarText(formula);
+            setActiveDataLinkDialog(null);
+          }}
+          onClose={() => setActiveDataLinkDialog(null)}
+        />
+      )}
+
       {/* Header / Toolbar */}
       <div className={styles.topToolbar}>
         <div className={styles.titleRow}>
