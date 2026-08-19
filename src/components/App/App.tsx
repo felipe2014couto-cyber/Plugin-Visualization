@@ -74,7 +74,6 @@ export function App() {
   const [openCalculationId, setOpenCalculationId] = useState<string>();
   const [isPiPointFiltersOpen, setIsPiPointFiltersOpen] = useState(false);
   const [isPiSearchOpen, setIsPiSearchOpen] = useState(true);
-  const [isCalculationsOpen, setIsCalculationsOpen] = useState(true);
   const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
   const [dashboardUid, setDashboardUid] = useState<string>();
   const [folders, setFolders] = useState<GrafanaDashboardFolder[]>([]);
@@ -503,7 +502,6 @@ export function App() {
                         enabled={piConnection.status === 'connected'}
                         onSelect={setSelectedPiPoint}
                         filtersOpen={isPiPointFiltersOpen}
-                        onSearchInteraction={() => setIsCalculationsOpen(false)}
                       />
                     ) : (
                       <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
@@ -515,14 +513,12 @@ export function App() {
                 </div>
                 <div className={`${styles.libraryTabContent} ${styles.calculationsTabContent}`} hidden={assetsTab !== 'calculations'}>
                   <CalculationsPanel
-                    selectedPiPoint={selectedPiPoint}
                     document={document}
                     onChange={setDocument}
                     resolvePiPoint={resolveCalculationPiPoint}
+                    loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
                     openCalculationId={openCalculationId}
                     onCalculationOpenHandled={() => setOpenCalculationId(undefined)}
-                    expanded={isCalculationsOpen}
-                    onExpandedChange={setIsCalculationsOpen}
                   />
                 </div>
               </div>

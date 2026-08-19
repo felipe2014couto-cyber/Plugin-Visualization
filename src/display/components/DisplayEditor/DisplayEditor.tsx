@@ -22,6 +22,7 @@ import {
   type ValueVisualOptions,
 } from '../../createValue';
 import {
+  addCalculationTrendSeries,
   addTrendSeries,
   appendTrend,
   createTrend,
@@ -484,6 +485,10 @@ export function DisplayEditor({
     if (Array.from(event.dataTransfer.types).includes(CALCULATION_DRAG_MIME)) {
       event.preventDefault();
       const svg = event.currentTarget.querySelector('svg');
+      const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
+      const targetTrend = dropSymbolType === 'trend'
+        ? resolveTrendDropTarget(documentRef.current, event.target, event.clientX, event.clientY, point)
+        : undefined;
       const preview = svg
         ? createCalculationDragPreview(
           svg,
@@ -492,6 +497,7 @@ export function DisplayEditor({
           event.clientY,
           documentRef.current,
           dropSymbolType,
+          targetTrend,
         )
         : undefined;
       event.dataTransfer.dropEffect = preview?.valid ? 'copy' : 'none';
@@ -579,6 +585,14 @@ export function DisplayEditor({
         existingIds: currentDocument.elements.map((item) => item.id),
       };
       if (dropSymbolType === 'table') {
+        return;
+      }
+      const targetTrend = dropSymbolType === 'trend'
+        ? resolveTrendDropTarget(currentDocument, event.target, event.clientX, event.clientY, point)
+        : undefined;
+      if (targetTrend) {
+        commitDocument(addCalculationTrendSeries(currentDocument, targetTrend.id, calculationId, calculation.name));
+        dispatch({ type: 'SELECT', elementId: targetTrend.id });
         return;
       }
       const element = dropSymbolType === 'value' ? createValue(options)
@@ -1431,10 +1445,27 @@ function createCalculationDragPreview(
   clientY: number,
   document: DisplayDocument,
   symbolType: PiPointDropSymbolType,
+  targetTrend?: TrendElement,
 ): PiPointDragPreview | undefined {
   const point = getDropPoint(svg, clientX, clientY, document);
   if (!point) {
     return undefined;
+  }
+  if (symbolType === 'trend' && targetTrend) {
+    const svgBounds = svg.getBoundingClientRect();
+    const wrapperBounds = wrapper.getBoundingClientRect();
+    const viewport = getSvgViewport(svgBounds, document);
+    return {
+      left: viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale,
+      top: viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale,
+      width: targetTrend.width * viewport.scale,
+      height: targetTrend.height * viewport.scale,
+      valid: true,
+      label: 'Cálculo',
+      symbolType,
+      targetTrend: true,
+      targetTrendId: targetTrend.id,
+    };
   }
   const prototype = createCalculationDropPreviewElement(symbolType, document);
   const svgBounds = svg.getBoundingClientRect();

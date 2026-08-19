@@ -234,6 +234,41 @@ export function addTrendSeries(
   return { ...document, elements };
 }
 
+export function addCalculationTrendSeries(
+  document: DisplayDocument,
+  elementId: string,
+  calculationId: string,
+  calculationName?: string,
+): DisplayDocument {
+  const elementIndex = document.elements.findIndex((element) => element.id === elementId && element.type === TREND_TYPE);
+  if (elementIndex < 0 || !calculationId.trim()) {
+    return document;
+  }
+  const element = document.elements[elementIndex] as TrendElement;
+  const series = getTrendSeries(element);
+  if (series.some((item) => item.calculationId === calculationId)) {
+    return document;
+  }
+  const currentProperties = { ...element.properties };
+  delete currentProperties.binding;
+  const nextElement: TrendElement = {
+    ...element,
+    properties: {
+      ...currentProperties,
+      visual: { ...getTrendVisualOptions(element), scaleMode: 'single' },
+      series: [...series, {
+        binding: createCalculationTrendBinding(calculationId),
+        calculationId,
+        ...(calculationName ? { legendLabel: calculationName } : {}),
+        color: trendSeriesColor(series.length),
+      }],
+    },
+  };
+  const elements = [...document.elements];
+  elements[elementIndex] = nextElement;
+  return { ...document, elements };
+}
+
 export function trendBindingKey(binding: PiPointBinding): string {
   return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
 }

@@ -28,4 +28,21 @@ describe('calculationEngine', () => {
   it('indica carregamento enquanto um PI Point ainda não tem valor', () => {
     expect(evaluateCalculation(calculation, new Map([['Vazao_01', 25]]))).toEqual({ status: 'loading' });
   });
+
+  it('avalia condições e funções declarativas', () => {
+    expect(evaluateCalculation({
+      ...calculation,
+      expression: 'IF(AND(Vazao_01 > 20, Producao_01 >= 50), ROUND(MAX(Vazao_01, Producao_01) / 3, 2), 0)',
+    }, new Map([
+      ['Vazao_01', 25],
+      ['Producao_01', 50],
+    ]))).toEqual({ status: 'success', value: 16.67 });
+  });
+
+  it('rejeita WHILE para preservar a execução limitada', () => {
+    expect(evaluateCalculation({ ...calculation, expression: 'WHILE(1, 1)' }, new Map([
+      ['Vazao_01', 25],
+      ['Producao_01', 50],
+    ]))).toMatchObject({ status: 'error' });
+  });
 });

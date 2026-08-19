@@ -1,5 +1,6 @@
 import { createDisplayDocument } from '../createDisplayDocument';
 import {
+  addCalculationTrendSeries,
   addTrendSeries,
   appendTrend,
   createTrend,
@@ -57,5 +58,23 @@ describe('TrendElement', () => {
       { binding: sameNameOtherDataSource, color: '#73bf69' },
     ]);
     expect(next.elements).toHaveLength(1);
+  });
+
+  it('adiciona um cálculo a uma Trend que já possui PI Points', () => {
+    const trend = createTrend({ binding, id: 'trend-1' });
+    const document = appendTrend(createDisplayDocument({ id: 'display-1' }), trend);
+
+    const next = addCalculationTrendSeries(document, trend.id, 'calculation-1', 'Eficiência');
+
+    expect(getTrendSeries(next.elements[0] as typeof trend)).toEqual([
+      { binding, color: '#6e9fff' },
+      {
+        binding: { dataSourceUid: '__pims_calculation__', serverPath: 'calculation-1', pointName: 'calculation-1' },
+        calculationId: 'calculation-1',
+        legendLabel: 'Eficiência',
+        color: '#ff9830',
+      },
+    ]);
+    expect(addCalculationTrendSeries(next, trend.id, 'calculation-1', 'Eficiência')).toBe(next);
   });
 });
