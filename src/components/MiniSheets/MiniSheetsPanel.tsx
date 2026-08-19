@@ -117,6 +117,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const lastEmittedDocRef = useRef<MiniSheetsDocument | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Emit updated MiniSheetsDocument when cells or colWidths change
   const notifyDocumentChange = useCallback(() => {
@@ -846,8 +847,13 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
   // Pointer event handlers for Cell Selection & Dragging
   const handleCellPointerDown = (col: number, row: number, e: React.PointerEvent) => {
     if (editingCellCoord) {
-      return;
+      if (editingCellCoord.col !== col || editingCellCoord.row !== row) {
+        handleCellEditSubmit(editingCellCoord.col, editingCellCoord.row, editingCellText);
+      } else {
+        return;
+      }
     }
+    containerRef.current?.focus();
     const isMulti = e.ctrlKey || e.metaKey;
     const isShift = e.shiftKey;
 
@@ -1166,12 +1172,33 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     computeCell(activeCell, formulaBarText);
   };
 
-  const handleCellEditSubmit = (col: number, row: number, text: string) => {
+  const handleCellEditSubmit = (
+    col: number,
+    row: number,
+    text: string,
+    moveDirection?: 'down' | 'right'
+  ) => {
     setEditingCellCoord(null);
     computeCell({ col, row }, text);
+    if (moveDirection === 'down') {
+      const nextRow = Math.min(TOTAL_ROWS - 1, row + 1);
+      const nextCoord = { col, row: nextRow };
+      setActiveCell(nextCoord);
+      setAnchorCell(nextCoord);
+      setRanges([rangeFromCells(nextCoord, nextCoord)]);
+    } else if (moveDirection === 'right') {
+      const nextCol = Math.min(TOTAL_COLS - 1, col + 1);
+      const nextCoord = { col: nextCol, row };
+      setActiveCell(nextCoord);
+      setAnchorCell(nextCoord);
+      setRanges([rangeFromCells(nextCoord, nextCoord)]);
+    }
+    setTimeout(() => {
+      containerRef.current?.focus();
+    }, 0);
   };
 
-  // Keyboard Shortcuts (Delete, Backspace, Ctrl+C, Ctrl+V, Cmd+C, Cmd+V)
+  // Keyboard Shortcuts (Delete, Backspace, Ctrl+C, Ctrl+V, Direct Typing, Navigation)
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Only capture shortcuts when NOT editing cell inline or formula bar input
     if (editingCellCoord) {
@@ -1201,6 +1228,71 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       handlePasteSelected();
       return;
     }
+
+    if (e.key === 'F2' || e.key === 'Enter') {
+      e.preventDefault();
+      const cell = cells.get(activeKey);
+      setEditingCellCoord(activeCell);
+      setEditingCellText(cell?.rawValue ?? '');
+      return;
+    }
+
+    // Arrow navigation when not editing
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const newRow = Math.max(0, activeCell.row - 1);
+      const nextCoord = { col: activeCell.col, row: newRow };
+      setActiveCell(nextCoord);
+      setAnchorCell(nextCoord);
+      setRanges([rangeFromCells(nextCoord, nextCoord)]);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const newRow = Math.min(TOTAL_ROWS - 1, activeCell.row + 1);
+      const nextCoord = { col: activeCell.col, row: newRow };
+      setActiveCell(nextCoord);
+      setAnchorCell(nextCoord);
+      setRanges([rangeFromCells(nextCoord, nextCoord)]);
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const newCol = Math.max(0, activeCell.col - 1);
+      const nextCoord = { col: newCol, row: activeCell.row };
+      setActiveCell(nextCoord);
+      setAnchorCell(nextCoord);
+      setRanges([rangeFromCells(nextCoord, nextCoord)]);
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const newCol = Math.min(TOTAL_COLS - 1, activeCell.col + 1);
+      const nextCoord = { col: newCol, row: activeCell.row };
+      setActiveCell(nextCoord);
+      setAnchorCell(nextCoord);
+      setRanges([rangeFromCells(nextCoord, nextCoord)]);
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const delta = e.shiftKey ? -1 : 1;
+      const newCol = Math.max(0, Math.min(TOTAL_COLS - 1, activeCell.col + delta));
+      const nextCoord = { col: newCol, row: activeCell.row };
+      setActiveCell(nextCoord);
+      setAnchorCell(nextCoord);
+      setRanges([rangeFromCells(nextCoord, nextCoord)]);
+      return;
+    }
+
+    // Single character typing on selected cell -> start editing immediately with typed character!
+    if (e.key.length === 1 && !isCtrlOrCmd && e.key !== 'Escape') {
+      e.preventDefault();
+      setEditingCellCoord(activeCell);
+      setEditingCellText(e.key);
+      return;
+    }
   };
 
   // Active cell format status for toolbar highlights
@@ -1212,6 +1304,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
 
   return (
     <section
+      ref={containerRef}
       className={styles.container}
       data-testid="mini-sheets-panel"
       aria-label="Mini-Sheets"
@@ -1486,9 +1579,17 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
                             onBlur={() => handleCellEditSubmit(cIndex, rIndex, editingCellText)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
-                                handleCellEditSubmit(cIndex, rIndex, editingCellText);
+                                e.preventDefault();
+                                handleCellEditSubmit(cIndex, rIndex, editingCellText, 'down');
+                              } else if (e.key === 'Tab') {
+                                e.preventDefault();
+                                handleCellEditSubmit(cIndex, rIndex, editingCellText, 'right');
                               } else if (e.key === 'Escape') {
+                                e.preventDefault();
                                 setEditingCellCoord(null);
+                                setTimeout(() => {
+                                  containerRef.current?.focus();
+                                }, 0);
                               }
                             }}
                           />
