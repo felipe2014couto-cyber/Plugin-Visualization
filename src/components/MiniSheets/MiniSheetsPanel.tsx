@@ -142,6 +142,11 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       startX,
       startWidth: currentWidth,
     };
+    if ((e as React.PointerEvent).pointerId !== undefined && (e.target as HTMLElement).setPointerCapture) {
+      try {
+        (e.target as HTMLElement).setPointerCapture((e as React.PointerEvent).pointerId);
+      } catch {}
+    }
   };
 
   // Pointer drag tracking
@@ -164,25 +169,33 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
 
 
   /**
-   * Helper to resolve a PI Point by name using existing searchPiPointsWithStatus
+   * Helper to resolve a PI Point by name using existing searchPiPointsWithStatus with timeout safety
    */
   const resolvePiPointBindingByName = useCallback(
     async (pointName: string): Promise<PiPointBinding | null> => {
-      try {
-        const response = await searchPiPointsWithStatus(pointName, dataSourceSrv);
-        const results = response.results ?? [];
-        if (results.length === 0) {
-          return null;
-        }
-        // Prefer exact match (case-insensitive)
-        const exact = results.find(
-          (p: PiPointSearchResult) => p.name.trim().toLowerCase() === pointName.trim().toLowerCase(),
-        );
-        const target = exact ?? results[0];
-        const binding = createPiPointBinding(target);
-        return binding ?? null;
-      } catch (err) {
+      const cleanName = pointName.trim();
+      if (!cleanName) {
         return null;
+      }
+      try {
+        const timeoutPromise = new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new Error('PI search timeout')), 5000)
+        );
+        const searchPromise = async (): Promise<PiPointBinding | null> => {
+          const response = await searchPiPointsWithStatus(cleanName, dataSourceSrv);
+          const results = response.results ?? [];
+          if (results.length === 0) {
+            return createPiPointBinding({ name: cleanName, path: cleanName, dataSourceUid: '' }) ?? null;
+          }
+          const exact = results.find(
+            (p: PiPointSearchResult) => p.name.trim().toLowerCase() === cleanName.toLowerCase(),
+          );
+          const target = exact ?? results[0];
+          return createPiPointBinding(target) ?? null;
+        };
+        return await Promise.race([searchPromise(), timeoutPromise]);
+      } catch (err) {
+        return createPiPointBinding({ name: cleanName, path: cleanName, dataSourceUid: '' }) ?? null;
       }
     },
     [dataSourceSrv],
@@ -1359,7 +1372,6 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
                     className={`${styles.colHeader} ${isColSel ? styles.colHeaderSelected : ''}`}
                     style={{ width: `${colWidth}px`, minWidth: `${colWidth}px`, maxWidth: `${colWidth}px` }}
                     data-testid={`mini-sheets-col-header-${colIndexToLetter(cIndex)}`}
-                    onClick={(e) => handleColHeaderPointerDown(cIndex, e as any)}
                     onPointerDown={(e) => handleColHeaderPointerDown(cIndex, e)}
                     onPointerEnter={(e) => handleColHeaderPointerEnter(cIndex, e)}
                     onMouseEnter={(e) => handleColHeaderPointerEnter(cIndex, e)}
@@ -1370,6 +1382,10 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
                       data-testid={`mini-sheets-col-resizer-${colIndexToLetter(cIndex)}`}
                       onPointerDown={(e) => handleColResizePointerDown(cIndex, e)}
                       onMouseDown={(e) => handleColResizePointerDown(cIndex, e as any)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                      }}
                       title="Arrastar para redimensionar coluna"
                     />
                   </th>
@@ -1787,12 +1803,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
   colResizeHandle: css`
     position: absolute;
     top: 0;
-    right: 0;
-    width: 6px;
+    right: -4px;
+    width: 8px;
     height: 100%;
     cursor: col-resize;
     user-select: none;
-    z-index: 5;
+    touch-action: none;
+    z-index: 10;
 
     &:hover {
       background-color: var(--accent);
