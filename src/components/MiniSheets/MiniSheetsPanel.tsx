@@ -87,16 +87,20 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
     setFormulaBarText(currentCell?.rawValue ?? '');
   }, [activeKey, cells]);
 
-  // Global pointer up to end selection drag
+  // Global pointer/mouse up to end selection drag
   useEffect(() => {
-    const handleGlobalPointerUp = () => {
+    const handleGlobalDragEnd = () => {
       dragModeRef.current = null;
       dragAnchorRef.current = null;
       isAppendingRangeRef.current = false;
     };
-    window.addEventListener('pointerup', handleGlobalPointerUp);
+    window.addEventListener('pointerup', handleGlobalDragEnd);
+    window.addEventListener('mouseup', handleGlobalDragEnd);
+    window.addEventListener('blur', handleGlobalDragEnd);
     return () => {
-      window.removeEventListener('pointerup', handleGlobalPointerUp);
+      window.removeEventListener('pointerup', handleGlobalDragEnd);
+      window.removeEventListener('mouseup', handleGlobalDragEnd);
+      window.removeEventListener('blur', handleGlobalDragEnd);
     };
   }, []);
 
@@ -538,7 +542,13 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
     }
   };
 
-  const handleCellPointerEnter = (col: number, row: number) => {
+  const handleCellPointerEnter = (col: number, row: number, e?: React.PointerEvent | React.MouseEvent) => {
+    if (e && e.buttons === 0) {
+      dragModeRef.current = null;
+      dragAnchorRef.current = null;
+      isAppendingRangeRef.current = false;
+      return;
+    }
     if (dragModeRef.current !== 'cells' || !dragAnchorRef.current) {
       return;
     }
@@ -588,7 +598,13 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
     }
   };
 
-  const handleColHeaderPointerEnter = (colIndex: number) => {
+  const handleColHeaderPointerEnter = (colIndex: number, e?: React.PointerEvent | React.MouseEvent) => {
+    if (e && e.buttons === 0) {
+      dragModeRef.current = null;
+      dragAnchorRef.current = null;
+      isAppendingRangeRef.current = false;
+      return;
+    }
     if (dragModeRef.current !== 'cols' || !dragAnchorRef.current) {
       return;
     }
@@ -638,7 +654,13 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
     }
   };
 
-  const handleRowHeaderPointerEnter = (rowIndex: number) => {
+  const handleRowHeaderPointerEnter = (rowIndex: number, e?: React.PointerEvent | React.MouseEvent) => {
+    if (e && e.buttons === 0) {
+      dragModeRef.current = null;
+      dragAnchorRef.current = null;
+      isAppendingRangeRef.current = false;
+      return;
+    }
     if (dragModeRef.current !== 'rows' || !dragAnchorRef.current) {
       return;
     }
@@ -738,7 +760,8 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
                     data-testid={`mini-sheets-col-header-${colIndexToLetter(cIndex)}`}
                     onClick={(e) => handleColHeaderPointerDown(cIndex, e as any)}
                     onPointerDown={(e) => handleColHeaderPointerDown(cIndex, e)}
-                    onPointerEnter={() => handleColHeaderPointerEnter(cIndex)}
+                    onPointerEnter={(e) => handleColHeaderPointerEnter(cIndex, e)}
+                    onMouseEnter={(e) => handleColHeaderPointerEnter(cIndex, e)}
                   >
                     {colIndexToLetter(cIndex)}
                   </th>
@@ -756,7 +779,8 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
                     data-testid={`mini-sheets-row-header-${rIndex + 1}`}
                     onClick={(e) => handleRowHeaderPointerDown(rIndex, e as any)}
                     onPointerDown={(e) => handleRowHeaderPointerDown(rIndex, e)}
-                    onPointerEnter={() => handleRowHeaderPointerEnter(rIndex)}
+                    onPointerEnter={(e) => handleRowHeaderPointerEnter(rIndex, e)}
+                    onMouseEnter={(e) => handleRowHeaderPointerEnter(rIndex, e)}
                   >
                     {rIndex + 1}
                   </th>
@@ -782,7 +806,8 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
                         data-testid={`mini-sheets-cell-${colIndexToLetter(cIndex)}${rIndex + 1}`}
                         onClick={(e) => handleCellPointerDown(cIndex, rIndex, e as any)}
                         onPointerDown={(e) => handleCellPointerDown(cIndex, rIndex, e)}
-                        onPointerEnter={() => handleCellPointerEnter(cIndex, rIndex)}
+                        onPointerEnter={(e) => handleCellPointerEnter(cIndex, rIndex, e)}
+                        onMouseEnter={(e) => handleCellPointerEnter(cIndex, rIndex, e)}
                         onDoubleClick={() => handleCellDoubleClick(cIndex, rIndex)}
                       >
                         {isEditing ? (
