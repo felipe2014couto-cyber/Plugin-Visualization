@@ -19,6 +19,7 @@ export interface ValueVisualOptions {
   showValue: boolean;
   fontSize: number;
   color: string;
+  backgroundColor: string;
   textAlign: ValueTextAlign;
 }
 
@@ -32,6 +33,7 @@ export const DEFAULT_VALUE_VISUAL_OPTIONS: ValueVisualOptions = {
   showValue: true,
   fontSize: 16,
   color: '#ffffff',
+  backgroundColor: 'transparent',
   textAlign: 'center',
 };
 
@@ -40,6 +42,7 @@ export interface ValueProperties extends Record<string, unknown> {
   calculationId?: string;
   visual: ValueVisualOptions;
   multistate?: MultistateConfig;
+  backgroundMultistate?: MultistateConfig;
 }
 
 export type ValueElement = DisplayElement<typeof VALUE_TYPE, ValueProperties>;
@@ -52,6 +55,7 @@ export interface CreateValueOptions {
   calculationId?: string;
   visual?: Partial<ValueVisualOptions>;
   multistate?: MultistateConfig;
+  backgroundMultistate?: MultistateConfig;
   id?: string;
   x?: number;
   y?: number;
@@ -94,6 +98,7 @@ export function createValue(options: CreateValueOptions): ValueElement {
       ...(options.calculationId ? { calculationId: options.calculationId } : {}),
       visual: normalizeValueVisualOptions(options.visual),
       ...(options.multistate ? { multistate: options.multistate } : {}),
+      ...(options.backgroundMultistate ? { backgroundMultistate: options.backgroundMultistate } : {}),
     },
   };
 }
@@ -117,6 +122,7 @@ export function normalizeValueVisualOptions(
     ? Math.max(8, Math.min(96, fontSize))
     : DEFAULT_VALUE_VISUAL_OPTIONS.fontSize;
   const color = options?.color;
+  const backgroundColor = options?.backgroundColor;
 
   return {
     decimals: normalizedDecimals,
@@ -132,6 +138,9 @@ export function normalizeValueVisualOptions(
     color: typeof color === 'string' && isValidColor(color)
       ? color
       : DEFAULT_VALUE_VISUAL_OPTIONS.color,
+    backgroundColor: typeof backgroundColor === 'string' && isValidColor(backgroundColor)
+      ? backgroundColor
+      : DEFAULT_VALUE_VISUAL_OPTIONS.backgroundColor,
     textAlign: options?.textAlign === 'left' || options?.textAlign === 'right'
       ? options.textAlign
       : DEFAULT_VALUE_VISUAL_OPTIONS.textAlign,

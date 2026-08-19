@@ -79,10 +79,32 @@ describe('ValueElementView', () => {
     expect(screen.getByTestId('display-value-value-multistate')).toHaveAttribute('fill', '#ff0000');
   });
 
-  it('renderiza zero como valor válido', () => {
+  it('renderiza zero como valor válido e fundo transparente por padrão', () => {
     const element = createValue({ binding, id: 'value-zero' });
     render(<svg><ValueElementView element={element} runtimeState={{ status: 'success', result: { value: 0 } }} /></svg>);
 
     expect(screen.getByTestId('display-value-value-zero')).toHaveTextContent('0');
+    expect(screen.getByTestId('value-background-value-zero')).toHaveAttribute('fill', 'transparent');
+    expect(screen.getByTestId('value-background-value-zero')).toHaveAttribute('stroke', 'none');
+  });
+
+  it('permite multistate de texto e de fundo independentes', () => {
+    const element = createValue({
+      binding,
+      id: 'value-dual-multistate',
+      visual: { color: '#ffffff', backgroundColor: 'transparent' },
+      multistate: {
+        enabled: true,
+        rules: [{ id: 'text-red', operator: 'gt', value: 50, color: '#ff0000' }],
+      },
+      backgroundMultistate: {
+        enabled: true,
+        rules: [{ id: 'bg-yellow', operator: 'gt', value: 50, color: '#ffff00' }],
+      },
+    });
+
+    render(<svg><ValueElementView element={element} runtimeState={{ status: 'success', result: { value: 75 } }} /></svg>);
+    expect(screen.getByTestId('display-value-value-dual-multistate')).toHaveAttribute('fill', '#ff0000');
+    expect(screen.getByTestId('value-background-value-dual-multistate')).toHaveAttribute('fill', '#ffff00');
   });
 });

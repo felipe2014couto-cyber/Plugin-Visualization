@@ -14,6 +14,8 @@ import {
 import { TransparentColorPicker } from './TransparentColorPicker';
 
 export interface MultistatePropertiesPanelProps {
+  title?: string;
+  testIdPrefix?: string;
   config?: MultistateConfig;
   onChange: (config: MultistateConfig) => void;
 }
@@ -27,7 +29,7 @@ const OPERATORS: Array<{ value: MultistateOperator; label: string }> = [
   { value: 'between', label: 'Entre' },
 ];
 
-export function MultistatePropertiesPanel({ config, onChange }: MultistatePropertiesPanelProps) {
+export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix = 'multistate', config, onChange }: MultistatePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const normalized = normalizeMultistateConfig(config) ?? { enabled: false, rules: [] };
   const update = (patch: Partial<MultistateConfig>) => onChange({ ...normalized, ...patch });
@@ -37,29 +39,29 @@ export function MultistatePropertiesPanel({ config, onChange }: MultistateProper
   const addRule = () => update({ rules: [...normalized.rules, createDefaultMultistateRule(generateId())] });
 
   return (
-    <section className={styles.section} data-testid="multistate-properties">
+    <section className={styles.section} data-testid={`${testIdPrefix}-properties`}>
       <div className={styles.sectionHeader}>
-        <span className={styles.title}>Multistate</span>
+        <span className={styles.title}>{title}</span>
         <label className={styles.toggle}>
           <input
             type="checkbox"
             checked={normalized.enabled}
-            data-testid="multistate-enabled"
+            data-testid={`${testIdPrefix}-enabled`}
             onChange={(event) => update({ enabled: event.target.checked })}
           />
           Habilitado
         </label>
       </div>
       <div className={styles.hint}>A primeira regra correspondente vence. Entre usa mínimo inclusivo e máximo exclusivo.</div>
-      <button type="button" className={styles.addButton} data-testid="multistate-add-rule" onClick={addRule}>
+      <button type="button" className={styles.addButton} data-testid={`${testIdPrefix}-add-rule`} onClick={addRule}>
         Adicionar regra
       </button>
       <div className={styles.rules}>
         {normalized.rules.map((rule) => (
-          <div className={styles.rule} key={rule.id} data-testid={`multistate-rule-${rule.id}`}>
+          <div className={styles.rule} key={rule.id} data-testid={`${testIdPrefix}-rule-${rule.id}`}>
             <select
               value={rule.operator}
-              data-testid={`multistate-operator-${rule.id}`}
+              data-testid={`${testIdPrefix}-operator-${rule.id}`}
               onChange={(event) => updateRule(rule.id, { operator: event.target.value as MultistateOperator })}
             >
               {OPERATORS.map((operator) => <option key={operator.value} value={operator.value}>{operator.label}</option>)}
@@ -70,7 +72,7 @@ export function MultistatePropertiesPanel({ config, onChange }: MultistateProper
                 type="number"
                 value={Number.isFinite(rule.value) ? rule.value : ''}
                 aria-label={rule.operator === 'between' ? 'Mínimo da regra' : 'Valor da regra'}
-                data-testid={`multistate-value-${rule.id}`}
+                data-testid={`${testIdPrefix}-value-${rule.id}`}
                 onChange={(event) => updateRule(rule.id, { value: toFiniteNumber(event.target.value, rule.value) })}
               />
             </label>
@@ -81,16 +83,16 @@ export function MultistatePropertiesPanel({ config, onChange }: MultistateProper
                   type="number"
                   value={typeof rule.value2 === 'number' && Number.isFinite(rule.value2) ? rule.value2 : ''}
                   aria-label="Máximo da regra"
-                  data-testid={`multistate-value2-${rule.id}`}
+                  data-testid={`${testIdPrefix}-value2-${rule.id}`}
                   onChange={(event) => updateRule(rule.id, { value2: toFiniteNumber(event.target.value, rule.value2 ?? rule.value) })}
                 />
               </label>
             )}
             <label className={styles.colorField}>
               <span>Cor</span>
-              <TransparentColorPicker color={rule.color} fallbackColor="#d32f2f" testId={`multistate-color-${rule.id}`} onChange={(color) => updateRule(rule.id, { color })} />
+              <TransparentColorPicker color={rule.color} fallbackColor="#d32f2f" testId={`${testIdPrefix}-color-${rule.id}`} onChange={(color) => updateRule(rule.id, { color })} />
             </label>
-            <button type="button" className={styles.removeButton} data-testid={`multistate-remove-${rule.id}`} onClick={() => update({ rules: normalized.rules.filter((item) => item.id !== rule.id) })}>
+            <button type="button" className={styles.removeButton} data-testid={`${testIdPrefix}-remove-${rule.id}`} onClick={() => update({ rules: normalized.rules.filter((item) => item.id !== rule.id) })}>
               Remover
             </button>
             {rule.operator === 'between' && !isValidMultistateRule(rule) && <span className={styles.invalid}>Faixa inválida</span>}

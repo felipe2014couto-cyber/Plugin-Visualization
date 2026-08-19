@@ -127,5 +127,6 @@ export {
   normalizeMultistateConfig,
   TRANSPARENT_COLOR,
   updateMultistateConfig,
+  updateBackgroundMultistateConfig,
 } from './multistate';
 export type { MultistateConfig, MultistateMatch, MultistateOperator, MultistateRule } from './multistate';

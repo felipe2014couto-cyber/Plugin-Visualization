@@ -18,13 +18,27 @@ export interface ValuePropertiesPanelProps {
   onChange: (patch: Partial<ValueVisualOptions>) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
+  backgroundMultistate?: MultistateConfig;
+  onBackgroundMultistateChange?: (config: MultistateConfig) => void;
   linkUrl?: string;
   onLinkChange: (value: string) => void;
   openInNewTab?: boolean;
   onOpenInNewTabChange: (value: boolean) => void;
 }
 
-export function ValuePropertiesPanel({ options, pointName, onChange, multistate, onMultistateChange, linkUrl, onLinkChange, openInNewTab = true, onOpenInNewTabChange }: ValuePropertiesPanelProps) {
+export function ValuePropertiesPanel({
+  options,
+  pointName,
+  onChange,
+  multistate,
+  onMultistateChange,
+  backgroundMultistate,
+  onBackgroundMultistateChange,
+  linkUrl,
+  onLinkChange,
+  openInNewTab = true,
+  onOpenInNewTabChange,
+}: ValuePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const visual = getValueVisualOptions({ visual: options });
 
@@ -81,6 +95,7 @@ export function ValuePropertiesPanel({ options, pointName, onChange, multistate,
           />
         </label>
         <ColorControl label="Cor do texto" color={visual.color} onChange={(value) => onChange({ color: value })} testId="value-color" />
+        <ColorControl label="Cor do fundo" color={visual.backgroundColor || 'transparent'} onChange={(value) => onChange({ backgroundColor: value })} testId="value-bg-color" />
         <label className={styles.field}>
           <span>Alinhamento</span>
           <select
@@ -96,7 +111,8 @@ export function ValuePropertiesPanel({ options, pointName, onChange, multistate,
           </select>
         </label>
       </div>
-      <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />
+      <MultistatePropertiesPanel title="Multistate (Texto)" testIdPrefix="value-text-multistate" config={multistate} onChange={onMultistateChange} />
+      <MultistatePropertiesPanel title="Multistate (Fundo)" testIdPrefix="value-bg-multistate" config={backgroundMultistate} onChange={onBackgroundMultistateChange ?? (() => {})} />
     </aside>
   );
 }

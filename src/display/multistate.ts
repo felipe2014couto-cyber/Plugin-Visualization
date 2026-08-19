@@ -93,6 +93,28 @@ export function updateMultistateConfig(
   return changed ? { ...document, elements } : document;
 }
 
+export function updateBackgroundMultistateConfig(
+  document: DisplayDocument,
+  elementId: string,
+  config: MultistateConfig | undefined,
+): DisplayDocument {
+  let changed = false;
+  const elements = document.elements.map((element) => {
+    if (element.id !== elementId || element.type !== 'value') {
+      return element;
+    }
+    changed = true;
+    const properties = { ...element.properties } as Record<string, unknown>;
+    if (config === undefined) {
+      delete properties.backgroundMultistate;
+    } else {
+      properties.backgroundMultistate = normalizeMultistateConfig(config);
+    }
+    return { ...element, properties };
+  });
+  return changed ? { ...document, elements } : document;
+}
+
 function matchesRule(value: number, rule: MultistateRule): boolean {
   if (!isValidMultistateRule(rule)) {
     return false;

@@ -83,7 +83,7 @@ import type { TrendCursor } from '../../runtime/trendCursor';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
-import { updateMultistateConfig, type MultistateConfig } from '../../multistate';
+import { updateMultistateConfig, updateBackgroundMultistateConfig, type MultistateConfig } from '../../multistate';
 import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay, serializeDisplayCsv, serializeDisplayXml, type DisplayExportFileFormat } from '../../displayTransfer';
 import { collectDisplayDataBindings, DISPLAY_DATA_EXPORT_MAX_POINTS, serializePiDataCsv, serializePiDataXml, type DisplayDataLoader } from '../../displayDataExport';
 import { editorReducer, initialEditorState, type EditorAction, type EditorState } from './editorState';
@@ -784,6 +784,14 @@ export function DisplayEditor({
     commitDocument(updateMultistateConfig(documentRef.current, selectedId, config));
   }, [commitDocument]);
 
+  const handleBackgroundMultistateChange = useCallback((config: MultistateConfig) => {
+    const selectedId = stateRef.current.selectedElementId;
+    if (!selectedId) {
+      return;
+    }
+    commitDocument(updateBackgroundMultistateConfig(documentRef.current, selectedId, config));
+  }, [commitDocument]);
+
   const selectedGauge = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === GAUGE_TYPE) as GaugeElement | undefined
     : undefined;
@@ -1209,6 +1217,8 @@ export function DisplayEditor({
             onChange={handleValueVisualChange}
             multistate={selectedValue.properties.multistate}
             onMultistateChange={handleMultistateChange}
+            backgroundMultistate={selectedValue.properties.backgroundMultistate}
+            onBackgroundMultistateChange={handleBackgroundMultistateChange}
             linkUrl={typeof selectedValue.properties.linkUrl === 'string' ? selectedValue.properties.linkUrl : undefined}
             onLinkChange={handleLinkChange}
             openInNewTab={selectedValue.properties.openInNewTab !== false}
