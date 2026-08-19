@@ -689,5 +689,76 @@ describe('MiniSheetsPanel', () => {
         expect(cellA1).toHaveStyle('width: 160px');
       });
     });
+
+    it('restores initialDocument and recalculates static and PI formulas', async () => {
+      searchMock.mockResolvedValueOnce({
+        results: [
+          {
+            name: 'PIMS_TAG_1',
+            path: '\\\\SRV\\PIMS_TAG_1',
+            dataSourceUid: 'pi-uid',
+          },
+        ],
+        hasMore: false,
+      });
+      currValMock.mockResolvedValueOnce({
+        value: 99.4,
+        timestamp: '2026-08-19T07:00:00Z',
+      });
+
+      const initialDocument = {
+        version: 1 as const,
+        columnCount: 20,
+        rowCount: 50,
+        columnWidths: { '0': 180 },
+        cells: {
+          A1: { rawValue: 'Motor 1', format: { bold: true } },
+          B1: { rawValue: '10' },
+          C1: { rawValue: '=B1*2' },
+          D1: { rawValue: '=PICurrVal("PIMS_TAG_1")' },
+        },
+      };
+
+      const handleChange = jest.fn();
+
+      render(
+        <MiniSheetsPanel
+          initialDocument={initialDocument}
+          onChange={handleChange}
+        />
+      );
+
+      // Verify column width restored
+      expect(screen.getByTestId('mini-sheets-col-header-A')).toHaveStyle('width: 180px');
+
+      // Verify A1 text and formatting restored
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      expect(cellA1).toHaveTextContent('Motor 1');
+      expect(cellA1).toHaveStyle('font-weight: bold');
+
+      // Verify B1 restored
+      expect(screen.getByTestId('mini-sheets-cell-B1')).toHaveTextContent('10');
+
+      // Verify C1 local formula recalculates to 20
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-cell-C1')).toHaveTextContent('20');
+      });
+
+      // Verify D1 PI formula recalculates to 99.4
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-cell-D1')).toHaveTextContent('99.4');
+      });
+
+      // Editing a cell triggers onChange with updated document
+      const input = screen.getByTestId('mini-sheets-formula-input');
+      fireEvent.change(input, { target: { value: 'Novo Motor' } });
+      fireEvent.submit(input.closest('form')!);
+
+      await waitFor(() => {
+        expect(handleChange).toHaveBeenCalled();
+        const lastCallArg = handleChange.mock.calls[handleChange.mock.calls.length - 1][0];
+        expect(lastCallArg.cells['A1'].rawValue).toBe('Novo Motor');
+      });
+    });
   });
 });

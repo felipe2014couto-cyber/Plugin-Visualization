@@ -42,6 +42,12 @@ import {
   shiftFormulaReferences,
 } from './miniSheetOperations';
 
+import {
+  MiniSheetsDocument,
+  deserializeMiniSheets,
+  serializeMiniSheets,
+} from './miniSheetsDocument';
+
 export interface CellData {
   rawValue: string; // The formula or raw entered string, e.g. '=PICurrVal("TAG")'
   displayValue: string; // The computed result to show
@@ -57,9 +63,11 @@ type DragMode = 'cells' | 'cols' | 'rows' | 'autofill';
 
 export interface MiniSheetsPanelProps {
   dataSourceSrv?: any;
+  initialDocument?: MiniSheetsDocument;
+  onChange?: (document: MiniSheetsDocument) => void;
 }
 
-export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
+export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: MiniSheetsPanelProps) {
   const styles = useStyles2(getStyles);
 
   // Selection state
@@ -72,7 +80,10 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
     { startCol: 0, startRow: 0, endCol: 0, endRow: 0 },
   ]);
 
-  const [cells, setCells] = useState<Map<string, CellData>>(() => new Map());
+  const [cells, setCells] = useState<Map<string, CellData>>(() => {
+    const deserialized = deserializeMiniSheets(initialDocument);
+    return deserialized.cells;
+  });
   const [formulaBarText, setFormulaBarText] = useState('');
   const [editingCellCoord, setEditingCellCoord] = useState<CellCoord | null>(null);
   const [editingCellText, setEditingCellText] = useState('');
@@ -87,7 +98,10 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
   // Column widths state (column index -> width in px)
   const DEFAULT_COL_WIDTH = 100;
   const MIN_COL_WIDTH = 40;
-  const [colWidths, setColWidths] = useState<Map<number, number>>(() => new Map());
+  const [colWidths, setColWidths] = useState<Map<number, number>>(() => {
+    const deserialized = deserializeMiniSheets(initialDocument);
+    return deserialized.colWidths;
+  });
 
   // Column resizing ref
   const resizingColRef = useRef<{
@@ -98,6 +112,18 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
 
   const cellsRef = useRef(cells);
   cellsRef.current = cells;
+  const colWidthsRef = useRef(colWidths);
+  colWidthsRef.current = colWidths;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  // Emit updated MiniSheetsDocument when cells or colWidths change
+  const notifyDocumentChange = useCallback(() => {
+    if (onChangeRef.current) {
+      const doc = serializeMiniSheets(cellsRef.current, colWidthsRef.current, TOTAL_COLS, TOTAL_ROWS);
+      onChangeRef.current(doc);
+    }
+  }, []);
 
   const getColWidth = useCallback((colIndex: number): number => {
     return colWidths.get(colIndex) ?? DEFAULT_COL_WIDTH;
@@ -551,6 +577,48 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
     }
     setStatusMessage('');
   }, [computeCell]);
+
+  // Notify parent on cells or colWidths update
+  const isFirstMountRef = useRef(true);
+  useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
+    notifyDocumentChange();
+  }, [cells, colWidths, notifyDocumentChange]);
+
+  // Sync state if initialDocument changes externally (e.g. loading a different dashboard)
+  const initialDocRef = useRef(initialDocument);
+  useEffect(() => {
+    if (initialDocRef.current !== initialDocument && initialDocument) {
+      initialDocRef.current = initialDocument;
+      const deserialized = deserializeMiniSheets(initialDocument);
+      setCells(deserialized.cells);
+      setColWidths(deserialized.colWidths);
+    }
+  }, [initialDocument]);
+
+  // Recalculate static formulas and formulas on initial load
+  const hasInitializedFormulasRef = useRef(false);
+  useEffect(() => {
+    if (!hasInitializedFormulasRef.current) {
+      hasInitializedFormulasRef.current = true;
+      // First evaluate static formulas
+      setCells((prev) => evaluateStaticFormulas(prev).nextMap);
+      // Then recompute all formula cells (including PI formulas)
+      const currentCells = Array.from(cellsRef.current.entries());
+      for (const [key, cell] of currentCells) {
+        if (cell.spilledFrom) continue;
+        const [colStr, rowStr] = key.split(',');
+        const col = parseInt(colStr, 10);
+        const row = parseInt(rowStr, 10);
+        if (!isNaN(col) && !isNaN(row) && cell.rawValue && cell.rawValue.trim().startsWith('=')) {
+          computeCell({ col, row }, cell.rawValue);
+        }
+      }
+    }
+  }, [computeCell, evaluateStaticFormulas]);
 
   /**
    * DELETE / CLEAR CONTENTS: Clears cell contents across all selected ranges.

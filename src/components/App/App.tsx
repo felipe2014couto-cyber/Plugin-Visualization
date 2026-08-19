@@ -559,7 +559,15 @@ export function App() {
             />
           </div>
           <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>
-            <MiniSheetsPanel />
+            <MiniSheetsPanel
+              initialDocument={document.miniSheets}
+              onChange={(miniSheetsDoc) => {
+                setDocument((prev) => ({
+                  ...prev,
+                  miniSheets: miniSheetsDoc,
+                }));
+              }}
+            />
           </div>
         </main>
       </div>
