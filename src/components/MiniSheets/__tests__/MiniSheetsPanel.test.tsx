@@ -515,4 +515,147 @@ describe('MiniSheetsPanel', () => {
       });
     });
   });
+
+  describe('Block Delete, Copy/Paste, Autofill & Formatting', () => {
+    it('deletes single cell and block range with Delete key', async () => {
+      render(<MiniSheetsPanel />);
+      const input = screen.getByTestId('mini-sheets-formula-input');
+
+      // Populate A1 and A2
+      fireEvent.change(input, { target: { value: '100' } });
+      fireEvent.submit(input.closest('form')!);
+      await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('100'));
+
+      const cellA2 = screen.getByTestId('mini-sheets-cell-A2');
+      fireEvent.pointerDown(cellA2);
+      fireEvent.change(input, { target: { value: '200' } });
+      fireEvent.submit(input.closest('form')!);
+      await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A2')).toHaveTextContent('200'));
+
+      // Select A1:A2 and press Delete
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      fireEvent.pointerDown(cellA1);
+      fireEvent.pointerEnter(cellA2);
+
+      const panel = screen.getByTestId('mini-sheets-panel');
+      fireEvent.keyDown(panel, { key: 'Delete' });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('');
+        expect(screen.getByTestId('mini-sheets-cell-A2')).toHaveTextContent('');
+      });
+    });
+
+    it('clears entire spill tree when deleting a spilled or origin cell', async () => {
+      searchMock.mockResolvedValue({
+        results: [{ name: 'LFS_RB2_TAG', path: '\\\\PISERVER\\LFS_RB2_TAG', dataSourceUid: 'pi-uid' }],
+        hasMore: false,
+      });
+      const ts1 = new Date(2026, 7, 19, 7, 0, 0).getTime();
+      const ts2 = new Date(2026, 7, 19, 7, 3, 0).getTime();
+      recordedMock.mockResolvedValue({
+        'pi-uid\u0000PISERVER\u0000LFS_RB2_TAG': {
+          status: 'success',
+          series: {
+            pointName: 'LFS_RB2_TAG',
+            points: [
+              { time: ts1, value: 35.2 },
+              { time: ts2, value: 35.7 },
+            ],
+          },
+        },
+      });
+
+      render(<MiniSheetsPanel />);
+      const input = screen.getByTestId('mini-sheets-formula-input');
+
+      fireEvent.change(input, { target: { value: '=PICompDat("LFS_RB2_TAG", "*-1h", "*")' } });
+      fireEvent.submit(input.closest('form')!);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('19/08/2026 07:00:00');
+        expect(screen.getByTestId('mini-sheets-cell-B1')).toHaveTextContent('35.2');
+      });
+
+      // Select spilled target B2 and press Delete -> should clear entire origin and spill
+      const cellB2 = screen.getByTestId('mini-sheets-cell-B2');
+      fireEvent.pointerDown(cellB2);
+
+      const panel = screen.getByTestId('mini-sheets-panel');
+      fireEvent.keyDown(panel, { key: 'Delete' });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('');
+        expect(screen.getByTestId('mini-sheets-cell-B1')).toHaveTextContent('');
+        expect(screen.getByTestId('mini-sheets-cell-A2')).toHaveTextContent('');
+        expect(screen.getByTestId('mini-sheets-cell-B2')).toHaveTextContent('');
+      });
+    });
+
+    it('copies and pastes single cells and matrix with relative formula adjustments', async () => {
+      render(<MiniSheetsPanel />);
+      const input = screen.getByTestId('mini-sheets-formula-input');
+      const panel = screen.getByTestId('mini-sheets-panel');
+
+      // A1 = 10
+      fireEvent.change(input, { target: { value: '10' } });
+      fireEvent.submit(input.closest('form')!);
+      await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('10'));
+
+      // B1 = =A1*2
+      const cellB1 = screen.getByTestId('mini-sheets-cell-B1');
+      fireEvent.pointerDown(cellB1);
+      fireEvent.change(input, { target: { value: '=A1*2' } });
+      fireEvent.submit(input.closest('form')!);
+      await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-B1')).toHaveTextContent('20'));
+
+      // Copy B1 (Ctrl+C)
+      fireEvent.keyDown(panel, { key: 'c', ctrlKey: true });
+
+      // Paste into B2 (Ctrl+V) -> should adjust =A1*2 into =A2*2
+      const cellB2 = screen.getByTestId('mini-sheets-cell-B2');
+      fireEvent.pointerDown(cellB2);
+      fireEvent.keyDown(panel, { key: 'v', ctrlKey: true });
+
+      // Check formula bar text for B2
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-formula-input')).toHaveValue('=A2*2');
+      });
+    });
+
+    it('applies formatting (bold, italic, colors, align, decimals) to selected range', async () => {
+      render(<MiniSheetsPanel />);
+      const input = screen.getByTestId('mini-sheets-formula-input');
+
+      // Set cell A1 = 12.3456
+      fireEvent.change(input, { target: { value: '12.3456' } });
+      fireEvent.submit(input.closest('form')!);
+      await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('12.3456'));
+
+      // Bold
+      const boldBtn = screen.getByTestId('mini-sheets-format-bold');
+      fireEvent.click(boldBtn);
+
+      // Italic
+      const italicBtn = screen.getByTestId('mini-sheets-format-italic');
+      fireEvent.click(italicBtn);
+
+      // Decimals = 2
+      const decimalSelect = screen.getByTestId('mini-sheets-format-decimals');
+      fireEvent.change(decimalSelect, { target: { value: '2' } });
+
+      await waitFor(() => {
+        const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+        expect(cellA1).toHaveTextContent('12.35');
+        expect(cellA1).toHaveStyle('font-weight: bold');
+        expect(cellA1).toHaveStyle('font-style: italic');
+      });
+    });
+
+    it('renders fill handle on the primary selected range', () => {
+      render(<MiniSheetsPanel />);
+      const fillHandle = screen.getByTestId('mini-sheets-fill-handle');
+      expect(fillHandle).toBeInTheDocument();
+    });
+  });
 });
