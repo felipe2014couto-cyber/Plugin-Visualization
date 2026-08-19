@@ -28,6 +28,7 @@ import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
 import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
+import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import type { CalculationDefinition } from '../../calculations/calculationEngine';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
@@ -45,7 +46,7 @@ export type VisualizationTheme = 'dark' | 'light';
 export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
 
 type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
-type AssetsTab = 'assets' | 'library' | 'calculations';
+type AssetsTab = 'assets' | 'library' | 'calculations' | 'sheets';
 
 function getInitialTheme(): VisualizationTheme {
   try {
@@ -409,6 +410,18 @@ export function App() {
               data-testid="pims-vision-toggle-assets-panel"
               onClick={() => setIsAssetsPanelOpen((prev) => !prev)}
             ><CubeIcon /></button>
+            <button
+              type="button"
+              className={isAssetsPanelOpen && assetsTab === 'sheets' ? styles.assetsRailActive : styles.assetsRailCollapsedToggle}
+              title="Mini-Sheets"
+              aria-label="Mini-Sheets"
+              aria-pressed={isAssetsPanelOpen && assetsTab === 'sheets'}
+              data-testid="pims-vision-sheets-tab"
+              onClick={() => {
+                setIsAssetsPanelOpen(true);
+                setAssetsTab('sheets');
+              }}
+            ><SheetsIcon /></button>
             <span className={styles.assetsRailItem} title="PI Points" aria-label="PI Points"><DatabaseIcon /></span>
             <span className={styles.assetsRailItem} title="Pesquisa PI" aria-label="Pesquisa PI"><SearchIcon /></span>
           </div>
@@ -439,9 +452,17 @@ export function App() {
                   data-testid="pims-vision-calculations-tab"
                   onClick={() => setAssetsTab('calculations')}
                 ><span className={styles.assetsIcon} aria-hidden="true"><CalculatorIcon /></span><span>Calculation</span></button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={assetsTab === 'sheets'}
+                  className={assetsTab === 'sheets' ? styles.assetsHeaderTabActive : styles.assetsHeaderTab}
+                  data-testid="pims-vision-sheets-header-tab"
+                  onClick={() => setAssetsTab('sheets')}
+                ><span className={styles.assetsIcon} aria-hidden="true"><SheetsIcon /></span><span>Sheets</span></button>
               </div>
               <div className={styles.assetsContent}>
-                <div className={styles.assetsPiSearch}>
+                <div className={styles.assetsPiSearch} hidden={assetsTab !== 'assets'}>
                   <div className={styles.assetsSectionHeader}>
                     <span className={styles.assetsSectionLabel}>PI System</span>
                     <button
@@ -484,6 +505,9 @@ export function App() {
                       })));
                     }}
                   />
+                </div>
+                <div className={styles.libraryTabContent} hidden={assetsTab !== 'sheets'}>
+                  <MiniSheetsPanel />
                 </div>
               </div>
             </div>
@@ -1293,6 +1317,13 @@ function CalculatorIcon() {
   return <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
     <rect x="5" y="3" width="14" height="18" rx="2" />
     <path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 18h2M14 18h2" />
+  </svg>;
+}
+
+function SheetsIcon() {
+  return <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+    <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
   </svg>;
 }
 
