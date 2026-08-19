@@ -84,8 +84,37 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
   // Autofill state
   const [autofillRange, setAutofillRange] = useState<SheetRange | null>(null);
 
+  // Column widths state (column index -> width in px)
+  const DEFAULT_COL_WIDTH = 100;
+  const MIN_COL_WIDTH = 40;
+  const [colWidths, setColWidths] = useState<Map<number, number>>(() => new Map());
+
+  // Column resizing ref
+  const resizingColRef = useRef<{
+    colIndex: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
   const cellsRef = useRef(cells);
   cellsRef.current = cells;
+
+  const getColWidth = useCallback((colIndex: number): number => {
+    return colWidths.get(colIndex) ?? DEFAULT_COL_WIDTH;
+  }, [colWidths]);
+
+  // Handle Column Resize Pointer Down
+  const handleColResizePointerDown = (colIndex: number, e: React.PointerEvent | React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const currentWidth = getColWidth(colIndex);
+    const startX = e.clientX ?? (e as any).pageX ?? 0;
+    resizingColRef.current = {
+      colIndex,
+      startX,
+      startWidth: currentWidth,
+    };
+  };
 
   // Pointer drag tracking
   const dragModeRef = useRef<DragMode | null>(null);
@@ -103,6 +132,8 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
     const currentCell = cells.get(activeKey);
     setFormulaBarText(currentCell?.rawValue ?? '');
   }, [activeKey, cells]);
+
+
 
   /**
    * Helper to resolve a PI Point by name using existing searchPiPointsWithStatus
@@ -870,9 +901,26 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
     setAutofillRange(null);
   }, [autofillRange, computeCell, evaluateStaticFormulas, ranges]);
 
-  // Global pointer/mouse up to end selection or autofill drag
+  // Global pointer/mouse move & up for column resizing, selection, or autofill drag
   useEffect(() => {
+    const handleGlobalPointerMove = (e: PointerEvent | MouseEvent) => {
+      if (resizingColRef.current) {
+        const currentX = e.clientX ?? (e as any).pageX ?? (e as any).screenX ?? 0;
+        const deltaX = currentX - resizingColRef.current.startX;
+        const newWidth = Math.max(MIN_COL_WIDTH, resizingColRef.current.startWidth + deltaX);
+        const colIdx = resizingColRef.current.colIndex;
+        setColWidths((prev) => {
+          const next = new Map(prev);
+          next.set(colIdx, newWidth);
+          return next;
+        });
+      }
+    };
+
     const handleGlobalDragEnd = () => {
+      if (resizingColRef.current) {
+        resizingColRef.current = null;
+      }
       if (dragModeRef.current === 'autofill') {
         commitAutofill();
       }
@@ -881,10 +929,15 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
       isAppendingRangeRef.current = false;
       setAutofillRange(null);
     };
+
+    window.addEventListener('pointermove', handleGlobalPointerMove);
+    window.addEventListener('mousemove', handleGlobalPointerMove);
     window.addEventListener('pointerup', handleGlobalDragEnd);
     window.addEventListener('mouseup', handleGlobalDragEnd);
     window.addEventListener('blur', handleGlobalDragEnd);
     return () => {
+      window.removeEventListener('pointermove', handleGlobalPointerMove);
+      window.removeEventListener('mousemove', handleGlobalPointerMove);
       window.removeEventListener('pointerup', handleGlobalDragEnd);
       window.removeEventListener('mouseup', handleGlobalDragEnd);
       window.removeEventListener('blur', handleGlobalDragEnd);
@@ -1232,17 +1285,26 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
               />
               {Array.from({ length: TOTAL_COLS }).map((_, cIndex) => {
                 const isColSel = isColumnSelected(cIndex, ranges);
+                const colWidth = getColWidth(cIndex);
                 return (
                   <th
                     key={cIndex}
                     className={`${styles.colHeader} ${isColSel ? styles.colHeaderSelected : ''}`}
+                    style={{ width: `${colWidth}px`, minWidth: `${colWidth}px`, maxWidth: `${colWidth}px` }}
                     data-testid={`mini-sheets-col-header-${colIndexToLetter(cIndex)}`}
                     onClick={(e) => handleColHeaderPointerDown(cIndex, e as any)}
                     onPointerDown={(e) => handleColHeaderPointerDown(cIndex, e)}
                     onPointerEnter={(e) => handleColHeaderPointerEnter(cIndex, e)}
                     onMouseEnter={(e) => handleColHeaderPointerEnter(cIndex, e)}
                   >
-                    {colIndexToLetter(cIndex)}
+                    <span>{colIndexToLetter(cIndex)}</span>
+                    <div
+                      className={styles.colResizeHandle}
+                      data-testid={`mini-sheets-col-resizer-${colIndexToLetter(cIndex)}`}
+                      onPointerDown={(e) => handleColResizePointerDown(cIndex, e)}
+                      onMouseDown={(e) => handleColResizePointerDown(cIndex, e as any)}
+                      title="Arrastar para redimensionar coluna"
+                    />
                   </th>
                 );
               })}
@@ -1273,13 +1335,18 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
                     const isSpilled = Boolean(cell?.spilledFrom);
                     const isError = cell?.displayValue?.startsWith('#');
                     const isPrimaryBottomRight = primaryRange && primaryRange.right === cIndex && primaryRange.bottom === rIndex;
+                    const colWidth = getColWidth(cIndex);
 
                     const formattedDisplay = cell?.displayValue
                       ? formatDisplayNumber(cell.displayValue, cell.format?.decimalPlaces)
                       : '';
 
-                    // Inline style override for custom cell formatting
-                    const customStyle: React.CSSProperties = {};
+                    // Inline style override for custom cell formatting + width
+                    const customStyle: React.CSSProperties = {
+                      width: `${colWidth}px`,
+                      minWidth: `${colWidth}px`,
+                      maxWidth: `${colWidth}px`,
+                    };
                     if (cell?.format?.bold) customStyle.fontWeight = 'bold';
                     if (cell?.format?.italic) customStyle.fontStyle = 'italic';
                     if (cell?.format?.textColor) customStyle.color = cell.format.textColor;
@@ -1608,8 +1675,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     position: sticky;
     top: 0;
     z-index: 2;
-    width: 100px;
-    min-width: 100px;
     height: 24px;
     padding: 2px 4px;
     font-size: 11px;
@@ -1619,6 +1684,22 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border-right: 1px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
     text-align: center;
+    user-select: none;
+    position: sticky;
+  `,
+  colResizeHandle: css`
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 5;
+
+    &:hover {
+      background-color: var(--accent);
+    }
   `,
   colHeaderSelected: css`
     color: var(--accent) !important;
@@ -1646,9 +1727,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   cell: css`
     position: relative;
-    width: 100px;
-    min-width: 100px;
-    max-width: 100px;
     height: 24px;
     padding: 2px 6px;
     font-size: 11px;

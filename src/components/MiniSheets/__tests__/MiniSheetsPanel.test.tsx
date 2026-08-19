@@ -657,5 +657,26 @@ describe('MiniSheetsPanel', () => {
       const fillHandle = screen.getByTestId('mini-sheets-fill-handle');
       expect(fillHandle).toBeInTheDocument();
     });
+
+    it('renders column resize handles and resizes column on drag', async () => {
+      render(<MiniSheetsPanel />);
+      const resizerA = screen.getByTestId('mini-sheets-col-resizer-A');
+      expect(resizerA).toBeInTheDocument();
+
+      const colHeaderA = screen.getByTestId('mini-sheets-col-header-A');
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      expect(colHeaderA).toHaveStyle('width: 100px');
+      expect(cellA1).toHaveStyle('width: 100px');
+
+      // Drag resize handle A to the right by +60px (start at 100, drag to 160)
+      fireEvent.mouseDown(resizerA, { clientX: 100 });
+      fireEvent.mouseMove(window, { clientX: 160 });
+      fireEvent.mouseUp(window);
+
+      await waitFor(() => {
+        expect(colHeaderA).toHaveStyle('width: 160px');
+        expect(cellA1).toHaveStyle('width: 160px');
+      });
+    });
   });
 });
