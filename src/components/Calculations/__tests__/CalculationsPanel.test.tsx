@@ -9,17 +9,17 @@ jest.mock('@grafana/ui', () => ({
 }));
 
 describe('CalculationsPanel', () => {
-  it('abre o editor de cálculo e usa o PI Point selecionado', async () => {
-    render(<CalculationsPanel selectedPiPoint={{ name: 'Vazao_01', webId: 'point-1', dataSourceUid: 'pi', path: '\\PIMS\\Vazao_01' }} />);
+  it('abre o editor de cálculo sem a área auxiliar de PI Point', async () => {
+    render(<CalculationsPanel />);
 
     fireEvent.click(screen.getByTestId('calculation-new'));
     expect(screen.getByRole('dialog')).toHaveTextContent('Editor de cálculo');
-    fireEvent.click(screen.getByRole('button', { name: /Adicionar Vazao_01/ }));
-    expect(screen.getByTestId('calculation-editor-expression')).toHaveValue('Vazao_01 ');
+    expect(screen.queryByTestId('calculation-editor-drop-zone')).toBeNull();
 
     fireEvent.change(screen.getByTestId('calculation-editor-name'), { target: { value: 'Vazão normalizada' } });
+    fireEvent.change(screen.getByTestId('calculation-editor-expression'), { target: { value: '25' } });
     fireEvent.click(screen.getByRole('button', { name: '/' }));
-    fireEvent.change(screen.getByTestId('calculation-editor-expression'), { target: { value: 'Vazao_01 / 100' } });
+    fireEvent.change(screen.getByTestId('calculation-editor-expression'), { target: { value: '25 / 100' } });
     fireEvent.click(screen.getByTestId('calculation-editor-save'));
 
     await waitFor(() => expect(screen.getByTestId('calculation-1')).toHaveTextContent('Vazão normalizada'));
@@ -76,10 +76,34 @@ describe('CalculationsPanel', () => {
         : ''),
       dropEffect: 'none',
     };
-    fireEvent.drop(screen.getByTestId('calculation-editor-drop-zone'), { dataTransfer });
+    fireEvent.drop(screen.getByTestId('calculation-editor-expression'), { dataTransfer });
 
     expect(screen.getByTestId('calculation-editor-expression')).toHaveValue('SINUSOID ');
     expect(screen.getByTestId('calculation-editor-inputs')).toHaveTextContent('SINUSOID');
+  });
+
+  it('executa a expressão e exibe o último valor', async () => {
+    render(<CalculationsPanel />);
+    fireEvent.click(screen.getByTestId('calculation-new'));
+    fireEvent.change(screen.getByTestId('calculation-editor-expression'), { target: { value: '20 + 5' } });
+
+    fireEvent.click(screen.getByTestId('calculation-editor-execute'));
+
+    await waitFor(() => expect(screen.getByTestId('calculation-editor-result')).toHaveTextContent('Último valor: 25'));
+  });
+
+  it('oferece funções com explicação, exemplo e insere a expressão selecionada', () => {
+    render(<CalculationsPanel />);
+    fireEvent.click(screen.getByTestId('calculation-new'));
+
+    fireEvent.click(screen.getByRole('button', { name: /Funções e lógica/ }));
+    expect(screen.getByTestId('calculation-function-help')).not.toHaveTextContent('IF(Temperatura > 80, 1, 0)');
+    fireEvent.click(screen.getByRole('button', { name: 'Explicação de IF / ELSE' }));
+    expect(screen.getByTestId('calculation-function-help')).toHaveTextContent('Retorna um valor quando a condição é verdadeira');
+    expect(screen.getByTestId('calculation-function-help')).toHaveTextContent('Ex.: IF(Temperatura > 80, 1, 0)');
+    fireEvent.click(screen.getByRole('button', { name: 'Inserir IF / ELSE' }));
+
+    expect(screen.getByTestId('calculation-editor-expression')).toHaveValue('IF(0, 0, 0) ');
   });
 
   it('deixa um cálculo salvo arrastável para o display', async () => {
