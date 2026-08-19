@@ -30,8 +30,6 @@ import { TimeRangeBar } from '../TimeRangeBar';
 import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
-import { PiDataLinkSidebarPanel } from '../MiniSheets/PiDataLinkSidebarPanel';
-import type { PiDataLinkFunctionType } from '../MiniSheets/PiDataLinkToolbar';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
@@ -87,7 +85,6 @@ export function App() {
   const [expandedFolderUids, setExpandedFolderUids] = useState<string[]>([]);
   const [saveValidationError, setSaveValidationError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const [activeDataLinkFunction, setActiveDataLinkFunction] = useState<PiDataLinkFunctionType | null>(null);
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
   if (!progressiveTrendLoaderRef.current) {
     progressiveTrendLoaderRef.current = createProgressiveTrendLoader(
@@ -440,15 +437,14 @@ export function App() {
               aria-label="Mini-Sheets"
               aria-pressed={activeModule === 'sheets'}
               data-testid="pims-vision-sheets-tab"
-              onClick={() => setActiveModule('sheets')}
+              onClick={() => { setActiveModule('sheets'); setIsAssetsPanelOpen(true); }}
             ><SheetsIcon /></button>
             <span className={styles.assetsRailItem} title="PI Points" aria-label="PI Points"><DatabaseIcon /></span>
             <span className={styles.assetsRailItem} title="Pesquisa PI" aria-label="Pesquisa PI"><SearchIcon /></span>
           </div>
           {isAssetsPanelOpen && (
             <div className={styles.assetsBody}>
-              {activeModule === 'visualization' ? (
-                <>
+              {activeModule === 'visualization' ? <>
                   <div className={styles.assetsHeader} role="tablist" aria-label="Módulos do painel">
                     <button
                       type="button"
@@ -527,12 +523,7 @@ export function App() {
                       />
                     </div>
                   </div>
-                </>
-              ) : (
-                <div className={styles.assetsContent} style={{ padding: 0, height: '100%', overflowY: 'hidden' }}>
-                  <PiDataLinkSidebarPanel onOpenFunction={(type) => setActiveDataLinkFunction(type)} />
-                </div>
-              )}
+              </> : <div id="pims-sheets-menu-slot" className={styles.sheetsMenuSlot} data-testid="pims-sheets-menu-slot" />}
             </div>
           )}
         </aside>
@@ -568,8 +559,8 @@ export function App() {
           <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>
             <MiniSheetsPanel
               initialDocument={document.miniSheets}
-              externalOpenDialog={activeDataLinkFunction}
-              onExternalOpenDialogHandled={() => setActiveDataLinkFunction(null)}
+              dataLinkMenuHostId="pims-sheets-menu-slot"
+              dataLinkMenuActive={activeModule === 'sheets' && isAssetsPanelOpen}
               onChange={(miniSheetsDoc) => {
                 setDocument((prev) => {
                   if (prev.miniSheets === miniSheetsDoc) {
@@ -1167,6 +1158,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border: 1px solid var(--border-color);
     border-radius: 14px;
     background: var(--panel-bg);
+  `,
+  sheetsMenuSlot: css`
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
   `,
   assetsContent: css`
     display: flex;

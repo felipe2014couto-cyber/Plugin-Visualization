@@ -13,7 +13,7 @@ import { LIBRARY_SYMBOL_DRAG_MIME, serializeLibrarySymbolDragData } from '../../
 export function LibraryPanel() {
   const styles = useStyles2(getStyles);
   const [term, setTerm] = useState('');
-  const [expanded, setExpanded] = useState<IndustrialSymbolCategory[]>(['Instrumentação']);
+  const [expanded, setExpanded] = useState<IndustrialSymbolCategory[]>([]);
   const filteredSymbols = useMemo(() => filterIndustrialSymbols(term), [term]);
   const symbolsByCategory = useMemo(() => new Map(
     INDUSTRIAL_SYMBOL_CATEGORIES.map((category) => [
@@ -47,7 +47,7 @@ export function LibraryPanel() {
       <div className={styles.catalog} data-testid="library-symbol-catalog">
         {INDUSTRIAL_SYMBOL_CATEGORIES.map((category) => {
           const symbols = symbolsByCategory.get(category) ?? [];
-          const isExpanded = expanded.includes(category);
+          const isExpanded = expanded.includes(category) || (term.trim().length > 0 && symbols.length > 0);
           return (
             <section key={category} className={styles.category} data-testid={`library-category-${category}`}>
               <button

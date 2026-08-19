@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -22,7 +23,7 @@ import {
   type CellCoord,
 } from './miniSheetFormula';
 import { parsePiTime, formatDateTime } from './miniSheetTime';
-import type { PiDataLinkFunctionType } from './PiDataLinkToolbar';
+import { PiDataLinkToolbar, type PiDataLinkFunctionType } from './PiDataLinkToolbar';
 import { PiDataLinkFunctionDialog } from './PiDataLinkFunctionDialog';
 import {
   SheetRange,
@@ -79,16 +80,16 @@ export interface MiniSheetsPanelProps {
   dataSourceSrv?: any;
   initialDocument?: MiniSheetsDocument;
   onChange?: (document: MiniSheetsDocument) => void;
-  externalOpenDialog?: PiDataLinkFunctionType | null;
-  onExternalOpenDialogHandled?: () => void;
+  dataLinkMenuHostId?: string;
+  dataLinkMenuActive?: boolean;
 }
 
 export function MiniSheetsPanel({
   dataSourceSrv,
   initialDocument,
   onChange,
-  externalOpenDialog,
-  onExternalOpenDialogHandled,
+  dataLinkMenuHostId,
+  dataLinkMenuActive = false,
 }: MiniSheetsPanelProps) {
   const styles = useStyles2(getStyles);
 
@@ -116,13 +117,13 @@ export function MiniSheetsPanel({
   const [editingCellText, setEditingCellText] = useState('');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [activeDataLinkDialog, setActiveDataLinkDialog] = useState<PiDataLinkFunctionType | null>(null);
+  const [dataLinkMenuHost, setDataLinkMenuHost] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (externalOpenDialog) {
-      setActiveDataLinkDialog(externalOpenDialog);
-      onExternalOpenDialogHandled?.();
-    }
-  }, [externalOpenDialog, onExternalOpenDialogHandled]);
+    setDataLinkMenuHost(dataLinkMenuActive && dataLinkMenuHostId
+      ? globalThis.document?.getElementById(dataLinkMenuHostId) ?? null
+      : null);
+  }, [dataLinkMenuActive, dataLinkMenuHostId]);
 
   // Internal clipboard buffer
   const [internalClipboard, setInternalClipboard] = useState<MiniSheetClipboard | null>(null);
@@ -1889,6 +1890,26 @@ export function MiniSheetsPanel({
 
   // Primary Range bounds for Fill Handle
   const primaryRange = ranges.length > 0 ? normalizeRange(ranges[ranges.length - 1]) : null;
+  const dataLinkMenu = <>
+    <PiDataLinkToolbar activeFunction={activeDataLinkDialog} onOpenFunction={setActiveDataLinkDialog} />
+    {activeDataLinkDialog && (
+      <PiDataLinkFunctionDialog
+        embedded
+        functionType={activeDataLinkDialog}
+        initialTargetCell={formatCellAddress(activeCell)}
+        currentSelectionAddress={ranges.length > 0 ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS) : undefined}
+        onInsert={(formula, targetAddress) => {
+          const coord = parseCellAddress(targetAddress) ?? activeCell;
+          setActiveCell(coord);
+          setRanges([rangeFromCells(coord, coord)]);
+          computeCell(coord, formula);
+          setFormulaBarText(formula);
+          setActiveDataLinkDialog(null);
+        }}
+        onClose={() => setActiveDataLinkDialog(null)}
+      />
+    )}
+  </>;
 
   return (
     <section
@@ -1899,25 +1920,7 @@ export function MiniSheetsPanel({
       tabIndex={0}
       onKeyDown={handleKeyDown}
     >
-      {/* PI DataLink Dialog Wizard */}
-      {activeDataLinkDialog && (
-        <PiDataLinkFunctionDialog
-          functionType={activeDataLinkDialog}
-          initialTargetCell={formatCellAddress(activeCell)}
-          currentSelectionAddress={
-            ranges.length > 0 ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS) : undefined
-          }
-          onInsert={(formula, targetAddress) => {
-            const coord = parseCellAddress(targetAddress) ?? activeCell;
-            setActiveCell(coord);
-            setRanges([rangeFromCells(coord, coord)]);
-            computeCell(coord, formula);
-            setFormulaBarText(formula);
-            setActiveDataLinkDialog(null);
-          }}
-          onClose={() => setActiveDataLinkDialog(null)}
-        />
-      )}
+      {dataLinkMenuHost ? createPortal(dataLinkMenu, dataLinkMenuHost) : !dataLinkMenuHostId ? dataLinkMenu : null}
 
       {/* Header / Toolbar */}
       <div className={styles.topToolbar}>

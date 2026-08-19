@@ -180,7 +180,7 @@ describe('App', () => {
     expect(screen.getByTestId('pims-vision-library-tab')).toHaveAttribute('aria-selected', 'false');
   });
 
-  it('exibe o módulo de Sheets na área central e mantém Data/Library/Calculation no painel', async () => {
+  it('exibe o módulo de Sheets e coloca o menu PI DataLink no painel lateral', async () => {
     checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
 
     render(<App />);
@@ -198,6 +198,8 @@ describe('App', () => {
     expect(screen.getByTestId('pims-vision-sheets-tab')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('mini-sheets-panel')).toBeVisible();
     expect(screen.getByTestId('mini-sheets-cell-A1')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('pims-sheets-menu-slot')).toContainElement(screen.getByTestId('pi-datalink-ribbon')));
+    expect(screen.getByTestId('mini-sheets-panel')).not.toContainElement(screen.getByTestId('pi-datalink-ribbon'));
 
     // Switch back to visualization
     fireEvent.click(screen.getByTestId('pims-vision-toggle-assets-panel'));
