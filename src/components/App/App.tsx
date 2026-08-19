@@ -562,10 +562,15 @@ export function App() {
             <MiniSheetsPanel
               initialDocument={document.miniSheets}
               onChange={(miniSheetsDoc) => {
-                setDocument((prev) => ({
-                  ...prev,
-                  miniSheets: miniSheetsDoc,
-                }));
+                setDocument((prev) => {
+                  if (prev.miniSheets === miniSheetsDoc) {
+                    return prev;
+                  }
+                  return {
+                    ...prev,
+                    miniSheets: miniSheetsDoc,
+                  };
+                });
               }}
             />
           </div>

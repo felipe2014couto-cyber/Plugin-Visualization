@@ -116,11 +116,13 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
   colWidthsRef.current = colWidths;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const lastEmittedDocRef = useRef<MiniSheetsDocument | null>(null);
 
   // Emit updated MiniSheetsDocument when cells or colWidths change
   const notifyDocumentChange = useCallback(() => {
     if (onChangeRef.current) {
       const doc = serializeMiniSheets(cellsRef.current, colWidthsRef.current, TOTAL_COLS, TOTAL_ROWS);
+      lastEmittedDocRef.current = doc;
       onChangeRef.current(doc);
     }
   }, []);
@@ -591,8 +593,13 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
   // Sync state if initialDocument changes externally (e.g. loading a different dashboard)
   const initialDocRef = useRef(initialDocument);
   useEffect(() => {
-    if (initialDocRef.current !== initialDocument && initialDocument) {
+    if (
+      initialDocument &&
+      initialDocument !== lastEmittedDocRef.current &&
+      initialDocument !== initialDocRef.current
+    ) {
       initialDocRef.current = initialDocument;
+      lastEmittedDocRef.current = initialDocument;
       const deserialized = deserializeMiniSheets(initialDocument);
       setCells(deserialized.cells);
       setColWidths(deserialized.colWidths);
@@ -967,6 +974,9 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
         const newWidth = Math.max(MIN_COL_WIDTH, resizingColRef.current.startWidth + deltaX);
         const colIdx = resizingColRef.current.colIndex;
         setColWidths((prev) => {
+          if (prev.get(colIdx) === newWidth) {
+            return prev;
+          }
           const next = new Map(prev);
           next.set(colIdx, newWidth);
           return next;
