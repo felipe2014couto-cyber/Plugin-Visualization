@@ -607,7 +607,24 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     notifyDocumentChange();
   }, [cells, colWidths, notifyDocumentChange]);
 
-  // Sync state if initialDocument changes externally (e.g. loading a different dashboard)
+  const recomputeAllFormulas = useCallback(
+    (cellMap: Map<string, CellData>) => {
+      setCells(evaluateStaticFormulas(cellMap).nextMap);
+      const currentCells = Array.from(cellMap.entries());
+      for (const [key, cell] of currentCells) {
+        if (cell.spilledFrom) continue;
+        const [colStr, rowStr] = key.split(',');
+        const col = parseInt(colStr, 10);
+        const row = parseInt(rowStr, 10);
+        if (!isNaN(col) && !isNaN(row) && cell.rawValue && cell.rawValue.trim().startsWith('=')) {
+          computeCell({ col, row }, cell.rawValue);
+        }
+      }
+    },
+    [computeCell, evaluateStaticFormulas],
+  );
+
+  // Sync state if initialDocument changes externally (e.g. loading a saved dashboard)
   const initialDocRef = useRef(initialDocument);
   useEffect(() => {
     if (
@@ -620,29 +637,18 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       const deserialized = deserializeMiniSheets(initialDocument);
       setCells(deserialized.cells);
       setColWidths(deserialized.colWidths);
+      recomputeAllFormulas(deserialized.cells);
     }
-  }, [initialDocument]);
+  }, [initialDocument, recomputeAllFormulas]);
 
   // Recalculate static formulas and formulas on initial load
   const hasInitializedFormulasRef = useRef(false);
   useEffect(() => {
     if (!hasInitializedFormulasRef.current) {
       hasInitializedFormulasRef.current = true;
-      // First evaluate static formulas
-      setCells((prev) => evaluateStaticFormulas(prev).nextMap);
-      // Then recompute all formula cells (including PI formulas)
-      const currentCells = Array.from(cellsRef.current.entries());
-      for (const [key, cell] of currentCells) {
-        if (cell.spilledFrom) continue;
-        const [colStr, rowStr] = key.split(',');
-        const col = parseInt(colStr, 10);
-        const row = parseInt(rowStr, 10);
-        if (!isNaN(col) && !isNaN(row) && cell.rawValue && cell.rawValue.trim().startsWith('=')) {
-          computeCell({ col, row }, cell.rawValue);
-        }
-      }
+      recomputeAllFormulas(cellsRef.current);
     }
-  }, [computeCell, evaluateStaticFormulas]);
+  }, [recomputeAllFormulas]);
 
   /**
    * DELETE / CLEAR CONTENTS: Clears cell contents across all selected ranges.
