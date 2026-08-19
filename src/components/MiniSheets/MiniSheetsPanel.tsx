@@ -271,6 +271,8 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       const address = formatCellAddress(coord);
       const trimmed = rawValue.trim();
 
+      let finalMapToCommit: Map<string, CellData> | null = null;
+
       // Clear any previous spill targets created by this cell
       setCells((prev) => {
         const next = new Map(prev);
@@ -294,9 +296,8 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
           } else {
             next.delete(key);
           }
-          const finalMap = evaluateStaticFormulas(next).nextMap;
-          commitStateToHistory(finalMap);
-          return finalMap;
+          finalMapToCommit = evaluateStaticFormulas(next).nextMap;
+          return finalMapToCommit;
         }
         const existing = next.get(key);
         next.set(key, {
@@ -304,10 +305,13 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
           displayValue: 'Carregando...',
           format: existing?.format,
         });
-        const finalMap = evaluateStaticFormulas(next).nextMap;
-        commitStateToHistory(finalMap);
-        return finalMap;
+        finalMapToCommit = evaluateStaticFormulas(next).nextMap;
+        return finalMapToCommit;
       });
+
+      if (finalMapToCommit) {
+        commitStateToHistory(finalMapToCommit);
+      }
 
       if (!trimmed) {
         return;
@@ -653,6 +657,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       );
       setHistory((prev) => commitMiniSheetsHistory(prev, doc));
       lastEmittedDocRef.current = doc;
+      initialDocRef.current = doc;
       onChangeRef.current?.(doc);
     },
     []
@@ -670,6 +675,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     recomputeAllFormulas(deserialized.cells);
     const doc = serializeMiniSheets(deserialized.cells, deserialized.colWidths, TOTAL_COLS, TOTAL_ROWS);
     lastEmittedDocRef.current = doc;
+    initialDocRef.current = doc;
     onChangeRef.current?.(doc);
   }, [recomputeAllFormulas]);
 
@@ -685,6 +691,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     recomputeAllFormulas(deserialized.cells);
     const doc = serializeMiniSheets(deserialized.cells, deserialized.colWidths, TOTAL_COLS, TOTAL_ROWS);
     lastEmittedDocRef.current = doc;
+    initialDocRef.current = doc;
     onChangeRef.current?.(doc);
   }, [recomputeAllFormulas]);
 
@@ -720,68 +727,66 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
    * Cleans whole spill tree if a spilled cell or origin cell is inside range.
    */
   const handleDeleteSelected = useCallback(() => {
-    setCells((prev) => {
-      const next = new Map(prev);
-      const spilledOriginsToClear = new Set<string>();
+    const next = new Map(cellsRef.current);
+    const spilledOriginsToClear = new Set<string>();
 
-      // Identify cells to clear and spill origins
-      ranges.forEach((range) => {
-        const norm = normalizeRange(range);
-        for (let r = norm.top; r <= norm.bottom; r++) {
-          for (let c = norm.left; c <= norm.right; c++) {
-            const key = `${c},${r}`;
-            const cell = next.get(key);
-            if (cell) {
-              if (cell.spilledFrom) {
-                spilledOriginsToClear.add(cell.spilledFrom);
-              }
-              if (cell.spillTargetAddresses && cell.spillTargetAddresses.length > 0) {
-                spilledOriginsToClear.add(formatCellAddress({ col: c, row: r }));
-              }
+    // Identify cells to clear and spill origins
+    ranges.forEach((range) => {
+      const norm = normalizeRange(range);
+      for (let r = norm.top; r <= norm.bottom; r++) {
+        for (let c = norm.left; c <= norm.right; c++) {
+          const key = `${c},${r}`;
+          const cell = next.get(key);
+          if (cell) {
+            if (cell.spilledFrom) {
+              spilledOriginsToClear.add(cell.spilledFrom);
+            }
+            if (cell.spillTargetAddresses && cell.spillTargetAddresses.length > 0) {
+              spilledOriginsToClear.add(formatCellAddress({ col: c, row: r }));
             }
           }
         }
-      });
-
-      // Clear full spill trees
-      spilledOriginsToClear.forEach((originAddr) => {
-        const originCoord = parseCellAddress(originAddr);
-        if (originCoord) {
-          const oKey = `${originCoord.col},${originCoord.row}`;
-          const oCell = next.get(oKey);
-          if (oCell?.spillTargetAddresses) {
-            oCell.spillTargetAddresses.forEach((tAddr) => {
-              const tc = parseCellAddress(tAddr);
-              if (tc) {
-                const tKey = `${tc.col},${tc.row}`;
-                const tCell = next.get(tKey);
-                if (tCell?.spilledFrom === originAddr) {
-                  next.delete(tKey);
-                }
-              }
-            });
-          }
-          if (oCell) {
-            next.delete(oKey);
-          }
-        }
-      });
-
-      // Clear directly selected cells (completely removing values and custom formats, returning cell to default)
-      ranges.forEach((range) => {
-        const norm = normalizeRange(range);
-        for (let r = norm.top; r <= norm.bottom; r++) {
-          for (let c = norm.left; c <= norm.right; c++) {
-            const key = `${c},${r}`;
-            next.delete(key);
-          }
-        }
-      });
-
-      const finalMap = evaluateStaticFormulas(next).nextMap;
-      commitStateToHistory(finalMap);
-      return finalMap;
+      }
     });
+
+    // Clear full spill trees
+    spilledOriginsToClear.forEach((originAddr) => {
+      const originCoord = parseCellAddress(originAddr);
+      if (originCoord) {
+        const oKey = `${originCoord.col},${originCoord.row}`;
+        const oCell = next.get(oKey);
+        if (oCell?.spillTargetAddresses) {
+          oCell.spillTargetAddresses.forEach((tAddr) => {
+            const tc = parseCellAddress(tAddr);
+            if (tc) {
+              const tKey = `${tc.col},${tc.row}`;
+              const tCell = next.get(tKey);
+              if (tCell?.spilledFrom === originAddr) {
+                next.delete(tKey);
+              }
+            }
+          });
+        }
+        if (oCell) {
+          next.delete(oKey);
+        }
+      }
+    });
+
+    // Clear directly selected cells (completely removing values and custom formats, returning cell to default)
+    ranges.forEach((range) => {
+      const norm = normalizeRange(range);
+      for (let r = norm.top; r <= norm.bottom; r++) {
+        for (let c = norm.left; c <= norm.right; c++) {
+          const key = `${c},${r}`;
+          next.delete(key);
+        }
+      }
+    });
+
+    const finalMap = evaluateStaticFormulas(next).nextMap;
+    setCells(finalMap);
+    commitStateToHistory(finalMap);
   }, [commitStateToHistory, evaluateStaticFormulas, ranges]);
 
   /**
@@ -839,40 +844,36 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     const baseDeltaCol = sourceOrigin ? startCol - sourceOrigin.col : 0;
     const baseDeltaRow = sourceOrigin ? startRow - sourceOrigin.row : 0;
 
-    // Get source origin from copy if available, otherwise relative to activeCell offset
-    setCells((prev) => {
-      const next = new Map(prev);
-
-      matrix.forEach((rowCells, rIdx) => {
-        const targetRow = startRow + rIdx;
-        if (targetRow >= TOTAL_ROWS) {
+    const next = new Map(cellsRef.current);
+    matrix.forEach((rowCells, rIdx) => {
+      const targetRow = startRow + rIdx;
+      if (targetRow >= TOTAL_ROWS) {
+        return;
+      }
+      rowCells.forEach((cell, cIdx) => {
+        const targetCol = startCol + cIdx;
+        if (targetCol >= TOTAL_COLS) {
           return;
         }
-        rowCells.forEach((cell, cIdx) => {
-          const targetCol = startCol + cIdx;
-          if (targetCol >= TOTAL_COLS) {
-            return;
-          }
-          const targetKey = `${targetCol},${targetRow}`;
-          const deltaCol = baseDeltaCol;
-          const deltaRow = baseDeltaRow;
+        const targetKey = `${targetCol},${targetRow}`;
+        const deltaCol = baseDeltaCol;
+        const deltaRow = baseDeltaRow;
 
-          const rawValue = cell.rawValue.startsWith('=')
-            ? shiftFormulaReferences(cell.rawValue, deltaCol, deltaRow, TOTAL_COLS, TOTAL_ROWS)
-            : cell.rawValue;
+        const rawValue = cell.rawValue.startsWith('=')
+          ? shiftFormulaReferences(cell.rawValue, deltaCol, deltaRow, TOTAL_COLS, TOTAL_ROWS)
+          : cell.rawValue;
 
-          next.set(targetKey, {
-            rawValue,
-            displayValue: rawValue.startsWith('=') ? 'Carregando...' : cell.displayValue,
-            format: cell.format ? { ...cell.format } : undefined,
-          });
+        next.set(targetKey, {
+          rawValue,
+          displayValue: rawValue.startsWith('=') ? 'Carregando...' : cell.displayValue,
+          format: cell.format ? { ...cell.format } : undefined,
         });
       });
-
-      const finalMap = evaluateStaticFormulas(next).nextMap;
-      commitStateToHistory(finalMap);
-      return finalMap;
     });
+
+    const finalMap = evaluateStaticFormulas(next).nextMap;
+    setCells(finalMap);
+    commitStateToHistory(finalMap);
 
     // Recompute pasted formulas
     matrix.forEach((rowCells, rIdx) => {
@@ -897,28 +898,26 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
    * FORMATTING: Applies partial CellFormat to all cells across all selected ranges.
    */
   const handleApplyFormat = useCallback((formatPatch: Partial<CellFormat>) => {
-    setCells((prev) => {
-      const next = new Map(prev);
-      ranges.forEach((range) => {
-        const norm = normalizeRange(range);
-        for (let r = norm.top; r <= norm.bottom; r++) {
-          for (let c = norm.left; c <= norm.right; c++) {
-            const key = `${c},${r}`;
-            const existing = next.get(key) ?? { rawValue: '', displayValue: '' };
-            next.set(key, {
-              ...existing,
-              format: {
-                ...existing.format,
-                ...formatPatch,
-              },
-            });
-          }
+    const next = new Map(cellsRef.current);
+    ranges.forEach((range) => {
+      const norm = normalizeRange(range);
+      for (let r = norm.top; r <= norm.bottom; r++) {
+        for (let c = norm.left; c <= norm.right; c++) {
+          const key = `${c},${r}`;
+          const existing = next.get(key) ?? { rawValue: '', displayValue: '' };
+          next.set(key, {
+            ...existing,
+            format: {
+              ...existing.format,
+              ...formatPatch,
+            },
+          });
         }
-      });
-      const finalMap = evaluateStaticFormulas(next).nextMap;
-      commitStateToHistory(finalMap);
-      return finalMap;
+      }
     });
+    const finalMap = evaluateStaticFormulas(next).nextMap;
+    setCells(finalMap);
+    commitStateToHistory(finalMap);
   }, [commitStateToHistory, evaluateStaticFormulas, ranges]);
 
   // Pointer event handlers for Cell Selection & Dragging
@@ -1037,20 +1036,18 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     );
 
     if (generated.length > 0) {
-      setCells((prev) => {
-        const next = new Map(prev);
-        generated.forEach((gen) => {
-          const key = `${gen.col},${gen.row}`;
-          next.set(key, {
-            rawValue: gen.rawValue,
-            displayValue: gen.displayValue,
-            format: gen.format,
-          });
+      const next = new Map(cellsRef.current);
+      generated.forEach((gen) => {
+        const key = `${gen.col},${gen.row}`;
+        next.set(key, {
+          rawValue: gen.rawValue,
+          displayValue: gen.displayValue,
+          format: gen.format,
         });
-        const finalMap = evaluateStaticFormulas(next).nextMap;
-        commitStateToHistory(finalMap);
-        return finalMap;
       });
+      const finalMap = evaluateStaticFormulas(next).nextMap;
+      setCells(finalMap);
+      commitStateToHistory(finalMap);
 
       // Compute formulas for generated cells
       generated.forEach((gen) => {
