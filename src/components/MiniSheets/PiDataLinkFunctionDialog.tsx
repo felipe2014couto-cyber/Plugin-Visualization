@@ -7,6 +7,7 @@ import { searchPiPointsWithStatus } from '../../pi';
 import { parseCellAddress } from './miniSheetFormula';
 
 interface PiDataLinkFunctionDialogProps {
+  embedded?: boolean;
   functionType: PiDataLinkFunctionType;
   initialTargetCell: string;
   currentSelectionAddress?: string;
@@ -15,6 +16,7 @@ interface PiDataLinkFunctionDialogProps {
 }
 
 export function PiDataLinkFunctionDialog({
+  embedded = false,
   functionType,
   initialTargetCell,
   currentSelectionAddress,
@@ -189,16 +191,16 @@ export function PiDataLinkFunctionDialog({
   };
 
   return (
-    <div className={styles.dialogBackdrop} role="presentation" onClick={onClose}>
+    <div className={embedded ? styles.embeddedShell : styles.dialogBackdrop} role={embedded ? undefined : 'presentation'} onClick={embedded ? undefined : onClose}>
       <form
-        className={styles.dialog}
-        role="dialog"
-        aria-modal="true"
+        className={embedded ? styles.embeddedDialog : styles.dialog}
+        role={embedded ? undefined : 'dialog'}
+        aria-modal={embedded ? undefined : true}
         aria-labelledby="datalink-dialog-title"
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
       >
-        <div className={styles.header}>
+        <div className={embedded ? styles.embeddedHeader : styles.header}>
           <h3 id="datalink-dialog-title" className={styles.title}>
             {getTitle()}
           </h3>
@@ -212,7 +214,7 @@ export function PiDataLinkFunctionDialog({
           </button>
         </div>
 
-        <div className={styles.body}>
+        <div className={embedded ? styles.embeddedBody : styles.body}>
           {functionType !== 'PITimeFilter' ? (
             <div className={styles.formRow}>
               <label className={styles.label} htmlFor="datalink-tag">
@@ -507,7 +509,7 @@ export function PiDataLinkFunctionDialog({
           </div>
         </div>
 
-        <div className={styles.footer}>
+        <div className={embedded ? styles.embeddedFooter : styles.footer}>
           <button type="button" className={styles.cancelButton} onClick={onClose}>
             Cancelar
           </button>
@@ -525,6 +527,43 @@ export function PiDataLinkFunctionDialog({
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({
+  embeddedShell: css({
+    flex: '0 0 auto',
+    borderBottom: '1px solid var(--border-color, #2b394a)',
+    background: 'var(--surface-primary, #111923)',
+  }),
+  embeddedDialog: css({
+    display: 'flex',
+    flexDirection: 'column',
+    color: 'var(--text-primary, #f1f2f5)',
+    background: 'var(--surface-primary, #111923)',
+  }),
+  embeddedHeader: css({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '10px 16px',
+    borderBottom: '1px solid var(--border-subtle, #2b394a)',
+    color: 'var(--text-primary, #f1f2f5)',
+  }),
+  embeddedBody: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    maxHeight: '330px',
+    padding: '14px 16px',
+    overflowY: 'auto',
+    background: 'var(--surface-primary, #111923)',
+    color: 'var(--text-primary, #f1f2f5)',
+  }),
+  embeddedFooter: css({
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    padding: '10px 16px',
+    borderTop: '1px solid var(--border-subtle, #2b394a)',
+    background: 'var(--surface-secondary, #18212d)',
+  }),
   dialogBackdrop: css({
     position: 'fixed',
     top: 0,

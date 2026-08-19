@@ -13,11 +13,12 @@ describe('LibraryPanel', () => {
 
     expect(screen.getByPlaceholderText('Pesquisar símbolos...')).toBeInTheDocument();
     expect(screen.getByText('Motores')).toBeInTheDocument();
-    expect(screen.getByTestId('library-symbol-PT002A_Option1')).toBeInTheDocument();
-    expect(screen.getByTestId('library-symbol-PV003B')).toBeInTheDocument();
+    expect(screen.queryByTestId('library-symbol-PT002A_Option1')).toBeNull();
+    expect(screen.queryByTestId('library-symbol-PV003B')).toBeNull();
+    expect(screen.getByRole('button', { name: /Instrumentação/ })).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.click(screen.getByRole('button', { name: /Instrumentação/ }));
-    expect(screen.queryByTestId('library-symbol-PT002A_Option1')).toBeNull();
+    expect(screen.getByTestId('library-symbol-PT002A_Option1')).toBeInTheDocument();
   });
 
   it('filtra símbolos sem remover as categorias', () => {
