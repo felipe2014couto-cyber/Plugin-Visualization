@@ -1491,14 +1491,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     align-items: center;
     gap: 4px;
-    background: var(--surface-primary, var(--panel-bg));
-    padding: 2px 6px;
-    border-radius: 4px;
+    background: var(--input-bg, var(--surface-primary));
+    padding: 3px 8px;
+    border-radius: 6px;
     border: 1px solid var(--border-color);
   `,
   toolbarDivider: css`
     width: 1px;
-    height: 16px;
+    height: 18px;
     background: var(--border-color);
     margin: 0 4px;
   `,
@@ -1506,37 +1506,52 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     padding: 0;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-primary);
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 3px;
+    border-radius: 4px;
     cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+
+    svg {
+      color: var(--text-primary);
+    }
 
     &:hover {
       background: var(--button-hover, var(--surface-secondary));
+      color: var(--text-primary);
     }
   `,
   formatButtonActive: css`
     background: var(--selection-bg) !important;
-    color: var(--accent) !important;
+    color: var(--accent-hover, var(--accent)) !important;
     border-color: var(--accent) !important;
+
+    svg {
+      color: var(--accent-hover, var(--accent)) !important;
+    }
   `,
   colorPickerLabel: css`
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     position: relative;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: bold;
     color: var(--text-primary);
-    border-radius: 3px;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+
+    svg {
+      color: var(--text-primary);
+    }
 
     &:hover {
       background: var(--button-hover, var(--surface-secondary));
@@ -1550,13 +1565,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
     cursor: pointer;
   `,
   decimalSelect: css`
-    height: 24px;
-    padding: 0 4px;
-    font-size: 11px;
+    height: 26px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--text-primary);
-    background: var(--input-bg, var(--panel-bg));
+    background: var(--button-bg, var(--surface-primary));
     border: 1px solid var(--border-color);
-    border-radius: 3px;
+    border-radius: 4px;
     outline: none;
     cursor: pointer;
   `,
@@ -1564,19 +1580,24 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 10px;
+    padding: 5px 12px;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text-primary);
     background: var(--button-bg);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+
+    svg {
+      color: var(--text-primary);
+    }
 
     &:hover {
       background: var(--button-hover);
       border-color: var(--accent);
+      color: var(--text-primary);
     }
   `,
   formulaBarRow: css`
@@ -1584,41 +1605,45 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     padding: 6px 12px;
     gap: 8px;
-    background: var(--surface-secondary, var(--panel-bg));
+    background: var(--surface-secondary, var(--panel-header-bg));
     border-bottom: 1px solid var(--border-color);
   `,
   activeCellBox: css`
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 48px;
-    height: 28px;
-    padding: 0 6px;
+    min-width: 54px;
+    height: 30px;
+    padding: 0 8px;
     font-family: monospace;
-    font-size: 12px;
-    font-weight: bold;
-    color: var(--accent);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent-hover, var(--accent));
     background: var(--input-bg, var(--panel-bg));
     border: 1px solid var(--border-color);
-    border-radius: 3px;
+    border-radius: 4px;
     user-select: none;
   `,
   formulaForm: css`
     display: flex;
     align-items: center;
     flex: 1;
-    height: 28px;
+    height: 30px;
     background: var(--input-bg, var(--panel-bg));
     border: 1px solid var(--border-color);
-    border-radius: 3px;
-    padding: 0 8px;
-    gap: 6px;
+    border-radius: 4px;
+    padding: 0 10px;
+    gap: 8px;
+
+    &:focus-within {
+      border-color: var(--accent);
+    }
   `,
   fxSymbol: css`
     font-style: italic;
-    font-weight: 600;
-    color: var(--text-secondary);
-    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 13px;
     user-select: none;
   `,
   formulaInput: css`
@@ -1627,8 +1652,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
     outline: none;
     background: transparent;
     color: var(--text-primary);
-    font-size: 12px;
+    font-size: 13px;
     font-family: inherit;
+
+    &::placeholder {
+      color: var(--text-muted);
+      opacity: 0.85;
+    }
   `,
   statusToast: css`
     padding: 4px 12px;
@@ -1666,9 +1696,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     z-index: 2;
     height: 24px;
     padding: 2px 4px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     background: var(--surface-secondary, var(--panel-header-bg));
     border-right: 1px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
@@ -1691,8 +1721,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   colHeaderSelected: css`
-    color: var(--accent) !important;
+    color: var(--accent-hover, var(--accent)) !important;
     background: var(--selection-bg) !important;
+    font-weight: 700;
   `,
   rowHeader: css`
     position: sticky;
@@ -1702,23 +1733,24 @@ const getStyles = (theme: GrafanaTheme2) => ({
     min-width: 42px;
     height: 24px;
     padding: 2px 4px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--text-secondary);
+    color: var(--text-primary);
     background: var(--surface-secondary, var(--panel-header-bg));
     border-right: 1px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
     text-align: center;
   `,
   rowHeaderSelected: css`
-    color: var(--accent) !important;
+    color: var(--accent-hover, var(--accent)) !important;
     background: var(--selection-bg) !important;
+    font-weight: 700;
   `,
   cell: css`
     position: relative;
     height: 24px;
     padding: 2px 6px;
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-primary);
     border-right: 1px solid var(--border-subtle, var(--border-color));
     border-bottom: 1px solid var(--border-subtle, var(--border-color));
@@ -1773,7 +1805,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     outline: none;
     background: var(--input-bg, var(--panel-bg));
     color: var(--text-primary);
-    font-size: 11px;
+    font-size: 12px;
     font-family: inherit;
   `,
   fillHandle: css`
