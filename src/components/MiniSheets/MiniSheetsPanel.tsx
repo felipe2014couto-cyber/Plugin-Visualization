@@ -20,6 +20,17 @@ import {
   type CellCoord,
 } from './miniSheetFormula';
 import { parsePiTime, formatDateTime } from './miniSheetTime';
+import {
+  SheetRange,
+  formatRangeAddress,
+  isCellInsideRanges,
+  isColumnSelected,
+  isRowSelected,
+  rangeFromCells,
+  rangeFromColumns,
+  rangeFromRows,
+  rangeSelectAll,
+} from './miniSheetRange';
 
 export interface CellData {
   rawValue: string; // The formula or raw entered string, e.g. '=PICurrVal("TAG")'
@@ -31,6 +42,8 @@ export interface CellData {
 const TOTAL_COLS = 20; // A to T
 const TOTAL_ROWS = 50; // 1 to 50
 
+type DragMode = 'cells' | 'cols' | 'rows';
+
 export interface MiniSheetsPanelProps {
   dataSourceSrv?: any;
 }
@@ -38,7 +51,16 @@ export interface MiniSheetsPanelProps {
 export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
   const styles = useStyles2(getStyles);
 
-  const [selectedCoord, setSelectedCoord] = useState<CellCoord>({ col: 0, row: 0 });
+  // Selection state
+  const [activeCell, setActiveCell] = useState<CellCoord>({ col: 0, row: 0 });
+  const [anchorCell, setAnchorCell] = useState<CellCoord>({ col: 0, row: 0 });
+  const anchorCellRef = useRef<CellCoord>({ col: 0, row: 0 });
+  anchorCellRef.current = anchorCell;
+
+  const [ranges, setRanges] = useState<SheetRange[]>([
+    { startCol: 0, startRow: 0, endCol: 0, endRow: 0 },
+  ]);
+
   const [cells, setCells] = useState<Map<string, CellData>>(() => new Map());
   const [formulaBarText, setFormulaBarText] = useState('');
   const [editingCellCoord, setEditingCellCoord] = useState<CellCoord | null>(null);
@@ -48,14 +70,35 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
   const cellsRef = useRef(cells);
   cellsRef.current = cells;
 
-  const selectedKey = `${selectedCoord.col},${selectedCoord.row}`;
-  const selectedAddress = formatCellAddress(selectedCoord);
+  // Pointer drag tracking
+  const dragModeRef = useRef<DragMode | null>(null);
+  const dragAnchorRef = useRef<{ col: number; row: number } | null>(null);
+  const isAppendingRangeRef = useRef<boolean>(false);
+  const baseRangesRef = useRef<SheetRange[]>([]);
 
-  // Sync formula bar when selected cell changes (unless currently editing formula bar)
+  const activeKey = `${activeCell.col},${activeCell.row}`;
+  const addressLabel = ranges.length > 0
+    ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS)
+    : formatCellAddress(activeCell);
+
+  // Sync formula bar when active cell changes (unless currently editing formula bar)
   useEffect(() => {
-    const currentCell = cells.get(selectedKey);
+    const currentCell = cells.get(activeKey);
     setFormulaBarText(currentCell?.rawValue ?? '');
-  }, [selectedKey, cells]);
+  }, [activeKey, cells]);
+
+  // Global pointer up to end selection drag
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      dragModeRef.current = null;
+      dragAnchorRef.current = null;
+      isAppendingRangeRef.current = false;
+    };
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    return () => {
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+    };
+  }, []);
 
   /**
    * Helper to resolve a PI Point by name using existing searchPiPointsWithStatus
@@ -345,35 +388,29 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
             return;
           }
 
-          // Check if any occupied cell in spill area has manual data not originating from this cell
+          // Apply Spill or set #SPILL! if collision
           let hasCollision = false;
-          const currentMap = cellsRef.current;
-          for (let r = coord.row; r <= neededEndRow; r++) {
-            for (let c = neededCol1; c <= neededCol2; c++) {
-              if (r === coord.row && c === coord.col) {
-                continue;
+          setCells((prev) => {
+            for (let r = coord.row; r <= neededEndRow; r++) {
+              for (let c = neededCol1; c <= neededCol2; c++) {
+                if (r === coord.row && c === coord.col) {
+                  continue;
+                }
+                const existing = prev.get(`${c},${r}`);
+                if (existing && !existing.spilledFrom && (existing.rawValue?.trim() || existing.displayValue?.trim())) {
+                  hasCollision = true;
+                  break;
+                }
               }
-              const existing = currentMap.get(`${c},${r}`);
-              if (existing && !existing.spilledFrom && existing.rawValue.trim()) {
-                hasCollision = true;
-                break;
-              }
+              if (hasCollision) break;
             }
-            if (hasCollision) break;
-          }
 
-          if (hasCollision) {
-            setCells((prev) => {
-              const next = new Map(prev);
+            const next = new Map(prev);
+            if (hasCollision) {
               next.set(key, { rawValue, displayValue: '#SPILL!' });
               return next;
-            });
-            return;
-          }
+            }
 
-          // Apply Spill
-          setCells((prev) => {
-            const next = new Map(prev);
             const spillTargets: string[] = [];
 
             // Set origin cell
@@ -462,22 +499,178 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
     setStatusMessage('');
   }, [computeCell]);
 
-  const handleCellSelect = (col: number, row: number) => {
-    setSelectedCoord({ col, row });
+  // Pointer event handlers for Cell Selection & Dragging
+  const handleCellPointerDown = (col: number, row: number, e: React.PointerEvent) => {
+    if (editingCellCoord) {
+      return;
+    }
+    const isMulti = e.ctrlKey || e.metaKey;
+    const isShift = e.shiftKey;
+
+    if (isShift) {
+      const currentAnchor = anchorCellRef.current;
+      const newRange = rangeFromCells(currentAnchor, { col, row });
+      setRanges((prev) => {
+        if (prev.length <= 1) {
+          return [newRange];
+        }
+        return [...prev.slice(0, prev.length - 1), newRange];
+      });
+      return;
+    }
+
+    if (isMulti) {
+      dragModeRef.current = 'cells';
+      dragAnchorRef.current = { col, row };
+      isAppendingRangeRef.current = true;
+      baseRangesRef.current = ranges;
+      setActiveCell({ col, row });
+      setAnchorCell({ col, row });
+      setRanges([...ranges, rangeFromCells({ col, row }, { col, row })]);
+    } else {
+      dragModeRef.current = 'cells';
+      dragAnchorRef.current = { col, row };
+      isAppendingRangeRef.current = false;
+      baseRangesRef.current = [];
+      setActiveCell({ col, row });
+      setAnchorCell({ col, row });
+      setRanges([rangeFromCells({ col, row }, { col, row })]);
+    }
+  };
+
+  const handleCellPointerEnter = (col: number, row: number) => {
+    if (dragModeRef.current !== 'cells' || !dragAnchorRef.current) {
+      return;
+    }
+    const currentRange = rangeFromCells(dragAnchorRef.current, { col, row });
+    if (isAppendingRangeRef.current) {
+      setRanges([...baseRangesRef.current, currentRange]);
+    } else {
+      setRanges([currentRange]);
+    }
+  };
+
+  // Column Header selection
+  const handleColHeaderPointerDown = (colIndex: number, e: React.PointerEvent) => {
     setEditingCellCoord(null);
+    const isMulti = e.ctrlKey || e.metaKey;
+    const isShift = e.shiftKey;
+
+    if (isShift) {
+      const currentAnchor = anchorCellRef.current;
+      const newRange = rangeFromColumns(currentAnchor.col, colIndex, TOTAL_ROWS);
+      setRanges((prev) => {
+        if (prev.length <= 1) {
+          return [newRange];
+        }
+        return [...prev.slice(0, prev.length - 1), newRange];
+      });
+      return;
+    }
+
+    const colRange = rangeFromColumns(colIndex, colIndex, TOTAL_ROWS);
+    if (isMulti) {
+      dragModeRef.current = 'cols';
+      dragAnchorRef.current = { col: colIndex, row: 0 };
+      isAppendingRangeRef.current = true;
+      baseRangesRef.current = ranges;
+      setActiveCell({ col: colIndex, row: 0 });
+      setAnchorCell({ col: colIndex, row: 0 });
+      setRanges([...ranges, colRange]);
+    } else {
+      dragModeRef.current = 'cols';
+      dragAnchorRef.current = { col: colIndex, row: 0 };
+      isAppendingRangeRef.current = false;
+      baseRangesRef.current = [];
+      setActiveCell({ col: colIndex, row: 0 });
+      setAnchorCell({ col: colIndex, row: 0 });
+      setRanges([colRange]);
+    }
+  };
+
+  const handleColHeaderPointerEnter = (colIndex: number) => {
+    if (dragModeRef.current !== 'cols' || !dragAnchorRef.current) {
+      return;
+    }
+    const currentRange = rangeFromColumns(dragAnchorRef.current.col, colIndex, TOTAL_ROWS);
+    if (isAppendingRangeRef.current) {
+      setRanges([...baseRangesRef.current, currentRange]);
+    } else {
+      setRanges([currentRange]);
+    }
+  };
+
+  // Row Header selection
+  const handleRowHeaderPointerDown = (rowIndex: number, e: React.PointerEvent) => {
+    setEditingCellCoord(null);
+    const isMulti = e.ctrlKey || e.metaKey;
+    const isShift = e.shiftKey;
+
+    if (isShift) {
+      const currentAnchor = anchorCellRef.current;
+      const newRange = rangeFromRows(currentAnchor.row, rowIndex, TOTAL_COLS);
+      setRanges((prev) => {
+        if (prev.length <= 1) {
+          return [newRange];
+        }
+        return [...prev.slice(0, prev.length - 1), newRange];
+      });
+      return;
+    }
+
+    const rowRange = rangeFromRows(rowIndex, rowIndex, TOTAL_COLS);
+    if (isMulti) {
+      dragModeRef.current = 'rows';
+      dragAnchorRef.current = { col: 0, row: rowIndex };
+      isAppendingRangeRef.current = true;
+      baseRangesRef.current = ranges;
+      setActiveCell({ col: 0, row: rowIndex });
+      setAnchorCell({ col: 0, row: rowIndex });
+      setRanges([...ranges, rowRange]);
+    } else {
+      dragModeRef.current = 'rows';
+      dragAnchorRef.current = { col: 0, row: rowIndex };
+      isAppendingRangeRef.current = false;
+      baseRangesRef.current = [];
+      setActiveCell({ col: 0, row: rowIndex });
+      setAnchorCell({ col: 0, row: rowIndex });
+      setRanges([rowRange]);
+    }
+  };
+
+  const handleRowHeaderPointerEnter = (rowIndex: number) => {
+    if (dragModeRef.current !== 'rows' || !dragAnchorRef.current) {
+      return;
+    }
+    const currentRange = rangeFromRows(dragAnchorRef.current.row, rowIndex, TOTAL_COLS);
+    if (isAppendingRangeRef.current) {
+      setRanges([...baseRangesRef.current, currentRange]);
+    } else {
+      setRanges([currentRange]);
+    }
+  };
+
+  // Select all corner
+  const handleSelectAll = () => {
+    setEditingCellCoord(null);
+    setActiveCell({ col: 0, row: 0 });
+    setAnchorCell({ col: 0, row: 0 });
+    setRanges([rangeSelectAll(TOTAL_COLS, TOTAL_ROWS)]);
   };
 
   const handleCellDoubleClick = (col: number, row: number) => {
     const key = `${col},${row}`;
     const cell = cells.get(key);
-    setSelectedCoord({ col, row });
+    setActiveCell({ col, row });
+    setAnchorCell({ col, row });
+    setRanges([rangeFromCells({ col, row }, { col, row })]);
     setEditingCellCoord({ col, row });
     setEditingCellText(cell?.rawValue ?? '');
   };
 
   const handleFormulaBarSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    computeCell(selectedCoord, formulaBarText);
+    computeCell(activeCell, formulaBarText);
   };
 
   const handleCellEditSubmit = (col: number, row: number, text: string) => {
@@ -508,8 +701,8 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
 
       {/* Formula Bar and Active Cell Box */}
       <div className={styles.formulaBarRow}>
-        <div className={styles.activeCellBox} data-testid="mini-sheets-active-cell" title="Célula ativa">
-          {selectedAddress}
+        <div className={styles.activeCellBox} data-testid="mini-sheets-active-cell" title="Endereço da seleção">
+          {addressLabel}
         </div>
         <form className={styles.formulaForm} onSubmit={handleFormulaBarSubmit}>
           <span className={styles.fxSymbol}>fx</span>
@@ -530,64 +723,92 @@ export function MiniSheetsPanel({ dataSourceSrv }: MiniSheetsPanelProps) {
         <table className={styles.table}>
           <thead>
             <tr>
-              <th className={styles.cornerHeader} />
-              {Array.from({ length: TOTAL_COLS }).map((_, cIndex) => (
-                <th
-                  key={cIndex}
-                  className={`${styles.colHeader} ${selectedCoord.col === cIndex ? styles.colHeaderSelected : ''}`}
-                >
-                  {colIndexToLetter(cIndex)}
-                </th>
-              ))}
+              <th
+                className={styles.cornerHeader}
+                data-testid="mini-sheets-select-all"
+                title="Selecionar toda a planilha"
+                onClick={handleSelectAll}
+              />
+              {Array.from({ length: TOTAL_COLS }).map((_, cIndex) => {
+                const isColSel = isColumnSelected(cIndex, ranges);
+                return (
+                  <th
+                    key={cIndex}
+                    className={`${styles.colHeader} ${isColSel ? styles.colHeaderSelected : ''}`}
+                    data-testid={`mini-sheets-col-header-${colIndexToLetter(cIndex)}`}
+                    onClick={(e) => handleColHeaderPointerDown(cIndex, e as any)}
+                    onPointerDown={(e) => handleColHeaderPointerDown(cIndex, e)}
+                    onPointerEnter={() => handleColHeaderPointerEnter(cIndex)}
+                  >
+                    {colIndexToLetter(cIndex)}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: TOTAL_ROWS }).map((_, rIndex) => (
-              <tr key={rIndex}>
-                <th className={`${styles.rowHeader} ${selectedCoord.row === rIndex ? styles.rowHeaderSelected : ''}`}>
-                  {rIndex + 1}
-                </th>
-                {Array.from({ length: TOTAL_COLS }).map((_, cIndex) => {
-                  const cellKey = `${cIndex},${rIndex}`;
-                  const cell = cells.get(cellKey);
-                  const isSelected = selectedCoord.col === cIndex && selectedCoord.row === rIndex;
-                  const isEditing = editingCellCoord?.col === cIndex && editingCellCoord?.row === rIndex;
-                  const isSpilled = Boolean(cell?.spilledFrom);
-                  const isError = cell?.displayValue?.startsWith('#');
+            {Array.from({ length: TOTAL_ROWS }).map((_, rIndex) => {
+              const isRowSel = isRowSelected(rIndex, ranges);
+              return (
+                <tr key={rIndex}>
+                  <th
+                    className={`${styles.rowHeader} ${isRowSel ? styles.rowHeaderSelected : ''}`}
+                    data-testid={`mini-sheets-row-header-${rIndex + 1}`}
+                    onClick={(e) => handleRowHeaderPointerDown(rIndex, e as any)}
+                    onPointerDown={(e) => handleRowHeaderPointerDown(rIndex, e)}
+                    onPointerEnter={() => handleRowHeaderPointerEnter(rIndex)}
+                  >
+                    {rIndex + 1}
+                  </th>
+                  {Array.from({ length: TOTAL_COLS }).map((_, cIndex) => {
+                    const cellKey = `${cIndex},${rIndex}`;
+                    const cell = cells.get(cellKey);
+                    const isActive = activeCell.col === cIndex && activeCell.row === rIndex;
+                    const isInsideSelection = isCellInsideRanges(cIndex, rIndex, ranges);
+                    const isEditing = editingCellCoord?.col === cIndex && editingCellCoord?.row === rIndex;
+                    const isSpilled = Boolean(cell?.spilledFrom);
+                    const isError = cell?.displayValue?.startsWith('#');
 
-                  return (
-                    <td
-                      key={cIndex}
-                      className={`${styles.cell} ${isSelected ? styles.cellSelected : ''} ${
-                        isSpilled ? styles.cellSpilled : ''
-                      } ${isError ? styles.cellError : ''}`}
-                      data-testid={`mini-sheets-cell-${colIndexToLetter(cIndex)}${rIndex + 1}`}
-                      onClick={() => handleCellSelect(cIndex, rIndex)}
-                      onDoubleClick={() => handleCellDoubleClick(cIndex, rIndex)}
-                    >
-                      {isEditing ? (
-                        <input
-                          autoFocus
-                          className={styles.cellInlineInput}
-                          value={editingCellText}
-                          onChange={(e) => setEditingCellText(e.target.value)}
-                          onBlur={() => handleCellEditSubmit(cIndex, rIndex, editingCellText)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              handleCellEditSubmit(cIndex, rIndex, editingCellText);
-                            } else if (e.key === 'Escape') {
-                              setEditingCellCoord(null);
-                            }
-                          }}
-                        />
-                      ) : (
-                        <span className={styles.cellText}>{cell?.displayValue ?? ''}</span>
-                      )}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                    return (
+                      <td
+                        key={cIndex}
+                        className={`${styles.cell} ${
+                          isActive
+                            ? styles.cellActive
+                            : isInsideSelection
+                            ? styles.cellInRange
+                            : ''
+                        } ${isSpilled ? styles.cellSpilled : ''} ${isError ? styles.cellError : ''}`}
+                        data-testid={`mini-sheets-cell-${colIndexToLetter(cIndex)}${rIndex + 1}`}
+                        onClick={(e) => handleCellPointerDown(cIndex, rIndex, e as any)}
+                        onPointerDown={(e) => handleCellPointerDown(cIndex, rIndex, e)}
+                        onPointerEnter={() => handleCellPointerEnter(cIndex, rIndex)}
+                        onDoubleClick={() => handleCellDoubleClick(cIndex, rIndex)}
+                      >
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            className={styles.cellInlineInput}
+                            value={editingCellText}
+                            onChange={(e) => setEditingCellText(e.target.value)}
+                            onBlur={() => handleCellEditSubmit(cIndex, rIndex, editingCellText)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleCellEditSubmit(cIndex, rIndex, editingCellText);
+                              } else if (e.key === 'Escape') {
+                                setEditingCellCoord(null);
+                              }
+                            }}
+                          />
+                        ) : (
+                          <span className={styles.cellText}>{cell?.displayValue ?? ''}</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -821,10 +1042,20 @@ const getStyles = (theme: GrafanaTheme2) => ({
     text-overflow: ellipsis;
     background: var(--surface-primary, var(--panel-bg));
     cursor: cell;
+    user-select: none;
 
     &:hover {
       background: var(--button-hover, var(--surface-secondary));
     }
+  `,
+  cellActive: css`
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: var(--selection-bg) !important;
+    z-index: 1;
+  `,
+  cellInRange: css`
+    background: var(--selection-bg) !important;
   `,
   cellSelected: css`
     outline: 2px solid var(--accent);

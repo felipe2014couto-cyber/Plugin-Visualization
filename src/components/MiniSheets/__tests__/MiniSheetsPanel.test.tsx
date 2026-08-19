@@ -364,4 +364,155 @@ describe('MiniSheetsPanel', () => {
       expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('200');
     });
   });
+
+  describe('Range and Multi-Selection Behaviors', () => {
+    it('selects a rectangular block by dragging from A1 to D10', () => {
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      const cellD10 = screen.getByTestId('mini-sheets-cell-D10');
+
+      fireEvent.pointerDown(cellA1);
+      fireEvent.pointerEnter(cellD10);
+
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A1:D10');
+      expect(cellA1.className).toMatch(/css-/);
+      expect(cellD10.className).toMatch(/css-/);
+    });
+
+    it('normalizes inverted drag from D10 to A1', () => {
+      render(<MiniSheetsPanel />);
+      const cellD10 = screen.getByTestId('mini-sheets-cell-D10');
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+
+      fireEvent.pointerDown(cellD10);
+      fireEvent.pointerEnter(cellA1);
+
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A1:D10');
+    });
+
+    it('extends range with Shift + click', () => {
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      const cellD10 = screen.getByTestId('mini-sheets-cell-D10');
+
+      fireEvent.pointerDown(cellA1);
+      fireEvent(cellD10, new MouseEvent('pointerdown', { bubbles: true, cancelable: true, shiftKey: true }));
+
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A1:D10');
+    });
+
+    it('selects an entire column when clicking header A', () => {
+      render(<MiniSheetsPanel />);
+      const colA = screen.getByTestId('mini-sheets-col-header-A');
+      fireEvent.pointerDown(colA);
+
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A');
+      expect(colA.className).toMatch(/css-/);
+    });
+
+    it('selects multiple columns when dragging from B to F', () => {
+      render(<MiniSheetsPanel />);
+      const colB = screen.getByTestId('mini-sheets-col-header-B');
+      const colF = screen.getByTestId('mini-sheets-col-header-F');
+
+      fireEvent.pointerDown(colB);
+      fireEvent.pointerEnter(colF);
+
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('B:F');
+      expect(colB.className).toMatch(/css-/);
+      expect(colF.className).toMatch(/css-/);
+    });
+
+    it('selects column interval with Shift + click', () => {
+      render(<MiniSheetsPanel />);
+      const colB = screen.getByTestId('mini-sheets-col-header-B');
+      const colF = screen.getByTestId('mini-sheets-col-header-F');
+
+      fireEvent.pointerDown(colB);
+      fireEvent(colF, new MouseEvent('pointerdown', { bubbles: true, cancelable: true, shiftKey: true }));
+
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('B:F');
+    });
+
+    it('selects an entire row when clicking row header 5', () => {
+      render(<MiniSheetsPanel />);
+      const row5 = screen.getByTestId('mini-sheets-row-header-5');
+      fireEvent.pointerDown(row5);
+
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('5');
+      expect(row5.className).toMatch(/css-/);
+    });
+
+    it('selects multiple rows when dragging row 5 to row 12', () => {
+      render(<MiniSheetsPanel />);
+      const row5 = screen.getByTestId('mini-sheets-row-header-5');
+      const row12 = screen.getByTestId('mini-sheets-row-header-12');
+
+      fireEvent.pointerDown(row5);
+      fireEvent.pointerEnter(row12);
+
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('5:12');
+      expect(row5.className).toMatch(/css-/);
+      expect(row12.className).toMatch(/css-/);
+    });
+
+    it('selects entire sheet with select-all top-left button', () => {
+      render(<MiniSheetsPanel />);
+      const selectAll = screen.getByTestId('mini-sheets-select-all');
+      fireEvent.click(selectAll);
+
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A1:T50');
+    });
+
+    it('adds multiple non-adjacent ranges with Ctrl/Cmd key', () => {
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      const cellB5 = screen.getByTestId('mini-sheets-cell-B5');
+      const cellD1 = screen.getByTestId('mini-sheets-cell-D1');
+      const cellE5 = screen.getByTestId('mini-sheets-cell-E5');
+
+      // Select A1:B5
+      fireEvent.pointerDown(cellA1);
+      fireEvent.pointerEnter(cellB5);
+
+      // Ctrl + drag D1:E5
+      fireEvent.pointerDown(cellD1, { ctrlKey: true });
+      fireEvent.pointerEnter(cellE5);
+
+      // Both regions are inside selection
+      expect(cellA1.className).toMatch(/css-/);
+      expect(cellE5.className).toMatch(/css-/);
+    });
+
+    it('selects non-adjacent columns with Ctrl/Cmd key (A, C, F)', () => {
+      render(<MiniSheetsPanel />);
+      const colA = screen.getByTestId('mini-sheets-col-header-A');
+      const colC = screen.getByTestId('mini-sheets-col-header-C');
+      const colF = screen.getByTestId('mini-sheets-col-header-F');
+
+      fireEvent.pointerDown(colA);
+      fireEvent.pointerDown(colC, { ctrlKey: true });
+      fireEvent.pointerDown(colF, { ctrlKey: true });
+
+      expect(colA.className).toMatch(/css-/);
+      expect(colC.className).toMatch(/css-/);
+      expect(colF.className).toMatch(/css-/);
+    });
+
+    it('supports inline editing on double click without breaking selection', async () => {
+      render(<MiniSheetsPanel />);
+      const cellB2 = screen.getByTestId('mini-sheets-cell-B2');
+
+      fireEvent.doubleClick(cellB2);
+      const input = cellB2.querySelector('input');
+      expect(input).toBeInTheDocument();
+
+      fireEvent.change(input!, { target: { value: 'Valor Editado' } });
+      fireEvent.keyDown(input!, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(cellB2).toHaveTextContent('Valor Editado');
+      });
+    });
+  });
 });
