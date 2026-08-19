@@ -266,7 +266,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
    * Calculates a single cell and updates state, handling PI and Spill logic.
    */
   const computeCell = useCallback(
-    async (coord: CellCoord, rawValue: string) => {
+    async (coord: CellCoord, rawValue: string, baseMap?: Map<string, CellData>) => {
       const key = `${coord.col},${coord.row}`;
       const address = formatCellAddress(coord);
       const trimmed = rawValue.trim();
@@ -275,7 +275,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
 
       // Clear any previous spill targets created by this cell
       setCells((prev) => {
-        const next = new Map(prev);
+        const next = new Map(baseMap ?? prev);
         const prevCell = next.get(key);
         if (prevCell?.spillTargetAddresses) {
           prevCell.spillTargetAddresses.forEach((targetAddr) => {
@@ -310,6 +310,7 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
       });
 
       if (finalMapToCommit) {
+        cellsRef.current = finalMapToCommit;
         commitStateToHistory(finalMapToCommit);
       }
 
@@ -632,15 +633,17 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
 
   const recomputeAllFormulas = useCallback(
     (cellMap: Map<string, CellData>) => {
-      setCells(evaluateStaticFormulas(cellMap).nextMap);
-      const currentCells = Array.from(cellMap.entries());
+      const evaluated = evaluateStaticFormulas(cellMap).nextMap;
+      setCells(evaluated);
+      cellsRef.current = evaluated;
+      const currentCells = Array.from(evaluated.entries());
       for (const [key, cell] of currentCells) {
         if (cell.spilledFrom) continue;
         const [colStr, rowStr] = key.split(',');
         const col = parseInt(colStr, 10);
         const row = parseInt(rowStr, 10);
         if (!isNaN(col) && !isNaN(row) && cell.rawValue && cell.rawValue.trim().startsWith('=')) {
-          computeCell({ col, row }, cell.rawValue);
+          computeCell({ col, row }, cell.rawValue, evaluated);
         }
       }
     },
@@ -670,7 +673,6 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     const next = undoMiniSheetsHistory(historyRef.current);
     setHistory(next);
     const deserialized = deserializeMiniSheets(next.present);
-    setCells(deserialized.cells);
     setColWidths(deserialized.colWidths);
     recomputeAllFormulas(deserialized.cells);
     const doc = serializeMiniSheets(deserialized.cells, deserialized.colWidths, TOTAL_COLS, TOTAL_ROWS);
@@ -686,7 +688,6 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     const next = redoMiniSheetsHistory(historyRef.current);
     setHistory(next);
     const deserialized = deserializeMiniSheets(next.present);
-    setCells(deserialized.cells);
     setColWidths(deserialized.colWidths);
     recomputeAllFormulas(deserialized.cells);
     const doc = serializeMiniSheets(deserialized.cells, deserialized.colWidths, TOTAL_COLS, TOTAL_ROWS);
@@ -694,6 +695,43 @@ export function MiniSheetsPanel({ dataSourceSrv, initialDocument, onChange }: Mi
     initialDocRef.current = doc;
     onChangeRef.current?.(doc);
   }, [recomputeAllFormulas]);
+
+  const editingCellCoordRef = useRef(editingCellCoord);
+  editingCellCoordRef.current = editingCellCoord;
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
+      if (targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select') {
+        return;
+      }
+      if (editingCellCoordRef.current) {
+        return;
+      }
+
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+      if (isCtrlOrCmd && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      }
+
+      if (isCtrlOrCmd && (e.key === 'y' || e.key === 'Y')) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [handleRedo, handleUndo]);
 
   // Sync state if initialDocument changes externally (e.g. loading a saved dashboard)
   const initialDocRef = useRef(initialDocument);
