@@ -11,6 +11,8 @@ export interface TextProperties extends Record<string, unknown> {
   fontSize: number;
   textAlign: TextAlign;
   rotation: number;
+  linkUrl?: string;
+  openInNewTab?: boolean;
 }
 export type TextElement = DisplayElement<typeof TEXT_TYPE, TextProperties>;
 export const DEFAULT_TEXT_PROPERTIES: TextProperties = { text: 'Texto', color: '#ffffff', fontSize: 24, textAlign: 'center', rotation: 0 };
