@@ -424,6 +424,39 @@ export function evaluateMathExpression(
   const cellRefRegex = /\b([A-Za-z]+[0-9]+)\b/g;
   let refMatch: RegExpExecArray | null;
   const matchedTokens: string[] = [];
+  const variables = new Map<string, number>();
+  let aggregateError: string | undefined;
+
+  // Aggregate calls can participate in a larger arithmetic expression, for
+  // example =SUM(A1:A10)+B1 or =AVERAGE(A1:A10)*2. Resolve them first so the
+  // arithmetic parser still receives only safe numeric tokens.
+  const aggregateRegex = /\b(SUM|AVERAGE|MIN|MAX)\s*\(\s*([A-Za-z]+\d+)\s*:\s*([A-Za-z]+\d+)\s*\)/gi;
+  let aggregateIndex = 0;
+  resolved = resolved.replace(aggregateRegex, (_match, funcName: string, start: string, end: string) => {
+    const startCoord = parseCellAddress(start);
+    const endCoord = parseCellAddress(end);
+    if (!startCoord || !endCoord) {
+      aggregateError = '#REF!';
+      return '0';
+    }
+    const aggregate = evaluateAggregate(
+      funcName.toUpperCase() as 'SUM' | 'AVERAGE' | 'MIN' | 'MAX',
+      getRangeCells(startCoord, endCoord),
+      getCellValue,
+      maxCol,
+      maxRow,
+    );
+    if (aggregate.status === 'error') {
+      aggregateError = aggregate.error;
+      return '0';
+    }
+    const variable = `__aggregate_${aggregateIndex++}`;
+    variables.set(variable, aggregate.value);
+    return variable;
+  });
+  if (aggregateError) {
+    return { status: 'error', error: aggregateError };
+  }
 
   while ((refMatch = cellRefRegex.exec(expression)) !== null) {
     matchedTokens.push(refMatch[1]);
@@ -432,7 +465,6 @@ export function evaluateMathExpression(
   // Sort longest first to avoid partial replacements
   matchedTokens.sort((a, b) => b.length - a.length);
 
-  const variables = new Map<string, number>();
   for (let i = 0; i < matchedTokens.length; i++) {
     const token = matchedTokens[i];
     const coord = parseCellAddress(token);
@@ -551,7 +583,7 @@ function parseArithmeticExpression(
       cursor++;
       return value;
     }
-    const variable = expression.slice(cursor).match(/^__cell_\d+/)?.[0];
+    const variable = expression.slice(cursor).match(/^__(?:cell|aggregate)_\d+/)?.[0];
     if (variable) {
       cursor += variable.length;
       const value = variables.get(variable);
@@ -584,7 +616,7 @@ function parseArithmeticExpression(
   };
 
   const parseMultiplicative = (): number => {
-    let value = parseUnary();
+    let value = parsePower();
     while (true) {
       skipWhitespace();
       const op = expression[cursor];
@@ -592,7 +624,7 @@ function parseArithmeticExpression(
         break;
       }
       cursor++;
-      const right = parseUnary();
+      const right = parsePower();
       if (op === '/' && right === 0) {
         throw new Error('Divisão por zero.');
       }
@@ -600,6 +632,17 @@ function parseArithmeticExpression(
     }
     return value;
   };
+
+  function parsePower(): number {
+    let value = parseUnary();
+    skipWhitespace();
+    if (expression[cursor] === '^') {
+      cursor++;
+      // Recursive parsing makes exponentiation right-associative: 2^3^2.
+      value = value ** parsePower();
+    }
+    return value;
+  }
 
   const parseAdditive = (): number => {
     let value = parseMultiplicative();

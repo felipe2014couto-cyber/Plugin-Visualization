@@ -74,7 +74,7 @@ export interface CellData {
 const TOTAL_COLS = 20; // A to T
 const TOTAL_ROWS = 50; // 1 to 50
 
-type DragMode = 'cells' | 'cols' | 'rows' | 'autofill';
+type DragMode = 'cells' | 'cols' | 'rows' | 'autofill' | 'formula';
 
 export interface MiniSheetsPanelProps {
   dataSourceSrv?: any;
@@ -115,6 +115,17 @@ export function MiniSheetsPanel({
   const [formulaBarText, setFormulaBarText] = useState('');
   const [editingCellCoord, setEditingCellCoord] = useState<CellCoord | null>(null);
   const [editingCellText, setEditingCellText] = useState('');
+  const [formulaEditMode, setFormulaEditMode] = useState(false);
+  const [formulaTargetCell, setFormulaTargetCell] = useState<CellCoord | null>(null);
+  const [formulaReferenceRange, setFormulaReferenceRange] = useState<SheetRange | null>(null);
+  const formulaTargetRef = useRef<CellCoord | null>(null);
+  const formulaSessionRef = useRef(false);
+  const formulaCursorRef = useRef({ start: 0, end: 0 });
+  const formulaPointerRef = useRef(false);
+  const formulaPointerHandledRef = useRef(false);
+  const formulaRangeAnchorRef = useRef<CellCoord | null>(null);
+  const formulaBarInputRef = useRef<HTMLInputElement>(null);
+  const inlineFormulaInputRef = useRef<HTMLInputElement>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [activeDataLinkDialog, setActiveDataLinkDialog] = useState<PiDataLinkFunctionType | null>(null);
   const [dataLinkMenuHost, setDataLinkMenuHost] = useState<HTMLElement | null>(null);
@@ -199,6 +210,44 @@ export function MiniSheetsPanel({
   const addressLabel = ranges.length > 0
     ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS)
     : formatCellAddress(activeCell);
+
+  const beginFormulaEdit = useCallback((initialText?: string, target: CellCoord = activeCell) => {
+    const text = initialText ?? formulaBarText;
+    formulaTargetRef.current = target;
+    formulaSessionRef.current = text.trimStart().startsWith('=');
+    setFormulaTargetCell(target);
+    setFormulaEditMode(text.trimStart().startsWith('='));
+    setFormulaReferenceRange(null);
+  }, [activeCell, formulaBarText]);
+
+  const insertFormulaReference = useCallback((range: SheetRange) => {
+    const target = formulaTargetRef.current ?? activeCell;
+    const reference = formatRangeAddress(range, TOTAL_COLS, TOTAL_ROWS);
+    const source = editingCellCoord && editingCellCoord.col === target.col && editingCellCoord.row === target.row
+      ? editingCellText
+      : formulaBarText;
+    const cursor = formulaCursorRef.current;
+    const start = Math.max(0, Math.min(cursor.start, source.length));
+    const end = Math.max(start, Math.min(cursor.end, source.length));
+    const next = `${source.slice(0, start)}${reference}${source.slice(end)}`;
+    const nextCursor = start + reference.length;
+    formulaCursorRef.current = { start: nextCursor, end: nextCursor };
+    setFormulaEditMode(true);
+    setFormulaReferenceRange(range);
+    setFormulaBarText(next);
+    if (editingCellCoord && editingCellCoord.col === target.col && editingCellCoord.row === target.row) {
+      setEditingCellText(next);
+    }
+    setTimeout(() => {
+      if (!formulaSessionRef.current) return;
+      const input = editingCellCoord && editingCellCoord.col === target.col && editingCellCoord.row === target.row
+        ? inlineFormulaInputRef.current
+        : formulaBarInputRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
+  }, [activeCell, editingCellCoord, editingCellText, formulaBarText]);
 
   // Sync formula bar when active cell changes (unless currently editing formula bar)
   useEffect(() => {
@@ -1455,6 +1504,16 @@ export function MiniSheetsPanel({
 
   // Pointer event handlers for Cell Selection & Dragging
   const handleCellPointerDown = (col: number, row: number, e: React.PointerEvent) => {
+    if (formulaEditMode && formulaSessionRef.current && formulaTargetRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      formulaPointerRef.current = true;
+      formulaPointerHandledRef.current = false;
+      formulaRangeAnchorRef.current = { col, row };
+      dragModeRef.current = 'formula';
+      setFormulaReferenceRange(rangeFromCells({ col, row }, { col, row }));
+      return;
+    }
     if (editingCellCoord) {
       if (editingCellCoord.col !== col || editingCellCoord.row !== row) {
         handleCellEditSubmit(editingCellCoord.col, editingCellCoord.row, editingCellText);
@@ -1506,6 +1565,11 @@ export function MiniSheetsPanel({
       return;
     }
 
+    if (dragModeRef.current === 'formula' && formulaRangeAnchorRef.current) {
+      setFormulaReferenceRange(rangeFromCells(formulaRangeAnchorRef.current, { col, row }));
+      return;
+    }
+
     // Autofill Drag
     if (dragModeRef.current === 'autofill' && ranges.length > 0) {
       const primary = normalizeRange(ranges[ranges.length - 1]);
@@ -1543,6 +1607,32 @@ export function MiniSheetsPanel({
     } else {
       setRanges([currentRange]);
     }
+  };
+
+  const handleCellPointerUp = (col: number, row: number, e: React.PointerEvent) => {
+    if (!formulaEditMode || !formulaSessionRef.current || !formulaTargetRef.current || !formulaPointerRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const range = formulaReferenceRange ?? rangeFromCells({ col, row }, { col, row });
+    formulaPointerRef.current = false;
+    formulaPointerHandledRef.current = true;
+    dragModeRef.current = null;
+    formulaRangeAnchorRef.current = null;
+    insertFormulaReference(range);
+  };
+
+  const handleCellClick = (col: number, row: number, e: React.MouseEvent) => {
+    if (formulaEditMode && formulaPointerHandledRef.current) {
+      formulaPointerHandledRef.current = false;
+      return;
+    }
+    if (formulaEditMode && formulaSessionRef.current && formulaTargetRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      insertFormulaReference(rangeFromCells({ col, row }, { col, row }));
+      return;
+    }
+    handleCellPointerDown(col, row, e as unknown as React.PointerEvent);
   };
 
   // Fill Handle Pointer Down
@@ -1778,7 +1868,13 @@ export function MiniSheetsPanel({
 
   const handleFormulaBarSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    computeCell(activeCell, formulaBarText);
+    const target = formulaTargetRef.current ?? activeCell;
+    setFormulaEditMode(false);
+    formulaSessionRef.current = false;
+    setFormulaReferenceRange(null);
+    formulaTargetRef.current = null;
+    setFormulaTargetCell(null);
+    computeCell(target, formulaBarText);
   };
 
   const handleCellEditSubmit = (
@@ -1788,6 +1884,14 @@ export function MiniSheetsPanel({
     moveDirection?: 'down' | 'right'
   ) => {
     setEditingCellCoord(null);
+    const target = formulaTargetRef.current;
+    if (target && target.col === col && target.row === row) {
+      setFormulaEditMode(false);
+      formulaSessionRef.current = false;
+      setFormulaReferenceRange(null);
+      formulaTargetRef.current = null;
+      setFormulaTargetCell(null);
+    }
     computeCell({ col, row }, text);
     if (moveDirection === 'down') {
       const nextRow = Math.min(TOTAL_ROWS - 1, row + 1);
@@ -1859,6 +1963,13 @@ export function MiniSheetsPanel({
       const cell = cells.get(activeKey);
       setEditingCellCoord(activeCell);
       setEditingCellText(cell?.rawValue ?? '');
+      if (cell?.rawValue?.trimStart().startsWith('=')) {
+        formulaTargetRef.current = activeCell;
+        setFormulaTargetCell(activeCell);
+        setFormulaEditMode(true);
+        formulaSessionRef.current = true;
+        formulaCursorRef.current = { start: cell.rawValue.length, end: cell.rawValue.length };
+      }
       return;
     }
 
@@ -1916,6 +2027,16 @@ export function MiniSheetsPanel({
       e.preventDefault();
       setEditingCellCoord(activeCell);
       setEditingCellText(e.key);
+      if (e.key === '=') {
+        formulaTargetRef.current = activeCell;
+        setFormulaTargetCell(activeCell);
+        setFormulaEditMode(true);
+        formulaSessionRef.current = true;
+        formulaCursorRef.current = { start: 1, end: 1 };
+      } else {
+        setFormulaEditMode(false);
+        formulaSessionRef.current = false;
+      }
       return;
     }
   };
@@ -2119,11 +2240,40 @@ export function MiniSheetsPanel({
         <form className={styles.formulaForm} onSubmit={handleFormulaBarSubmit}>
           <span className={styles.fxSymbol}>fx</span>
           <input
+            ref={formulaBarInputRef}
             className={styles.formulaInput}
             data-testid="mini-sheets-formula-input"
             value={formulaBarText}
             placeholder="Digite um texto, número ou fórmula (ex: =PICurrVal(&quot;TAG&quot;))"
-            onChange={(e) => setFormulaBarText(e.target.value)}
+            onFocus={(e) => {
+              formulaCursorRef.current = { start: e.currentTarget.selectionStart ?? e.currentTarget.value.length, end: e.currentTarget.selectionEnd ?? e.currentTarget.value.length };
+              if (e.currentTarget.value.trimStart().startsWith('=')) beginFormulaEdit(e.currentTarget.value);
+            }}
+            onSelect={(e) => {
+              formulaCursorRef.current = { start: e.currentTarget.selectionStart ?? e.currentTarget.value.length, end: e.currentTarget.selectionEnd ?? e.currentTarget.value.length };
+            }}
+            onChange={(e) => {
+              const value = e.target.value;
+              formulaCursorRef.current = { start: e.target.selectionStart ?? value.length, end: e.target.selectionEnd ?? value.length };
+              setFormulaBarText(value);
+              if (value.trimStart().startsWith('=')) {
+                beginFormulaEdit(value);
+              } else {
+                setFormulaEditMode(false);
+                formulaSessionRef.current = false;
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setFormulaEditMode(false);
+                formulaSessionRef.current = false;
+                setFormulaReferenceRange(null);
+                formulaTargetRef.current = null;
+                setFormulaTargetCell(null);
+                e.currentTarget.blur();
+              }
+            }}
           />
         </form>
       </div>
@@ -2203,6 +2353,9 @@ export function MiniSheetsPanel({
                     const cell = cells.get(cellKey);
                     const isActive = activeCell.col === cIndex && activeCell.row === rIndex;
                     const isInsideSelection = isCellInsideRanges(cIndex, rIndex, ranges);
+                    const isFormulaReference = formulaEditMode && formulaReferenceRange
+                      ? isCellInsideRanges(cIndex, rIndex, [formulaReferenceRange])
+                      : false;
                     const isInsideAutofill = autofillRange ? isCellInsideRanges(cIndex, rIndex, [autofillRange]) : false;
                     const isEditing = editingCellCoord?.col === cIndex && editingCellCoord?.row === rIndex;
                     const isSpilled = Boolean(cell?.spilledFrom);
@@ -2261,6 +2414,8 @@ export function MiniSheetsPanel({
                         className={`${styles.cell} ${
                           isActive
                             ? styles.cellActive
+                            : isFormulaReference
+                            ? styles.cellFormulaReference
                             : isInsideSelection
                             ? styles.cellInRange
                             : ''
@@ -2269,8 +2424,10 @@ export function MiniSheetsPanel({
                         } ${isError ? styles.cellError : ''}`}
                         style={customStyle}
                         data-testid={`mini-sheets-cell-${colIndexToLetter(cIndex)}${rIndex + 1}`}
-                        onClick={(e) => handleCellPointerDown(cIndex, rIndex, e as any)}
+                        data-formula-target={formulaEditMode && formulaTargetCell?.col === cIndex && formulaTargetCell.row === rIndex ? 'true' : undefined}
+                        onClick={(e) => handleCellClick(cIndex, rIndex, e)}
                         onPointerDown={(e) => handleCellPointerDown(cIndex, rIndex, e)}
+                        onPointerUp={(e) => handleCellPointerUp(cIndex, rIndex, e)}
                         onPointerEnter={(e) => handleCellPointerEnter(cIndex, rIndex, e)}
                         onMouseEnter={(e) => handleCellPointerEnter(cIndex, rIndex, e)}
                         onDoubleClick={() => handleCellDoubleClick(cIndex, rIndex)}
@@ -2278,9 +2435,26 @@ export function MiniSheetsPanel({
                         {isEditing ? (
                           <input
                             autoFocus
+                            ref={inlineFormulaInputRef}
                             className={styles.cellInlineInput}
                             value={editingCellText}
-                            onChange={(e) => setEditingCellText(e.target.value)}
+                            onFocus={(e) => {
+                              formulaCursorRef.current = { start: e.currentTarget.selectionStart ?? e.currentTarget.value.length, end: e.currentTarget.selectionEnd ?? e.currentTarget.value.length };
+                            }}
+                            onSelect={(e) => {
+                              formulaCursorRef.current = { start: e.currentTarget.selectionStart ?? e.currentTarget.value.length, end: e.currentTarget.selectionEnd ?? e.currentTarget.value.length };
+                            }}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              formulaCursorRef.current = { start: e.target.selectionStart ?? value.length, end: e.target.selectionEnd ?? value.length };
+                              setEditingCellText(value);
+                              setFormulaEditMode(value.trimStart().startsWith('='));
+                              formulaSessionRef.current = value.trimStart().startsWith('=');
+                              if (value.trimStart().startsWith('=')) {
+                                formulaTargetRef.current = { col: cIndex, row: rIndex };
+                                setFormulaTargetCell({ col: cIndex, row: rIndex });
+                              }
+                            }}
                             onBlur={() => handleCellEditSubmit(cIndex, rIndex, editingCellText)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -2292,6 +2466,11 @@ export function MiniSheetsPanel({
                               } else if (e.key === 'Escape') {
                                 e.preventDefault();
                                 setEditingCellCoord(null);
+                                setFormulaEditMode(false);
+                                formulaSessionRef.current = false;
+                                setFormulaReferenceRange(null);
+                                formulaTargetRef.current = null;
+                                setFormulaTargetCell(null);
                                 setTimeout(() => {
                                   containerRef.current?.focus();
                                 }, 0);
@@ -2712,6 +2891,10 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   cellInRange: css`
     background: var(--selection-bg) !important;
+  `,
+  cellFormulaReference: css`
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface-primary, var(--panel-bg))) !important;
+    box-shadow: inset 0 0 0 2px var(--accent);
   `,
   cellAutofillPreview: css`
     outline: 1px dashed var(--accent);

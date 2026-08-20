@@ -124,6 +124,29 @@ describe('MiniSheetsPanel', () => {
     });
   });
 
+  it('inserts clicked cell references into the formula destination', async () => {
+    render(<MiniSheetsPanel />);
+    const input = screen.getByTestId('mini-sheets-formula-input');
+
+    fireEvent.change(input, { target: { value: '15' } });
+    fireEvent.submit(input.closest('form')!);
+    fireEvent.click(screen.getByTestId('mini-sheets-cell-B2'));
+    fireEvent.change(input, { target: { value: '20' } });
+    fireEvent.submit(input.closest('form')!);
+
+    fireEvent.click(screen.getByTestId('mini-sheets-cell-C1'));
+    fireEvent.change(input, { target: { value: '=' } });
+    fireEvent.click(screen.getByTestId('mini-sheets-cell-A1'));
+    fireEvent.change(input, { target: { value: '=A1+' } });
+    fireEvent.click(screen.getByTestId('mini-sheets-cell-B2'));
+
+    await waitFor(() => expect(input).toHaveValue('=A1+B2'));
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-C1')).toHaveTextContent('35'));
+    fireEvent.click(screen.getByTestId('mini-sheets-cell-C1'));
+    expect(input).toHaveValue('=A1+B2');
+  });
+
   it('evaluates aggregate formula =SUM(A1:A3)', async () => {
     render(<MiniSheetsPanel />);
     const input = screen.getByTestId('mini-sheets-formula-input');
