@@ -5,6 +5,7 @@ import { formatScaleValue, getScaleRatio } from '../scaleOptions';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
 import { getMultistateColor } from '../multistate';
 import type { PiPointDatabaseLimits } from '../../pi/piPointBinding';
+import { resolveThemeForeground } from '../themeColor';
 
 export interface GaugeElementViewProps {
   element: GaugeElement;
@@ -40,8 +41,8 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
     ? element.y + element.height - 42
     : cy + 28;
   const showGaugeScale = element.width >= 180 && element.height >= 160;
-  const scaleColor = options.gaugeScaleColor || '#ffffff';
-  const borderColor = options.gaugeBorderColor || '#ffffff';
+  const scaleColor = resolveThemeForeground(options.gaugeScaleColor);
+  const borderColor = resolveThemeForeground(options.gaugeBorderColor);
   const title = options.title.trim() || label || (binding && isPiPointBinding(binding) ? binding.pointName : '');
   const titleY = options.labelPosition === 'below' ? element.y + element.height - 52 : element.y + 20;
 
