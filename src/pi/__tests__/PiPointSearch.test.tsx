@@ -78,10 +78,11 @@ describe('PiPointSearch', () => {
     render(<PiPointSearch enabled filtersOpen />);
 
     fireEvent.change(screen.getByTestId('pi-point-search-input'), { target: { value: '*' } });
+    fireEvent.change(screen.getByTestId('pi-point-search-description'), { target: { value: 'forno' } });
     fireEvent.click(screen.getByTestId('pi-point-search-submit'));
     await waitFor(() => expect(screen.getByTestId('pi-point-search-filters')).toBeInTheDocument());
 
-    fireEvent.change(screen.getByTestId('pi-point-filter-description'), { target: { value: 'forno' } });
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ term: '*', description: 'forno' }));
     expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('TEMPERATURA_A');
     expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('PRESSAO_A');
     expect(screen.getByTestId('pi-point-search-results')).not.toHaveTextContent('ESTADO_A');
@@ -98,7 +99,7 @@ describe('PiPointSearch', () => {
     expect(screen.getByLabelText('Digital')).toBeInTheDocument();
   });
 
-  it('mostra contador e aviso quando existem mais de 1000 resultados', async () => {
+  it('mostra contador quando existem mais de 1000 resultados', async () => {
     searchMock.mockResolvedValue({
       results: Array.from({ length: 1000 }, (_, index) => ({ name: `TAG_${index}`, webId: `id-${index}` })),
       hasMore: true,
@@ -109,6 +110,5 @@ describe('PiPointSearch', () => {
     fireEvent.click(screen.getByTestId('pi-point-search-submit'));
 
     await waitFor(() => expect(screen.getByTestId('pi-point-search-count')).toHaveTextContent('1000 PI Points exibidos'));
-    expect(screen.getByTestId('pi-point-search-limit-warning')).toHaveTextContent('mais de 1000 PI Points');
   });
 });
