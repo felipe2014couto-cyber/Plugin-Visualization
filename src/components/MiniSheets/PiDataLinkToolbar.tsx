@@ -20,11 +20,11 @@ interface RibbonItem {
 
 const RIBBON_ITEMS: readonly RibbonItem[] = [
   { type: 'PICurrVal', label: 'Último valor', shortLabel: 'Último valor', testId: 'datalink-curr-val', color: '#f5a000', icon: <BoltIcon /> },
-  { type: 'PIArcVal', label: 'Registros históricos', shortLabel: 'Histórico', testId: 'datalink-arc-val', color: '#b66cff', icon: <ClockIcon /> },
+  { type: 'PIArcVal', label: 'Valor de Archive', shortLabel: 'Valor de Archive', testId: 'datalink-arc-val', color: '#b66cff', icon: <ClockIcon /> },
   { type: 'PICompDat', label: 'Dados compactados', shortLabel: 'Compactados', testId: 'datalink-comp-dat', color: '#f5a000', icon: <ArchiveIcon /> },
   { type: 'PITimeFilter', label: 'Tempo filtrado', shortLabel: 'Tempo filtrado', testId: 'datalink-time-filter', color: '#11cfe3', icon: <HourglassIcon /> },
-  { type: 'PISampDat', label: 'Dados interpolados', shortLabel: 'Interpolados', testId: 'datalink-samp-dat', color: '#4285f4', icon: <ChartIcon /> },
-  { type: 'PITimeDat', label: 'Dados com intervalo definido', shortLabel: 'Intervalo definido', testId: 'datalink-time-dat', color: '#1acb9b', icon: <TagIcon /> },
+  { type: 'PISampDat', label: 'Dados de amostragem', shortLabel: 'Amostragem', testId: 'datalink-samp-dat', color: '#4285f4', icon: <ChartIcon /> },
+  { type: 'PITimeDat', label: 'Dados com marcação de tempo', shortLabel: 'Marcação de tempo', testId: 'datalink-time-dat', color: '#1acb9b', icon: <TagIcon /> },
   { type: 'PIAdvCalcVal', label: 'Dados calculados', shortLabel: 'Calculados', testId: 'datalink-calc-dat', color: '#e83ca7', icon: <SigmaIcon /> },
 ];
 

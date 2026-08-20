@@ -49,7 +49,23 @@ export function PiDataLinkFunctionDialog({
   const [expression, setExpression] = useState("'TAG' > 50");
   const [unit, setUnit] = useState('hours');
   const [maxCount, setMaxCount] = useState('500');
+  const [limitMode, setLimitMode] = useState<'time' | 'count'>('time');
   const [showTimestamp, setShowTimestamp] = useState(true);
+  const [inputMode, setInputMode] = useState<'item' | 'expression'>('item');
+  const [rootPath, setRootPath] = useState('');
+  const [filterExpression, setFilterExpression] = useState('');
+  const [markFiltered, setMarkFiltered] = useState(false);
+  const [orientation, setOrientation] = useState<'column' | 'row'>('column');
+  const [reverseTime, setReverseTime] = useState(false);
+  const [boundaryType, setBoundaryType] = useState('Inside');
+  const [hideCount, setHideCount] = useState(false);
+  const [showValueAttributes, setShowValueAttributes] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(false);
+  const [conversionFactor, setConversionFactor] = useState('1');
+  const [showStartTime, setShowStartTime] = useState(false);
+  const [showEndTime, setShowEndTime] = useState(false);
+  const [showMinMaxTime, setShowMinMaxTime] = useState(false);
+  const [showPercentValid, setShowPercentValid] = useState(false);
   const [currValTimestampPosition, setCurrValTimestampPosition] = useState<'none' | 'left' | 'above'>('none');
   const [selectionField, setSelectionField] = useState<SelectableField | null>(null);
   const [selectionBaselineAddress, setSelectionBaselineAddress] = useState<string | null>(null);
@@ -151,44 +167,40 @@ export function PiDataLinkFunctionDialog({
         const pTag = formatParam(tag, 'TAG');
         const pTime = formatParam(timestamp, '*-1h');
         const pMode = formatParam(mode, 'Interpolated');
-        return `=PIArcVal(${pTag}, ${pTime}, ${pMode})`;
+        return `=PIArcVal(${pTag}, ${pTime}, ${pMode}, "${currValTimestampPosition}", ${formatParam(rootPath)})`;
       }
       case 'PICompDat': {
         const pTag = formatParam(tag, 'TAG');
         const pStart = formatParam(startTime, '*-1h');
         const pEnd = formatParam(endTime, '*');
         const pMax = maxCount ? formatParam(maxCount) : '';
-        const pShow = showTimestamp ? '' : ', false';
-        return `=PICompDat(${pTag}, ${pStart}, ${pEnd}${pMax ? `, ${pMax}` : ''}${pShow})`;
+        return `=PICompDat(${pTag}, ${pStart}, ${pEnd}, ${pMax || '"500"'}, ${showTimestamp}, "${orientation}", ${reverseTime}, "${boundaryType}", ${hideCount}, ${showValueAttributes}, ${showAnnotations}, ${formatParam(filterExpression)}, ${markFiltered}, ${formatParam(rootPath)}, "${limitMode}")`;
       }
       case 'PISampDat': {
         const pTag = formatParam(tag, 'TAG');
         const pStart = formatParam(startTime, '*-8h');
         const pEnd = formatParam(endTime, '*');
         const pInt = formatParam(interval, '5m');
-        const pShow = showTimestamp ? '' : ', false';
-        return `=PISampDat(${pTag}, ${pStart}, ${pEnd}, ${pInt}${pShow})`;
+        return `=PISampDat(${pTag}, ${pStart}, ${pEnd}, ${pInt}, ${showTimestamp}, "${orientation}", ${formatParam(filterExpression)}, ${markFiltered}, ${formatParam(rootPath)})`;
       }
       case 'PITimeDat': {
         const pTag = formatParam(tag, 'TAG');
         const pRange = formatParam(timestampsRange, 'A1:A4');
-        const pMode = mode !== 'Interpolated' ? `, ${formatParam(mode)}` : '';
-        return `=PITimeDat(${pTag}, ${pRange}${pMode})`;
+        return `=PITimeDat(${pTag}, ${pRange}, ${formatParam(mode, 'Interpolated')}, "${orientation}", ${formatParam(rootPath)})`;
       }
       case 'PIAdvCalcVal': {
         const pTag = formatParam(tag, 'TAG');
         const pStart = formatParam(startTime, '*-8h');
         const pEnd = formatParam(endTime, '*');
         const pCalc = formatParam(calculation, 'Average');
-        const pInt = calcInterval ? `, ${formatParam(calcInterval)}` : '';
-        return `=PIAdvCalcVal(${pTag}, ${pStart}, ${pEnd}, ${pCalc}${pInt})`;
+        return `=PIAdvCalcVal(${pTag}, ${pStart}, ${pEnd}, ${pCalc}, ${formatParam(calcInterval)}, ${formatParam(conversionFactor, '1')}, "${orientation}", ${showStartTime}, ${showEndTime}, ${showMinMaxTime}, ${showPercentValid}, ${formatParam(filterExpression)}, ${markFiltered}, ${formatParam(rootPath)})`;
       }
       case 'PITimeFilter': {
         const pExpr = formatParam(expression, "'TAG' > 50");
         const pStart = formatParam(startTime, '*-8h');
         const pEnd = formatParam(endTime, '*');
         const pUnit = formatParam(unit, 'hours');
-        return `=PITimeFilter(${pExpr}, ${pStart}, ${pEnd}, ${pUnit})`;
+        return `=PITimeFilter(${pExpr}, ${pStart}, ${pEnd}, ${pUnit}, ${formatParam(interval)}, "${orientation}", ${showStartTime}, ${showEndTime}, ${showPercentValid}, ${formatParam(rootPath)})`;
       }
       default:
         return '';
@@ -196,14 +208,29 @@ export function PiDataLinkFunctionDialog({
   }, [
     calcInterval,
     calculation,
+    boundaryType,
+    conversionFactor,
     currValTimestampPosition,
     endTime,
     expression,
+    filterExpression,
     functionType,
     interval,
+    hideCount,
+    limitMode,
+    markFiltered,
     maxCount,
     mode,
+    orientation,
+    reverseTime,
+    rootPath,
+    showAnnotations,
+    showEndTime,
+    showMinMaxTime,
+    showPercentValid,
+    showStartTime,
     showTimestamp,
+    showValueAttributes,
     startTime,
     tag,
     timestamp,
@@ -260,17 +287,30 @@ export function PiDataLinkFunctionDialog({
         </div>
 
         <div className={embedded ? styles.embeddedBody : styles.body}>
+          {functionType !== 'PITimeFilter' && (
+            <fieldset className={styles.radioGroup}>
+              <legend className={styles.radioLegend}>Origem dos dados</legend>
+              <label className={styles.radioLabel}><input type="radio" name="datalink-input-mode" checked={inputMode === 'item'} onChange={() => setInputMode('item')} /><span>Item de dados</span></label>
+              <label className={styles.radioLabel}><input type="radio" name="datalink-input-mode" checked={inputMode === 'expression'} onChange={() => setInputMode('expression')} /><span>Expressão</span></label>
+            </fieldset>
+          )}
+
+          <div className={styles.formRow}>
+            <label className={styles.label} htmlFor="datalink-root-path">Caminho-raiz (opcional)</label>
+            <input id="datalink-root-path" className={styles.input} value={rootPath} placeholder="Ex: \\Servidor\\Banco" onChange={(e) => setRootPath(e.target.value)} />
+          </div>
+
           {functionType !== 'PITimeFilter' ? (
             <div className={styles.formRow}>
               <label className={styles.label} htmlFor="datalink-tag">
-                Item de dados (PI Point ou Célula)
+                {inputMode === 'item' ? 'Item de dados (PI Point ou Célula)' : 'Expressão'}
               </label>
               <div className={styles.inputWrapper}>
                 <input
                   id="datalink-tag"
                   className={`${styles.input} ${isSelectionFieldActive('tag') ? styles.inputSelectingRange : ''}`}
                   value={tag}
-                  placeholder="Ex: LFS_RB2_TEMP ou A1"
+                  placeholder={inputMode === 'item' ? 'Ex: LFS_RB2_TEMP ou A1' : "Ex: 'LFS_RB2_TEMP'"}
                   onChange={(e) => {
                     setTag(e.target.value);
                     setSelectionField(null);
@@ -360,7 +400,7 @@ export function PiDataLinkFunctionDialog({
             </>
           )}
 
-          {functionType === 'PICurrVal' && (
+          {(functionType === 'PICurrVal' || functionType === 'PIArcVal') && (
             <fieldset className={styles.radioGroup}>
               <legend className={styles.radioLegend}>Timestamp</legend>
               <label className={styles.radioLabel}>
@@ -570,20 +610,34 @@ export function PiDataLinkFunctionDialog({
           )}
 
           {functionType === 'PICompDat' && (
-            <div className={styles.formRow}>
-              <label className={styles.label} htmlFor="datalink-max-count">
-                Máximo de valores
-              </label>
-              <input
-                id="datalink-max-count"
-                className={styles.input}
-                value={maxCount}
-                type="number"
-                min={1}
-                max={5000}
-                onChange={(e) => setMaxCount(e.target.value)}
-              />
-            </div>
+            <>
+              <fieldset className={styles.radioGroup}>
+                <legend className={styles.radioLegend}>Limitar resultados por</legend>
+                <label className={styles.radioLabel}><input type="radio" name="datalink-limit-mode" checked={limitMode === 'time'} onChange={() => setLimitMode('time')} /><span>Intervalo de tempo</span></label>
+                <label className={styles.radioLabel}><input type="radio" name="datalink-limit-mode" checked={limitMode === 'count'} onChange={() => setLimitMode('count')} /><span>Número de valores</span></label>
+              </fieldset>
+              {limitMode === 'count' && <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-max-count">Número máximo de valores</label>
+                <input id="datalink-max-count" className={styles.input} value={maxCount} type="number" min={1} max={5000} onChange={(e) => setMaxCount(e.target.value)} />
+              </div>}
+              <label className={styles.checkboxLabel}><input type="checkbox" checked={reverseTime} onChange={(e) => setReverseTime(e.target.checked)} /><span>Voltar no tempo</span></label>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-boundary-type">Tipo de limite</label>
+                <select id="datalink-boundary-type" className={styles.select} value={boundaryType} onChange={(e) => setBoundaryType(e.target.value)}>
+                  <option value="Inside">Dentro</option><option value="Outside">Fora</option><option value="Interpolated">Interpolado</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {(functionType === 'PICompDat' || functionType === 'PISampDat' || functionType === 'PIAdvCalcVal') && (
+            <>
+              <div className={styles.formRow}>
+                <label className={styles.label} htmlFor="datalink-filter-expression">Expressão de filtro (opcional)</label>
+                <input id="datalink-filter-expression" className={styles.input} value={filterExpression} placeholder="Ex: valor > 50" onChange={(e) => setFilterExpression(e.target.value)} />
+              </div>
+              <label className={styles.checkboxLabel}><input type="checkbox" checked={markFiltered} onChange={(e) => setMarkFiltered(e.target.checked)} /><span>Marcar como filtrado</span></label>
+            </>
           )}
 
           {(functionType === 'PICompDat' || functionType === 'PISampDat') && (
@@ -597,6 +651,45 @@ export function PiDataLinkFunctionDialog({
                 <span>Mostrar coluna de timestamp</span>
               </label>
             </div>
+          )}
+
+          {functionType === 'PICompDat' && (
+            <div className={styles.optionGrid}>
+              <label className={styles.checkboxLabel}><input type="checkbox" checked={hideCount} onChange={(e) => setHideCount(e.target.checked)} /><span>Ocultar contagem</span></label>
+              <label className={styles.checkboxLabel}><input type="checkbox" checked={showValueAttributes} onChange={(e) => setShowValueAttributes(e.target.checked)} /><span>Mostrar atributos do valor</span></label>
+              <label className={styles.checkboxLabel}><input type="checkbox" checked={showAnnotations} onChange={(e) => setShowAnnotations(e.target.checked)} /><span>Mostrar anotações</span></label>
+            </div>
+          )}
+
+          {functionType === 'PIAdvCalcVal' && (
+            <>
+              <div className={styles.formRow}><label className={styles.label} htmlFor="datalink-conversion-factor">Fator de conversão</label><input id="datalink-conversion-factor" className={styles.input} type="number" step="any" value={conversionFactor} onChange={(e) => setConversionFactor(e.target.value)} /></div>
+              <div className={styles.optionGrid}>
+                <label className={styles.checkboxLabel}><input type="checkbox" checked={showStartTime} onChange={(e) => setShowStartTime(e.target.checked)} /><span>Mostrar hora inicial</span></label>
+                <label className={styles.checkboxLabel}><input type="checkbox" checked={showEndTime} onChange={(e) => setShowEndTime(e.target.checked)} /><span>Mostrar hora final</span></label>
+                <label className={styles.checkboxLabel}><input type="checkbox" checked={showMinMaxTime} onChange={(e) => setShowMinMaxTime(e.target.checked)} /><span>Mostrar hora mín./máx.</span></label>
+                <label className={styles.checkboxLabel}><input type="checkbox" checked={showPercentValid} onChange={(e) => setShowPercentValid(e.target.checked)} /><span>Mostrar percentual válido</span></label>
+              </div>
+            </>
+          )}
+
+          {functionType === 'PITimeFilter' && (
+            <>
+              <div className={styles.formRow}><label className={styles.label} htmlFor="datalink-time-filter-interval">Intervalo de tempo (opcional)</label><input id="datalink-time-filter-interval" className={styles.input} value={interval} placeholder="Ex: 1h" onChange={(e) => setInterval(e.target.value)} /></div>
+              <div className={styles.optionGrid}>
+                <label className={styles.checkboxLabel}><input type="checkbox" checked={showStartTime} onChange={(e) => setShowStartTime(e.target.checked)} /><span>Mostrar hora inicial</span></label>
+                <label className={styles.checkboxLabel}><input type="checkbox" checked={showEndTime} onChange={(e) => setShowEndTime(e.target.checked)} /><span>Mostrar hora final</span></label>
+                <label className={styles.checkboxLabel}><input type="checkbox" checked={showPercentValid} onChange={(e) => setShowPercentValid(e.target.checked)} /><span>Mostrar percentual válido</span></label>
+              </div>
+            </>
+          )}
+
+          {(functionType === 'PICompDat' || functionType === 'PISampDat' || functionType === 'PITimeDat' || functionType === 'PIAdvCalcVal' || functionType === 'PITimeFilter') && (
+            <fieldset className={styles.radioGroup}>
+              <legend className={styles.radioLegend}>Orientação da saída</legend>
+              <label className={styles.radioLabel}><input type="radio" name="datalink-orientation" checked={orientation === 'column'} onChange={() => setOrientation('column')} /><span>Coluna</span></label>
+              <label className={styles.radioLabel}><input type="radio" name="datalink-orientation" checked={orientation === 'row'} onChange={() => setOrientation('row')} /><span>Linha</span></label>
+            </fieldset>
           )}
 
           <div className={styles.formRow}>
@@ -690,7 +783,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: '6px',
     minHeight: 0,
     padding: '8px 16px',
-    overflow: 'hidden',
+    overflowY: 'auto',
     background: 'var(--surface-primary, #111923)',
     color: 'var(--text-primary, #f1f2f5)',
   }),
@@ -907,6 +1000,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: 'flex',
     alignItems: 'center',
     marginTop: '4px',
+  }),
+  optionGrid: css({
+    display: 'grid',
+    gridTemplateColumns: '1fr',
+    gap: '5px',
   }),
   checkboxLabel: css({
     display: 'inline-flex',

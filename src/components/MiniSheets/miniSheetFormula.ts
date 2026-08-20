@@ -20,6 +20,15 @@ export interface CellCoord {
   col: number;
 }
 
+export type PiDataOrientation = 'column' | 'row';
+
+export interface PiDataLinkOutputOptions {
+  orientation?: PiDataOrientation;
+  filterExpression?: string;
+  markFiltered?: boolean;
+  rootPath?: string;
+}
+
 export type ParsedFormula =
   | { type: 'literal_number'; value: number }
   | { type: 'literal_string'; value: string }
@@ -34,6 +43,7 @@ export type ParsedFormula =
       tag: string;
       timeExpression: string;
       mode?: string;
+      timestampPosition?: 'none' | 'left' | 'above';
       referencedCells?: CellCoord[];
     }
   | {
@@ -43,6 +53,13 @@ export type ParsedFormula =
       endTime: string;
       maxCount?: number;
       showTimestamp?: boolean;
+      reverseTime?: boolean;
+      boundaryType?: string;
+      hideCount?: boolean;
+      showValueAttributes?: boolean;
+      showAnnotations?: boolean;
+      limitMode?: 'time' | 'count';
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -52,6 +69,7 @@ export type ParsedFormula =
       endTime: string;
       interval: string;
       showTimestamp?: boolean;
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -59,6 +77,7 @@ export type ParsedFormula =
       tag: string;
       timestampsRange: string;
       mode?: string;
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -68,6 +87,12 @@ export type ParsedFormula =
       endTime: string;
       calculation: string;
       interval?: string;
+      conversionFactor?: number;
+      showStartTime?: boolean;
+      showEndTime?: boolean;
+      showMinMaxTime?: boolean;
+      showPercentValid?: boolean;
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -76,6 +101,11 @@ export type ParsedFormula =
       startTime: string;
       endTime: string;
       unit: string;
+      interval?: string;
+      showStartTime?: boolean;
+      showEndTime?: boolean;
+      showPercentValid?: boolean;
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -208,6 +238,29 @@ export function stripQuotes(value: string): string {
   return trimmed;
 }
 
+function parseBooleanArgument(value: string | undefined, fallback = false): boolean {
+  if (!value) {
+    return fallback;
+  }
+  const normalized = stripQuotes(value).trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function parseOutputOptions(
+  orientation: string | undefined,
+  filterExpression: string | undefined,
+  markFiltered: string | undefined,
+  rootPath: string | undefined,
+): PiDataLinkOutputOptions {
+  const normalizedOrientation = stripQuotes(orientation ?? '').toLowerCase() === 'row' ? 'row' : 'column';
+  return {
+    orientation: normalizedOrientation,
+    filterExpression: filterExpression ? stripQuotes(filterExpression) : undefined,
+    markFiltered: parseBooleanArgument(markFiltered),
+    rootPath: rootPath ? stripQuotes(rootPath) : undefined,
+  };
+}
+
 /**
  * Resolves a parameter: if it is a cell coordinate or range, reads the first cell value;
  * otherwise strips quotes. Scalar PI parameters use the first cell when a selected range
@@ -283,6 +336,7 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         tag: stripQuotes(rawArgs[0]),
         timeExpression: stripQuotes(rawArgs[1]),
         mode: rawArgs[2] ? stripQuotes(rawArgs[2]) : undefined,
+        ...(rawArgs[3] ? { timestampPosition: stripQuotes(rawArgs[3]).toLowerCase() as 'none' | 'left' | 'above' } : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -300,6 +354,15 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         endTime: stripQuotes(rawArgs[2]),
         maxCount: !isNaN(maxCount as number) ? maxCount : undefined,
         showTimestamp,
+        ...(rawArgs[6] ? { reverseTime: parseBooleanArgument(rawArgs[6]) } : {}),
+        ...(rawArgs[7] ? { boundaryType: stripQuotes(rawArgs[7]) } : {}),
+        ...(rawArgs[8] ? { hideCount: parseBooleanArgument(rawArgs[8]) } : {}),
+        ...(rawArgs[9] ? { showValueAttributes: parseBooleanArgument(rawArgs[9]) } : {}),
+        ...(rawArgs[10] ? { showAnnotations: parseBooleanArgument(rawArgs[10]) } : {}),
+        ...(rawArgs[14] ? { limitMode: stripQuotes(rawArgs[14]).toLowerCase() === 'count' ? 'count' as const : 'time' as const } : {}),
+        ...(rawArgs[5] || rawArgs[11] || rawArgs[12] || rawArgs[13]
+          ? { options: parseOutputOptions(rawArgs[5], rawArgs[11], rawArgs[12], rawArgs[13]) }
+          : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -316,6 +379,9 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         endTime: stripQuotes(rawArgs[2]),
         interval: stripQuotes(rawArgs[3]),
         showTimestamp,
+        ...(rawArgs[5] || rawArgs[6] || rawArgs[7] || rawArgs[8]
+          ? { options: parseOutputOptions(rawArgs[5], rawArgs[6], rawArgs[7], rawArgs[8]) }
+          : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -329,6 +395,7 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         tag: stripQuotes(rawArgs[0]),
         timestampsRange: stripQuotes(rawArgs[1]),
         mode: rawArgs[2] ? stripQuotes(rawArgs[2]) : undefined,
+        ...(rawArgs[3] || rawArgs[4] ? { options: parseOutputOptions(rawArgs[3], undefined, undefined, rawArgs[4]) } : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -344,6 +411,14 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         endTime: stripQuotes(rawArgs[2]),
         calculation: stripQuotes(rawArgs[3]),
         interval: rawArgs[4] ? stripQuotes(rawArgs[4]) : undefined,
+        ...(rawArgs[5] ? { conversionFactor: Number(stripQuotes(rawArgs[5])) } : {}),
+        ...(rawArgs[7] ? { showStartTime: parseBooleanArgument(rawArgs[7]) } : {}),
+        ...(rawArgs[8] ? { showEndTime: parseBooleanArgument(rawArgs[8]) } : {}),
+        ...(rawArgs[9] ? { showMinMaxTime: parseBooleanArgument(rawArgs[9]) } : {}),
+        ...(rawArgs[10] ? { showPercentValid: parseBooleanArgument(rawArgs[10]) } : {}),
+        ...(rawArgs[6] || rawArgs[11] || rawArgs[12] || rawArgs[13]
+          ? { options: parseOutputOptions(rawArgs[6], rawArgs[11], rawArgs[12], rawArgs[13]) }
+          : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -358,6 +433,11 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         startTime: stripQuotes(rawArgs[1]),
         endTime: stripQuotes(rawArgs[2]),
         unit: stripQuotes(rawArgs[3]),
+        ...(rawArgs[4] ? { interval: stripQuotes(rawArgs[4]) } : {}),
+        ...(rawArgs[6] ? { showStartTime: parseBooleanArgument(rawArgs[6]) } : {}),
+        ...(rawArgs[7] ? { showEndTime: parseBooleanArgument(rawArgs[7]) } : {}),
+        ...(rawArgs[8] ? { showPercentValid: parseBooleanArgument(rawArgs[8]) } : {}),
+        ...(rawArgs[5] || rawArgs[9] ? { options: parseOutputOptions(rawArgs[5], undefined, undefined, rawArgs[9]) } : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
