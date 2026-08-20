@@ -4,7 +4,7 @@ import { createTheme } from '@grafana/data';
 import { createDisplayDocument, createRectangle, createTrend, createValue, type DisplayDocument } from '../../../index';
 import { PI_POINT_DRAG_MIME, serializePiPointDragData } from '../../../../pi/piPointDrag';
 import { PiPointSearch } from '../../../../pi/PiPointSearch';
-import { searchPiPoints, type PiPointSearchResult } from '../../../../pi/piDataSource';
+import { searchPiPointsWithStatus, type PiPointSearchResult } from '../../../../pi/piDataSource';
 import { DisplayEditor, type PiPointDropSymbolType } from '../DisplayEditor';
 import type { LoadCurrentValues } from '../../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../../runtime/trendRuntime';
@@ -14,7 +14,7 @@ jest.mock('@grafana/ui', () => ({
 }));
 
 jest.mock('../../../../pi/piDataSource', () => ({
-  searchPiPoints: jest.fn(),
+  searchPiPointsWithStatus: jest.fn(),
 }));
 
 const point = {
@@ -157,7 +157,7 @@ function fireDragEvent(target: Element, type: 'dragover' | 'drop', dataTransfer:
 }
 
 describe('DisplayEditor - drop de PI Point', () => {
-  const searchMock = searchPiPoints as jest.MockedFunction<typeof searchPiPoints>;
+  const searchMock = searchPiPointsWithStatus as jest.MockedFunction<typeof searchPiPointsWithStatus>;
 
   it.each<PiPointDropSymbolType>(['value', 'trend', 'gauge', 'bar'])(
     'cria %s vinculado na posição solta e registra no histórico',
@@ -320,7 +320,7 @@ describe('DisplayEditor - drop de PI Point', () => {
   });
 
   it('finaliza o arraste iniciado na lista de tags sobre um filho SVG da Trend', async () => {
-    searchMock.mockResolvedValueOnce([point]);
+    searchMock.mockResolvedValueOnce({ results: [point], hasMore: false });
     render(<SearchDropHarness />);
     mockSurfaceBounds({ left: 100, top: 50, width: 1600, height: 600 });
 

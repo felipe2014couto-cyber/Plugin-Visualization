@@ -69,34 +69,27 @@ describe('PiPointSearch', () => {
     expect(screen.getAllByTestId('pi-point-search-submit')[1]).toBeDisabled();
   });
 
-  it('filtra cumulativamente por descrição, tipo de dados e unidade de engenharia', async () => {
+  it('abre o diálogo de pesquisa avançada quando filtersOpen é verdadeiro', async () => {
     searchMock.mockResolvedValue({ results: [
       { name: 'TEMPERATURA_A', webId: 'point-a', description: 'Forno', pointType: 'Float32', engineeringUnit: '°C' },
-      { name: 'PRESSAO_A', webId: 'point-b', description: 'Forno', pointType: 'Float32', engineeringUnit: 'bar' },
-      { name: 'ESTADO_A', webId: 'point-c', description: 'Bomba', pointType: 'Digital', engineeringUnit: 'estado' },
     ], hasMore: false });
-    render(<PiPointSearch enabled filtersOpen />);
+    const onCloseFilters = jest.fn();
+    const onSelect = jest.fn();
+    render(<PiPointSearch enabled filtersOpen onCloseFilters={onCloseFilters} onSelect={onSelect} />);
 
-    fireEvent.change(screen.getByTestId('pi-point-search-input'), { target: { value: '*' } });
-    fireEvent.change(screen.getByTestId('pi-point-search-description'), { target: { value: 'forno' } });
-    fireEvent.click(screen.getByTestId('pi-point-search-submit'));
-    await waitFor(() => expect(screen.getByTestId('pi-point-search-filters')).toBeInTheDocument());
+    expect(screen.getByTestId('pi-point-search-dialog')).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('dialog-tag-mask'), { target: { value: '*' } });
+    fireEvent.change(screen.getByTestId('dialog-descriptor'), { target: { value: 'forno' } });
+    fireEvent.click(screen.getByTestId('dialog-search-submit'));
 
-    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ term: '*', description: 'forno' }));
-    expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('TEMPERATURA_A');
-    expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('PRESSAO_A');
-    expect(screen.getByTestId('pi-point-search-results')).not.toHaveTextContent('ESTADO_A');
+    await waitFor(() => expect(screen.getByTestId('dialog-results-table')).toBeInTheDocument());
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ term: '', description: 'forno' }));
+    expect(screen.getByTestId('dialog-results-table')).toHaveTextContent('TEMPERATURA_A');
 
-    fireEvent.change(screen.getByTestId('pi-point-filter-engineering-unit'), { target: { value: 'bar' } });
-    expect(screen.getByTestId('pi-point-search-results')).toHaveTextContent('PRESSAO_A');
-    expect(screen.getByTestId('pi-point-search-results')).not.toHaveTextContent('TEMPERATURA_A');
-  });
-
-  it('disponibiliza os tipos de dados antes da primeira pesquisa', () => {
-    render(<PiPointSearch enabled filtersOpen />);
-
-    expect(screen.getByLabelText('Float32')).toBeInTheDocument();
-    expect(screen.getByLabelText('Digital')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('dialog-row-point-a'));
+    fireEvent.click(screen.getByTestId('dialog-ok-button'));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ name: 'TEMPERATURA_A' }));
+    expect(onCloseFilters).toHaveBeenCalled();
   });
 
   it('mostra contador quando existem mais de 1000 resultados', async () => {

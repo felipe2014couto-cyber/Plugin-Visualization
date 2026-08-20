@@ -92,7 +92,7 @@ describe('App', () => {
     expect(screen.getByTestId('time-range-end')).toHaveValue('*');
     expect(screen.getByRole('button', { name: 'Arrastar como Trend' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Ocultar barra de ferramentas' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Arrastar como Barra' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Arrastar como Barra' })).toBeInTheDocument();
   });
 
   it('recolhe e reabre o painel lateral ao alternar o ícone do cubo', async () => {

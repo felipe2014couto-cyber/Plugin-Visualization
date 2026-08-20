@@ -418,9 +418,9 @@ export function App() {
                   ? styles.assetsRailActive
                   : styles.assetsRailButton
               }
-              title="Visualização"
-              aria-label="Visualização"
-              aria-pressed={activeModule === 'visualization'}
+              title={isAssetsPanelOpen ? 'Ocultar barra de ferramentas' : 'Visualização'}
+              aria-label={isAssetsPanelOpen ? 'Ocultar barra de ferramentas' : 'Mostrar barra de ferramentas'}
+              aria-pressed={isAssetsPanelOpen}
               data-testid="pims-vision-toggle-assets-panel"
               onClick={() => {
                 if (activeModule !== 'visualization') {
@@ -504,6 +504,7 @@ export function App() {
                             enabled={piConnection.status === 'connected'}
                             onSelect={setSelectedPiPoint}
                             filtersOpen={isPiPointFiltersOpen}
+                            onCloseFilters={() => setIsPiPointFiltersOpen(false)}
                           />
                         ) : (
                           <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
