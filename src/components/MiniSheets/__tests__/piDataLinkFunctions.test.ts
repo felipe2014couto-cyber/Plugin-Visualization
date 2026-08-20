@@ -140,7 +140,7 @@ describe('PI DataLink Formula Parsing & Reference Resolution', () => {
   });
 
   test('preserva opções avançadas de dados compactados', () => {
-    const parsed = parseFormula('=PICompDat("TAG", "*-8h", "*", 100, true, "row", true, "Outside", true, true, true, "value > 10", true, "\\\\SERVER\\DB")');
+    const parsed = parseFormula('=PICompDat("TAG", "*-8h", "*", 100, true, "row", true, "Outside", true, true, true, "value > 10", true, "count")');
     expect(parsed).toMatchObject({
       type: 'pi_comp_dat',
       reverseTime: true,
@@ -152,7 +152,6 @@ describe('PI DataLink Formula Parsing & Reference Resolution', () => {
         orientation: 'row',
         filterExpression: 'value > 10',
         markFiltered: true,
-        rootPath: '\\\\SERVER\\DB',
       },
     });
   });

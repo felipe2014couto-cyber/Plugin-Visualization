@@ -26,7 +26,6 @@ export interface PiDataLinkOutputOptions {
   orientation?: PiDataOrientation;
   filterExpression?: string;
   markFiltered?: boolean;
-  rootPath?: string;
 }
 
 export type ParsedFormula =
@@ -248,16 +247,14 @@ function parseBooleanArgument(value: string | undefined, fallback = false): bool
 
 function parseOutputOptions(
   orientation: string | undefined,
-  filterExpression: string | undefined,
-  markFiltered: string | undefined,
-  rootPath: string | undefined,
+  filterExpression: string | undefined = undefined,
+  markFiltered: string | undefined = undefined,
 ): PiDataLinkOutputOptions {
   const normalizedOrientation = stripQuotes(orientation ?? '').toLowerCase() === 'row' ? 'row' : 'column';
   return {
     orientation: normalizedOrientation,
     filterExpression: filterExpression ? stripQuotes(filterExpression) : undefined,
     markFiltered: parseBooleanArgument(markFiltered),
-    rootPath: rootPath ? stripQuotes(rootPath) : undefined,
   };
 }
 
@@ -359,9 +356,9 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         ...(rawArgs[8] ? { hideCount: parseBooleanArgument(rawArgs[8]) } : {}),
         ...(rawArgs[9] ? { showValueAttributes: parseBooleanArgument(rawArgs[9]) } : {}),
         ...(rawArgs[10] ? { showAnnotations: parseBooleanArgument(rawArgs[10]) } : {}),
-        ...(rawArgs[14] ? { limitMode: stripQuotes(rawArgs[14]).toLowerCase() === 'count' ? 'count' as const : 'time' as const } : {}),
-        ...(rawArgs[5] || rawArgs[11] || rawArgs[12] || rawArgs[13]
-          ? { options: parseOutputOptions(rawArgs[5], rawArgs[11], rawArgs[12], rawArgs[13]) }
+        ...(rawArgs[13] ? { limitMode: stripQuotes(rawArgs[13]).toLowerCase() === 'count' ? 'count' as const : 'time' as const } : {}),
+        ...(rawArgs[5] || rawArgs[11] || rawArgs[12]
+          ? { options: parseOutputOptions(rawArgs[5], rawArgs[11], rawArgs[12]) }
           : {}),
         referencedCells: getRefCoords(rawArgs),
       };
@@ -379,8 +376,8 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         endTime: stripQuotes(rawArgs[2]),
         interval: stripQuotes(rawArgs[3]),
         showTimestamp,
-        ...(rawArgs[5] || rawArgs[6] || rawArgs[7] || rawArgs[8]
-          ? { options: parseOutputOptions(rawArgs[5], rawArgs[6], rawArgs[7], rawArgs[8]) }
+        ...(rawArgs[5] || rawArgs[6] || rawArgs[7]
+          ? { options: parseOutputOptions(rawArgs[5], rawArgs[6], rawArgs[7]) }
           : {}),
         referencedCells: getRefCoords(rawArgs),
       };
@@ -395,7 +392,7 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         tag: stripQuotes(rawArgs[0]),
         timestampsRange: stripQuotes(rawArgs[1]),
         mode: rawArgs[2] ? stripQuotes(rawArgs[2]) : undefined,
-        ...(rawArgs[3] || rawArgs[4] ? { options: parseOutputOptions(rawArgs[3], undefined, undefined, rawArgs[4]) } : {}),
+        ...(rawArgs[3] ? { options: parseOutputOptions(rawArgs[3]) } : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -416,8 +413,8 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         ...(rawArgs[8] ? { showEndTime: parseBooleanArgument(rawArgs[8]) } : {}),
         ...(rawArgs[9] ? { showMinMaxTime: parseBooleanArgument(rawArgs[9]) } : {}),
         ...(rawArgs[10] ? { showPercentValid: parseBooleanArgument(rawArgs[10]) } : {}),
-        ...(rawArgs[6] || rawArgs[11] || rawArgs[12] || rawArgs[13]
-          ? { options: parseOutputOptions(rawArgs[6], rawArgs[11], rawArgs[12], rawArgs[13]) }
+        ...(rawArgs[6] || rawArgs[11] || rawArgs[12]
+          ? { options: parseOutputOptions(rawArgs[6], rawArgs[11], rawArgs[12]) }
           : {}),
         referencedCells: getRefCoords(rawArgs),
       };
@@ -437,7 +434,7 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         ...(rawArgs[6] ? { showStartTime: parseBooleanArgument(rawArgs[6]) } : {}),
         ...(rawArgs[7] ? { showEndTime: parseBooleanArgument(rawArgs[7]) } : {}),
         ...(rawArgs[8] ? { showPercentValid: parseBooleanArgument(rawArgs[8]) } : {}),
-        ...(rawArgs[5] || rawArgs[9] ? { options: parseOutputOptions(rawArgs[5], undefined, undefined, rawArgs[9]) } : {}),
+        ...(rawArgs[5] ? { options: parseOutputOptions(rawArgs[5]) } : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }

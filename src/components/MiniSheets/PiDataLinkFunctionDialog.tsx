@@ -52,7 +52,6 @@ export function PiDataLinkFunctionDialog({
   const [limitMode, setLimitMode] = useState<'time' | 'count'>('time');
   const [showTimestamp, setShowTimestamp] = useState(true);
   const [inputMode, setInputMode] = useState<'item' | 'expression'>('item');
-  const [rootPath, setRootPath] = useState('');
   const [filterExpression, setFilterExpression] = useState('');
   const [markFiltered, setMarkFiltered] = useState(false);
   const [orientation, setOrientation] = useState<'column' | 'row'>('column');
@@ -167,40 +166,40 @@ export function PiDataLinkFunctionDialog({
         const pTag = formatParam(tag, 'TAG');
         const pTime = formatParam(timestamp, '*-1h');
         const pMode = formatParam(mode, 'Interpolated');
-        return `=PIArcVal(${pTag}, ${pTime}, ${pMode}, "${currValTimestampPosition}", ${formatParam(rootPath)})`;
+        return `=PIArcVal(${pTag}, ${pTime}, ${pMode}, "${currValTimestampPosition}")`;
       }
       case 'PICompDat': {
         const pTag = formatParam(tag, 'TAG');
         const pStart = formatParam(startTime, '*-1h');
         const pEnd = formatParam(endTime, '*');
         const pMax = maxCount ? formatParam(maxCount) : '';
-        return `=PICompDat(${pTag}, ${pStart}, ${pEnd}, ${pMax || '"500"'}, ${showTimestamp}, "${orientation}", ${reverseTime}, "${boundaryType}", ${hideCount}, ${showValueAttributes}, ${showAnnotations}, ${formatParam(filterExpression)}, ${markFiltered}, ${formatParam(rootPath)}, "${limitMode}")`;
+        return `=PICompDat(${pTag}, ${pStart}, ${pEnd}, ${pMax || '"500"'}, ${showTimestamp}, "${orientation}", ${reverseTime}, "${boundaryType}", ${hideCount}, ${showValueAttributes}, ${showAnnotations}, ${formatParam(filterExpression)}, ${markFiltered}, "${limitMode}")`;
       }
       case 'PISampDat': {
         const pTag = formatParam(tag, 'TAG');
         const pStart = formatParam(startTime, '*-8h');
         const pEnd = formatParam(endTime, '*');
         const pInt = formatParam(interval, '5m');
-        return `=PISampDat(${pTag}, ${pStart}, ${pEnd}, ${pInt}, ${showTimestamp}, "${orientation}", ${formatParam(filterExpression)}, ${markFiltered}, ${formatParam(rootPath)})`;
+        return `=PISampDat(${pTag}, ${pStart}, ${pEnd}, ${pInt}, ${showTimestamp}, "${orientation}", ${formatParam(filterExpression)}, ${markFiltered})`;
       }
       case 'PITimeDat': {
         const pTag = formatParam(tag, 'TAG');
         const pRange = formatParam(timestampsRange, 'A1:A4');
-        return `=PITimeDat(${pTag}, ${pRange}, ${formatParam(mode, 'Interpolated')}, "${orientation}", ${formatParam(rootPath)})`;
+        return `=PITimeDat(${pTag}, ${pRange}, ${formatParam(mode, 'Interpolated')}, "${orientation}")`;
       }
       case 'PIAdvCalcVal': {
         const pTag = formatParam(tag, 'TAG');
         const pStart = formatParam(startTime, '*-8h');
         const pEnd = formatParam(endTime, '*');
         const pCalc = formatParam(calculation, 'Average');
-        return `=PIAdvCalcVal(${pTag}, ${pStart}, ${pEnd}, ${pCalc}, ${formatParam(calcInterval)}, ${formatParam(conversionFactor, '1')}, "${orientation}", ${showStartTime}, ${showEndTime}, ${showMinMaxTime}, ${showPercentValid}, ${formatParam(filterExpression)}, ${markFiltered}, ${formatParam(rootPath)})`;
+        return `=PIAdvCalcVal(${pTag}, ${pStart}, ${pEnd}, ${pCalc}, ${formatParam(calcInterval)}, ${formatParam(conversionFactor, '1')}, "${orientation}", ${showStartTime}, ${showEndTime}, ${showMinMaxTime}, ${showPercentValid}, ${formatParam(filterExpression)}, ${markFiltered})`;
       }
       case 'PITimeFilter': {
         const pExpr = formatParam(expression, "'TAG' > 50");
         const pStart = formatParam(startTime, '*-8h');
         const pEnd = formatParam(endTime, '*');
         const pUnit = formatParam(unit, 'hours');
-        return `=PITimeFilter(${pExpr}, ${pStart}, ${pEnd}, ${pUnit}, ${formatParam(interval)}, "${orientation}", ${showStartTime}, ${showEndTime}, ${showPercentValid}, ${formatParam(rootPath)})`;
+        return `=PITimeFilter(${pExpr}, ${pStart}, ${pEnd}, ${pUnit}, ${formatParam(interval)}, "${orientation}", ${showStartTime}, ${showEndTime}, ${showPercentValid})`;
       }
       default:
         return '';
@@ -223,7 +222,6 @@ export function PiDataLinkFunctionDialog({
     mode,
     orientation,
     reverseTime,
-    rootPath,
     showAnnotations,
     showEndTime,
     showMinMaxTime,
@@ -294,11 +292,6 @@ export function PiDataLinkFunctionDialog({
               <label className={styles.radioLabel}><input type="radio" name="datalink-input-mode" checked={inputMode === 'expression'} onChange={() => setInputMode('expression')} /><span>Expressão</span></label>
             </fieldset>
           )}
-
-          <div className={styles.formRow}>
-            <label className={styles.label} htmlFor="datalink-root-path">Caminho-raiz (opcional)</label>
-            <input id="datalink-root-path" className={styles.input} value={rootPath} placeholder="Ex: \\Servidor\\Banco" onChange={(e) => setRootPath(e.target.value)} />
-          </div>
 
           {functionType !== 'PITimeFilter' ? (
             <div className={styles.formRow}>
