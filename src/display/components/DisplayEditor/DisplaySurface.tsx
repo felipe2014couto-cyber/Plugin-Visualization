@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { css } from '@emotion/css';
 import type { DisplayDocument } from '../../displayDocument';
+import type { DisplayElement } from '../../displayElement';
 import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE, type RectangleElement } from '../../createRectangle';
 import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { CALCULATION_TYPE, type CalculationElement } from '../../createCalculation';
@@ -126,6 +127,7 @@ export interface DisplaySurfaceProps {
   trendTimeRange?: DisplayTimeRange;
   onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors?: readonly TrendCursor[]) => void;
   onTrendContextMenu?: (element: TrendElement) => void;
+  onElementContextMenu?: (element: DisplayElement) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement) => void;
   onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
   zoom?: number;
@@ -179,6 +181,7 @@ export function DisplaySurface({
   trendTimeRange,
   onTrendOpen,
   onTrendContextMenu,
+  onElementContextMenu,
   onLibrarySymbolContextMenu,
   onTableColumnsChange,
   zoom = 1,
@@ -383,6 +386,21 @@ export function DisplaySurface({
     event.stopPropagation();
     onLibrarySymbolContextMenu?.(element as LibrarySymbolElement);
   }, [editable, elements, onLibrarySymbolContextMenu]);
+
+  const handleElementContextMenu = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    if (!editable) {
+      return;
+    }
+    const target = event.target as Element;
+    const elementId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
+    const element = elementId ? elements.find((candidate) => candidate.id === elementId) : undefined;
+    if (!element || element.type === TREND_TYPE || element.type === LIBRARY_SYMBOL_TYPE) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onElementContextMenu?.(element);
+  }, [editable, elements, onElementContextMenu]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
@@ -680,6 +698,7 @@ export function DisplaySurface({
   return (
     <svg
       onClick={handleElementClick}
+      onContextMenu={handleElementContextMenu}
       ref={svgRef}
       width={surface.width}
       height={surface.height}
