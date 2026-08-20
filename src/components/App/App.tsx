@@ -31,6 +31,7 @@ import { TimeRangeBar } from '../TimeRangeBar';
 import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
+import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
@@ -47,7 +48,7 @@ export type VisualizationTheme = 'dark' | 'light';
 export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
 
 type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
-type ActiveModule = 'visualization' | 'sheets';
+type ActiveModule = 'visualization' | 'sheets' | 'sql-query';
 type AssetsTab = 'assets' | 'library' | 'calculations';
 
 function getInitialTheme(): VisualizationTheme {
@@ -418,9 +419,9 @@ export function App() {
                   ? styles.assetsRailActive
                   : styles.assetsRailButton
               }
-              title="Visualização"
-              aria-label="Visualização"
-              aria-pressed={activeModule === 'visualization'}
+              title={isAssetsPanelOpen ? 'Ocultar barra de ferramentas' : 'Visualização'}
+              aria-label={isAssetsPanelOpen ? 'Ocultar barra de ferramentas' : 'Mostrar barra de ferramentas'}
+              aria-pressed={isAssetsPanelOpen}
               data-testid="pims-vision-toggle-assets-panel"
               onClick={() => {
                 if (activeModule !== 'visualization') {
@@ -440,7 +441,15 @@ export function App() {
               data-testid="pims-vision-sheets-tab"
               onClick={() => { setActiveModule('sheets'); setIsAssetsPanelOpen(true); }}
             ><SheetsIcon /></button>
-            <span className={styles.assetsRailItem} title="PI Points" aria-label="PI Points"><DatabaseIcon /></span>
+            <button
+              type="button"
+              className={activeModule === 'sql-query' ? styles.assetsRailActive : styles.assetsRailButton}
+              title="Consulta SQL Oracle"
+              aria-label="Consulta SQL Oracle"
+              aria-pressed={activeModule === 'sql-query'}
+              data-testid="pims-vision-sql-query-tab"
+              onClick={() => { setActiveModule('sql-query'); setIsAssetsPanelOpen(true); }}
+            ><DatabaseIcon /></button>
             <span className={styles.assetsRailItem} title="Pesquisa PI" aria-label="Pesquisa PI"><SearchIcon /></span>
           </div>
           {isAssetsPanelOpen && (
@@ -525,7 +534,11 @@ export function App() {
                       />
                     </div>
                   </div>
-              </> : <div id="pims-sheets-menu-slot" className={styles.sheetsMenuSlot} data-testid="pims-sheets-menu-slot" />}
+              </> : activeModule === 'sheets' ? (
+                <div id="pims-sheets-menu-slot" className={styles.sheetsMenuSlot} data-testid="pims-sheets-menu-slot" />
+              ) : (
+                <SqlQueryPanel />
+              )}
             </div>
           )}
         </aside>

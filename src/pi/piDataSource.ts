@@ -194,19 +194,18 @@ export async function searchPiPointsWithStatus(
     }
   }
 
-  if (!request.term) {
-    if (request.description) {
-      throw new Error('Para pesquisar por descrição nesta versão do PI Web API, informe também o nome ou máscara da tag (ex: *).');
-    }
+  if (!request.term && !hasMetadataFilters(request)) {
     throw new Error('Informe o nome ou máscara da tag para pesquisar.');
   }
+
+  const fallbackRequest = request.term ? request : { ...request, term: '*' };
 
   // O datasource GridProtectionAlliance fixa maxCount=100 em piPointSearch().
   // Para buscas por nome, use diretamente o endpoint legado do mesmo PI Web
   // API, preservando o datasource/proxy configurado e permitindo paginação.
   if (serverWebId && typeof resourceApi.getResource === 'function') {
     try {
-      const legacyResults = await searchPiPointsByDataServer(resourceApi, request, dataSource.uid, serverWebId);
+      const legacyResults = await searchPiPointsByDataServer(resourceApi, fallbackRequest, dataSource.uid, serverWebId);
       return {
         results: filterPiPointSearchResults(legacyResults.results, request),
         hasMore: legacyResults.hasMore,
@@ -489,7 +488,7 @@ function filterPiPointSearchResults(
     matchesTagSearch(result.name, request.term)
     && includesIgnoreCase(result.description, request.description)
     && matchesAny(result.pointType, request.pointTypes)
-    && matchesAny(result.engineeringUnit, request.engineeringUnits)
+    && (request.engineeringUnits.length === 0 || Boolean(result.engineeringUnit && request.engineeringUnits.some((unit) => includesIgnoreCase(result.engineeringUnit, unit))))
     && matchesAny(result.pointSource, request.pointSources)
   ));
 }
@@ -520,7 +519,7 @@ function includesIgnoreCase(value: string | undefined, expected: string): boolea
 }
 
 function matchesAny(value: string | undefined, expected: string[]): boolean {
-  return expected.length === 0 || Boolean(value && expected.some((item) => item.localeCompare(value, undefined, { sensitivity: 'accent' }) === 0));
+  return expected.length === 0 || Boolean(value && expected.some((item) => item.localeCompare(value, undefined, { sensitivity: 'base' }) === 0));
 }
 
 async function runLimited<T>(tasks: Array<() => Promise<T>>, concurrency: number): Promise<T[]> {
