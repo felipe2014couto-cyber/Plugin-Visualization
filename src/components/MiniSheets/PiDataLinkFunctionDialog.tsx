@@ -50,6 +50,7 @@ export function PiDataLinkFunctionDialog({
   const [unit, setUnit] = useState('hours');
   const [maxCount, setMaxCount] = useState('500');
   const [showTimestamp, setShowTimestamp] = useState(true);
+  const [currValTimestampPosition, setCurrValTimestampPosition] = useState<'none' | 'left' | 'above'>('none');
   const [selectionField, setSelectionField] = useState<SelectableField | null>(null);
   const [selectionBaselineAddress, setSelectionBaselineAddress] = useState<string | null>(null);
   const targetCellInputRef = useRef<HTMLInputElement>(null);
@@ -142,7 +143,9 @@ export function PiDataLinkFunctionDialog({
     switch (functionType) {
       case 'PICurrVal': {
         const pTag = formatParam(tag, 'TAG');
-        return `=PICurrVal(${pTag})`;
+        return currValTimestampPosition === 'none'
+          ? `=PICurrVal(${pTag})`
+          : `=PICurrVal(${pTag}, "${currValTimestampPosition}")`;
       }
       case 'PIArcVal': {
         const pTag = formatParam(tag, 'TAG');
@@ -193,6 +196,7 @@ export function PiDataLinkFunctionDialog({
   }, [
     calcInterval,
     calculation,
+    currValTimestampPosition,
     endTime,
     expression,
     functionType,
@@ -354,6 +358,42 @@ export function PiDataLinkFunctionDialog({
                 </select>
               </div>
             </>
+          )}
+
+          {functionType === 'PICurrVal' && (
+            <fieldset className={styles.radioGroup}>
+              <legend className={styles.radioLegend}>Timestamp</legend>
+              <label className={styles.radioLabel}>
+                <input
+                  type="radio"
+                  name="curr-val-timestamp-position"
+                  value="none"
+                  checked={currValTimestampPosition === 'none'}
+                  onChange={() => setCurrValTimestampPosition('none')}
+                />
+                <span>Sem time stamp</span>
+              </label>
+              <label className={styles.radioLabel}>
+                <input
+                  type="radio"
+                  name="curr-val-timestamp-position"
+                  value="left"
+                  checked={currValTimestampPosition === 'left'}
+                  onChange={() => setCurrValTimestampPosition('left')}
+                />
+                <span>Time stamp à esquerda</span>
+              </label>
+              <label className={styles.radioLabel}>
+                <input
+                  type="radio"
+                  name="curr-val-timestamp-position"
+                  value="above"
+                  checked={currValTimestampPosition === 'above'}
+                  onChange={() => setCurrValTimestampPosition('above')}
+                />
+                <span>Time stamp acima</span>
+              </label>
+            </fieldset>
           )}
 
           {(functionType === 'PICompDat' ||
@@ -731,6 +771,30 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: 'flex',
     flexDirection: 'column',
     gap: '3px',
+  }),
+  radioGroup: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '7px',
+    margin: 0,
+    padding: '8px 10px',
+    border: '1px solid var(--border-subtle, #2b394a)',
+    borderRadius: '4px',
+  }),
+  radioLegend: css({
+    padding: '0 4px',
+    fontSize: '12px',
+    fontWeight: 600,
+    color: 'var(--text-secondary, #aeb3bf)',
+  }),
+  radioLabel: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: '7px',
+    fontSize: '13px',
+    color: 'var(--text-primary, #f1f2f5)',
+    cursor: 'pointer',
+    '& input': { margin: 0 },
   }),
   gridTwoCols: css({
     display: 'grid',

@@ -26,6 +26,7 @@ export type ParsedFormula =
   | {
       type: 'pi_curr_val';
       tag: string;
+      timestampPosition?: 'none' | 'left' | 'above';
       referencedCells?: CellCoord[];
     }
   | {
@@ -266,6 +267,9 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
       return {
         type: 'pi_curr_val',
         tag: stripQuotes(rawArgs[0]),
+        ...(rawArgs[1]
+          ? { timestampPosition: stripQuotes(rawArgs[1]).toLowerCase() as 'none' | 'left' | 'above' }
+          : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }

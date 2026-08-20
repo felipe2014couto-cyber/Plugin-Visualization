@@ -405,7 +405,43 @@ export function MiniSheetsPanel({
           setCells((prev) => {
             const next = new Map(prev);
             const existing = next.get(key);
-            next.set(key, { rawValue, displayValue: display, format: existing?.format });
+            const timestampPosition = parsed.timestampPosition ?? 'none';
+            const hasTimestamp = timestampPosition !== 'none' && Boolean(valResult?.timestamp);
+            const timestampMs = valResult?.timestamp ? Date.parse(valResult.timestamp) : NaN;
+            const timestampDisplay = hasTimestamp
+              ? Number.isFinite(timestampMs)
+                ? formatDateTime(timestampMs)
+                : String(valResult?.timestamp)
+              : '';
+
+            if (hasTimestamp && display !== '#PI!') {
+              const spillCoord = timestampPosition === 'left'
+                ? { col: coord.col + 1, row: coord.row }
+                : { col: coord.col, row: coord.row + 1 };
+              const spillKey = `${spillCoord.col},${spillCoord.row}`;
+              const spillCell = next.get(spillKey);
+              const outsideGrid = spillCoord.col >= TOTAL_COLS || spillCoord.row >= TOTAL_ROWS;
+              const occupied = Boolean(spillCell && (spillCell.rawValue || spillCell.spilledFrom));
+
+              if (outsideGrid || occupied) {
+                next.set(key, { rawValue, displayValue: '#SPILL!', format: existing?.format });
+                return evaluateStaticFormulas(next).nextMap;
+              }
+
+              next.set(key, {
+                rawValue,
+                displayValue: timestampDisplay,
+                spillTargetAddresses: [formatCellAddress(spillCoord)],
+                format: existing?.format,
+              });
+              next.set(spillKey, {
+                rawValue: '',
+                displayValue: display,
+                spilledFrom: address,
+              });
+            } else {
+              next.set(key, { rawValue, displayValue: display, format: existing?.format });
+            }
             return evaluateStaticFormulas(next).nextMap;
           });
         } catch {
