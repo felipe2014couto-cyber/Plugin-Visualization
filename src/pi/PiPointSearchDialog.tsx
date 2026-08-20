@@ -1,4 +1,4 @@
-import React, { FormEvent, useState } from 'react';
+import React, { FormEvent, useMemo, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -16,6 +16,8 @@ export interface PiPointSearchDialogProps {
   initialDescription?: string;
 }
 
+const getPointKey = (point: PiPointSearchResult): string => point.webId ?? point.name;
+
 export function PiPointSearchDialog({
   isOpen,
   onClose,
@@ -32,10 +34,13 @@ export function PiPointSearchDialog({
   const [pointSource, setPointSource] = useState('');
 
   const [results, setResults] = useState<PiPointSearchResult[]>([]);
-  const [selectedPoint, setSelectedPoint] = useState<PiPointSearchResult | null>(null);
+  const [selectedPoints, setSelectedPoints] = useState<PiPointSearchResult[]>([]);
+  const [anchorIndex, setAnchorIndex] = useState<number | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'empty' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [hasMoreResults, setHasMoreResults] = useState(false);
+
+  const selectedKeys = useMemo(() => new Set(selectedPoints.map(getPointKey)), [selectedPoints]);
 
   if (!isOpen) {
     return null;
@@ -53,6 +58,9 @@ export function PiPointSearchDialog({
 
     setStatus('loading');
     setErrorMessage('');
+    setSelectedPoints([]);
+    setAnchorIndex(null);
+
     try {
       const response = await searchPiPointsWithStatus({
         term: cleanTag === '*' ? '' : cleanTag,
@@ -63,9 +71,7 @@ export function PiPointSearchDialog({
       });
       setResults(response.results);
       setHasMoreResults(response.hasMore);
-      setSelectedPoint(null);
       setStatus(response.results.length > 0 ? 'success' : 'empty');
-      onApplyResults?.(response.results, response.hasMore);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Não foi possível pesquisar PI Points.');
       setStatus('error');
@@ -79,14 +85,60 @@ export function PiPointSearchDialog({
     setEngUnits('');
     setPointSource('');
     setResults([]);
-    setSelectedPoint(null);
+    setSelectedPoints([]);
+    setAnchorIndex(null);
     setStatus('idle');
     setErrorMessage('');
   };
 
-  const handleConfirmSelection = (point: PiPointSearchResult) => {
-    onSelect?.(point);
+  const handleRowClick = (point: PiPointSearchResult, index: number, event: React.MouseEvent) => {
+    const isCtrl = event.ctrlKey || event.metaKey;
+    const isShift = event.shiftKey;
+
+    if (isShift && anchorIndex !== null && anchorIndex >= 0 && anchorIndex < results.length) {
+      const start = Math.min(anchorIndex, index);
+      const end = Math.max(anchorIndex, index);
+      const range = results.slice(start, end + 1);
+
+      if (isCtrl) {
+        const currentKeys = new Set(selectedPoints.map(getPointKey));
+        const merged = [...selectedPoints];
+        for (const item of range) {
+          const key = getPointKey(item);
+          if (!currentKeys.has(key)) {
+            currentKeys.add(key);
+            merged.push(item);
+          }
+        }
+        setSelectedPoints(merged);
+      } else {
+        setSelectedPoints(range);
+      }
+    } else if (isCtrl) {
+      const key = getPointKey(point);
+      if (selectedKeys.has(key)) {
+        setSelectedPoints(selectedPoints.filter((p) => getPointKey(p) !== key));
+      } else {
+        setSelectedPoints([...selectedPoints, point]);
+      }
+      setAnchorIndex(index);
+    } else {
+      setSelectedPoints([point]);
+      setAnchorIndex(index);
+    }
+  };
+
+  const handleConfirmSelection = (pointsToConfirm: PiPointSearchResult[]) => {
+    if (pointsToConfirm.length === 0) return;
+    onSelect?.(pointsToConfirm[0]);
+    onApplyResults?.(pointsToConfirm, false);
     onClose();
+  };
+
+  const handleRowDoubleClick = (point: PiPointSearchResult) => {
+    const isIncluded = selectedKeys.has(getPointKey(point));
+    const toConfirm = isIncluded && selectedPoints.length > 0 ? selectedPoints : [point];
+    handleConfirmSelection(toConfirm);
   };
 
   return (
@@ -244,23 +296,24 @@ export function PiPointSearchDialog({
                     </tr>
                   </thead>
                   <tbody>
-                    {results.map((point) => {
-                      const isSelected = selectedPoint?.webId
-                        ? selectedPoint.webId === point.webId
-                        : selectedPoint?.name === point.name;
+                    {results.map((point, index) => {
+                      const isSelected = selectedKeys.has(getPointKey(point));
                       return (
                         <tr
                           key={point.webId ?? point.name}
                           className={isSelected ? styles.selectedRow : styles.row}
-                          onClick={() => setSelectedPoint(point)}
-                          onDoubleClick={() => handleConfirmSelection(point)}
+                          onClick={(e) => handleRowClick(point, index, e)}
+                          onDoubleClick={() => handleRowDoubleClick(point)}
                           draggable
-                          title={`Arraste ${point.name} para o display ou clique duas vezes para selecionar`}
+                          title={`Arraste ${point.name} para o display ou selecione (Ctrl/Shift para múltiplos)`}
                           onDragStart={(event) => {
                             event.dataTransfer.effectAllowed = 'copy';
                             event.dataTransfer.setData(PI_POINT_DRAG_MIME, serializePiPointDragData(point));
                             event.dataTransfer.setData('text/plain', point.name);
-                            setSelectedPoint(point);
+                            if (!isSelected) {
+                              setSelectedPoints([point]);
+                              setAnchorIndex(index);
+                            }
                           }}
                           data-testid={`dialog-row-${point.webId ?? point.name}`}
                         >
@@ -282,10 +335,16 @@ export function PiPointSearchDialog({
         </div>
 
         <div className={styles.footer}>
-          <div className={styles.footerLeft}>
-            {selectedPoint && (
+          <div className={styles.footerLeft} data-testid="dialog-selected-info">
+            {selectedPoints.length === 0 && <span>Nenhuma tag selecionada</span>}
+            {selectedPoints.length === 1 && (
               <span>
-                Selecionado: <strong>{selectedPoint.name}</strong>
+                Selecionado: <strong>{selectedPoints[0].name}</strong>
+              </span>
+            )}
+            {selectedPoints.length > 1 && (
+              <span>
+                <strong>{selectedPoints.length}</strong> PI Points selecionados
               </span>
             )}
           </div>
@@ -301,8 +360,8 @@ export function PiPointSearchDialog({
             <button
               type="button"
               className={styles.primaryButton}
-              disabled={!selectedPoint}
-              onClick={() => selectedPoint && handleConfirmSelection(selectedPoint)}
+              disabled={selectedPoints.length === 0}
+              onClick={() => handleConfirmSelection(selectedPoints)}
               data-testid="dialog-ok-button"
             >
               OK
@@ -530,6 +589,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+    user-select: none;
 
     th {
       position: sticky;
