@@ -69,11 +69,12 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
             <label className={styles.numberField}>
               <span>{rule.operator === 'between' ? 'Mínimo' : 'Valor'}</span>
               <input
-                type="number"
-                value={Number.isFinite(rule.value) ? rule.value : ''}
+                type={rule.operator === 'between' ? 'number' : 'text'}
+                value={rule.value ?? ''}
+                placeholder={rule.operator === 'eq' ? 'Ex: LIGADO, 1...' : undefined}
                 aria-label={rule.operator === 'between' ? 'Mínimo da regra' : 'Valor da regra'}
                 data-testid={`${testIdPrefix}-value-${rule.id}`}
-                onChange={(event) => updateRule(rule.id, { value: toFiniteNumber(event.target.value, rule.value) })}
+                onChange={(event) => updateRule(rule.id, { value: parseRuleValue(event.target.value, rule.value) })}
               />
             </label>
             {rule.operator === 'between' && (
@@ -81,10 +82,10 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
                 <span>Máximo</span>
                 <input
                   type="number"
-                  value={typeof rule.value2 === 'number' && Number.isFinite(rule.value2) ? rule.value2 : ''}
+                  value={typeof rule.value2 === 'number' && Number.isFinite(rule.value2) ? rule.value2 : (rule.value2 ?? '')}
                   aria-label="Máximo da regra"
                   data-testid={`${testIdPrefix}-value2-${rule.id}`}
-                  onChange={(event) => updateRule(rule.id, { value2: toFiniteNumber(event.target.value, rule.value2 ?? rule.value) })}
+                  onChange={(event) => updateRule(rule.id, { value2: parseRuleValue(event.target.value, rule.value2 ?? rule.value) })}
                 />
               </label>
             )}
@@ -103,12 +104,13 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
   );
 }
 
-function toFiniteNumber(value: string, fallback: number): number {
-  if (value.trim() === '') {
-    return fallback;
+function parseRuleValue(value: string, fallback: number | string): number | string {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return '';
   }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : value;
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({

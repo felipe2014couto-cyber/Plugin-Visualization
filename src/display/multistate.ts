@@ -5,8 +5,8 @@ export type MultistateOperator = 'lt' | 'lte' | 'gt' | 'gte' | 'eq' | 'between';
 export interface MultistateRule {
   id: string;
   operator: MultistateOperator;
-  value: number;
-  value2?: number;
+  value: number | string;
+  value2?: number | string;
   color: string;
 }
 
@@ -38,13 +38,35 @@ export function normalizeMultistateConfig(config?: Partial<MultistateConfig> | n
   };
 }
 
+function extractRawCandidates(val: unknown): unknown[] {
+  if (val === null || val === undefined) {
+    return [];
+  }
+  if (typeof val === 'object' && !Array.isArray(val)) {
+    const rec = val as Record<string, unknown>;
+    const candidates: unknown[] = [];
+    if ('Name' in rec && rec.Name !== undefined) candidates.push(rec.Name);
+    if ('name' in rec && rec.name !== undefined) candidates.push(rec.name);
+    if ('text' in rec && rec.text !== undefined) candidates.push(rec.text);
+    if ('Text' in rec && rec.Text !== undefined) candidates.push(rec.Text);
+    if ('State' in rec && rec.State !== undefined) candidates.push(rec.State);
+    if ('state' in rec && rec.state !== undefined) candidates.push(rec.state);
+    if ('Value' in rec && rec.Value !== undefined) candidates.push(rec.Value);
+    if ('value' in rec && rec.value !== undefined) candidates.push(rec.value);
+    if (candidates.length > 0) {
+      return candidates;
+    }
+  }
+  return [val];
+}
+
 export function evaluateMultistate(value: unknown, config?: MultistateConfig | null): MultistateMatch | undefined {
-  const numericValue = toMultistateNumber(value);
-  if (!config?.enabled || numericValue === undefined) {
+  if (!config?.enabled || value === undefined || value === null) {
     return undefined;
   }
+  const candidates = extractRawCandidates(value);
   for (const rule of config.rules) {
-    if (matchesRule(numericValue, rule)) {
+    if (candidates.some((candidate) => matchesRule(candidate, rule))) {
       return { rule, color: rule.color };
     }
   }
@@ -60,11 +82,22 @@ export function getMultistateColor(
 }
 
 export function isValidMultistateRule(rule: MultistateRule): boolean {
-  if (!Number.isFinite(rule.value) || (!HEX_COLOR.test(rule.color) && rule.color !== TRANSPARENT_COLOR)) {
+  const hasValidColor = HEX_COLOR.test(rule.color) || rule.color === TRANSPARENT_COLOR;
+  if (!hasValidColor) {
     return false;
   }
-  return rule.operator !== 'between'
-    || (typeof rule.value2 === 'number' && Number.isFinite(rule.value2) && rule.value < rule.value2);
+  const hasValidValue = typeof rule.value === 'number'
+    ? Number.isFinite(rule.value)
+    : typeof rule.value === 'string' && rule.value.trim().length > 0;
+  if (!hasValidValue) {
+    return false;
+  }
+  if (rule.operator === 'between') {
+    const num1 = typeof rule.value === 'number' ? rule.value : Number(rule.value);
+    const num2 = typeof rule.value2 === 'number' ? rule.value2 : Number(rule.value2);
+    return Number.isFinite(num1) && Number.isFinite(num2) && num1 < num2;
+  }
+  return true;
 }
 
 export function createDefaultMultistateRule(id: string): MultistateRule {
@@ -115,17 +148,52 @@ export function updateBackgroundMultistateConfig(
   return changed ? { ...document, elements } : document;
 }
 
-function matchesRule(value: number, rule: MultistateRule): boolean {
+function matchesRule(rawVal: unknown, rule: MultistateRule): boolean {
   if (!isValidMultistateRule(rule)) {
     return false;
   }
+
+  // Equality comparison (supports strings, numbers, booleans, digital states)
+  if (rule.operator === 'eq') {
+    const strVal = String(rawVal).trim().toLowerCase();
+    const strRule = String(rule.value).trim().toLowerCase();
+    if (strVal === strRule) {
+      return true;
+    }
+    if (typeof rawVal === 'boolean') {
+      const isTrue = rawVal === true;
+      if (isTrue && ['1', 'true', 'ligado', 'on', 'aberto', 'running', 'sim', 'yes', 'ativo'].includes(strRule)) return true;
+      if (!isTrue && ['0', 'false', 'desligado', 'off', 'fechado', 'stopped', 'nao', 'não', 'no', 'inativo'].includes(strRule)) return true;
+    }
+    if (typeof rawVal === 'number' || (!Number.isNaN(Number(rawVal)) && strVal !== '')) {
+      const numVal = Number(rawVal);
+      const numRule = Number(rule.value);
+      if (Number.isFinite(numVal) && Number.isFinite(numRule) && numVal === numRule) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Numeric comparisons for lt, lte, gt, gte, between
+  const numVal = typeof rawVal === 'number' ? rawVal : Number(rawVal);
+  const numRule = typeof rule.value === 'number' ? rule.value : Number(rule.value);
+
+  if (!Number.isFinite(numVal) || !Number.isFinite(numRule)) {
+    return false;
+  }
+
   switch (rule.operator) {
-    case 'lt': return value < rule.value;
-    case 'lte': return value <= rule.value;
-    case 'gt': return value > rule.value;
-    case 'gte': return value >= rule.value;
-    case 'eq': return value === rule.value;
-    case 'between': return value >= rule.value && value < (rule.value2 as number);
+    case 'lt': return numVal < numRule;
+    case 'lte': return numVal <= numRule;
+    case 'gt': return numVal > numRule;
+    case 'gte': return numVal >= numRule;
+    case 'between': {
+      const numRule2 = typeof rule.value2 === 'number' ? rule.value2 : Number(rule.value2);
+      return Number.isFinite(numRule2) && numVal >= numRule && numVal < numRule2;
+    }
+    default:
+      return false;
   }
 }
 
@@ -138,8 +206,22 @@ function normalizeRule(rule: unknown, index: number): MultistateRule | undefined
   if (!['lt', 'lte', 'gt', 'gte', 'eq', 'between'].includes(String(operator))) {
     return undefined;
   }
-  const value = typeof candidate.value === 'number' ? candidate.value : Number.NaN;
-  const value2 = typeof candidate.value2 === 'number' ? candidate.value2 : undefined;
+  let value: number | string = Number.NaN;
+  if (typeof candidate.value === 'number') {
+    value = candidate.value;
+  } else if (typeof candidate.value === 'string') {
+    const trimmed = candidate.value.trim();
+    const num = Number(trimmed);
+    value = trimmed !== '' && Number.isFinite(num) ? num : trimmed;
+  }
+  let value2: number | string | undefined = undefined;
+  if (typeof candidate.value2 === 'number') {
+    value2 = candidate.value2;
+  } else if (typeof candidate.value2 === 'string') {
+    const trimmed = candidate.value2.trim();
+    const num = Number(trimmed);
+    value2 = trimmed !== '' && Number.isFinite(num) ? num : trimmed;
+  }
   return {
     id: typeof candidate.id === 'string' && candidate.id.length > 0 ? candidate.id : `multistate-rule-${index + 1}`,
     operator: operator as MultistateOperator,
@@ -147,15 +229,4 @@ function normalizeRule(rule: unknown, index: number): MultistateRule | undefined
     ...(value2 === undefined ? {} : { value2 }),
     color: typeof candidate.color === 'string' && (HEX_COLOR.test(candidate.color) || candidate.color === TRANSPARENT_COLOR) ? candidate.color : DEFAULT_RULE_COLOR,
   };
-}
-
-function toMultistateNumber(value: unknown): number | undefined {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : undefined;
-  }
-  if (typeof value === 'string' && value.trim() !== '') {
-    const numericValue = Number(value);
-    return Number.isFinite(numericValue) ? numericValue : undefined;
-  }
-  return undefined;
 }

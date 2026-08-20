@@ -10,7 +10,7 @@ import {
 } from '../multistate';
 
 const config = (rules: MultistateConfig['rules']): MultistateConfig => ({ enabled: true, rules });
-const rule = (id: string, operator: MultistateConfig['rules'][number]['operator'], value: number, color = '#ff0000', value2?: number) => ({
+const rule = (id: string, operator: MultistateConfig['rules'][number]['operator'], value: number | string, color = '#ff0000', value2?: number | string) => ({
   id, operator, value, color, ...(value2 === undefined ? {} : { value2 }),
 });
 
@@ -51,6 +51,44 @@ describe('Multistate', () => {
     const transparent = rule('transparent', 'eq', 0, 'transparent');
     expect(isValidMultistateRule(transparent)).toBe(true);
     expect(evaluateMultistate(0, config([transparent]))?.color).toBe('transparent');
+  });
+
+  it('avalia tags com estado digital e texto de forma flexível', () => {
+    const digitalRules = [
+      { id: 'running', operator: 'eq' as const, value: 'LIGADO', color: '#00ff00' },
+      { id: 'stopped', operator: 'eq' as const, value: 'DESLIGADO', color: '#ff0000' },
+    ];
+    expect(evaluateMultistate('LIGADO', config(digitalRules))?.color).toBe('#00ff00');
+    expect(evaluateMultistate('ligado', config(digitalRules))?.color).toBe('#00ff00');
+    expect(evaluateMultistate('DESLIGADO', config(digitalRules))?.color).toBe('#ff0000');
+    expect(evaluateMultistate('desligado', config(digitalRules))?.color).toBe('#ff0000');
+    expect(evaluateMultistate({ Name: 'LIGADO' }, config(digitalRules))?.color).toBe('#00ff00');
+    expect(evaluateMultistate({ Value: 'DESLIGADO' }, config(digitalRules))?.color).toBe('#ff0000');
+    expect(evaluateMultistate({ text: 'LIGADO' }, config(digitalRules))?.color).toBe('#00ff00');
+    expect(evaluateMultistate({ State: 'DESLIGADO' }, config(digitalRules))?.color).toBe('#ff0000');
+  });
+
+  it('avalia estados digitais com booleanos e números (0/1)', () => {
+    const rules01 = [
+      { id: 'on', operator: 'eq' as const, value: 1, color: '#00ff00' },
+      { id: 'off', operator: 'eq' as const, value: 0, color: '#ff0000' },
+    ];
+    expect(evaluateMultistate(1, config(rules01))?.color).toBe('#00ff00');
+    expect(evaluateMultistate(0, config(rules01))?.color).toBe('#ff0000');
+    expect(evaluateMultistate('1', config(rules01))?.color).toBe('#00ff00');
+    expect(evaluateMultistate('0', config(rules01))?.color).toBe('#ff0000');
+    expect(evaluateMultistate(true, config(rules01))?.color).toBe('#00ff00');
+    expect(evaluateMultistate(false, config(rules01))?.color).toBe('#ff0000');
+    expect(evaluateMultistate({ Name: 'LIGADO', Value: 1 }, config(rules01))?.color).toBe('#00ff00');
+    expect(evaluateMultistate({ Name: 'DESLIGADO', Value: 0 }, config(rules01))?.color).toBe('#ff0000');
+
+    const rulesNamed = [
+      { id: 'on', operator: 'eq' as const, value: 'LIGADO', color: '#00ff00' },
+      { id: 'off', operator: 'eq' as const, value: 'DESLIGADO', color: '#ff0000' },
+    ];
+    expect(evaluateMultistate(true, config(rulesNamed))?.color).toBe('#00ff00');
+    expect(evaluateMultistate(false, config(rulesNamed))?.color).toBe('#ff0000');
+    expect(evaluateMultistate({ Name: 'LIGADO', Value: 1 }, config(rulesNamed))?.color).toBe('#00ff00');
   });
 
   it('persiste configuração aditiva em Value, Gauge e Barra sem runtime', () => {

@@ -386,13 +386,14 @@ export function DisplayEditor({
     const element = createRectangle({
       surface: currentDocument.surface,
       existingIds: currentDocument.elements.map(({ id }) => id),
+      binding: selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined,
     });
     if (!onChangeRef.current) {
       return;
     }
     commitDocument(appendDisplayElement(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-  }, [commitDocument, dispatch]);
+  }, [commitDocument, dispatch, selectedPiPoint]);
 
   const handleInsertText = useCallback(() => {
     const currentDocument = documentRef.current;

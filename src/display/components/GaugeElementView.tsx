@@ -32,7 +32,8 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const track = arcPath(cx, cy, radius, startAngle, sweepAngle);
   const valueText = getValueText(binding, label, runtimeState, numericValue, options.decimals);
   const detailLines = getDetailLines(valueText, runtimeState, options.showValue, options.showUnit, false);
-  const activeColor = getMultistateColor(numericValue, element.properties.multistate, options.color);
+  const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
+  const activeColor = getMultistateColor(rawValue, element.properties.multistate, options.color);
   const valueY = options.labelPosition === 'below'
     ? element.y + element.height - 12
     : options.gaugeStyle === 'pointer' || options.gaugeStyle === 'line'

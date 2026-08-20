@@ -142,6 +142,20 @@ function formatTimestamp(timestamp: string): string {
 }
 
 export function formatValue(value: unknown, visual: ValueVisualOptions = getValueVisualOptions({})): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'object') {
+    const rec = value as Record<string, unknown>;
+    if ('Name' in rec && rec.Name !== undefined) return String(rec.Name);
+    if ('name' in rec && rec.name !== undefined) return String(rec.name);
+    if ('text' in rec && rec.text !== undefined) return String(rec.text);
+    if ('Text' in rec && rec.Text !== undefined) return String(rec.Text);
+    if ('State' in rec && rec.State !== undefined) return String(rec.State);
+    if ('state' in rec && rec.state !== undefined) return String(rec.state);
+    if ('Value' in rec && rec.Value !== undefined) return formatValue(rec.Value, visual);
+    if ('value' in rec && rec.value !== undefined) return formatValue(rec.value, visual);
+  }
   return typeof value === 'number' && Number.isFinite(value) && visual.decimals !== null
     ? value.toFixed(visual.decimals)
     : String(value);
