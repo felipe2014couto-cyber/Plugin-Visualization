@@ -52,6 +52,7 @@ import {
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
+import { zoomViewportAtPoint, type SurfaceViewport } from './viewportZoom';
 
 const HANDLE_SIZE = 8;
 const ELEMENT_FILL = 'rgba(110, 159, 255, 0.15)';
@@ -132,6 +133,10 @@ export interface DisplaySurfaceProps {
   onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
   zoom?: number;
   viewCenter?: Point;
+  onViewportWheelZoom?: (viewport: SurfaceViewport) => void;
+  minZoom?: number;
+  maxZoom?: number;
+  wheelZoomFactor?: number;
 }
 
 function trySetPointerCapture(target: Element, pointerId: number): void {
@@ -186,15 +191,29 @@ export function DisplaySurface({
   onTableColumnsChange,
   zoom = 1,
   viewCenter,
+  onViewportWheelZoom,
+  minZoom = 0.1,
+  maxZoom = 5,
+  wheelZoomFactor = 1.1,
 }: DisplaySurfaceProps) {
   const { surface, elements } = displayDocument;
   const cursorEnabled = !editable;
   const svgRef = useRef<SVGSVGElement>(null);
+  const viewportRef = useRef<SurfaceViewport>({
+    zoom,
+    viewCenter: viewCenter ?? { x: displayDocument.surface.width / 2, y: displayDocument.surface.height / 2 },
+  });
   const nextCursorId = useRef(1);
   const [cursorsByTrend, setCursorsByTrend] = useState<Record<string, TrendCursor[]>>({});
   const [selectedCursor, setSelectedCursor] = useState<CursorSelection | null>(null);
   const [cursorDrag, setCursorDrag] = useState<CursorDrag | null>(null);
   const [databaseScales, setDatabaseScales] = useState<Record<string, PiPointDatabaseLimits>>({});
+  useEffect(() => {
+    viewportRef.current = {
+      zoom,
+      viewCenter: viewCenter ?? { x: surface.width / 2, y: surface.height / 2 },
+    };
+  }, [surface.height, surface.width, viewCenter, zoom]);
   useEffect(() => {
     if (!loadPiPointDatabaseLimits) {
       return;
@@ -530,6 +549,37 @@ export function DisplaySurface({
       window.open(linkUrl, openInNewTab ? '_blank' : '_self', openInNewTab ? 'noopener,noreferrer' : undefined);
     }
   }, [displayDocument.elements, editable]);
+
+  const handleWheel = useCallback((event: WheelEvent) => {
+    if (!event.ctrlKey || event.deltaY === 0) {
+      return;
+    }
+    const svg = svgRef.current;
+    if (!svg) {
+      return;
+    }
+    event.preventDefault();
+    const anchor = svgPointFromEvent(svg, event.clientX, event.clientY);
+    const nextViewport = zoomViewportAtPoint(
+      viewportRef.current,
+      anchor,
+      event.deltaY < 0 ? 'in' : 'out',
+      minZoom,
+      maxZoom,
+      wheelZoomFactor,
+    );
+    viewportRef.current = nextViewport;
+    onViewportWheelZoom?.(nextViewport);
+  }, [maxZoom, minZoom, onViewportWheelZoom, wheelZoomFactor]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) {
+      return;
+    }
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   const handleSvgPointerDown = useCallback(
     (e: React.PointerEvent) => {

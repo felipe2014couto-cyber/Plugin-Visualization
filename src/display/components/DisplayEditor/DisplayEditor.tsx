@@ -96,6 +96,7 @@ import {
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
+import type { SurfaceViewport } from './viewportZoom';
 
 export type DisplayEditorMode = 'edit' | 'view';
 export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'table';
@@ -1042,6 +1043,11 @@ export function DisplayEditor({
     setTrendPopup(null);
   }, []);
 
+  const handleViewportWheelZoom = useCallback((viewport: SurfaceViewport) => {
+    setSurfaceZoom(viewport.zoom);
+    setSurfaceViewCenter(viewport.viewCenter);
+  }, []);
+
   const handleZoomFit = useCallback(() => {
     const elements = documentRef.current.elements;
     const surface = documentRef.current.surface;
@@ -1197,6 +1203,10 @@ export function DisplayEditor({
             onTableColumnsChange={handleTableColumnsChange}
             zoom={surfaceZoom}
             viewCenter={surfaceViewCenter}
+            minZoom={DISPLAY_ZOOM_MIN}
+            maxZoom={DISPLAY_ZOOM_MAX}
+            wheelZoomFactor={1 + DISPLAY_ZOOM_STEP}
+            onViewportWheelZoom={handleViewportWheelZoom}
           />
           {displayDocument.elements.length === 0 && (
             <div className={styles.emptyState} data-testid="display-empty-state">
