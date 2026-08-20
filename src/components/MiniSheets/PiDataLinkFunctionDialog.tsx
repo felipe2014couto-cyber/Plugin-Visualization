@@ -51,7 +51,6 @@ export function PiDataLinkFunctionDialog({
   const [maxCount, setMaxCount] = useState('500');
   const [limitMode, setLimitMode] = useState<'time' | 'count'>('time');
   const [showTimestamp, setShowTimestamp] = useState(true);
-  const [inputMode, setInputMode] = useState<'item' | 'expression'>('item');
   const [filterExpression, setFilterExpression] = useState('');
   const [markFiltered, setMarkFiltered] = useState(false);
   const [orientation, setOrientation] = useState<'column' | 'row'>('column');
@@ -285,25 +284,17 @@ export function PiDataLinkFunctionDialog({
         </div>
 
         <div className={embedded ? styles.embeddedBody : styles.body}>
-          {functionType !== 'PITimeFilter' && (
-            <fieldset className={styles.radioGroup}>
-              <legend className={styles.radioLegend}>Origem dos dados</legend>
-              <label className={styles.radioLabel}><input type="radio" name="datalink-input-mode" checked={inputMode === 'item'} onChange={() => setInputMode('item')} /><span>Item de dados</span></label>
-              <label className={styles.radioLabel}><input type="radio" name="datalink-input-mode" checked={inputMode === 'expression'} onChange={() => setInputMode('expression')} /><span>Expressão</span></label>
-            </fieldset>
-          )}
-
           {functionType !== 'PITimeFilter' ? (
             <div className={styles.formRow}>
               <label className={styles.label} htmlFor="datalink-tag">
-                {inputMode === 'item' ? 'Item de dados (PI Point ou Célula)' : 'Expressão'}
+                Item de dados (PI Point ou Célula)
               </label>
               <div className={styles.inputWrapper}>
                 <input
                   id="datalink-tag"
                   className={`${styles.input} ${isSelectionFieldActive('tag') ? styles.inputSelectingRange : ''}`}
                   value={tag}
-                  placeholder={inputMode === 'item' ? 'Ex: LFS_RB2_TEMP ou A1' : "Ex: 'LFS_RB2_TEMP'"}
+                  placeholder="Ex: LFS_RB2_TEMP ou A1"
                   onChange={(e) => {
                     setTag(e.target.value);
                     setSelectionField(null);
