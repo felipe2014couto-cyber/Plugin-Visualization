@@ -81,6 +81,14 @@ export function TransparentColorPicker({ color, fallbackColor, onChange, testId 
         aria-label="Selecionar cor"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
+        // Keep the shared test/automation contract used by the former native
+        // color input while the visible control is the SVG-style picker.
+        onChange={(event) => {
+          const next = (event.target as HTMLInputElement).value;
+          if (isHexColor(next)) {
+            onChange(next);
+          }
+        }}
       >
         <span className={transparent ? styles.transparentSwatch : styles.swatch} style={transparent ? undefined : { background: selectedColor }} />
       </button>
