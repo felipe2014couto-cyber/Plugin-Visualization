@@ -13,7 +13,9 @@ export function SqlResultTable({ result, isLoading }: SqlResultTableProps) {
   const styles = useStyles2(getStyles);
 
   const columns = useMemo(() => {
-    if (!result || !result.rows || result.rows.length === 0) return [];
+    if (!result || !result.rows || result.rows.length === 0) {
+      return [];
+    }
     return Object.keys(result.rows[0]);
   }, [result]);
 
@@ -107,9 +109,10 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    border: 1px solid ${theme.colors.border.weak};
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: ${theme.shape.borderRadius(1)};
-    background: ${theme.colors.background.primary};
+    background: var(--surface-primary);
   `,
   emptyState: css`
     display: flex;
@@ -118,9 +121,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     justify-content: center;
     height: 100%;
     min-height: 200px;
-    color: ${theme.colors.text.secondary};
-    background: ${theme.colors.background.primary};
-    border: 1px solid ${theme.colors.border.weak};
+    color: var(--text-secondary);
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
     border-radius: ${theme.shape.borderRadius(1)};
     padding: ${theme.spacing(4)};
     text-align: center;
@@ -134,13 +137,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
     justify-content: space-between;
     align-items: center;
     padding: ${theme.spacing(1)} ${theme.spacing(2)};
-    background: ${theme.colors.background.secondary};
-    border-bottom: 1px solid ${theme.colors.border.weak};
+    background: var(--surface-secondary);
+    border-bottom: 1px solid var(--border-color);
     font-size: ${theme.typography.size.sm};
-    color: ${theme.colors.text.secondary};
+    color: var(--text-secondary);
   `,
   warningText: css`
-    color: ${theme.colors.warning.text};
+    color: var(--warning, #f59e0b);
     display: flex;
     align-items: center;
     gap: ${theme.spacing(0.5)};
@@ -152,6 +155,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   table: css`
     width: 100%;
+    min-width: 100%;
+    table-layout: fixed;
     border-collapse: separate;
     border-spacing: 0;
     font-family: ${theme.typography.fontFamilyMonospace};
@@ -159,10 +164,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
     
     th, td {
       padding: ${theme.spacing(1)} ${theme.spacing(2)};
-      border-bottom: 1px solid ${theme.colors.border.weak};
-      border-right: 1px solid ${theme.colors.border.weak};
-      white-space: nowrap;
-      max-width: 300px;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+      white-space: normal;
+      max-width: none;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      vertical-align: top;
       overflow: hidden;
       text-overflow: ellipsis;
       
@@ -172,18 +181,18 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
     
     th {
-      background: ${theme.colors.background.secondary};
+      background: var(--surface-secondary);
       position: sticky;
       top: 0;
       z-index: 1;
-      border-bottom: 1px solid ${theme.colors.border.medium};
+      border-bottom: 1px solid var(--border-color);
       text-align: left;
       font-weight: ${theme.typography.fontWeightMedium};
-      color: ${theme.colors.text.primary};
+      color: var(--text-primary);
     }
     
     tbody tr:hover {
-      background: ${theme.colors.action.hover};
+      background: var(--button-hover);
     }
   `,
   rowNumHeader: css`
@@ -192,14 +201,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   rowNumCell: css`
     text-align: center;
-    color: ${theme.colors.text.disabled};
-    background: ${theme.colors.background.secondary};
+    color: var(--text-muted);
+    background: var(--surface-secondary);
     position: sticky;
     left: 0;
     z-index: 0;
   `,
   nullCell: css`
-    color: ${theme.colors.text.disabled};
+    color: var(--text-muted);
     font-style: italic;
   `,
   numberCell: css`

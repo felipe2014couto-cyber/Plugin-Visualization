@@ -50,7 +50,7 @@ class QueryRequest(BaseModel):
     params: Optional[Dict[str, Any]] = None
 
 # =========================
-# PROTEÇÃO READ-ONLY
+# PROTEÇÃO DE CONSULTAS
 # =========================
 COMMENT_RE = re.compile(r"(--[^\n]*\n)|(/\*.*?\*/)", re.DOTALL)
 LEADING_SPACE_RE = re.compile(r"^\s+", re.DOTALL)
@@ -66,14 +66,22 @@ def strip_comments(sql: str) -> str:
     sql2 = LEADING_SPACE_RE.sub("", sql2)
     return sql2.strip()
 
+def normalize_sql(sql: str) -> str:
+    """Remove one optional terminator while keeping multi-statement SQL blocked."""
+    normalized = sql.strip()
+    if normalized.endswith(";"):
+        normalized = normalized[:-1].rstrip()
+    return normalized
+
 def is_read_only_sql(sql: str) -> bool:
     if not sql or not isinstance(sql, str):
         return False
 
-    if ";" in sql:
+    normalized = normalize_sql(sql)
+    if ";" in normalized:
         return False
 
-    cleaned = strip_comments(sql)
+    cleaned = strip_comments(normalized)
     low = cleaned.lower()
 
     if not (low.startswith("select") or low.startswith("with")):
@@ -171,8 +179,9 @@ def run_query(req: QueryRequest):
     if max_rows < 1: max_rows = 1
     if max_rows > HARD_MAX_ROWS: max_rows = HARD_MAX_ROWS
 
-    if not is_read_only_sql(req.sql):
-        raise HTTPException(status_code=400, detail="SQL inválido. Permitido apenas SELECT/WITH em modo read-only, sem ';' e sem comandos de escrita.")
+    normalized_sql = normalize_sql(req.sql)
+    if not is_read_only_sql(normalized_sql):
+        raise HTTPException(status_code=400, detail="SQL inválido. Permitido apenas SELECT/WITH, com ponto e vírgula final opcional e sem comandos de escrita.")
 
     engine = get_engine_for_session(SESSIONS[req.session_id])
     
@@ -182,7 +191,7 @@ def run_query(req: QueryRequest):
         with engine.connect() as connection:
             connection.exec_driver_sql("SET TRANSACTION READ ONLY")
             
-            result = connection.execute(text(req.sql), req.params or {})
+            result = connection.execute(text(normalized_sql), req.params or {})
             
             if result.returns_rows:
                 fetched_rows = result.mappings().fetchmany(max_rows)

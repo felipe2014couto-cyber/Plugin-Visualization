@@ -32,6 +32,8 @@ import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
+import { SqlDashboardTable } from '../SqlQuery/SqlDashboardTable';
+import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
@@ -51,6 +53,12 @@ type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
 type ActiveModule = 'visualization' | 'sheets' | 'sql-query';
 type AssetsTab = 'assets' | 'library' | 'calculations';
 
+interface SqlDashboardTableState {
+  id: string;
+  sql: string;
+  result: OracleQueryResponse;
+}
+
 function getInitialTheme(): VisualizationTheme {
   try {
     return globalThis.localStorage?.getItem(VISUALIZATION_THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
@@ -63,6 +71,8 @@ export function App() {
   const styles = useStyles2(getStyles);
   const [authenticationState, setAuthenticationState] = useState<AuthenticationState>('checking');
   const [activeModule, setActiveModule] = useState<ActiveModule>('visualization');
+  const [sqlTables, setSqlTables] = useState<SqlDashboardTableState[]>([]);
+  const [selectedSqlTableId, setSelectedSqlTableId] = useState<string | null>(null);
   const [document, setDocument] = useState(() =>
     createDisplayDocument({ name: 'Visualization' }),
   );
@@ -87,6 +97,7 @@ export function App() {
   const [expandedFolderUids, setExpandedFolderUids] = useState<string[]>([]);
   const [saveValidationError, setSaveValidationError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const sqlTableIdRef = useRef(0);
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
   if (!progressiveTrendLoaderRef.current) {
     progressiveTrendLoaderRef.current = createProgressiveTrendLoader(
@@ -215,6 +226,24 @@ export function App() {
     [progressiveTrendLoader, rangeFrom, rangeTo],
   );
   const hasPiConnection = piConnection.status === 'connected';
+  const handleSqlResultChange = useCallback((result: OracleQueryResponse, sql: string) => {
+    setSqlTables((currentTables) => {
+      if (selectedSqlTableId) {
+        const selectedExists = currentTables.some((table) => table.id === selectedSqlTableId);
+        if (selectedExists) {
+          return currentTables.map((table) => table.id === selectedSqlTableId ? { ...table, sql, result } : table);
+        }
+      }
+      const id = `sql-table-${Date.now()}-${sqlTableIdRef.current++}`;
+      return [...currentTables, { id, sql, result }];
+    });
+  }, [selectedSqlTableId]);
+  const handleSqlTableSelect = useCallback((tableId: string) => {
+    setSelectedSqlTableId((currentId) => currentId === tableId ? null : tableId);
+    setActiveModule('sql-query');
+    setIsAssetsPanelOpen(true);
+  }, []);
+  const selectedSqlTable = sqlTables.find((table) => table.id === selectedSqlTableId);
   const openSaveAsDialog = useCallback(() => {
     setSaveName(document.name);
     setSaveFolderUid(selectedFolderUid);
@@ -537,14 +566,15 @@ export function App() {
               </> : activeModule === 'sheets' ? (
                 <div id="pims-sheets-menu-slot" className={styles.sheetsMenuSlot} data-testid="pims-sheets-menu-slot" />
               ) : (
-                <SqlQueryPanel />
+                <SqlQueryPanel onResultChange={handleSqlResultChange} sqlToLoad={selectedSqlTable?.sql} />
               )}
             </div>
           )}
         </aside>
         <main className={styles.editorArea} data-testid="pims-vision-editor-area">
-          <div style={{ display: activeModule === 'visualization' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>
-            <DisplayEditor
+          <div style={{ display: activeModule === 'visualization' || activeModule === 'sql-query' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>
+            <div className={styles.sqlDashboardWorkspace}>
+              <DisplayEditor
               document={document}
               onChange={setDocument}
               onModeChange={setEditorMode}
@@ -570,7 +600,18 @@ export function App() {
                 setIsAssetsPanelOpen(true);
                 setOpenCalculationId(calculationId);
               }}
-            />
+              />
+              {(activeModule === 'visualization' || activeModule === 'sql-query') && sqlTables.map((table, index) => (
+                <SqlDashboardTable
+                  key={table.id}
+                  id={table.id}
+                  result={table.result}
+                  index={index}
+                  selected={table.id === selectedSqlTableId}
+                  onSelect={handleSqlTableSelect}
+                />
+              ))}
+            </div>
           </div>
           <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>
             <MiniSheetsPanel
@@ -1387,6 +1428,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
     cursor: pointer;
   `,
   editorArea: css`
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+  `,
+  sqlDashboardWorkspace: css`
+    position: relative;
     display: flex;
     flex: 1;
     min-width: 0;
