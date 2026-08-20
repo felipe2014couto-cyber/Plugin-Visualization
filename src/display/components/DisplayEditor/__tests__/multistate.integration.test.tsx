@@ -52,6 +52,19 @@ function selectElement(id: string): void {
 }
 
 describe('Multistate no editor', () => {
+  it('não permite adicionar regra enquanto o Multistate estiver desabilitado', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    const addRule = screen.getByTestId('multistate-add-rule');
+    expect(addRule).toBeDisabled();
+    fireEvent.click(addRule);
+    expect(screen.queryByTestId(/^multistate-rule-/)).toBeNull();
+    fireEvent.click(screen.getByTestId('multistate-enabled'));
+    expect(addRule).not.toBeDisabled();
+    fireEvent.click(addRule);
+    expect(screen.getByTestId(/^multistate-rule-/)).toBeInTheDocument();
+  });
+
   it('aplica Multistate a uma forma geométrica vinculada ao PI Point', async () => {
     const loadValue = jest.fn().mockResolvedValue({ value: 85 });
     render(<Harness loadValue={loadValue} />);

@@ -68,7 +68,10 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
   const updateRule = (ruleId: string, patch: Partial<MultistateRule>) => update({
     rules: normalized.rules.map((rule) => rule.id === ruleId ? { ...rule, ...patch } : rule),
   });
-  const addRule = () => update({ rules: [...normalized.rules, isDigital ? createDigitalRule(generateId(), digitalStates[0]) : createDefaultMultistateRule(generateId())] });
+  const addRule = () => {
+    if (!normalized.enabled) return;
+    update({ rules: [...normalized.rules, isDigital ? createDigitalRule(generateId(), digitalStates[0]) : createDefaultMultistateRule(generateId())] });
+  };
 
   useEffect(() => {
     if (!isDigital || !normalized.enabled || normalized.rules.length > 0 || digitalStates.length === 0 || autoPopulatedFor.current === bindingKey) return;
@@ -93,7 +96,7 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
         </label>
       </div>
       <div className={styles.hint}>{isDigital ? 'Cada estado digital usa igualdade. A primeira regra correspondente vence.' : 'A primeira regra correspondente vence. Entre usa mínimo inclusivo e máximo exclusivo.'}</div>
-      <button type="button" className={styles.addButton} data-testid={`${testIdPrefix}-add-rule`} onClick={addRule}>
+      <button type="button" className={styles.addButton} data-testid={`${testIdPrefix}-add-rule`} onClick={addRule} disabled={!normalized.enabled}>
         Adicionar regra
       </button>
       <div className={styles.rules}>
@@ -211,7 +214,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   title: css`font-size: 11px; font-weight: ${theme.typography.fontWeightMedium};`,
   toggle: css`display: flex; align-items: center; gap: 4px; color: var(--text-secondary); font-size: 10px;`,
   hint: css`margin: 7px 0; color: var(--text-secondary); font-size: 9px; line-height: 1.35;`,
-  addButton: css`width: 100%; min-height: 27px; padding: 3px 6px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-primary); font-size: 10px;`,
+  addButton: css`width: 100%; min-height: 27px; padding: 3px 6px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-primary); font-size: 10px; &:disabled { opacity: 0.5; cursor: not-allowed; }`,
   rules: css`
     display: flex;
     flex-direction: column;
