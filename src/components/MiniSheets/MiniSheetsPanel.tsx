@@ -72,7 +72,8 @@ export interface CellData {
 }
 
 const TOTAL_COLS = 20; // A to T
-const TOTAL_ROWS = 50; // 1 to 50
+const TOTAL_ROWS = 100_000; // Limite máximo de linhas
+const INITIAL_VISIBLE_ROWS = 50;
 
 function filterPiDataPoints<T extends { value: number | string }>(points: T[], expression?: string): T[] {
   const normalized = expression?.trim();
@@ -134,6 +135,7 @@ export function MiniSheetsPanel({
     const deserialized = deserializeMiniSheets(initialDocument);
     return deserialized.cells;
   });
+  const [visibleRows, setVisibleRows] = useState(INITIAL_VISIBLE_ROWS);
   const [history, setHistory] = useState<MiniSheetsHistory>(() =>
     createMiniSheetsHistory(initialDocument)
   );
@@ -193,6 +195,28 @@ export function MiniSheetsPanel({
   const lastEmittedDocRef = useRef<MiniSheetsDocument | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Mantém a grade inicialmente compacta, expandindo-a em blocos quando uma
+  // fórmula, colagem ou documento carregado utiliza linhas além das visíveis.
+  useEffect(() => {
+    let highestRow = -1;
+    cells.forEach((_cell, key) => {
+      const [, row] = key.split(',').map(Number);
+      if (Number.isInteger(row)) {
+        highestRow = Math.max(highestRow, row);
+      }
+    });
+    const requiredRow = Math.max(highestRow, activeCell.row);
+    if (requiredRow < visibleRows) {
+      return;
+    }
+    const requiredRows = Math.min(TOTAL_ROWS, Math.ceil((requiredRow + 1) / INITIAL_VISIBLE_ROWS) * INITIAL_VISIBLE_ROWS);
+    setVisibleRows((current) => Math.max(current, requiredRows));
+  }, [activeCell.row, cells, visibleRows]);
+
+  const handleAddRow = useCallback(() => {
+    setVisibleRows((current) => Math.min(TOTAL_ROWS, current + 1));
+  }, []);
+
   // Emit updated MiniSheetsDocument when cells or colWidths change
   const notifyDocumentChange = useCallback(() => {
     if (resizingColRef.current) {
@@ -235,7 +259,7 @@ export function MiniSheetsPanel({
 
   const activeKey = `${activeCell.col},${activeCell.row}`;
   const addressLabel = ranges.length > 0
-    ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS)
+    ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, visibleRows)
     : formatCellAddress(activeCell);
 
   const beginFormulaEdit = useCallback((initialText?: string, target: CellCoord = activeCell) => {
@@ -1782,7 +1806,7 @@ export function MiniSheetsPanel({
 
     if (isShift) {
       const currentAnchor = anchorCellRef.current;
-      const newRange = rangeFromColumns(currentAnchor.col, colIndex, TOTAL_ROWS);
+      const newRange = rangeFromColumns(currentAnchor.col, colIndex, visibleRows);
       setRanges((prev) => {
         if (prev.length <= 1) {
           return [newRange];
@@ -1792,7 +1816,7 @@ export function MiniSheetsPanel({
       return;
     }
 
-    const colRange = rangeFromColumns(colIndex, colIndex, TOTAL_ROWS);
+    const colRange = rangeFromColumns(colIndex, colIndex, visibleRows);
     if (isMulti) {
       dragModeRef.current = 'cols';
       dragAnchorRef.current = { col: colIndex, row: 0 };
@@ -1822,7 +1846,7 @@ export function MiniSheetsPanel({
     if (dragModeRef.current !== 'cols' || !dragAnchorRef.current) {
       return;
     }
-    const currentRange = rangeFromColumns(dragAnchorRef.current.col, colIndex, TOTAL_ROWS);
+    const currentRange = rangeFromColumns(dragAnchorRef.current.col, colIndex, visibleRows);
     if (isAppendingRangeRef.current) {
       setRanges([...baseRangesRef.current, currentRange]);
     } else {
@@ -1891,7 +1915,7 @@ export function MiniSheetsPanel({
     setEditingCellCoord(null);
     setActiveCell({ col: 0, row: 0 });
     setAnchorCell({ col: 0, row: 0 });
-    setRanges([rangeSelectAll(TOTAL_COLS, TOTAL_ROWS)]);
+    setRanges([rangeSelectAll(TOTAL_COLS, visibleRows)]);
   };
 
   const handleCellDoubleClick = (col: number, row: number) => {
@@ -2268,6 +2292,16 @@ export function MiniSheetsPanel({
           <RefreshIcon />
           <span>Recalcular</span>
         </button>
+        <button
+          type="button"
+          className={styles.recalculateButton}
+          data-testid="mini-sheets-add-row"
+          onClick={handleAddRow}
+          disabled={visibleRows >= TOTAL_ROWS}
+          title={visibleRows >= TOTAL_ROWS ? 'Limite máximo de linhas atingido' : 'Adicionar uma linha'}
+        >
+          <span>+ Linha</span>
+        </button>
       </div>
 
       {/* Formula Bar and Active Cell Box */}
@@ -2372,7 +2406,7 @@ export function MiniSheetsPanel({
             </tr>
           </thead>
           <tbody>
-            {Array.from({ length: TOTAL_ROWS }).map((_, rIndex) => {
+            {Array.from({ length: visibleRows }).map((_, rIndex) => {
               const isRowSel = isRowSelected(rIndex, ranges);
               return (
                 <tr key={rIndex}>
