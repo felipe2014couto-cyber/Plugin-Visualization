@@ -616,23 +616,98 @@ async function loadPiPointDigitalStates(
 
   const digitalSet = getDigitalSetReference(metadata);
   if (digitalSet.webId) {
-    const response = await resourceApi.getResource(`/digitalstatesets/${encodeURIComponent(digitalSet.webId)}/digitalstates`);
-    const states = normalizePiDigitalStates(response);
+    const states = await loadDigitalStatesBySetWebId(resourceApi, digitalSet.webId);
     if (states.length > 0) return { isDigital: true, states };
   }
   if (digitalSet.name) {
-    const sets = await resourceApi.getResource(`/digitalstatesets?nameFilter=${encodeURIComponent(digitalSet.name)}`);
-    const set = getResourceItems(sets)[0] ?? sets;
-    const setStates = normalizePiDigitalStates(set);
-    if (setStates.length > 0) return { isDigital: true, states: setStates };
-    const webId = getUnknownString((set as Record<string, unknown>)?.WebId);
-    if (webId) {
-      const response = await resourceApi.getResource(`/digitalstatesets/${encodeURIComponent(webId)}/digitalstates`);
-      const states = normalizePiDigitalStates(response);
-      if (states.length > 0) return { isDigital: true, states };
-    }
+    const states = await loadDigitalStatesByName(instance, resourceApi, digitalSet.name);
+    if (states.length > 0) return { isDigital: true, states };
   }
   throw new Error('Não foi possível localizar o conjunto de estados digitais da PI Point');
+}
+
+async function loadDigitalStatesBySetWebId(resourceApi: PiDataSourceResourceApi, webId: string): Promise<PiDigitalState[]> {
+  const paths = [
+    `/digitalstatesets/${encodeURIComponent(webId)}/digitalstates`,
+    `/digitalstatesets/${encodeURIComponent(webId)}`,
+  ];
+  for (const path of paths) {
+    try {
+      const response = await resourceApi.getResource(path);
+      const states = normalizePiDigitalStates(response);
+      if (states.length > 0) return states;
+      const linkedStates = await loadDigitalStatesFromLink(resourceApi, response);
+      if (linkedStates.length > 0) return linkedStates;
+    } catch {
+      // PI Web API versions differ in which Digital State Set routes they expose.
+    }
+  }
+  return [];
+}
+
+async function loadDigitalStatesByName(
+  instance: PiDataSourceApi,
+  resourceApi: PiDataSourceResourceApi,
+  name: string,
+): Promise<PiDigitalState[]> {
+  const encodedName = encodeURIComponent(name);
+  const serverWebId = await getPiDataServerWebId(instance);
+  const paths = [
+    ...(serverWebId ? [`/dataservers/${encodeURIComponent(serverWebId)}/digitalstatesets?nameFilter=${encodedName}`] : []),
+    // Fallback for PI Web API installations that expose this collection globally.
+    `/digitalstatesets?nameFilter=${encodedName}`,
+  ];
+  for (const path of paths) {
+    try {
+      const response = await resourceApi.getResource(path);
+      for (const set of getResourceItems(response)) {
+        const states = normalizePiDigitalStates(set);
+        if (states.length > 0) return states;
+        const linkedStates = await loadDigitalStatesFromLink(resourceApi, set);
+        if (linkedStates.length > 0) return linkedStates;
+        const webId = getUnknownString((set as Record<string, unknown>).WebId);
+        if (webId) {
+          const directStates = await loadDigitalStatesBySetWebId(resourceApi, webId);
+          if (directStates.length > 0) return directStates;
+        }
+      }
+    } catch {
+      // Continue with the next route supported by this datasource/PI Web API.
+    }
+  }
+  return [];
+}
+
+async function getPiDataServerWebId(instance: PiDataSourceApi): Promise<string | undefined> {
+  if (typeof instance.metricFindQuery !== 'function') return undefined;
+  try {
+    const servers = await instance.metricFindQuery({ type: 'dataserver' }, { isPiPoint: true });
+    return getMetricField(servers[0], 'WebId') ?? getMetricField(servers[0], 'value');
+  } catch {
+    return undefined;
+  }
+}
+
+async function loadDigitalStatesFromLink(resourceApi: PiDataSourceResourceApi, source: unknown): Promise<PiDigitalState[]> {
+  if (!source || typeof source !== 'object') return [];
+  const links = (source as Record<string, unknown>).Links;
+  const linkRecord = links && typeof links === 'object' ? links as Record<string, unknown> : undefined;
+  const path = getUnknownString(linkRecord?.DigitalStates) ?? getUnknownString(linkRecord?.States);
+  if (!path) return [];
+  try {
+    return normalizePiDigitalStates(await resourceApi.getResource(toPiResourcePath(path)));
+  } catch {
+    return [];
+  }
+}
+
+function toPiResourcePath(link: string): string {
+  try {
+    const parsed = new URL(link);
+    return `${parsed.pathname}${parsed.search}`.replace(/^.*?(\/piwebapi\/)/i, '/');
+  } catch {
+    return link.startsWith('/') ? link : `/${link}`;
+  }
 }
 
 async function getPiPointMetadataForBinding(

@@ -59,6 +59,25 @@ describe('PI data source integration', () => {
     expect(getResource).toHaveBeenCalledTimes(2);
   });
 
+  it('busca DigitalSetName pelo Data Server, como exposto pelo datasource GPA', async () => {
+    const getResource = jest.fn(async (path: string) => {
+      if (path === '/points/gpa-digital-point') return { PointType: 'Digital', DigitalSetName: 'MOTOR STATES' };
+      if (path === '/dataservers/server-webid/digitalstatesets?nameFilter=MOTOR%20STATES') {
+        return { Items: [{ WebId: 'motor-set-webid', Name: 'MOTOR STATES', Links: { DigitalStates: '/digitalstatesets/motor-set-webid/digitalstates' } }] };
+      }
+      if (path === '/digitalstatesets/motor-set-webid/digitalstates') return { Items: [{ Name: 'Off', Value: 0 }, { Name: 'On', Value: 1 }] };
+      return {};
+    });
+    const metricFindQuery = jest.fn(async (query: unknown) => (
+      (query as { type?: string }).type === 'dataserver' ? [{ WebId: 'server-webid' }] : []
+    ));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource, metricFindQuery });
+
+    await expect(getPiPointDigitalStates({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'MOTOR', webId: 'gpa-digital-point' }, dataSourceSrv))
+      .resolves.toEqual({ isDigital: true, states: [{ name: 'Off', value: 0 }, { name: 'On', value: 1 }] });
+    expect(getResource).toHaveBeenCalledWith('/dataservers/server-webid/digitalstatesets?nameFilter=MOTOR%20STATES');
+  });
+
   it('não trata PI Points Float ou String como Digital', async () => {
     const dataSourceSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ isDefault: true })],
