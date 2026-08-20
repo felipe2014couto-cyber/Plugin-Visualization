@@ -68,6 +68,19 @@ export interface PiPointValue {
   quality?: Record<string, unknown>;
 }
 
+/** A compact representation of a state configured in a PI Digital State Set. */
+export interface PiDigitalState {
+  name: string;
+  value?: number | string;
+}
+
+export interface PiDigitalStatesResult {
+  isDigital: boolean;
+  states: PiDigitalState[];
+}
+
+const piDigitalStatesCache = new Map<string, Promise<PiDigitalStatesResult>>();
+
 export type PiPointValueResult =
   | { status: 'success'; value: PiPointValue }
   | { status: 'error'; error: Error };
@@ -560,6 +573,126 @@ export async function getPiPointDatabaseLimits(
   const span = getMetricNumber(point, 'Span');
   if (zero === undefined || span === undefined || span <= 0) throw new Error('PI Point sem Zero/Span válidos');
   return { zero, span };
+}
+
+/**
+ * Gets the actual Digital State Set assigned to a PI Point using the existing
+ * Grafana PI datasource proxy.  No direct PI Web API connection is created.
+ */
+export function getPiPointDigitalStates(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
+): Promise<PiDigitalStatesResult> {
+  const cacheKey = `${binding.dataSourceUid}:${binding.webId ?? `${binding.serverPath}\\${binding.pointName}`}`;
+  const cached = piDigitalStatesCache.get(cacheKey);
+  if (cached) return cached;
+
+  const request = loadPiPointDigitalStates(binding, dataSourceSrv).catch((error) => {
+    piDigitalStatesCache.delete(cacheKey);
+    throw error;
+  });
+  piDigitalStatesCache.set(cacheKey, request);
+  return request;
+}
+
+async function loadPiPointDigitalStates(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'>,
+): Promise<PiDigitalStatesResult> {
+  const dataSource = resolvePiDataSource(dataSourceSrv);
+  if (!dataSource) throw new Error('PI Data Source não configurada');
+  const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
+  const resourceApi = instance as PiDataSourceResourceApi;
+  const metadata = await getPiPointMetadataForBinding(binding, instance, resourceApi);
+  const pointType = getUnknownString(metadata?.PointType) ?? binding.pointType;
+  const isDigital = pointType?.trim().toLocaleLowerCase() === 'digital';
+  if (!isDigital) return { isDigital: false, states: [] };
+
+  const embeddedStates = normalizePiDigitalStates(metadata);
+  if (embeddedStates.length > 0) return { isDigital: true, states: embeddedStates };
+  if (typeof resourceApi.getResource !== 'function') {
+    throw new Error('A Data Source PI não expõe estados digitais');
+  }
+
+  const digitalSet = getDigitalSetReference(metadata);
+  if (digitalSet.webId) {
+    const response = await resourceApi.getResource(`/digitalstatesets/${encodeURIComponent(digitalSet.webId)}/digitalstates`);
+    const states = normalizePiDigitalStates(response);
+    if (states.length > 0) return { isDigital: true, states };
+  }
+  if (digitalSet.name) {
+    const sets = await resourceApi.getResource(`/digitalstatesets?nameFilter=${encodeURIComponent(digitalSet.name)}`);
+    const set = getResourceItems(sets)[0] ?? sets;
+    const setStates = normalizePiDigitalStates(set);
+    if (setStates.length > 0) return { isDigital: true, states: setStates };
+    const webId = getUnknownString((set as Record<string, unknown>)?.WebId);
+    if (webId) {
+      const response = await resourceApi.getResource(`/digitalstatesets/${encodeURIComponent(webId)}/digitalstates`);
+      const states = normalizePiDigitalStates(response);
+      if (states.length > 0) return { isDigital: true, states };
+    }
+  }
+  throw new Error('Não foi possível localizar o conjunto de estados digitais da PI Point');
+}
+
+async function getPiPointMetadataForBinding(
+  binding: PiPointBinding,
+  instance: PiDataSourceApi,
+  resourceApi: PiDataSourceResourceApi,
+): Promise<Record<string, unknown> | undefined> {
+  if (binding.webId && typeof resourceApi.getResource === 'function') {
+    const response = await resourceApi.getResource(`/points/${encodeURIComponent(binding.webId)}`);
+    return response && typeof response === 'object' ? response as Record<string, unknown> : undefined;
+  }
+  if (typeof instance.metricFindQuery !== 'function') return undefined;
+  const points = await instance.metricFindQuery(
+    { path: binding.serverPath, pointName: binding.pointName, type: 'pipoint' },
+    { isPiPoint: true },
+  );
+  const point = points.find((candidate) => getMetricField(candidate, 'text') === binding.pointName) ?? points[0];
+  if (!point) return undefined;
+  const webId = getMetricField(point, 'WebId');
+  if (webId && typeof resourceApi.getResource === 'function') {
+    const response = await resourceApi.getResource(`/points/${encodeURIComponent(webId)}`);
+    return response && typeof response === 'object' ? response as Record<string, unknown> : undefined;
+  }
+  return point as unknown as Record<string, unknown>;
+}
+
+function getDigitalSetReference(metadata: Record<string, unknown> | undefined): { webId?: string; name?: string } {
+  if (!metadata) return {};
+  const nested = metadata.DigitalSet ?? metadata.DigitalStateSet;
+  const nestedRecord = nested && typeof nested === 'object' ? nested as Record<string, unknown> : undefined;
+  const links = metadata.Links && typeof metadata.Links === 'object' ? metadata.Links as Record<string, unknown> : undefined;
+  const link = getUnknownString(links?.DigitalSet) ?? getUnknownString(links?.DigitalStateSet);
+  const linkWebId = link?.match(/digitalstatesets\/([^/?]+)/i)?.[1];
+  return {
+    webId: getUnknownString(metadata.DigitalSetWebId)
+      ?? getUnknownString(metadata.DigitalStateSetWebId)
+      ?? getUnknownString(nestedRecord?.WebId)
+      ?? linkWebId,
+    name: getUnknownString(metadata.DigitalSetName)
+      ?? getUnknownString(metadata.DigitalStateSetName)
+      ?? (typeof nested === 'string' ? getUnknownString(nested) : undefined)
+      ?? getUnknownString(nestedRecord?.Name),
+  };
+}
+
+function normalizePiDigitalStates(response: unknown): PiDigitalState[] {
+  const items = getResourceItems(response);
+  const candidates = items.length > 0 ? items : Array.isArray(response) ? response : [];
+  const unique = new Map<string, PiDigitalState>();
+  for (const item of candidates) {
+    if (!item || typeof item !== 'object') continue;
+    const state = item as Record<string, unknown>;
+    const name = getUnknownString(state.Name) ?? getUnknownString(state.name) ?? getUnknownString(state.Text) ?? getUnknownString(state.text);
+    if (!name) continue;
+    const rawValue = state.Value ?? state.value ?? state.Code ?? state.code;
+    const value = typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : undefined;
+    const key = value === undefined ? `name:${name.toLocaleLowerCase()}` : `value:${value}`;
+    unique.set(key, { name, ...(value === undefined ? {} : { value }) });
+  }
+  return [...unique.values()];
 }
 
 export async function getPiPointsCurrentValues(

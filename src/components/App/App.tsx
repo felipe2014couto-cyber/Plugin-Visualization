@@ -12,6 +12,7 @@ import {
   checkPiConnection,
   getPiPointCurrentValue,
   getPiPointDatabaseLimits,
+  getPiPointDigitalStates,
   getPiPointsCurrentValues,
   searchPiPointsWithStatus,
   getPiTrendsHistoryForRange,
@@ -545,6 +546,7 @@ export function App() {
               selectedPiPoint={selectedPiPoint}
               loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
               loadPiPointDatabaseLimits={hasPiConnection ? getPiPointDatabaseLimits : undefined}
+              loadDigitalStates={hasPiConnection ? getPiPointDigitalStates : undefined}
               loadValues={hasPiConnection ? getPiPointsCurrentValues : undefined}
               loadTrend={hasPiConnection ? loadTrend : undefined}
               loadRecordedTrend={hasPiConnection ? loadTrend : undefined}

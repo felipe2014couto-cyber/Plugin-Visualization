@@ -8,10 +8,14 @@ import type { MultistateConfig } from '../../multistate';
 import { ColorControl } from './ColorControl';
 import type { GaugeStyle } from '../../createGauge';
 import { LinkField } from './LinkField';
+import type { PiPointBinding } from '../../../pi/piPointBinding';
+import type { PiDigitalStatesResult } from '../../../pi/piDataSource';
 
 export interface ScalePropertiesPanelProps {
   kind: 'Gauge' | 'Bar';
   pointName?: string;
+  binding?: PiPointBinding;
+  loadDigitalStates?: (binding: PiPointBinding) => Promise<PiDigitalStatesResult>;
   minimum: number;
   maximum: number;
   showValue: boolean;
@@ -73,6 +77,8 @@ export interface ScalePropertiesPanelProps {
 export function ScalePropertiesPanel({
   kind,
   pointName,
+  binding,
+  loadDigitalStates,
   minimum,
   maximum,
   showValue,
@@ -172,7 +178,7 @@ export function ScalePropertiesPanel({
         <label className={styles.checkbox}><input type="checkbox" checked={showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-unit`} /><span>Unidades</span></label>
         {onLinkChange && <LinkField value={linkUrl} openInNewTab={openInNewTab} onChange={onLinkChange} onOpenInNewTabChange={onOpenInNewTabChange} testId={`${kind.toLowerCase()}-link-url`} />}
       </div>
-      <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />
+      <MultistatePropertiesPanel config={multistate} binding={binding} loadDigitalStates={loadDigitalStates} onChange={onMultistateChange} />
     </aside>
   );
 }

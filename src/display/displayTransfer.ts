@@ -449,7 +449,7 @@ function portableMultistate(input: unknown): { multistate?: MultistateConfig } {
 }
 
 function portableMultistateRule(input: unknown): MultistateRule {
-  if (!isRecord(input) || !isNonEmptyString(input.id) || !['lt', 'lte', 'gt', 'gte', 'eq', 'between'].includes(String(input.operator)) || !isFiniteNumber(input.value) || typeof input.color !== 'string' || (input.color !== 'transparent' && !/^#[0-9a-f]{6}$/i.test(input.color))) {
+  if (!isRecord(input) || !isNonEmptyString(input.id) || !['lt', 'lte', 'gt', 'gte', 'eq', 'between'].includes(String(input.operator)) || !(isFiniteNumber(input.value) || isNonEmptyString(input.value)) || typeof input.color !== 'string' || (input.color !== 'transparent' && !/^#[0-9a-f]{6}$/i.test(input.color))) {
     throw new DisplayImportError('Arquivo de Display inválido.');
   }
   if (input.operator === 'between' && !isFiniteNumber(input.value2)) {
@@ -458,9 +458,13 @@ function portableMultistateRule(input: unknown): MultistateRule {
   return {
     id: input.id,
     operator: input.operator as MultistateRule['operator'],
-    value: input.value,
+    value: input.value as number | string,
     ...(input.operator === 'between' ? { value2: input.value2 as number } : {}),
     color: input.color,
+    ...(isFiniteNumber(input.digitalStateValue) || isNonEmptyString(input.digitalStateValue)
+      ? { digitalStateValue: input.digitalStateValue as number | string }
+      : {}),
+    ...(isNonEmptyString(input.digitalStateName) ? { digitalStateName: input.digitalStateName } : {}),
   };
 }
 

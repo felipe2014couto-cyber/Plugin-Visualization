@@ -8,6 +8,8 @@ import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 import { ColorControl } from './ColorControl';
 import { RotationControl } from './RotationControl';
 import { LinkField } from './LinkField';
+import type { PiPointBinding } from '../../../pi/piPointBinding';
+import type { PiDigitalStatesResult } from '../../../pi/piDataSource';
 
 export interface RectanglePropertiesPanelProps {
   fill: string;
@@ -15,6 +17,8 @@ export interface RectanglePropertiesPanelProps {
   shape: RectangleProperties['shape'];
   rotation?: number;
   pointName?: string;
+  binding?: PiPointBinding;
+  loadDigitalStates?: (binding: PiPointBinding) => Promise<PiDigitalStatesResult>;
   linkUrl?: string;
   openInNewTab?: boolean;
   onLinkChange?: (value: string) => void;
@@ -24,7 +28,7 @@ export interface RectanglePropertiesPanelProps {
   onMultistateChange: (config: MultistateConfig) => void;
 }
 
-export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, pointName, linkUrl, openInNewTab = true, onLinkChange, onOpenInNewTabChange, onChange, multistate, onMultistateChange }: RectanglePropertiesPanelProps) {
+export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, pointName, binding, loadDigitalStates, linkUrl, openInNewTab = true, onLinkChange, onOpenInNewTabChange, onChange, multistate, onMultistateChange }: RectanglePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   return (
     <aside className={styles.panel} data-testid="rectangle-properties-panel" aria-label="Configuração do Rectangle">
@@ -47,7 +51,7 @@ export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, po
         {onLinkChange && <LinkField value={linkUrl} openInNewTab={openInNewTab} onChange={onLinkChange} onOpenInNewTabChange={onOpenInNewTabChange} testId="rectangle-link-url" />}
       </div>
       {pointName ? (
-        <MultistatePropertiesPanel config={multistate} onChange={onMultistateChange} />
+        <MultistatePropertiesPanel config={multistate} binding={binding} loadDigitalStates={loadDigitalStates} onChange={onMultistateChange} />
       ) : (
         <div className={styles.hint}>Selecione um PI Point antes de inserir a forma para habilitar o Multistate.</div>
       )}

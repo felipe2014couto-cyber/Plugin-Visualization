@@ -91,6 +91,15 @@ describe('Multistate', () => {
     expect(evaluateMultistate({ Name: 'LIGADO', Value: 1 }, config(rulesNamed))?.color).toBe('#00ff00');
   });
 
+  it('prioriza o código estável do estado digital, incluindo o código zero', () => {
+    const digitalRules = [
+      { id: 'off', operator: 'eq' as const, value: 'Off', digitalStateName: 'Off', digitalStateValue: 0, color: '#777777' },
+      { id: 'on', operator: 'eq' as const, value: 'On', digitalStateName: 'On', digitalStateValue: 1, color: '#00ff00' },
+    ];
+    expect(evaluateMultistate({ Name: 'Off', Value: 0 }, config(digitalRules))?.color).toBe('#777777');
+    expect(evaluateMultistate({ Name: 'On', Value: 1 }, config(digitalRules))?.color).toBe('#00ff00');
+  });
+
   it('persiste configuração aditiva em Value, Gauge e Barra sem runtime', () => {
     const binding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID' };
     const base = createDisplayDocument({ id: 'display' });

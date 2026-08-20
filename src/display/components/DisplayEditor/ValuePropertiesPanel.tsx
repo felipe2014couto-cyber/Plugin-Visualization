@@ -11,10 +11,14 @@ import { MultistatePropertiesPanel } from './MultistatePropertiesPanel';
 import type { MultistateConfig } from '../../multistate';
 import { ColorControl } from './ColorControl';
 import { LinkField } from './LinkField';
+import type { PiPointBinding } from '../../../pi/piPointBinding';
+import type { PiDigitalStatesResult } from '../../../pi/piDataSource';
 
 export interface ValuePropertiesPanelProps {
   options: ValueVisualOptions;
   pointName: string;
+  binding?: PiPointBinding;
+  loadDigitalStates?: (binding: PiPointBinding) => Promise<PiDigitalStatesResult>;
   onChange: (patch: Partial<ValueVisualOptions>) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -29,6 +33,8 @@ export interface ValuePropertiesPanelProps {
 export function ValuePropertiesPanel({
   options,
   pointName,
+  binding,
+  loadDigitalStates,
   onChange,
   multistate,
   onMultistateChange,
@@ -111,8 +117,8 @@ export function ValuePropertiesPanel({
           </select>
         </label>
       </div>
-      <MultistatePropertiesPanel title="Multistate (Texto)" testIdPrefix="value-text-multistate" config={multistate} onChange={onMultistateChange} />
-      <MultistatePropertiesPanel title="Multistate (Fundo)" testIdPrefix="value-bg-multistate" config={backgroundMultistate} onChange={onBackgroundMultistateChange ?? (() => {})} />
+      <MultistatePropertiesPanel title="Multistate (Texto)" testIdPrefix="value-text-multistate" config={multistate} binding={binding} loadDigitalStates={loadDigitalStates} onChange={onMultistateChange} />
+      <MultistatePropertiesPanel title="Multistate (Fundo)" testIdPrefix="value-bg-multistate" config={backgroundMultistate} binding={binding} loadDigitalStates={loadDigitalStates} onChange={onBackgroundMultistateChange ?? (() => {})} />
     </aside>
   );
 }

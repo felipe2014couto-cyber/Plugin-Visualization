@@ -1,5 +1,5 @@
 import type { DataSourceSrv } from '@grafana/runtime';
-import { checkPiConnection, getPiPointDatabaseLimits, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
+import { checkPiConnection, getPiPointDatabaseLimits, getPiPointDigitalStates, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
 
 function makeDataSource(overrides: Partial<{ uid: string; name: string; isDefault: boolean }> = {}) {
   return {
@@ -40,6 +40,32 @@ describe('PI data source integration', () => {
     await expect(getPiPointDatabaseLimits({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG', webId: 'point-webid' }, dataSourceSrv))
       .resolves.toEqual({ zero: -50, span: 100 });
     expect(getResource).toHaveBeenCalledWith('/points/point-webid');
+  });
+
+  it('consulta o State Set real de uma PI Point Digital e reutiliza o cache', async () => {
+    const getResource = jest.fn(async (path: string) => {
+      if (path === '/points/digital-point') return { PointType: 'DIGITAL', DigitalSetWebId: 'set-motor' };
+      if (path === '/digitalstatesets/set-motor/digitalstates') return { Items: [{ Name: 'Parado', Value: 0 }, { Name: 'Ligado', Value: 1 }, { Name: 'Falha', Value: 2 }] };
+      return {};
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    const binding = { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'MOTOR_STATUS', webId: 'digital-point', pointType: 'Digital' };
+
+    await expect(getPiPointDigitalStates(binding, dataSourceSrv)).resolves.toEqual({
+      isDigital: true,
+      states: [{ name: 'Parado', value: 0 }, { name: 'Ligado', value: 1 }, { name: 'Falha', value: 2 }],
+    });
+    await getPiPointDigitalStates(binding, dataSourceSrv);
+    expect(getResource).toHaveBeenCalledTimes(2);
+  });
+
+  it('não trata PI Points Float ou String como Digital', async () => {
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      getResource: async (path) => path.includes('float-point') ? { PointType: 'Float32' } : { PointType: 'String' },
+    });
+    await expect(getPiPointDigitalStates({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'FLOAT', webId: 'float-point' }, dataSourceSrv)).resolves.toEqual({ isDigital: false, states: [] });
+    await expect(getPiPointDigitalStates({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TEXT', webId: 'string-point' }, dataSourceSrv)).resolves.toEqual({ isDigital: false, states: [] });
   });
 
   it('resolve a Data Source PI padrão pela identidade estável', () => {

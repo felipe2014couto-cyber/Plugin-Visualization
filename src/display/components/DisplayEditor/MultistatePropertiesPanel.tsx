@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -11,12 +11,16 @@ import {
   type MultistateOperator,
   type MultistateRule,
 } from '../../index';
+import type { PiDigitalState, PiDigitalStatesResult } from '../../../pi/piDataSource';
+import type { PiPointBinding } from '../../../pi/piPointBinding';
 import { TransparentColorPicker } from './TransparentColorPicker';
 
 export interface MultistatePropertiesPanelProps {
   title?: string;
   testIdPrefix?: string;
   config?: MultistateConfig;
+  binding?: PiPointBinding;
+  loadDigitalStates?: (binding: PiPointBinding) => Promise<PiDigitalStatesResult>;
   onChange: (config: MultistateConfig) => void;
 }
 
@@ -29,14 +33,50 @@ const OPERATORS: Array<{ value: MultistateOperator; label: string }> = [
   { value: 'between', label: 'Entre' },
 ];
 
-export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix = 'multistate', config, onChange }: MultistatePropertiesPanelProps) {
+export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix = 'multistate', config, binding, loadDigitalStates, onChange }: MultistatePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const normalized = normalizeMultistateConfig(config) ?? { enabled: false, rules: [] };
+  const [digitalStates, setDigitalStates] = useState<PiDigitalState[]>([]);
+  const [digitalMetadata, setDigitalMetadata] = useState<boolean | undefined>(undefined);
+  const [digitalError, setDigitalError] = useState(false);
+  const autoPopulatedFor = useRef<string | undefined>();
+  const bindingKey = binding ? `${binding.dataSourceUid}:${binding.webId ?? `${binding.serverPath}\\${binding.pointName}`}` : undefined;
+  const knownDigital = binding?.pointType?.trim().toLocaleLowerCase() === 'digital';
+
+  useEffect(() => {
+    let active = true;
+    setDigitalStates([]);
+    setDigitalMetadata(undefined);
+    setDigitalError(false);
+    autoPopulatedFor.current = undefined;
+    if (!binding || !loadDigitalStates) return () => { active = false; };
+    loadDigitalStates(binding).then((result) => {
+      if (!active) return;
+      setDigitalMetadata(result.isDigital);
+      setDigitalStates(result.states);
+    }).catch(() => {
+      if (!active) return;
+      setDigitalMetadata(knownDigital);
+      setDigitalError(true);
+    });
+    return () => { active = false; };
+  }, [binding, bindingKey, knownDigital, loadDigitalStates]);
+
+  const isDigital = Boolean(loadDigitalStates) && (knownDigital || digitalMetadata === true);
+  const loadingDigitalStates = isDigital && digitalMetadata === undefined && !digitalError;
   const update = (patch: Partial<MultistateConfig>) => onChange({ ...normalized, ...patch });
   const updateRule = (ruleId: string, patch: Partial<MultistateRule>) => update({
     rules: normalized.rules.map((rule) => rule.id === ruleId ? { ...rule, ...patch } : rule),
   });
-  const addRule = () => update({ rules: [...normalized.rules, createDefaultMultistateRule(generateId())] });
+  const addRule = () => update({ rules: [...normalized.rules, isDigital ? createDigitalRule(generateId(), digitalStates[0]) : createDefaultMultistateRule(generateId())] });
+
+  useEffect(() => {
+    if (!isDigital || !normalized.enabled || normalized.rules.length > 0 || digitalStates.length === 0 || autoPopulatedFor.current === bindingKey) return;
+    autoPopulatedFor.current = bindingKey;
+    onChange({ ...normalized, rules: digitalStates.map((state) => createDigitalRule(generateId(), state)) });
+  }, [bindingKey, digitalStates, isDigital, normalized, onChange]);
+
+  const selectedStateKeys = useMemo(() => new Set(normalized.rules.map((rule) => getSelectedDigitalStateKey(rule, digitalStates)).filter(Boolean)), [digitalStates, normalized.rules]);
 
   return (
     <section className={styles.section} data-testid={`${testIdPrefix}-properties`}>
@@ -52,32 +92,52 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
           Habilitado
         </label>
       </div>
-      <div className={styles.hint}>A primeira regra correspondente vence. Entre usa mínimo inclusivo e máximo exclusivo.</div>
+      <div className={styles.hint}>{isDigital ? 'Cada estado digital usa igualdade. A primeira regra correspondente vence.' : 'A primeira regra correspondente vence. Entre usa mínimo inclusivo e máximo exclusivo.'}</div>
       <button type="button" className={styles.addButton} data-testid={`${testIdPrefix}-add-rule`} onClick={addRule}>
         Adicionar regra
       </button>
       <div className={styles.rules}>
         {normalized.rules.map((rule) => (
           <div className={styles.rule} key={rule.id} data-testid={`${testIdPrefix}-rule-${rule.id}`}>
-            <select
+            {!isDigital && <select
               value={rule.operator}
               data-testid={`${testIdPrefix}-operator-${rule.id}`}
               onChange={(event) => updateRule(rule.id, { operator: event.target.value as MultistateOperator })}
             >
               {OPERATORS.map((operator) => <option key={operator.value} value={operator.value}>{operator.label}</option>)}
-            </select>
+            </select>}
             <label className={styles.numberField}>
-              <span>{rule.operator === 'between' ? 'Mínimo' : 'Valor'}</span>
-              <input
-                type={rule.operator === 'between' ? 'number' : 'text'}
-                value={rule.value ?? ''}
-                placeholder={rule.operator === 'eq' ? 'Ex: LIGADO, 1...' : undefined}
-                aria-label={rule.operator === 'between' ? 'Mínimo da regra' : 'Valor da regra'}
-                data-testid={`${testIdPrefix}-value-${rule.id}`}
-                onChange={(event) => updateRule(rule.id, { value: parseRuleValue(event.target.value, rule.value) })}
-              />
+              <span>{!isDigital && rule.operator === 'between' ? 'Mínimo' : 'Valor'}</span>
+              {isDigital && !digitalError ? (
+                <select
+                  value={getSelectedDigitalStateKey(rule, digitalStates)}
+                  disabled={loadingDigitalStates}
+                  aria-label="Estado digital"
+                  data-testid={`${testIdPrefix}-value-${rule.id}`}
+                  onChange={(event) => {
+                    const state = digitalStates.find((item) => digitalStateKey(item) === event.target.value);
+                    if (state) updateRule(rule.id, digitalRulePatch(state));
+                  }}
+                >
+                  <option value="">{loadingDigitalStates ? 'Carregando estados...' : 'Selecione um estado'}</option>
+                  {digitalStates.map((state) => {
+                    const key = digitalStateKey(state);
+                    const selected = getSelectedDigitalStateKey(rule, digitalStates) === key;
+                    return <option key={key} value={key} disabled={!selected && selectedStateKeys.has(key)}>{state.name}</option>;
+                  })}
+                </select>
+              ) : (
+                <input
+                  type={rule.operator === 'between' ? 'number' : 'text'}
+                  value={rule.value ?? ''}
+                  placeholder={rule.operator === 'eq' ? 'Ex: LIGADO, 1...' : undefined}
+                  aria-label={rule.operator === 'between' ? 'Mínimo da regra' : 'Valor da regra'}
+                  data-testid={`${testIdPrefix}-value-${rule.id}`}
+                  onChange={(event) => updateRule(rule.id, { value: parseRuleValue(event.target.value, rule.value) })}
+                />
+              )}
             </label>
-            {rule.operator === 'between' && (
+            {!isDigital && rule.operator === 'between' && (
               <label className={styles.numberField}>
                 <span>Máximo</span>
                 <input
@@ -100,8 +160,29 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
           </div>
         ))}
       </div>
+      {isDigital && digitalError && <div className={styles.error}>Não foi possível carregar os estados digitais. Você pode informar o valor manualmente.</div>}
     </section>
   );
+}
+
+function digitalStateKey(state: PiDigitalState): string {
+  return state.value === undefined ? `name:${state.name.toLocaleLowerCase()}` : `value:${String(state.value)}`;
+}
+
+function getSelectedDigitalStateKey(rule: MultistateRule, states: PiDigitalState[]): string {
+  if (rule.digitalStateValue !== undefined) {
+    return digitalStateKey({ name: rule.digitalStateName ?? String(rule.digitalStateValue), value: rule.digitalStateValue });
+  }
+  const byName = states.find((state) => state.name.toLocaleLowerCase() === String(rule.digitalStateName ?? rule.value).trim().toLocaleLowerCase());
+  return byName ? digitalStateKey(byName) : '';
+}
+
+function digitalRulePatch(state: PiDigitalState): Partial<MultistateRule> {
+  return { operator: 'eq', value: state.value ?? state.name, digitalStateName: state.name, ...(state.value === undefined ? {} : { digitalStateValue: state.value }) };
+}
+
+function createDigitalRule(id: string, state?: PiDigitalState): MultistateRule {
+  return { id, operator: 'eq', value: state?.value ?? state?.name ?? '', color: '#d32f2f', ...(state ? digitalRulePatch(state) : {}) };
 }
 
 function parseRuleValue(value: string, fallback: number | string): number | string {
@@ -179,4 +260,5 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   removeButton: css`grid-column: 1 / -1; width: 100%; max-width: 100%; min-height: 24px; padding: 2px 5px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-secondary); font-size: 9px;`,
   invalid: css`grid-column: 1 / -1; color: ${theme.colors.warning.text}; font-size: 9px;`,
+  error: css`margin-top: 7px; color: ${theme.colors.warning.text}; font-size: 9px; line-height: 1.35;`,
 });

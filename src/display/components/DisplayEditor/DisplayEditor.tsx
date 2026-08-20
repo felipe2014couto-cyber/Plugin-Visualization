@@ -60,7 +60,7 @@ import {
   type RectangleElement,
 } from '../../createRectangle';
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
-import type { PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
+import type { PiDigitalStatesResult, PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 import { CALCULATION_DRAG_MIME, parseCalculationDragData } from '../../../calculations/calculationDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
@@ -107,6 +107,7 @@ export interface DisplayEditorProps {
   selectedPiPoint?: PiPointSearchResult | null;
   loadValue?: (binding: PiPointBinding) => Promise<PiPointValue>;
   loadPiPointDatabaseLimits?: (binding: PiPointBinding) => Promise<PiPointDatabaseLimits>;
+  loadDigitalStates?: (binding: PiPointBinding) => Promise<PiDigitalStatesResult>;
   loadValues?: LoadCurrentValues;
   loadTrend?: LoadTrendSeries;
   loadRecordedTrend?: LoadTrendSeries;
@@ -160,6 +161,7 @@ export function DisplayEditor({
   selectedPiPoint,
   loadValue,
   loadPiPointDatabaseLimits,
+  loadDigitalStates,
   loadValues,
   loadTrend,
   loadRecordedTrend,
@@ -1215,6 +1217,8 @@ export function DisplayEditor({
           <ValuePropertiesPanel
             options={selectedValue.properties.visual}
             pointName={selectedValue.properties.binding?.pointName ?? ''}
+            binding={selectedValue.properties.binding}
+            loadDigitalStates={loadDigitalStates}
             onChange={handleValueVisualChange}
             multistate={selectedValue.properties.multistate}
             onMultistateChange={handleMultistateChange}
@@ -1227,10 +1231,10 @@ export function DisplayEditor({
           />
         )}
         {selectedGauge && (
-          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} binding={selectedGauge.properties.binding} loadDigitalStates={loadDigitalStates} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedBar && (
-          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} openInNewTab={selectedBar.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} binding={selectedBar.properties.binding} loadDigitalStates={loadDigitalStates} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} openInNewTab={selectedBar.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} />}
         {selectedRectangle && (
@@ -1240,6 +1244,8 @@ export function DisplayEditor({
             shape={selectedRectangle.properties.shape ?? 'rectangle'}
             rotation={selectedRectangle.properties.rotation}
             pointName={isPiPointBinding(selectedRectangle.properties.binding) ? selectedRectangle.properties.binding.pointName : undefined}
+            binding={isPiPointBinding(selectedRectangle.properties.binding) ? selectedRectangle.properties.binding : undefined}
+            loadDigitalStates={loadDigitalStates}
             linkUrl={typeof selectedRectangle.properties.linkUrl === 'string' ? selectedRectangle.properties.linkUrl : undefined}
             openInNewTab={selectedRectangle.properties.openInNewTab !== false}
             onLinkChange={handleLinkChange}
@@ -1255,6 +1261,7 @@ export function DisplayEditor({
           <LibrarySymbolPropertiesPanel
             properties={selectedLibrarySymbol.properties}
             selectedPiPoint={selectedPiPoint}
+            loadDigitalStates={loadDigitalStates}
             onChange={handleLibrarySymbolChange}
             onMultistateChange={handleMultistateChange}
           />

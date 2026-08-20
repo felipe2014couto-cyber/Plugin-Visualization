@@ -10,15 +10,17 @@ import { TransparentColorPicker } from './TransparentColorPicker';
 import type { MultistateConfig } from '../../multistate';
 import { RotationControl } from './RotationControl';
 import { LinkField } from './LinkField';
+import type { PiDigitalStatesResult } from '../../../pi/piDataSource';
 
 export interface LibrarySymbolPropertiesPanelProps {
   properties: LibrarySymbolProperties;
   selectedPiPoint?: PiPointSearchResult | null;
+  loadDigitalStates?: (binding: import('../../../pi/piPointBinding').PiPointBinding) => Promise<PiDigitalStatesResult>;
   onChange: (patch: Partial<LibrarySymbolProperties>) => void;
   onMultistateChange: (config: MultistateConfig) => void;
 }
 
-export function LibrarySymbolPropertiesPanel({ properties, selectedPiPoint, onChange, onMultistateChange }: LibrarySymbolPropertiesPanelProps) {
+export function LibrarySymbolPropertiesPanel({ properties, selectedPiPoint, loadDigitalStates, onChange, onMultistateChange }: LibrarySymbolPropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const binding = isPiPointBinding(properties.binding) ? properties.binding : undefined;
   const selectedBinding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
@@ -47,7 +49,7 @@ export function LibrarySymbolPropertiesPanel({ properties, selectedPiPoint, onCh
         )}
       </div>
       {binding ? (
-        <MultistatePropertiesPanel config={properties.multistate} onChange={onMultistateChange} />
+        <MultistatePropertiesPanel config={properties.multistate} binding={binding} loadDigitalStates={loadDigitalStates} onChange={onMultistateChange} />
       ) : (
         <div className={styles.hint}>Depois de vincular um PI Point, você poderá criar regras de cor.</div>
       )}

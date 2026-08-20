@@ -7,6 +7,10 @@ export interface MultistateRule {
   operator: MultistateOperator;
   value: number | string;
   value2?: number | string;
+  /** Stable PI Digital State code when the datasource makes one available. */
+  digitalStateValue?: number | string;
+  /** Display name retained for the editor and as compatibility fallback. */
+  digitalStateName?: string;
   color: string;
 }
 
@@ -24,6 +28,11 @@ const DEFAULT_RULE_COLOR = '#d32f2f';
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 export const TRANSPARENT_COLOR = 'transparent' as const;
+
+export interface NormalizedDigitalValue {
+  name?: string;
+  value?: number | string;
+}
 
 export function normalizeMultistateConfig(config?: Partial<MultistateConfig> | null): MultistateConfig | undefined {
   if (!config) {
@@ -79,6 +88,21 @@ export function getMultistateColor(
   fallbackColor: string,
 ): string {
   return evaluateMultistate(value, config)?.color ?? fallbackColor;
+}
+
+/** Normalizes the different digital-value shapes returned by PI datasources. */
+export function normalizePiDigitalValue(value: unknown): NormalizedDigitalValue | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === 'number' || typeof value === 'string') {
+    return typeof value === 'number' ? { value } : { name: value };
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const state = value as Record<string, unknown>;
+  const nameCandidate = state.Name ?? state.name ?? state.Text ?? state.text ?? state.State ?? state.state;
+  const valueCandidate = state.Value ?? state.value ?? state.Code ?? state.code;
+  const name = typeof nameCandidate === 'string' && nameCandidate.trim() ? nameCandidate.trim() : undefined;
+  const digitalValue = typeof valueCandidate === 'number' || typeof valueCandidate === 'string' ? valueCandidate : undefined;
+  return name || digitalValue !== undefined ? { ...(name ? { name } : {}), ...(digitalValue !== undefined ? { value: digitalValue } : {}) } : undefined;
 }
 
 export function isValidMultistateRule(rule: MultistateRule): boolean {
@@ -155,6 +179,15 @@ function matchesRule(rawVal: unknown, rule: MultistateRule): boolean {
 
   // Equality comparison (supports strings, numbers, booleans, digital states)
   if (rule.operator === 'eq') {
+    const digital = normalizePiDigitalValue(rawVal);
+    if (rule.digitalStateValue !== undefined && digital?.value !== undefined
+      && String(digital.value).trim() === String(rule.digitalStateValue).trim()) {
+      return true;
+    }
+    if (rule.digitalStateName && digital?.name
+      && digital.name.trim().toLocaleLowerCase() === rule.digitalStateName.trim().toLocaleLowerCase()) {
+      return true;
+    }
     const strVal = String(rawVal).trim().toLowerCase();
     const strRule = String(rule.value).trim().toLowerCase();
     if (strVal === strRule) {
@@ -227,6 +260,12 @@ function normalizeRule(rule: unknown, index: number): MultistateRule | undefined
     operator: operator as MultistateOperator,
     value,
     ...(value2 === undefined ? {} : { value2 }),
+    ...(typeof candidate.digitalStateValue === 'number' || typeof candidate.digitalStateValue === 'string'
+      ? { digitalStateValue: candidate.digitalStateValue }
+      : {}),
+    ...(typeof candidate.digitalStateName === 'string' && candidate.digitalStateName.trim()
+      ? { digitalStateName: candidate.digitalStateName.trim() }
+      : {}),
     color: typeof candidate.color === 'string' && (HEX_COLOR.test(candidate.color) || candidate.color === TRANSPARENT_COLOR) ? candidate.color : DEFAULT_RULE_COLOR,
   };
 }
