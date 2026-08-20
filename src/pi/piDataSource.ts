@@ -716,22 +716,53 @@ async function getPiPointMetadataForBinding(
   resourceApi: PiDataSourceResourceApi,
 ): Promise<Record<string, unknown> | undefined> {
   if (binding.webId && typeof resourceApi.getResource === 'function') {
-    const response = await resourceApi.getResource(`/points/${encodeURIComponent(binding.webId)}`);
-    return response && typeof response === 'object' ? response as Record<string, unknown> : undefined;
+    const pointPath = `/points/${encodeURIComponent(binding.webId)}`;
+    const paths = [
+      `${pointPath}?selectedFields=WebId;Name;Path;PointType;DigitalSetName;Links`,
+      pointPath,
+    ];
+    for (const path of paths) {
+      try {
+        const response = await resourceApi.getResource(path);
+        if (hasPiPointMetadata(response)) return response as Record<string, unknown>;
+      } catch {
+        // Try the next form supported by this PI Web API version.
+      }
+    }
+  }
+  const serverWebId = await getPiDataServerWebId(instance);
+  if (serverWebId && typeof resourceApi.getResource === 'function') {
+    try {
+      const response = await resourceApi.getResource(
+        `/dataservers/${encodeURIComponent(serverWebId)}/points?nameFilter=${encodeURIComponent(binding.pointName)}&selectedFields=Items.WebId;Items.Name;Items.Path;Items.PointType;Items.DigitalSetName;Items.Links`,
+      );
+      const point = getResourceItems(response).find((item) => (
+        getUnknownString((item as Record<string, unknown>)?.Name)?.toLocaleLowerCase() === binding.pointName.toLocaleLowerCase()
+      )) ?? getResourceItems(response)[0];
+      if (hasPiPointMetadata(point)) return point as Record<string, unknown>;
+    } catch {
+      // metricFindQuery below remains a compatible final fallback.
+    }
   }
   if (typeof instance.metricFindQuery !== 'function') return undefined;
-  const points = await instance.metricFindQuery(
-    { path: binding.serverPath, pointName: binding.pointName, type: 'pipoint' },
-    { isPiPoint: true },
-  );
-  const point = points.find((candidate) => getMetricField(candidate, 'text') === binding.pointName) ?? points[0];
-  if (!point) return undefined;
-  const webId = getMetricField(point, 'WebId');
-  if (webId && typeof resourceApi.getResource === 'function') {
-    const response = await resourceApi.getResource(`/points/${encodeURIComponent(webId)}`);
-    return response && typeof response === 'object' ? response as Record<string, unknown> : undefined;
+  try {
+    const points = await instance.metricFindQuery(
+      { path: binding.serverPath, pointName: binding.pointName, type: 'pipoint' },
+      { isPiPoint: true },
+    );
+    const point = points.find((candidate) => getMetricField(candidate, 'text') === binding.pointName) ?? points[0];
+    return point as unknown as Record<string, unknown> | undefined;
+  } catch {
+    return undefined;
   }
-  return point as unknown as Record<string, unknown>;
+}
+
+function hasPiPointMetadata(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  const fields = value as Record<string, unknown>;
+  return getUnknownString(fields.PointType) !== undefined
+    || getUnknownString(fields.DigitalSetName) !== undefined
+    || getUnknownString(fields.Name) !== undefined;
 }
 
 function getDigitalSetReference(metadata: Record<string, unknown> | undefined): { webId?: string; name?: string } {

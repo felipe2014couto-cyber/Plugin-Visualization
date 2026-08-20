@@ -44,7 +44,7 @@ describe('PI data source integration', () => {
 
   it('consulta o State Set real de uma PI Point Digital e reutiliza o cache', async () => {
     const getResource = jest.fn(async (path: string) => {
-      if (path === '/points/digital-point') return { PointType: 'DIGITAL', DigitalSetWebId: 'set-motor' };
+      if (path.startsWith('/points/digital-point')) return { PointType: 'DIGITAL', DigitalSetWebId: 'set-motor' };
       if (path === '/digitalstatesets/set-motor/digitalstates') return { Items: [{ Name: 'Parado', Value: 0 }, { Name: 'Ligado', Value: 1 }, { Name: 'Falha', Value: 2 }] };
       return {};
     });
@@ -61,7 +61,7 @@ describe('PI data source integration', () => {
 
   it('busca DigitalSetName pelo Data Server, como exposto pelo datasource GPA', async () => {
     const getResource = jest.fn(async (path: string) => {
-      if (path === '/points/gpa-digital-point') return { PointType: 'Digital', DigitalSetName: 'MOTOR STATES' };
+      if (path.startsWith('/points/gpa-digital-point')) return { PointType: 'Digital', DigitalSetName: 'MOTOR STATES' };
       if (path === '/dataservers/server-webid/digitalstatesets?nameFilter=MOTOR%20STATES') {
         return { Items: [{ WebId: 'motor-set-webid', Name: 'MOTOR STATES', Links: { DigitalStates: '/digitalstatesets/motor-set-webid/digitalstates' } }] };
       }
