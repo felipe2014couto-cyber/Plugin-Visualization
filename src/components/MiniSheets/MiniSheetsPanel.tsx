@@ -2039,8 +2039,14 @@ export function MiniSheetsPanel({
     }
 
     if (isCtrlOrCmd && (e.key === 'v' || e.key === 'V')) {
-      e.preventDefault();
-      handlePasteSelected();
+      // When a cell was copied inside Mini-Sheets, preserve formulas and
+      // formatting through the internal clipboard. Otherwise let the browser
+      // dispatch its native paste event so Excel/Google Sheets text reaches
+      // handleExternalPaste through text/plain.
+      if (internalClipboard?.matrix.length) {
+        e.preventDefault();
+        handlePasteSelected();
+      }
       return;
     }
 
