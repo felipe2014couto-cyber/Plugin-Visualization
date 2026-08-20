@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { PiDataLinkFunctionType } from './PiDataLinkToolbar';
 import { searchPiPointsWithStatus } from '../../pi';
-import { parseCellAddress } from './miniSheetFormula';
+import { parseCellAddress, parseRangeAddresses } from './miniSheetFormula';
 
 interface PiDataLinkFunctionDialogProps {
   embedded?: boolean;
@@ -14,6 +14,17 @@ interface PiDataLinkFunctionDialogProps {
   onInsert: (formula: string, targetCell: string) => void;
   onClose: () => void;
 }
+
+type SelectableField =
+  | 'tag'
+  | 'expression'
+  | 'timestamp'
+  | 'startTime'
+  | 'endTime'
+  | 'interval'
+  | 'timestampsRange'
+  | 'calcInterval'
+  | 'targetCell';
 
 export function PiDataLinkFunctionDialog({
   embedded = false,
@@ -39,6 +50,9 @@ export function PiDataLinkFunctionDialog({
   const [unit, setUnit] = useState('hours');
   const [maxCount, setMaxCount] = useState('500');
   const [showTimestamp, setShowTimestamp] = useState(true);
+  const [selectionField, setSelectionField] = useState<SelectableField | null>(null);
+  const [selectionBaselineAddress, setSelectionBaselineAddress] = useState<string | null>(null);
+  const targetCellInputRef = useRef<HTMLInputElement>(null);
 
   // Autocomplete state
   const [searchResults, setSearchResults] = useState<string[]>([]);
@@ -46,7 +60,7 @@ export function PiDataLinkFunctionDialog({
   const [showSuggestions, setShowSuggestions] = useState(false);
 
   useEffect(() => {
-    if (!tag.trim() || parseCellAddress(tag) || tag.includes("'") || tag.includes('"')) {
+    if (!tag.trim() || parseCellAddress(tag) || parseRangeAddresses(tag).length > 0 || tag.includes("'") || tag.includes('"')) {
       setSearchResults([]);
       setShowSuggestions(false);
       return;
@@ -75,6 +89,33 @@ export function PiDataLinkFunctionDialog({
       clearTimeout(timer);
     };
   }, [tag]);
+
+  const activateSelectionField = (field: SelectableField) => {
+    setSelectionField(field);
+    setSelectionBaselineAddress(currentSelectionAddress ?? null);
+  };
+  const isSelectionFieldActive = (field: SelectableField) => selectionField === field;
+
+  useEffect(() => {
+    if (!selectionField || !currentSelectionAddress || currentSelectionAddress === selectionBaselineAddress) {
+      return;
+    }
+
+    const selectedValue = currentSelectionAddress;
+
+    switch (selectionField) {
+      case 'tag': setTag(selectedValue); break;
+      case 'expression': setExpression(selectedValue); break;
+      case 'timestamp': setTimestamp(selectedValue); break;
+      case 'startTime': setStartTime(selectedValue); break;
+      case 'endTime': setEndTime(selectedValue); break;
+      case 'interval': setInterval(selectedValue); break;
+      case 'timestampsRange': setTimestampsRange(selectedValue); break;
+      case 'calcInterval': setCalcInterval(selectedValue); break;
+      case 'targetCell': setTargetCell(selectedValue); break;
+    }
+    setSelectionBaselineAddress(currentSelectionAddress);
+  }, [currentSelectionAddress, selectionBaselineAddress, selectionField]);
 
   const formatParam = (val: string, fallback = '') => {
     const trimmed = (val || fallback).trim();
@@ -223,12 +264,16 @@ export function PiDataLinkFunctionDialog({
               <div className={styles.inputWrapper}>
                 <input
                   id="datalink-tag"
-                  className={styles.input}
+                  className={`${styles.input} ${isSelectionFieldActive('tag') ? styles.inputSelectingRange : ''}`}
                   value={tag}
                   placeholder="Ex: LFS_RB2_TEMP ou A1"
-                  autoFocus
-                  onChange={(e) => setTag(e.target.value)}
+                  onChange={(e) => {
+                    setTag(e.target.value);
+                    setSelectionField(null);
+                    setSelectionBaselineAddress(null);
+                  }}
                   onFocus={() => {
+                    activateSelectionField('tag');
                     if (searchResults.length > 0) setShowSuggestions(true);
                   }}
                 />
@@ -260,11 +305,15 @@ export function PiDataLinkFunctionDialog({
               </label>
               <input
                 id="datalink-expr"
-                className={styles.input}
+                className={`${styles.input} ${isSelectionFieldActive('expression') ? styles.inputSelectingRange : ''}`}
                 value={expression}
                 placeholder="Ex: 'LFS_RB2_TEMP' > 50"
-                autoFocus
-                onChange={(e) => setExpression(e.target.value)}
+                onFocus={() => activateSelectionField('expression')}
+                onChange={(e) => {
+                  setExpression(e.target.value);
+                  setSelectionField(null);
+                  setSelectionBaselineAddress(null);
+                }}
               />
             </div>
           )}
@@ -277,10 +326,15 @@ export function PiDataLinkFunctionDialog({
                 </label>
                 <input
                   id="datalink-timestamp"
-                  className={styles.input}
+                  className={`${styles.input} ${isSelectionFieldActive('timestamp') ? styles.inputSelectingRange : ''}`}
                   value={timestamp}
                   placeholder="Ex: *-1h, 19/08/2026 12:00 ou B1"
-                  onChange={(e) => setTimestamp(e.target.value)}
+                  onFocus={() => activateSelectionField('timestamp')}
+                  onChange={(e) => {
+                    setTimestamp(e.target.value);
+                    setSelectionField(null);
+                    setSelectionBaselineAddress(null);
+                  }}
                 />
               </div>
               <div className={styles.formRow}>
@@ -313,10 +367,15 @@ export function PiDataLinkFunctionDialog({
                 </label>
                 <input
                   id="datalink-start-time"
-                  className={styles.input}
+                  className={`${styles.input} ${isSelectionFieldActive('startTime') ? styles.inputSelectingRange : ''}`}
                   value={startTime}
                   placeholder="Ex: *-8h ou A2"
-                  onChange={(e) => setStartTime(e.target.value)}
+                  onFocus={() => activateSelectionField('startTime')}
+                  onChange={(e) => {
+                    setStartTime(e.target.value);
+                    setSelectionField(null);
+                    setSelectionBaselineAddress(null);
+                  }}
                 />
               </div>
               <div className={styles.formRow}>
@@ -325,10 +384,15 @@ export function PiDataLinkFunctionDialog({
                 </label>
                 <input
                   id="datalink-end-time"
-                  className={styles.input}
+                  className={`${styles.input} ${isSelectionFieldActive('endTime') ? styles.inputSelectingRange : ''}`}
                   value={endTime}
                   placeholder="Ex: * ou A3"
-                  onChange={(e) => setEndTime(e.target.value)}
+                  onFocus={() => activateSelectionField('endTime')}
+                  onChange={(e) => {
+                    setEndTime(e.target.value);
+                    setSelectionField(null);
+                    setSelectionBaselineAddress(null);
+                  }}
                 />
               </div>
             </div>
@@ -341,10 +405,15 @@ export function PiDataLinkFunctionDialog({
               </label>
               <input
                 id="datalink-interval"
-                className={styles.input}
+                className={`${styles.input} ${isSelectionFieldActive('interval') ? styles.inputSelectingRange : ''}`}
                 value={interval}
                 placeholder="Ex: 5m, 1h ou A4"
-                onChange={(e) => setInterval(e.target.value)}
+                onFocus={() => activateSelectionField('interval')}
+                onChange={(e) => {
+                  setInterval(e.target.value);
+                  setSelectionField(null);
+                  setSelectionBaselineAddress(null);
+                }}
               />
             </div>
           )}
@@ -360,7 +429,10 @@ export function PiDataLinkFunctionDialog({
                     <button
                       type="button"
                       className={styles.linkButton}
-                      onClick={() => setTimestampsRange(currentSelectionAddress)}
+                      onClick={() => {
+                        activateSelectionField('timestampsRange');
+                        setTimestampsRange(currentSelectionAddress);
+                      }}
                     >
                       Usar seleção ({currentSelectionAddress})
                     </button>
@@ -368,10 +440,15 @@ export function PiDataLinkFunctionDialog({
                 </div>
                 <input
                   id="datalink-range"
-                  className={styles.input}
+                  className={`${styles.input} ${isSelectionFieldActive('timestampsRange') ? styles.inputSelectingRange : ''}`}
                   value={timestampsRange}
                   placeholder="Ex: A1:A10"
-                  onChange={(e) => setTimestampsRange(e.target.value)}
+                  onFocus={() => activateSelectionField('timestampsRange')}
+                  onChange={(e) => {
+                    setTimestampsRange(e.target.value);
+                    setSelectionField(null);
+                    setSelectionBaselineAddress(null);
+                  }}
                 />
               </div>
               <div className={styles.formRow}>
@@ -418,10 +495,15 @@ export function PiDataLinkFunctionDialog({
                 </label>
                 <input
                   id="datalink-calc-interval"
-                  className={styles.input}
+                  className={`${styles.input} ${isSelectionFieldActive('calcInterval') ? styles.inputSelectingRange : ''}`}
                   value={calcInterval}
                   placeholder="Ex: 1h (para série) ou vazio"
-                  onChange={(e) => setCalcInterval(e.target.value)}
+                  onFocus={() => activateSelectionField('calcInterval')}
+                  onChange={(e) => {
+                    setCalcInterval(e.target.value);
+                    setSelectionField(null);
+                    setSelectionBaselineAddress(null);
+                  }}
                 />
               </div>
             </div>
@@ -486,18 +568,28 @@ export function PiDataLinkFunctionDialog({
                 <button
                   type="button"
                   className={styles.linkButton}
-                  onClick={() => setTargetCell(currentSelectionAddress.split(':')[0])}
+                  onClick={() => {
+                    setTargetCell(currentSelectionAddress);
+                    activateSelectionField('targetCell');
+                    targetCellInputRef.current?.focus();
+                  }}
                 >
-                  Usar célula ativa ({currentSelectionAddress.split(':')[0]})
+                  Usar seleção ({currentSelectionAddress})
                 </button>
               )}
             </div>
             <input
               id="datalink-target-cell"
-              className={styles.input}
+              ref={targetCellInputRef}
+              className={`${styles.input} ${isSelectionFieldActive('targetCell') ? styles.inputSelectingRange : ''}`}
               value={targetCell}
               placeholder="Ex: B4"
-              onChange={(e) => setTargetCell(e.target.value)}
+              onFocus={() => activateSelectionField('targetCell')}
+              onChange={(e) => {
+                setTargetCell(e.target.value);
+                setSelectionField(null);
+                setSelectionBaselineAddress(null);
+              }}
             />
           </div>
 
@@ -528,13 +620,18 @@ export function PiDataLinkFunctionDialog({
 
 const getStyles = (theme: GrafanaTheme2) => ({
   embeddedShell: css({
-    flex: '0 0 auto',
+    display: 'flex',
+    flex: '1 1 auto',
+    flexDirection: 'column',
+    minHeight: 0,
     borderBottom: '1px solid var(--border-color, #2b394a)',
     background: 'var(--surface-primary, #111923)',
   }),
   embeddedDialog: css({
     display: 'flex',
+    flex: '1 1 auto',
     flexDirection: 'column',
+    minHeight: 0,
     color: 'var(--text-primary, #f1f2f5)',
     background: 'var(--surface-primary, #111923)',
   }),
@@ -542,17 +639,18 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '10px 16px',
+    padding: '8px 16px',
     borderBottom: '1px solid var(--border-subtle, #2b394a)',
     color: 'var(--text-primary, #f1f2f5)',
   }),
   embeddedBody: css({
     display: 'flex',
+    flex: '1 1 auto',
     flexDirection: 'column',
-    gap: '12px',
-    maxHeight: '330px',
-    padding: '14px 16px',
-    overflowY: 'auto',
+    gap: '6px',
+    minHeight: 0,
+    padding: '8px 16px',
+    overflow: 'hidden',
     background: 'var(--surface-primary, #111923)',
     color: 'var(--text-primary, #f1f2f5)',
   }),
@@ -560,7 +658,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: 'flex',
     justifyContent: 'flex-end',
     gap: '8px',
-    padding: '10px 16px',
+    padding: '8px 16px',
     borderTop: '1px solid var(--border-subtle, #2b394a)',
     background: 'var(--surface-secondary, #18212d)',
   }),
@@ -632,12 +730,12 @@ const getStyles = (theme: GrafanaTheme2) => ({
   formRow: css({
     display: 'flex',
     flexDirection: 'column',
-    gap: '5px',
+    gap: '3px',
   }),
   gridTwoCols: css({
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '12px',
+    gap: '8px',
   }),
   label: css({
     fontSize: '12px',
@@ -669,8 +767,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
   }),
   input: css({
     width: '100%',
-    minHeight: '34px',
-    padding: '6px 10px',
+    minHeight: '30px',
+    padding: '4px 8px',
     fontSize: '12px',
     color: 'var(--text-primary, #f1f2f5)',
     background: 'var(--input-bg, #0c1521)',
@@ -683,10 +781,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
       boxShadow: '0 0 0 2px var(--focus-ring, rgba(237, 98, 173, 0.34))',
     },
   }),
+  inputSelectingRange: css({
+    borderColor: 'var(--accent, #d33b91)',
+    boxShadow: '0 0 0 2px var(--focus-ring, rgba(237, 98, 173, 0.34))',
+  }),
   select: css({
     width: '100%',
-    minHeight: '34px',
-    padding: '6px 10px',
+    minHeight: '30px',
+    padding: '4px 8px',
     fontSize: '12px',
     color: 'var(--text-primary, #f1f2f5)',
     background: 'var(--input-bg, #0c1521)',
@@ -753,8 +855,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
   previewBox: css({
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
-    padding: '10px 12px',
+    gap: '2px',
+    padding: '7px 10px',
     background: 'var(--surface-secondary, #151e2a)',
     border: '1px solid var(--border-subtle, #202d3c)',
     borderRadius: '5px',

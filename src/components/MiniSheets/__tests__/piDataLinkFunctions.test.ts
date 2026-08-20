@@ -147,5 +147,8 @@ describe('PI DataLink Formula Parsing & Reference Resolution', () => {
       { col: 0, row: 2 },
     ]);
   });
-});
 
+  test('resolves a scalar parameter from the first cell of a selected range', () => {
+    expect(resolveParameter('A1:A3', getCellValue)).toBe('LFS_RB2_TEMP');
+  });
+});

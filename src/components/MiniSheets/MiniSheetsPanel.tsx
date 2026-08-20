@@ -1899,9 +1899,14 @@ export function MiniSheetsPanel({
         initialTargetCell={formatCellAddress(activeCell)}
         currentSelectionAddress={ranges.length > 0 ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS) : undefined}
         onInsert={(formula, targetAddress) => {
-          const coord = parseCellAddress(targetAddress) ?? activeCell;
+          const targetRange = parseRangeAddresses(targetAddress);
+          const coord = targetRange[0] ?? parseCellAddress(targetAddress) ?? activeCell;
           setActiveCell(coord);
-          setRanges([rangeFromCells(coord, coord)]);
+          setRanges([
+            targetRange.length > 1
+              ? rangeFromCells(targetRange[0], targetRange[targetRange.length - 1])
+              : rangeFromCells(coord, coord),
+          ]);
           computeCell(coord, formula);
           setFormulaBarText(formula);
           setActiveDataLinkDialog(null);

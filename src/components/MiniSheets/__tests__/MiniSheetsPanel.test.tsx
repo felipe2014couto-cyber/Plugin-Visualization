@@ -48,6 +48,35 @@ describe('MiniSheetsPanel', () => {
     expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('B2');
   });
 
+  it('uses the complete selected sheet range as the PI function output target', async () => {
+    render(<MiniSheetsPanel />);
+
+    fireEvent.click(screen.getByTestId('datalink-arc-val'));
+    const targetCellInput = screen.getByLabelText('Célula de saída');
+    fireEvent.focus(targetCellInput);
+    fireEvent.pointerDown(screen.getByTestId('mini-sheets-cell-B8'));
+    fireEvent.pointerEnter(screen.getByTestId('mini-sheets-cell-B14'));
+
+    await waitFor(() => {
+      expect(targetCellInput).toHaveValue('B8:B14');
+      expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('B8:B14');
+    });
+  });
+
+  it('uses a selected sheet cell for other reference-enabled fields', async () => {
+    render(<MiniSheetsPanel />);
+
+    fireEvent.click(screen.getByTestId('datalink-arc-val'));
+    const timestampInput = screen.getByLabelText('Timestamp (PI Time ou Célula)');
+    fireEvent.focus(timestampInput);
+    expect(timestampInput).toHaveValue('*-1h');
+    fireEvent.click(screen.getByTestId('mini-sheets-cell-C3'));
+
+    await waitFor(() => {
+      expect(timestampInput).toHaveValue('C3');
+    });
+  });
+
   it('enters simple text and displays it', async () => {
     render(<MiniSheetsPanel />);
     const input = screen.getByTestId('mini-sheets-formula-input');

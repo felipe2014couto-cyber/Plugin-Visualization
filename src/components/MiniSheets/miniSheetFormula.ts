@@ -208,14 +208,16 @@ export function stripQuotes(value: string): string {
 }
 
 /**
- * Resolves a parameter: if it is a cell coordinate (e.g. A1), reads its value; otherwise strips quotes.
+ * Resolves a parameter: if it is a cell coordinate or range, reads the first cell value;
+ * otherwise strips quotes. Scalar PI parameters use the first cell when a selected range
+ * is supplied by the DataLink picker.
  */
 export function resolveParameter(
   param: string,
   getCellValue: (coord: CellCoord) => string | undefined
 ): string {
   const trimmed = param.trim();
-  const coord = parseCellAddress(trimmed);
+  const coord = parseRangeAddresses(trimmed)[0];
   if (coord) {
     const val = getCellValue(coord);
     return val !== undefined ? String(val).trim() : '';
