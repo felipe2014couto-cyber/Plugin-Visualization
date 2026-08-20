@@ -628,6 +628,9 @@ async function loadPiPointDigitalStates(
 
 async function loadDigitalStatesBySetWebId(resourceApi: PiDataSourceResourceApi, webId: string): Promise<PiDigitalState[]> {
   const paths = [
+    `/enumerationsets/${encodeURIComponent(webId)}/enumerationvalues`,
+    `/enumerationsets/${encodeURIComponent(webId)}`,
+    // Legacy/custom PI Web API adapters may expose these aliases.
     `/digitalstatesets/${encodeURIComponent(webId)}/digitalstates`,
     `/digitalstatesets/${encodeURIComponent(webId)}`,
   ];
@@ -653,14 +656,25 @@ async function loadDigitalStatesByName(
   const encodedName = encodeURIComponent(name);
   const serverWebId = await getPiDataServerWebId(instance);
   const paths = [
+    ...(serverWebId ? [
+      `/dataservers/${encodeURIComponent(serverWebId)}/enumerationsets?nameFilter=${encodedName}`,
+      // Some PI Web API versions ignore or reject nameFilter. Load the
+      // collection and select the exact DigitalSetName locally as fallback.
+      `/dataservers/${encodeURIComponent(serverWebId)}/enumerationsets`,
+    ] : []),
+    // Legacy/custom aliases retained for compatibility.
     ...(serverWebId ? [`/dataservers/${encodeURIComponent(serverWebId)}/digitalstatesets?nameFilter=${encodedName}`] : []),
-    // Fallback for PI Web API installations that expose this collection globally.
+    `/enumerationsets?nameFilter=${encodedName}`,
     `/digitalstatesets?nameFilter=${encodedName}`,
   ];
   for (const path of paths) {
     try {
       const response = await resourceApi.getResource(path);
-      for (const set of getResourceItems(response)) {
+      const sets = getResourceItems(response).filter((set) => {
+        const setName = getUnknownString((set as Record<string, unknown>)?.Name);
+        return !setName || setName.toLocaleLowerCase() === name.toLocaleLowerCase();
+      });
+      for (const set of sets) {
         const states = normalizePiDigitalStates(set);
         if (states.length > 0) return states;
         const linkedStates = await loadDigitalStatesFromLink(resourceApi, set);
@@ -692,7 +706,10 @@ async function loadDigitalStatesFromLink(resourceApi: PiDataSourceResourceApi, s
   if (!source || typeof source !== 'object') return [];
   const links = (source as Record<string, unknown>).Links;
   const linkRecord = links && typeof links === 'object' ? links as Record<string, unknown> : undefined;
-  const path = getUnknownString(linkRecord?.DigitalStates) ?? getUnknownString(linkRecord?.States);
+  const path = getUnknownString(linkRecord?.EnumerationValues)
+    ?? getUnknownString(linkRecord?.Values)
+    ?? getUnknownString(linkRecord?.DigitalStates)
+    ?? getUnknownString(linkRecord?.States);
   if (!path) return [];
   try {
     return normalizePiDigitalStates(await resourceApi.getResource(toPiResourcePath(path)));

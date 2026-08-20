@@ -45,7 +45,7 @@ describe('PI data source integration', () => {
   it('consulta o State Set real de uma PI Point Digital e reutiliza o cache', async () => {
     const getResource = jest.fn(async (path: string) => {
       if (path.startsWith('/points/digital-point')) return { PointType: 'DIGITAL', DigitalSetWebId: 'set-motor' };
-      if (path === '/digitalstatesets/set-motor/digitalstates') return { Items: [{ Name: 'Parado', Value: 0 }, { Name: 'Ligado', Value: 1 }, { Name: 'Falha', Value: 2 }] };
+      if (path === '/enumerationsets/set-motor/enumerationvalues') return { Items: [{ Name: 'Parado', Value: 0 }, { Name: 'Ligado', Value: 1 }, { Name: 'Falha', Value: 2 }] };
       return {};
     });
     const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
@@ -59,13 +59,13 @@ describe('PI data source integration', () => {
     expect(getResource).toHaveBeenCalledTimes(2);
   });
 
-  it('busca DigitalSetName pelo Data Server, como exposto pelo datasource GPA', async () => {
+  it('busca DigitalSetName como Enumeration Set pelo Data Server do datasource GPA', async () => {
     const getResource = jest.fn(async (path: string) => {
       if (path.startsWith('/points/gpa-digital-point')) return { PointType: 'Digital', DigitalSetName: 'MOTOR STATES' };
-      if (path === '/dataservers/server-webid/digitalstatesets?nameFilter=MOTOR%20STATES') {
-        return { Items: [{ WebId: 'motor-set-webid', Name: 'MOTOR STATES', Links: { DigitalStates: '/digitalstatesets/motor-set-webid/digitalstates' } }] };
+      if (path === '/dataservers/server-webid/enumerationsets?nameFilter=MOTOR%20STATES') {
+        return { Items: [{ WebId: 'motor-set-webid', Name: 'MOTOR STATES', Links: { EnumerationValues: '/enumerationsets/motor-set-webid/enumerationvalues' } }] };
       }
-      if (path === '/digitalstatesets/motor-set-webid/digitalstates') return { Items: [{ Name: 'Off', Value: 0 }, { Name: 'On', Value: 1 }] };
+      if (path === '/enumerationsets/motor-set-webid/enumerationvalues') return { Items: [{ Name: 'Off', Value: 0 }, { Name: 'On', Value: 1 }] };
       return {};
     });
     const metricFindQuery = jest.fn(async (query: unknown) => (
@@ -75,7 +75,26 @@ describe('PI data source integration', () => {
 
     await expect(getPiPointDigitalStates({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'MOTOR', webId: 'gpa-digital-point' }, dataSourceSrv))
       .resolves.toEqual({ isDigital: true, states: [{ name: 'Off', value: 0 }, { name: 'On', value: 1 }] });
-    expect(getResource).toHaveBeenCalledWith('/dataservers/server-webid/digitalstatesets?nameFilter=MOTOR%20STATES');
+    expect(getResource).toHaveBeenCalledWith('/dataservers/server-webid/enumerationsets?nameFilter=MOTOR%20STATES');
+  });
+
+  it('filtra localmente o Enumeration Set quando nameFilter não é suportado', async () => {
+    const getResource = jest.fn(async (path: string) => {
+      if (path.startsWith('/points/filter-digital-point')) return { PointType: 'Digital', DigitalSetName: 'Estado_01' };
+      if (path === '/dataservers/server-filter/enumerationsets?nameFilter=Estado_01') return { Items: [] };
+      if (path === '/dataservers/server-filter/enumerationsets') {
+        return { Items: [{ WebId: 'other', Name: 'Outro' }, { WebId: 'estado-01', Name: 'Estado_01' }] };
+      }
+      if (path === '/enumerationsets/estado-01/enumerationvalues') return { Items: [{ Name: 'Desligado', Value: 0 }, { Name: 'Ligado', Value: 1 }] };
+      return {};
+    });
+    const metricFindQuery = jest.fn(async (query: unknown) => (
+      (query as { type?: string }).type === 'dataserver' ? [{ WebId: 'server-filter' }] : []
+    ));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource, metricFindQuery });
+
+    await expect(getPiPointDigitalStates({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_ESTADO_01', webId: 'filter-digital-point' }, dataSourceSrv))
+      .resolves.toEqual({ isDigital: true, states: [{ name: 'Desligado', value: 0 }, { name: 'Ligado', value: 1 }] });
   });
 
   it('não trata PI Points Float ou String como Digital', async () => {
