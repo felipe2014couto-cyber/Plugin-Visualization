@@ -2192,6 +2192,33 @@ export function MiniSheetsPanel({
                     }
                     if (cell?.format?.horizontalAlign) customStyle.textAlign = cell.format.horizontalAlign;
 
+                    // Draw a single, heavier outline around the outside of each
+                    // selected range (like Excel) without changing the size of
+                    // the cells or hiding the normal inner grid lines.
+                    if (isInsideSelection) {
+                      const rangeOutline = ranges.flatMap((range) => {
+                        const normalized = normalizeRange(range);
+                        if (
+                          cIndex < normalized.left ||
+                          cIndex > normalized.right ||
+                          rIndex < normalized.top ||
+                          rIndex > normalized.bottom
+                        ) {
+                          return [];
+                        }
+
+                        const shadows: string[] = [];
+                        if (rIndex === normalized.top) shadows.push('inset 0 2px 0 var(--accent)');
+                        if (rIndex === normalized.bottom) shadows.push('inset 0 -2px 0 var(--accent)');
+                        if (cIndex === normalized.left) shadows.push('inset 2px 0 0 var(--accent)');
+                        if (cIndex === normalized.right) shadows.push('inset -2px 0 0 var(--accent)');
+                        return shadows;
+                      });
+                      if (rangeOutline.length > 0) {
+                        customStyle.boxShadow = rangeOutline.join(', ');
+                      }
+                    }
+
                     return (
                       <td
                         key={cIndex}
