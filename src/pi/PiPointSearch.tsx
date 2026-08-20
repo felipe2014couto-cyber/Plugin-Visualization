@@ -31,6 +31,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onFilter
   const [engineeringUnitFilter, setEngineeringUnitFilter] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [hasMoreResults, setHasMoreResults] = useState(false);
+  const [filterPosition, setFilterPosition] = useState({ left: 16, top: 116 });
   const requestSequence = useRef(0);
 
   const pointTypes = useMemo(() => [...new Set([
@@ -48,6 +49,26 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onFilter
   const filterPortalTarget = typeof document !== 'undefined'
     ? document.querySelector('[data-visualization-theme]') ?? document.body
     : null;
+
+  React.useEffect(() => {
+    if (!filtersOpen || typeof document === 'undefined') return undefined;
+    const updatePosition = () => {
+      const editorArea = document.querySelector<HTMLElement>('[data-testid="pims-vision-editor-area"]');
+      if (!editorArea) {
+        setFilterPosition({ left: 16, top: 116 });
+        return;
+      }
+      const bounds = editorArea.getBoundingClientRect();
+      setFilterPosition({ left: Math.max(8, bounds.left), top: Math.max(8, bounds.top) });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [filtersOpen]);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -141,7 +162,12 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onFilter
       {!enabled && <p data-testid="pi-point-search-disabled">Pesquisa PI indisponível.</p>}
 
       {filtersOpen && filterPortalTarget && createPortal(
-        <div className={styles.filterBackdrop} data-testid="pi-point-search-filter-backdrop" onMouseDown={() => onFiltersClose?.()}>
+        <div
+          className={styles.filterBackdrop}
+          data-testid="pi-point-search-filter-backdrop"
+          style={{ '--filter-left': `${filterPosition.left}px`, '--filter-top': `${filterPosition.top}px` } as React.CSSProperties}
+          onMouseDown={() => onFiltersClose?.()}
+        >
           <div className={styles.filterDialog} role="dialog" aria-modal="true" aria-labelledby="pi-point-filter-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className={styles.filters} data-testid="pi-point-search-filters">
             <div className={styles.filterHeader}>
@@ -397,16 +423,19 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     align-items: flex-start;
     justify-content: flex-start;
-    padding: 116px 16px 16px;
+    padding: 0;
     box-sizing: border-box;
     background: rgba(2, 8, 15, 0.38);
   `,
   filterDialog: css`
+    position: absolute;
+    left: var(--filter-left, 16px);
+    top: var(--filter-top, 116px);
     display: flex;
     flex-direction: column;
     gap: 8px;
-    width: min(360px, calc(100vw - 32px));
-    max-height: min(520px, calc(100vh - 132px));
+    width: min(568px, calc(100vw - 32px));
+    max-height: min(390px, calc(100vh - 32px));
     padding: 10px;
     box-sizing: border-box;
     overflow: auto;
