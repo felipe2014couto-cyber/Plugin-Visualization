@@ -96,6 +96,7 @@ import {
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
+import { calculateAreaZoomViewport, type AreaZoomRect } from './areaZoom';
 
 export type DisplayEditorMode = 'edit' | 'view';
 export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'table';
@@ -198,6 +199,7 @@ export function DisplayEditor({
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [surfaceZoom, setSurfaceZoom] = useState(1);
+  const [areaZoomMode, setAreaZoomMode] = useState(false);
   const [surfaceViewCenter, setSurfaceViewCenter] = useState({
     x: displayDocument.surface.width / 2,
     y: displayDocument.surface.height / 2,
@@ -1064,6 +1066,40 @@ export function DisplayEditor({
     setSurfaceViewCenter({ x: (left + right) / 2, y: (top + bottom) / 2 });
   }, []);
 
+  const handleAreaZoom = useCallback((selection: AreaZoomRect) => {
+    const surface = documentRef.current.surface;
+    const viewport = calculateAreaZoomViewport(
+      selection,
+      surface.width,
+      surface.height,
+      DISPLAY_ZOOM_MIN,
+      DISPLAY_ZOOM_MAX,
+    );
+    if (viewport) {
+      setSurfaceZoom(Number(viewport.zoom.toFixed(2)));
+      setSurfaceViewCenter(viewport.center);
+    }
+    setAreaZoomMode(false);
+  }, []);
+
+  const cancelAreaZoom = useCallback(() => {
+    setAreaZoomMode(false);
+  }, []);
+
+  useEffect(() => {
+    if (!areaZoomMode) {
+      return;
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setAreaZoomMode(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [areaZoomMode]);
+
   useEffect(() => {
     const current = trendPopupRef.current;
     if (!current) {
@@ -1140,6 +1176,7 @@ export function DisplayEditor({
             <div className={styles.zoomControls} role="group" aria-label="Zoom do display">
               <button type="button" title="Ampliar" aria-label="Ampliar" className={styles.iconButton} data-testid="display-zoom-in" disabled={surfaceZoom >= DISPLAY_ZOOM_MAX} onClick={() => setSurfaceZoom((zoom) => Math.min(DISPLAY_ZOOM_MAX, Number((zoom + DISPLAY_ZOOM_STEP).toFixed(1))))}><ZoomInIcon /></button>
               <button type="button" title="Reduzir" aria-label="Reduzir" className={styles.iconButton} data-testid="display-zoom-out" disabled={surfaceZoom <= DISPLAY_ZOOM_MIN} onClick={() => setSurfaceZoom((zoom) => Math.max(DISPLAY_ZOOM_MIN, Number((zoom - DISPLAY_ZOOM_STEP).toFixed(1))))}><ZoomOutIcon /></button>
+              <button type="button" title="Zoom por área" aria-label="Zoom por área" className={areaZoomMode ? styles.iconButtonActive : styles.iconButton} data-testid="display-area-zoom" aria-pressed={areaZoomMode} onClick={() => setAreaZoomMode((active) => !active)}><AreaZoomIcon /></button>
               <button type="button" title="Ajustar à tela" aria-label="Ajustar à tela" className={styles.iconButton} data-testid="display-zoom-fit" onClick={handleZoomFit}><ZoomFitIcon /></button>
             </div>
             <div className={styles.exportControl}>
@@ -1197,6 +1234,9 @@ export function DisplayEditor({
             onTableColumnsChange={handleTableColumnsChange}
             zoom={surfaceZoom}
             viewCenter={surfaceViewCenter}
+            areaZoomMode={areaZoomMode}
+            onAreaZoom={handleAreaZoom}
+            onAreaZoomCancel={cancelAreaZoom}
           />
           {displayDocument.elements.length === 0 && (
             <div className={styles.emptyState} data-testid="display-empty-state">
@@ -1928,6 +1968,20 @@ const getStyles = (theme: GrafanaTheme2) => ({
       background: var(--button-hover);
     }
   `,
+  iconButtonActive: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 42px;
+    flex: 0 0 44px;
+    padding: 0;
+    border: 1px solid var(--accent);
+    border-radius: 11px;
+    background: var(--selection-bg);
+    color: var(--accent);
+    cursor: crosshair;
+  `,
   surfaceWrapper: css`
     display: flex;
     position: relative;
@@ -2107,6 +2161,10 @@ function ZoomInIcon() {
 
 function ZoomOutIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6" /><path d="M7 10h6m7 7-5.5-5.5" /></svg>;
+}
+
+function AreaZoomIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3.5" y="3.5" width="11" height="11" strokeDasharray="2 1.5" /><circle cx="14.5" cy="14.5" r="4.5" /><path d="M18 18 21 21M14.5 12.5v4M12.5 14.5h4" /></svg>;
 }
 
 function ZoomFitIcon() {
