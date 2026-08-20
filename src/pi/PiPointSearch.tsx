@@ -21,11 +21,11 @@ export interface PiPointSearchProps {
 export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearchInteraction }: PiPointSearchProps) {
   const styles = useStyles2(getStyles);
   const [term, setTerm] = useState('');
+  const [descriptionTerm, setDescriptionTerm] = useState('');
   const [results, setResults] = useState<PiPointSearchResult[]>([]);
   const [selected, setSelected] = useState<PiPointSearchResult | null>(null);
   const [status, setStatus] = useState<SearchStatus>('idle');
   const [selectedPointTypes, setSelectedPointTypes] = useState<string[]>([]);
-  const [descriptionFilter, setDescriptionFilter] = useState('');
   const [engineeringUnitFilter, setEngineeringUnitFilter] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [hasMoreResults, setHasMoreResults] = useState(false);
@@ -36,18 +36,20 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearch
     ...getFilterOptions(results, (result) => result.pointType),
   ])], [results]);
   const filteredResults = useMemo(() => results.filter((result) => (
-    includesFilter(result.description, descriptionFilter)
+    includesFilter(result.description, descriptionTerm)
     && matchesFilter(result.pointType, selectedPointTypes)
     && includesFilter(result.engineeringUnit, engineeringUnitFilter)
-  )), [results, descriptionFilter, selectedPointTypes, engineeringUnitFilter]);
-  const hasActiveFilters = Boolean(descriptionFilter || selectedPointTypes.length || engineeringUnitFilter);
+  )), [results, descriptionTerm, selectedPointTypes, engineeringUnitFilter]);
+  const hasActiveFilters = Boolean(descriptionTerm || selectedPointTypes.length || engineeringUnitFilter);
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     onSearchInteraction?.();
     const normalizedTerm = term.trim();
-    if (!enabled || (!normalizedTerm && !hasActiveFilters)) {
-      setStatus(normalizedTerm || hasActiveFilters ? 'error' : 'idle');
+    const normalizedDescription = descriptionTerm.trim();
+
+    if (!enabled || (!normalizedTerm && !normalizedDescription && !hasActiveFilters)) {
+      setStatus(normalizedTerm || normalizedDescription || hasActiveFilters ? 'error' : 'idle');
       return;
     }
 
@@ -57,7 +59,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearch
     try {
       const response = await searchPiPointsWithStatus({
         term: normalizedTerm,
-        description: descriptionFilter,
+        description: normalizedDescription,
         pointTypes: selectedPointTypes,
         engineeringUnits: engineeringUnitFilter ? [engineeringUnitFilter] : [],
       });
@@ -91,7 +93,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearch
               onSearchInteraction?.();
               setTerm(event.target.value);
             }}
-            placeholder="Pesquisar tag..."
+            placeholder="Nome da tag..."
             disabled={!enabled || status === 'loading'}
           />
           <button
@@ -100,15 +102,34 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearch
             data-testid="pi-point-search-submit"
             aria-label="Pesquisar"
             title="Pesquisar"
-            disabled={!enabled || status === 'loading' || (!term.trim() && !hasActiveFilters)}
+            disabled={!enabled || status === 'loading' || (!term.trim() && !descriptionTerm.trim() && !hasActiveFilters)}
           >
             <SearchIcon />
           </button>
         </div>
+        <div className={styles.inputRow}>
+          <input
+            id="pi-point-search-description"
+            className={styles.descriptionInput}
+            data-testid="pi-point-search-description"
+            value={descriptionTerm}
+            onFocus={onSearchInteraction}
+            onChange={(event) => {
+              onSearchInteraction?.();
+              setDescriptionTerm(event.target.value);
+            }}
+            placeholder="Descrição (ex: *velocidade*)"
+            disabled={!enabled || status === 'loading'}
+          />
+        </div>
       </form>
 
       {status === 'loading' && <p data-testid="pi-point-search-loading">Pesquisando...</p>}
-      {status === 'empty' && <p data-testid="pi-point-search-empty">Nenhum PI Point encontrado.</p>}
+      {(status === 'empty' || (status === 'success' && filteredResults.length === 0)) && (
+        <p className={styles.filteredEmpty} data-testid="pi-point-search-empty">
+          Nenhum PI Point encontrado.
+        </p>
+      )}
       {status === 'error' && <p data-testid="pi-point-search-error">{errorMessage || 'Não foi possível pesquisar PI Points.'}</p>}
       {!enabled && <p data-testid="pi-point-search-disabled">Pesquisa PI indisponível.</p>}
 
@@ -116,14 +137,13 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearch
         <>
           <div className={styles.filters} data-testid="pi-point-search-filters">
             <div className={styles.filterHeader}>
-              <span>Filtros</span>
+              <span>Filtros Adicionais</span>
               {hasActiveFilters && (
                 <button
                   type="button"
                   className={styles.clearFilters}
                   onClick={() => {
                     setSelectedPointTypes([]);
-                    setDescriptionFilter('');
                     setEngineeringUnitFilter('');
                   }}
                 >
@@ -131,13 +151,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearch
                 </button>
               )}
             </div>
-            <TextFilter
-              label="Descrição contém"
-              value={descriptionFilter}
-              onChange={setDescriptionFilter}
-              styles={styles}
-              testId="description"
-            />
+
             <FilterGroup
               label="Tipo de dados"
               options={pointTypes}
@@ -155,29 +169,19 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearch
             />
           </div>
 
-          {results.length === 0 && status === 'idle' ? (
+          {results.length === 0 && status === 'idle' && (
             <p className={styles.noFilterOptions} data-testid="pi-point-filter-awaiting-search">
               Pesquise uma tag para carregar as opções de filtro.
-            </p>
-          ) : filteredResults.length === 0 && (
-            <p className={styles.filteredEmpty} data-testid="pi-point-search-filtered-empty">
-              Nenhum PI Point corresponde aos filtros.
             </p>
           )}
         </>
       )}
 
-      {results.length > 0 && (
+      {filteredResults.length > 0 && (
         <>
           <p className={styles.resultCount} data-testid="pi-point-search-count">
-            {results.length} PI Points {hasMoreResults ? 'exibidos' : 'encontrados'}
+            {filteredResults.length} PI Points {hasMoreResults ? 'exibidos' : 'encontrados'}
           </p>
-          {hasMoreResults && (
-            <div className={styles.resultLimitWarning} data-testid="pi-point-search-limit-warning">
-              A pesquisa encontrou mais de 1000 PI Points. Estão sendo exibidos somente os primeiros 1000 pontos.
-              Refine a pesquisa ou utilize mais filtros para reduzir os resultados.
-            </div>
-          )}
           <ul className={styles.results} data-testid="pi-point-search-results">
           {filteredResults.map((result) => (
             <li key={result.webId ?? `${result.name}-${result.path ?? ''}`}>
@@ -250,6 +254,28 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: stretch;
     gap: 5px;
   `,
+  searchOptions: css`
+    display: flex;
+    align-items: center;
+    padding-left: 2px;
+  `,
+  checkboxLabel: css`
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+
+    input {
+      margin: 0;
+    }
+
+    &:has(input:disabled) {
+      cursor: default;
+      opacity: 0.55;
+    }
+  `,
   label: css`
     position: absolute;
     width: 1px;
@@ -278,6 +304,33 @@ const getStyles = (theme: GrafanaTheme2) => ({
     outline: none;
     background: var(--input-bg) !important;
     color: var(--text-primary) !important;
+
+    &::placeholder {
+      color: var(--text-secondary) !important;
+      opacity: 1 !important;
+    }
+
+    &:focus {
+      border-color: var(--accent);
+      box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--focus-ring);
+    }
+  `,
+  descriptionInput: css`
+    min-width: 0;
+    flex: 1;
+    width: 100%;
+    box-sizing: border-box;
+    padding: ${theme.spacing(0.5, 0.75)};
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    outline: none;
+    background: var(--input-bg) !important;
+    color: var(--text-primary) !important;
+
+    &::placeholder {
+      color: var(--text-secondary) !important;
+      opacity: 1 !important;
+    }
 
     &:focus {
       border-color: var(--accent);
@@ -401,15 +454,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--text-secondary);
     font-size: 12px;
   `,
-  resultLimitWarning: css`
-    margin-top: ${theme.spacing(0.75)};
-    padding: ${theme.spacing(0.75)};
-    border: 1px solid var(--warning);
-    background: color-mix(in srgb, var(--warning) 10%, transparent);
-    color: var(--text-primary);
-    font-size: 12px;
-    line-height: 1.35;
-  `,
   result: css`
     width: 100%;
     padding: 7px 8px;
@@ -528,7 +572,17 @@ function matchesFilter(value: string | undefined, selectedValues: string[]): boo
 }
 
 function includesFilter(value: string | undefined, filter: string): boolean {
-  return !filter.trim() || Boolean(value && value.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()));
+  const trimmed = filter.trim();
+  if (!trimmed) return true;
+  if (!value) return false;
+  if (trimmed.includes('*') || trimmed.includes('?')) {
+    const pattern = trimmed
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*')
+      .replace(/\?/g, '.');
+    return new RegExp(`^${pattern}$`, 'i').test(value);
+  }
+  return value.toLocaleLowerCase().includes(trimmed.toLocaleLowerCase());
 }
 
 function toggleFilter(values: string[], value: string): string[] {

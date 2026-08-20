@@ -174,8 +174,8 @@ describe('PI data source integration', () => {
       .resolves.toEqual([expect.objectContaining({ name: 'LFS_RB2_MOTOR', description: 'Motor principal', pointType: 'Float32', engineeringUnit: 'mm/s' })]);
     expect(getResource).toHaveBeenCalledWith(expect.stringContaining('/points/search?'));
     expect(getResource).toHaveBeenCalledWith(expect.stringContaining('dataServerWebId=server-webid'));
-    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('query=Tag%3A%3DLFS_RB2*'));
-    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('Descriptor%3A%3D*motor*'));
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('query=Tag%3A%3D%22LFS_RB2*%22'));
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('Descriptor%3A%3D%22*motor*%22'));
   });
 
   it('enriquece os candidatos do fallback por WebId sem falhar se um metadata falhar', async () => {

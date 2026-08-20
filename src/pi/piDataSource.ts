@@ -196,9 +196,9 @@ export async function searchPiPointsWithStatus(
 
   if (!request.term) {
     if (request.description) {
-      throw new Error('A pesquisa por descrição não é suportada por esta versão do PI Web API.');
+      throw new Error('Para pesquisar por descrição nesta versão do PI Web API, informe também o nome ou máscara da tag (ex: *).');
     }
-    throw new Error('A pesquisa por metadados não é suportada por esta versão do PI Web API.');
+    throw new Error('Informe o nome ou máscara da tag para pesquisar.');
   }
 
   // O datasource GridProtectionAlliance fixa maxCount=100 em piPointSearch().
@@ -387,17 +387,20 @@ function buildPiPointSearchQuery(request: ReturnType<typeof normalizePiPointSear
   const criteria: string[] = [];
   if (request.term) {
     const term = request.term.includes('*') || request.term.includes('?') ? request.term : `${request.term}*`;
-    criteria.push(`Tag:=${escapePiSearchValue(term)}`);
+    criteria.push(`Tag:="${escapePiSearchValue(term)}"`);
   }
-  if (request.description) criteria.push(`Descriptor:=*${escapePiSearchValue(request.description)}*`);
+  if (request.description) {
+    const desc = request.description.includes('*') || request.description.includes('?') ? request.description : `*${request.description}*`;
+    criteria.push(`Descriptor:="${escapePiSearchValue(desc)}"`);
+  }
   if (request.pointTypes.length) {
-    criteria.push(`(${request.pointTypes.map((type) => `PointType:=${escapePiSearchValue(type)}`).join(' OR ')})`);
+    criteria.push(`(${request.pointTypes.map((type) => `PointType:="${escapePiSearchValue(type)}"`).join(' OR ')})`);
   }
   if (request.engineeringUnits.length) {
-    criteria.push(`(${request.engineeringUnits.map((unit) => `EngineeringUnits:=${escapePiSearchValue(unit)}`).join(' OR ')})`);
+    criteria.push(`(${request.engineeringUnits.map((unit) => `EngineeringUnits:="${escapePiSearchValue(unit)}"`).join(' OR ')})`);
   }
   if (request.pointSources.length) {
-    criteria.push(`(${request.pointSources.map((source) => `PointSource:=${escapePiSearchValue(source)}`).join(' OR ')})`);
+    criteria.push(`(${request.pointSources.map((source) => `PointSource:="${escapePiSearchValue(source)}"`).join(' OR ')})`);
   }
   return criteria.join(' AND ');
 }
@@ -504,7 +507,16 @@ function matchesTagSearch(name: string, term: string): boolean {
 }
 
 function includesIgnoreCase(value: string | undefined, expected: string): boolean {
-  return !expected || Boolean(value && value.toLocaleLowerCase().includes(expected.toLocaleLowerCase()));
+  if (!expected) return true;
+  if (!value) return false;
+  if (expected.includes('*') || expected.includes('?')) {
+    const pattern = expected
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/\*/g, '.*')
+      .replace(/\?/g, '.');
+    return new RegExp(`^${pattern}$`, 'i').test(value);
+  }
+  return value.toLocaleLowerCase().includes(expected.toLocaleLowerCase());
 }
 
 function matchesAny(value: string | undefined, expected: string[]): boolean {
