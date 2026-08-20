@@ -74,7 +74,34 @@ export interface CellData {
 const TOTAL_COLS = 20; // A to T
 const TOTAL_ROWS = 50; // 1 to 50
 
-type DragMode = 'cells' | 'cols' | 'rows' | 'autofill';
+function filterPiDataPoints<T extends { value: number | string }>(points: T[], expression?: string): T[] {
+  const normalized = expression?.trim();
+  if (!normalized) {
+    return points;
+  }
+  const match = /^(?:value|valor)?\s*(>=|<=|<>|!=|==|=|>|<)\s*(-?\d+(?:[.,]\d+)?)$/i.exec(normalized);
+  if (!match) {
+    return points;
+  }
+  const expected = Number(match[2].replace(',', '.'));
+  return points.filter((point) => {
+    const value = Number(point.value);
+    if (!Number.isFinite(value)) {
+      return false;
+    }
+    switch (match[1]) {
+      case '>': return value > expected;
+      case '>=': return value >= expected;
+      case '<': return value < expected;
+      case '<=': return value <= expected;
+      case '=': case '==': return value === expected;
+      case '<>': case '!=': return value !== expected;
+      default: return true;
+    }
+  });
+}
+
+type DragMode = 'cells' | 'cols' | 'rows' | 'autofill' | 'formula';
 
 export interface MiniSheetsPanelProps {
   dataSourceSrv?: any;
@@ -115,6 +142,17 @@ export function MiniSheetsPanel({
   const [formulaBarText, setFormulaBarText] = useState('');
   const [editingCellCoord, setEditingCellCoord] = useState<CellCoord | null>(null);
   const [editingCellText, setEditingCellText] = useState('');
+  const [formulaEditMode, setFormulaEditMode] = useState(false);
+  const [formulaTargetCell, setFormulaTargetCell] = useState<CellCoord | null>(null);
+  const [formulaReferenceRange, setFormulaReferenceRange] = useState<SheetRange | null>(null);
+  const formulaTargetRef = useRef<CellCoord | null>(null);
+  const formulaSessionRef = useRef(false);
+  const formulaCursorRef = useRef({ start: 0, end: 0 });
+  const formulaPointerRef = useRef(false);
+  const formulaPointerHandledRef = useRef(false);
+  const formulaRangeAnchorRef = useRef<CellCoord | null>(null);
+  const formulaBarInputRef = useRef<HTMLInputElement>(null);
+  const inlineFormulaInputRef = useRef<HTMLInputElement>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [activeDataLinkDialog, setActiveDataLinkDialog] = useState<PiDataLinkFunctionType | null>(null);
   const [dataLinkMenuHost, setDataLinkMenuHost] = useState<HTMLElement | null>(null);
@@ -199,6 +237,44 @@ export function MiniSheetsPanel({
   const addressLabel = ranges.length > 0
     ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS)
     : formatCellAddress(activeCell);
+
+  const beginFormulaEdit = useCallback((initialText?: string, target: CellCoord = activeCell) => {
+    const text = initialText ?? formulaBarText;
+    formulaTargetRef.current = target;
+    formulaSessionRef.current = text.trimStart().startsWith('=');
+    setFormulaTargetCell(target);
+    setFormulaEditMode(text.trimStart().startsWith('='));
+    setFormulaReferenceRange(null);
+  }, [activeCell, formulaBarText]);
+
+  const insertFormulaReference = useCallback((range: SheetRange) => {
+    const target = formulaTargetRef.current ?? activeCell;
+    const reference = formatRangeAddress(range, TOTAL_COLS, TOTAL_ROWS);
+    const source = editingCellCoord && editingCellCoord.col === target.col && editingCellCoord.row === target.row
+      ? editingCellText
+      : formulaBarText;
+    const cursor = formulaCursorRef.current;
+    const start = Math.max(0, Math.min(cursor.start, source.length));
+    const end = Math.max(start, Math.min(cursor.end, source.length));
+    const next = `${source.slice(0, start)}${reference}${source.slice(end)}`;
+    const nextCursor = start + reference.length;
+    formulaCursorRef.current = { start: nextCursor, end: nextCursor };
+    setFormulaEditMode(true);
+    setFormulaReferenceRange(range);
+    setFormulaBarText(next);
+    if (editingCellCoord && editingCellCoord.col === target.col && editingCellCoord.row === target.row) {
+      setEditingCellText(next);
+    }
+    setTimeout(() => {
+      if (!formulaSessionRef.current) return;
+      const input = editingCellCoord && editingCellCoord.col === target.col && editingCellCoord.row === target.row
+        ? inlineFormulaInputRef.current
+        : formulaBarInputRef.current;
+      if (!input) return;
+      input.focus();
+      input.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
+  }, [activeCell, editingCellCoord, editingCellText, formulaBarText]);
 
   // Sync formula bar when active cell changes (unless currently editing formula bar)
   useEffect(() => {
@@ -405,7 +481,43 @@ export function MiniSheetsPanel({
           setCells((prev) => {
             const next = new Map(prev);
             const existing = next.get(key);
-            next.set(key, { rawValue, displayValue: display, format: existing?.format });
+            const timestampPosition = parsed.timestampPosition ?? 'none';
+            const hasTimestamp = timestampPosition !== 'none' && Boolean(valResult?.timestamp);
+            const timestampMs = valResult?.timestamp ? Date.parse(valResult.timestamp) : NaN;
+            const timestampDisplay = hasTimestamp
+              ? Number.isFinite(timestampMs)
+                ? formatDateTime(timestampMs)
+                : String(valResult?.timestamp)
+              : '';
+
+            if (hasTimestamp && display !== '#PI!') {
+              const spillCoord = timestampPosition === 'left'
+                ? { col: coord.col + 1, row: coord.row }
+                : { col: coord.col, row: coord.row + 1 };
+              const spillKey = `${spillCoord.col},${spillCoord.row}`;
+              const spillCell = next.get(spillKey);
+              const outsideGrid = spillCoord.col >= TOTAL_COLS || spillCoord.row >= TOTAL_ROWS;
+              const occupied = Boolean(spillCell && (spillCell.rawValue || spillCell.spilledFrom));
+
+              if (outsideGrid || occupied) {
+                next.set(key, { rawValue, displayValue: '#SPILL!', format: existing?.format });
+                return evaluateStaticFormulas(next).nextMap;
+              }
+
+              next.set(key, {
+                rawValue,
+                displayValue: timestampDisplay,
+                spillTargetAddresses: [formatCellAddress(spillCoord)],
+                format: existing?.format,
+              });
+              next.set(spillKey, {
+                rawValue: '',
+                displayValue: display,
+                spilledFrom: address,
+              });
+            } else {
+              next.set(key, { rawValue, displayValue: display, format: existing?.format });
+            }
             return evaluateStaticFormulas(next).nextMap;
           });
         } catch {
@@ -442,18 +554,34 @@ export function MiniSheetsPanel({
           const result = results[bindingKey];
 
           let display = '#PI!';
+          let resultTimestamp: number | undefined;
           if (result && result.status === 'success' && result.series && result.series.points.length > 0) {
             const points = result.series.points;
             const lastPt = points[points.length - 1];
             if (lastPt && lastPt.value !== undefined && lastPt.value !== null) {
               display = String(lastPt.value);
+              resultTimestamp = lastPt.time;
             }
           }
 
           setCells((prev) => {
             const next = new Map(prev);
             const existing = next.get(key);
-            next.set(key, { rawValue, displayValue: display, format: existing?.format });
+            const timestampPosition = parsed.timestampPosition ?? 'none';
+            if (timestampPosition !== 'none' && resultTimestamp !== undefined && display !== '#PI!') {
+              const spillCoord = timestampPosition === 'left'
+                ? { col: coord.col + 1, row: coord.row }
+                : { col: coord.col, row: coord.row + 1 };
+              const spillCell = next.get(`${spillCoord.col},${spillCoord.row}`);
+              if (spillCoord.col >= TOTAL_COLS || spillCoord.row >= TOTAL_ROWS || Boolean(spillCell && (spillCell.rawValue || spillCell.spilledFrom))) {
+                next.set(key, { rawValue, displayValue: '#SPILL!', format: existing?.format });
+                return evaluateStaticFormulas(next).nextMap;
+              }
+              next.set(key, { rawValue, displayValue: formatDateTime(resultTimestamp), spillTargetAddresses: [formatCellAddress(spillCoord)], format: existing?.format });
+              next.set(`${spillCoord.col},${spillCoord.row}`, { rawValue: '', displayValue: display, spilledFrom: address });
+            } else {
+              next.set(key, { rawValue, displayValue: display, format: existing?.format });
+            }
             return evaluateStaticFormulas(next).nextMap;
           });
         } catch {
@@ -510,6 +638,11 @@ export function MiniSheetsPanel({
             }
           }
 
+          points = filterPiDataPoints(points, parsed.options?.filterExpression);
+          if (parsed.type === 'pi_comp_dat' && parsed.reverseTime) {
+            points = [...points].reverse();
+          }
+
           if (points.length === 0) {
             setCells((prev) => {
               const next = new Map(prev);
@@ -520,12 +653,12 @@ export function MiniSheetsPanel({
             return;
           }
 
-          // Check for SPILL collision
           const showTs = parsed.showTimestamp !== false;
-          const neededCol2 = showTs ? coord.col + 1 : coord.col;
-          const neededEndRow = coord.row + points.length - 1;
+          const rowOrientation = parsed.options?.orientation === 'row';
+          const neededEndCol = coord.col + (rowOrientation ? points.length - 1 : (showTs ? 1 : 0));
+          const neededEndRow = coord.row + (rowOrientation ? (showTs ? 1 : 0) : points.length - 1);
 
-          if (neededCol2 >= TOTAL_COLS || neededEndRow >= TOTAL_ROWS) {
+          if (neededEndCol >= TOTAL_COLS || neededEndRow >= TOTAL_ROWS) {
             setCells((prev) => {
               const next = new Map(prev);
               const existing = next.get(key);
@@ -535,11 +668,10 @@ export function MiniSheetsPanel({
             return;
           }
 
-          // Apply Spill or set #SPILL! if collision
           let hasCollision = false;
           setCells((prev) => {
             for (let r = coord.row; r <= neededEndRow; r++) {
-              for (let c = coord.col; c <= neededCol2; c++) {
+              for (let c = coord.col; c <= neededEndCol; c++) {
                 if (r === coord.row && c === coord.col) {
                   continue;
                 }
@@ -560,72 +692,30 @@ export function MiniSheetsPanel({
             }
 
             const spillTargets: string[] = [];
-            const firstPt = points[0];
-
-            if (showTs) {
-              next.set(key, {
-                rawValue,
-                displayValue: formatDateTime(firstPt.time),
-                spillTargetAddresses: [],
-                format: existingOrigin?.format,
-              });
-
-              const rightCoord = { col: coord.col + 1, row: coord.row };
-              const rightKey = `${rightCoord.col},${rightCoord.row}`;
-              const rightAddr = formatCellAddress(rightCoord);
-              spillTargets.push(rightAddr);
-              next.set(rightKey, {
-                rawValue: '',
-                displayValue: String(firstPt.value),
-                spilledFrom: address,
-              });
-
-              for (let i = 1; i < points.length; i++) {
-                const pt = points[i];
-                const r = coord.row + i;
-
-                const timeCoord = { col: coord.col, row: r };
-                const timeKey = `${timeCoord.col},${timeCoord.row}`;
-                const timeAddr = formatCellAddress(timeCoord);
-                spillTargets.push(timeAddr);
-                next.set(timeKey, {
-                  rawValue: '',
-                  displayValue: formatDateTime(pt.time),
-                  spilledFrom: address,
-                });
-
-                const valCoord = { col: coord.col + 1, row: r };
-                const valKey = `${valCoord.col},${valCoord.row}`;
-                const valAddr = formatCellAddress(valCoord);
-                spillTargets.push(valAddr);
-                next.set(valKey, {
-                  rawValue: '',
-                  displayValue: String(pt.value),
-                  spilledFrom: address,
-                });
+            const writeCell = (target: CellCoord, displayValue: string) => {
+              const targetKey = `${target.col},${target.row}`;
+              const origin = target.col === coord.col && target.row === coord.row;
+              if (!origin) {
+                spillTargets.push(formatCellAddress(target));
               }
-            } else {
-              next.set(key, {
-                rawValue,
-                displayValue: String(firstPt.value),
-                spillTargetAddresses: [],
-                format: existingOrigin?.format,
-              });
+              next.set(targetKey, origin
+                ? { rawValue, displayValue, spillTargetAddresses: [], format: existingOrigin?.format }
+                : { rawValue: '', displayValue, spilledFrom: address });
+            };
 
-              for (let i = 1; i < points.length; i++) {
-                const pt = points[i];
-                const r = coord.row + i;
-                const valCoord = { col: coord.col, row: r };
-                const valKey = `${valCoord.col},${valCoord.row}`;
-                const valAddr = formatCellAddress(valCoord);
-                spillTargets.push(valAddr);
-                next.set(valKey, {
-                  rawValue: '',
-                  displayValue: String(pt.value),
-                  spilledFrom: address,
-                });
+            points.forEach((point, index) => {
+              const base = rowOrientation
+                ? { col: coord.col + index, row: coord.row }
+                : { col: coord.col, row: coord.row + index };
+              if (showTs) {
+                writeCell(base, formatDateTime(point.time));
+                writeCell(rowOrientation
+                  ? { col: base.col, row: base.row + 1 }
+                  : { col: base.col + 1, row: base.row }, String(point.value));
+              } else {
+                writeCell(base, String(point.value));
               }
-            }
+            });
 
             const originCell = next.get(key);
             if (originCell) {
@@ -706,8 +796,10 @@ export function MiniSheetsPanel({
             return { time: item.time, value: closest.value };
           });
 
-          const neededEndRow = coord.row + timedPoints.length - 1;
-          if (neededEndRow >= TOTAL_ROWS) {
+          const timedRowOrientation = parsed.options?.orientation === 'row';
+          const neededEndRow = coord.row + (timedRowOrientation ? 0 : timedPoints.length - 1);
+          const neededEndCol = coord.col + (timedRowOrientation ? timedPoints.length - 1 : 0);
+          if (neededEndRow >= TOTAL_ROWS || neededEndCol >= TOTAL_COLS) {
             setCells((prev) => {
               const next = new Map(prev);
               const existing = next.get(key);
@@ -719,8 +811,11 @@ export function MiniSheetsPanel({
 
           let hasCollision = false;
           setCells((prev) => {
-            for (let r = coord.row + 1; r <= neededEndRow; r++) {
-              const existing = prev.get(`${coord.col},${r}`);
+            for (let index = 1; index < timedPoints.length; index++) {
+              const target = timedRowOrientation
+                ? { col: coord.col + index, row: coord.row }
+                : { col: coord.col, row: coord.row + index };
+              const existing = prev.get(`${target.col},${target.row}`);
               if (existing && !existing.spilledFrom && (existing.rawValue?.trim() || existing.displayValue?.trim())) {
                 hasCollision = true;
                 break;
@@ -744,8 +839,9 @@ export function MiniSheetsPanel({
 
             for (let i = 1; i < timedPoints.length; i++) {
               const pt = timedPoints[i];
-              const r = coord.row + i;
-              const tCoord = { col: coord.col, row: r };
+              const tCoord = timedRowOrientation
+                ? { col: coord.col + i, row: coord.row }
+                : { col: coord.col, row: coord.row + i };
               const tKey = `${tCoord.col},${tCoord.row}`;
               const tAddr = formatCellAddress(tCoord);
               spillTargets.push(tAddr);
@@ -780,6 +876,7 @@ export function MiniSheetsPanel({
           const resolvedEnd = resolveParameter(parsed.endTime, getCellString);
           const resolvedCalc = resolveParameter(parsed.calculation, getCellString) || 'Average';
           const resolvedInt = parsed.interval ? resolveParameter(parsed.interval, getCellString) : undefined;
+          const conversionFactor = Number.isFinite(parsed.conversionFactor) ? (parsed.conversionFactor as number) : 1;
 
           const binding = await resolvePiPointBindingByName(resolvedTag);
           const fromTime = parsePiTime(resolvedStart);
@@ -816,10 +913,14 @@ export function MiniSheetsPanel({
           const results = await getPiTrendsRecordedHistoryForRange([binding], range, dataSourceSrv);
           const bindingKey = `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
           const res = results[bindingKey];
-          const allPoints = (res && res.status === 'success' && res.series) ? res.series.points : [];
+          const allPoints = filterPiDataPoints(
+            (res && res.status === 'success' && res.series) ? res.series.points : [],
+            parsed.options?.filterExpression,
+          );
 
           if (!resolvedInt || resolvedInt.trim() === '') {
-            const summaryVal = computeSummary(allPoints);
+            const rawSummary = computeSummary(allPoints);
+            const summaryVal = typeof rawSummary === 'number' ? rawSummary * conversionFactor : rawSummary;
             const formattedVal = typeof summaryVal === 'number' ? summaryVal.toLocaleString('pt-BR', { maximumFractionDigits: 4 }) : String(summaryVal);
             setCells((prev) => {
               const next = new Map(prev);
@@ -845,7 +946,8 @@ export function MiniSheetsPanel({
           for (let cur = fromTime; cur < toTime; cur += stepMs) {
             const nextStep = Math.min(cur + stepMs, toTime);
             const stepPts = allPoints.filter((p) => p.time >= cur && p.time < nextStep);
-            const val = computeSummary(stepPts);
+            const rawValue = computeSummary(stepPts);
+            const val = typeof rawValue === 'number' ? rawValue * conversionFactor : rawValue;
             intervalItems.push({
               time: cur,
               value: typeof val === 'number' ? val.toLocaleString('pt-BR', { maximumFractionDigits: 4 }) : String(val),
@@ -863,9 +965,10 @@ export function MiniSheetsPanel({
             return;
           }
 
-          const neededCol2 = coord.col + 1;
-          const neededEndRow = coord.row + intervalItems.length - 1;
-          if (neededCol2 >= TOTAL_COLS || neededEndRow >= TOTAL_ROWS) {
+          const calcRowOrientation = parsed.options?.orientation === 'row';
+          const neededEndCol = coord.col + (calcRowOrientation ? intervalItems.length - 1 : 1);
+          const neededEndRow = coord.row + (calcRowOrientation ? 1 : intervalItems.length - 1);
+          if (neededEndCol >= TOTAL_COLS || neededEndRow >= TOTAL_ROWS) {
             setCells((prev) => {
               const next = new Map(prev);
               const existing = next.get(key);
@@ -878,7 +981,7 @@ export function MiniSheetsPanel({
           let hasCollision = false;
           setCells((prev) => {
             for (let r = coord.row; r <= neededEndRow; r++) {
-              for (let c = coord.col; c <= neededCol2; c++) {
+              for (let c = coord.col; c <= neededEndCol; c++) {
                 if (r === coord.row && c === coord.col) continue;
                 const existing = prev.get(`${c},${r}`);
                 if (existing && !existing.spilledFrom && (existing.rawValue?.trim() || existing.displayValue?.trim())) {
@@ -896,44 +999,25 @@ export function MiniSheetsPanel({
             }
 
             const spillTargets: string[] = [];
-            const first = intervalItems[0];
-            next.set(key, {
-              rawValue,
-              displayValue: formatDateTime(first.time),
-              spillTargetAddresses: [],
-              format: existingOrigin?.format,
+            const writeCell = (target: CellCoord, displayValue: string) => {
+              const origin = target.col === coord.col && target.row === coord.row;
+              if (!origin) {
+                spillTargets.push(formatCellAddress(target));
+              }
+              next.set(`${target.col},${target.row}`, origin
+                ? { rawValue, displayValue, spillTargetAddresses: [], format: existingOrigin?.format }
+                : { rawValue: '', displayValue, spilledFrom: address });
+            };
+            intervalItems.forEach((item, index) => {
+              const timeCoord = calcRowOrientation
+                ? { col: coord.col + index, row: coord.row }
+                : { col: coord.col, row: coord.row + index };
+              const valueCoord = calcRowOrientation
+                ? { col: timeCoord.col, row: timeCoord.row + 1 }
+                : { col: timeCoord.col + 1, row: timeCoord.row };
+              writeCell(timeCoord, formatDateTime(item.time));
+              writeCell(valueCoord, String(item.value));
             });
-
-            const rightCoord = { col: coord.col + 1, row: coord.row };
-            const rightAddr = formatCellAddress(rightCoord);
-            spillTargets.push(rightAddr);
-            next.set(`${rightCoord.col},${rightCoord.row}`, {
-              rawValue: '',
-              displayValue: String(first.value),
-              spilledFrom: address,
-            });
-
-            for (let i = 1; i < intervalItems.length; i++) {
-              const item = intervalItems[i];
-              const r = coord.row + i;
-              const tCoord = { col: coord.col, row: r };
-              const tAddr = formatCellAddress(tCoord);
-              spillTargets.push(tAddr);
-              next.set(`${tCoord.col},${tCoord.row}`, {
-                rawValue: '',
-                displayValue: formatDateTime(item.time),
-                spilledFrom: address,
-              });
-
-              const vCoord = { col: coord.col + 1, row: r };
-              const vAddr = formatCellAddress(vCoord);
-              spillTargets.push(vAddr);
-              next.set(`${vCoord.col},${vCoord.row}`, {
-                rawValue: '',
-                displayValue: String(item.value),
-                spilledFrom: address,
-              });
-            }
 
             const originCell = next.get(key);
             if (originCell) originCell.spillTargetAddresses = spillTargets;
@@ -1034,10 +1118,49 @@ export function MiniSheetsPanel({
             displayResult = `${hrs.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} h`;
           }
 
+          const outputValues = [displayResult];
+          if (parsed.showStartTime) {
+            outputValues.push(formatDateTime(fromTime));
+          }
+          if (parsed.showEndTime) {
+            outputValues.push(formatDateTime(toTime));
+          }
+          if (parsed.showPercentValid) {
+            const valid = points.filter((point) => Number.isFinite(Number(point.value))).length;
+            outputValues.push(`${(points.length ? valid / points.length * 100 : 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`);
+          }
+          const rowOrientation = parsed.options?.orientation === 'row';
+          const outputEndCol = coord.col + (rowOrientation ? outputValues.length - 1 : 0);
+          const outputEndRow = coord.row + (rowOrientation ? 0 : outputValues.length - 1);
           setCells((prev) => {
             const next = new Map(prev);
             const existing = next.get(key);
-            next.set(key, { rawValue, displayValue: displayResult, format: existing?.format });
+            if (outputEndCol >= TOTAL_COLS || outputEndRow >= TOTAL_ROWS) {
+              next.set(key, { rawValue, displayValue: '#SPILL!', format: existing?.format });
+              return next;
+            }
+            const spillTargets: string[] = [];
+            for (let index = 0; index < outputValues.length; index++) {
+              const target = rowOrientation
+                ? { col: coord.col + index, row: coord.row }
+                : { col: coord.col, row: coord.row + index };
+              const targetKey = `${target.col},${target.row}`;
+              if (index > 0) {
+                const occupied = prev.get(targetKey);
+                if (occupied && !occupied.spilledFrom && (occupied.rawValue?.trim() || occupied.displayValue?.trim())) {
+                  next.set(key, { rawValue, displayValue: '#SPILL!', format: existing?.format });
+                  return next;
+                }
+                spillTargets.push(formatCellAddress(target));
+              }
+              next.set(targetKey, index === 0
+                ? { rawValue, displayValue: outputValues[index], spillTargetAddresses: [], format: existing?.format }
+                : { rawValue: '', displayValue: outputValues[index], spilledFrom: address });
+            }
+            const origin = next.get(key);
+            if (origin) {
+              origin.spillTargetAddresses = spillTargets;
+            }
             return evaluateStaticFormulas(next).nextMap;
           });
         } catch {
@@ -1419,6 +1542,16 @@ export function MiniSheetsPanel({
 
   // Pointer event handlers for Cell Selection & Dragging
   const handleCellPointerDown = (col: number, row: number, e: React.PointerEvent) => {
+    if (formulaEditMode && formulaSessionRef.current && formulaTargetRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      formulaPointerRef.current = true;
+      formulaPointerHandledRef.current = false;
+      formulaRangeAnchorRef.current = { col, row };
+      dragModeRef.current = 'formula';
+      setFormulaReferenceRange(rangeFromCells({ col, row }, { col, row }));
+      return;
+    }
     if (editingCellCoord) {
       if (editingCellCoord.col !== col || editingCellCoord.row !== row) {
         handleCellEditSubmit(editingCellCoord.col, editingCellCoord.row, editingCellText);
@@ -1470,6 +1603,11 @@ export function MiniSheetsPanel({
       return;
     }
 
+    if (dragModeRef.current === 'formula' && formulaRangeAnchorRef.current) {
+      setFormulaReferenceRange(rangeFromCells(formulaRangeAnchorRef.current, { col, row }));
+      return;
+    }
+
     // Autofill Drag
     if (dragModeRef.current === 'autofill' && ranges.length > 0) {
       const primary = normalizeRange(ranges[ranges.length - 1]);
@@ -1507,6 +1645,32 @@ export function MiniSheetsPanel({
     } else {
       setRanges([currentRange]);
     }
+  };
+
+  const handleCellPointerUp = (col: number, row: number, e: React.PointerEvent) => {
+    if (!formulaEditMode || !formulaSessionRef.current || !formulaTargetRef.current || !formulaPointerRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const range = formulaReferenceRange ?? rangeFromCells({ col, row }, { col, row });
+    formulaPointerRef.current = false;
+    formulaPointerHandledRef.current = true;
+    dragModeRef.current = null;
+    formulaRangeAnchorRef.current = null;
+    insertFormulaReference(range);
+  };
+
+  const handleCellClick = (col: number, row: number, e: React.MouseEvent) => {
+    if (formulaEditMode && formulaPointerHandledRef.current) {
+      formulaPointerHandledRef.current = false;
+      return;
+    }
+    if (formulaEditMode && formulaSessionRef.current && formulaTargetRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      insertFormulaReference(rangeFromCells({ col, row }, { col, row }));
+      return;
+    }
+    handleCellPointerDown(col, row, e as unknown as React.PointerEvent);
   };
 
   // Fill Handle Pointer Down
@@ -1742,7 +1906,13 @@ export function MiniSheetsPanel({
 
   const handleFormulaBarSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    computeCell(activeCell, formulaBarText);
+    const target = formulaTargetRef.current ?? activeCell;
+    setFormulaEditMode(false);
+    formulaSessionRef.current = false;
+    setFormulaReferenceRange(null);
+    formulaTargetRef.current = null;
+    setFormulaTargetCell(null);
+    computeCell(target, formulaBarText);
   };
 
   const handleCellEditSubmit = (
@@ -1752,6 +1922,14 @@ export function MiniSheetsPanel({
     moveDirection?: 'down' | 'right'
   ) => {
     setEditingCellCoord(null);
+    const target = formulaTargetRef.current;
+    if (target && target.col === col && target.row === row) {
+      setFormulaEditMode(false);
+      formulaSessionRef.current = false;
+      setFormulaReferenceRange(null);
+      formulaTargetRef.current = null;
+      setFormulaTargetCell(null);
+    }
     computeCell({ col, row }, text);
     if (moveDirection === 'down') {
       const nextRow = Math.min(TOTAL_ROWS - 1, row + 1);
@@ -1823,6 +2001,13 @@ export function MiniSheetsPanel({
       const cell = cells.get(activeKey);
       setEditingCellCoord(activeCell);
       setEditingCellText(cell?.rawValue ?? '');
+      if (cell?.rawValue?.trimStart().startsWith('=')) {
+        formulaTargetRef.current = activeCell;
+        setFormulaTargetCell(activeCell);
+        setFormulaEditMode(true);
+        formulaSessionRef.current = true;
+        formulaCursorRef.current = { start: cell.rawValue.length, end: cell.rawValue.length };
+      }
       return;
     }
 
@@ -1880,6 +2065,16 @@ export function MiniSheetsPanel({
       e.preventDefault();
       setEditingCellCoord(activeCell);
       setEditingCellText(e.key);
+      if (e.key === '=') {
+        formulaTargetRef.current = activeCell;
+        setFormulaTargetCell(activeCell);
+        setFormulaEditMode(true);
+        formulaSessionRef.current = true;
+        formulaCursorRef.current = { start: 1, end: 1 };
+      } else {
+        setFormulaEditMode(false);
+        formulaSessionRef.current = false;
+      }
       return;
     }
   };
@@ -2083,11 +2278,40 @@ export function MiniSheetsPanel({
         <form className={styles.formulaForm} onSubmit={handleFormulaBarSubmit}>
           <span className={styles.fxSymbol}>fx</span>
           <input
+            ref={formulaBarInputRef}
             className={styles.formulaInput}
             data-testid="mini-sheets-formula-input"
             value={formulaBarText}
             placeholder="Digite um texto, número ou fórmula (ex: =PICurrVal(&quot;TAG&quot;))"
-            onChange={(e) => setFormulaBarText(e.target.value)}
+            onFocus={(e) => {
+              formulaCursorRef.current = { start: e.currentTarget.selectionStart ?? e.currentTarget.value.length, end: e.currentTarget.selectionEnd ?? e.currentTarget.value.length };
+              if (e.currentTarget.value.trimStart().startsWith('=')) beginFormulaEdit(e.currentTarget.value);
+            }}
+            onSelect={(e) => {
+              formulaCursorRef.current = { start: e.currentTarget.selectionStart ?? e.currentTarget.value.length, end: e.currentTarget.selectionEnd ?? e.currentTarget.value.length };
+            }}
+            onChange={(e) => {
+              const value = e.target.value;
+              formulaCursorRef.current = { start: e.target.selectionStart ?? value.length, end: e.target.selectionEnd ?? value.length };
+              setFormulaBarText(value);
+              if (value.trimStart().startsWith('=')) {
+                beginFormulaEdit(value);
+              } else {
+                setFormulaEditMode(false);
+                formulaSessionRef.current = false;
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setFormulaEditMode(false);
+                formulaSessionRef.current = false;
+                setFormulaReferenceRange(null);
+                formulaTargetRef.current = null;
+                setFormulaTargetCell(null);
+                e.currentTarget.blur();
+              }
+            }}
           />
         </form>
       </div>
@@ -2167,6 +2391,9 @@ export function MiniSheetsPanel({
                     const cell = cells.get(cellKey);
                     const isActive = activeCell.col === cIndex && activeCell.row === rIndex;
                     const isInsideSelection = isCellInsideRanges(cIndex, rIndex, ranges);
+                    const isFormulaReference = formulaEditMode && formulaReferenceRange
+                      ? isCellInsideRanges(cIndex, rIndex, [formulaReferenceRange])
+                      : false;
                     const isInsideAutofill = autofillRange ? isCellInsideRanges(cIndex, rIndex, [autofillRange]) : false;
                     const isEditing = editingCellCoord?.col === cIndex && editingCellCoord?.row === rIndex;
                     const isSpilled = Boolean(cell?.spilledFrom);
@@ -2192,12 +2419,41 @@ export function MiniSheetsPanel({
                     }
                     if (cell?.format?.horizontalAlign) customStyle.textAlign = cell.format.horizontalAlign;
 
+                    // Draw a single, heavier outline around the outside of each
+                    // selected range (like Excel) without changing the size of
+                    // the cells or hiding the normal inner grid lines.
+                    if (isInsideSelection) {
+                      const rangeOutline = ranges.flatMap((range) => {
+                        const normalized = normalizeRange(range);
+                        if (
+                          cIndex < normalized.left ||
+                          cIndex > normalized.right ||
+                          rIndex < normalized.top ||
+                          rIndex > normalized.bottom
+                        ) {
+                          return [];
+                        }
+
+                        const shadows: string[] = [];
+                        if (rIndex === normalized.top) shadows.push('inset 0 2px 0 var(--accent)');
+                        if (rIndex === normalized.bottom) shadows.push('inset 0 -2px 0 var(--accent)');
+                        if (cIndex === normalized.left) shadows.push('inset 2px 0 0 var(--accent)');
+                        if (cIndex === normalized.right) shadows.push('inset -2px 0 0 var(--accent)');
+                        return shadows;
+                      });
+                      if (rangeOutline.length > 0) {
+                        customStyle.boxShadow = rangeOutline.join(', ');
+                      }
+                    }
+
                     return (
                       <td
                         key={cIndex}
                         className={`${styles.cell} ${
                           isActive
                             ? styles.cellActive
+                            : isFormulaReference
+                            ? styles.cellFormulaReference
                             : isInsideSelection
                             ? styles.cellInRange
                             : ''
@@ -2206,8 +2462,10 @@ export function MiniSheetsPanel({
                         } ${isError ? styles.cellError : ''}`}
                         style={customStyle}
                         data-testid={`mini-sheets-cell-${colIndexToLetter(cIndex)}${rIndex + 1}`}
-                        onClick={(e) => handleCellPointerDown(cIndex, rIndex, e as any)}
+                        data-formula-target={formulaEditMode && formulaTargetCell?.col === cIndex && formulaTargetCell.row === rIndex ? 'true' : undefined}
+                        onClick={(e) => handleCellClick(cIndex, rIndex, e)}
                         onPointerDown={(e) => handleCellPointerDown(cIndex, rIndex, e)}
+                        onPointerUp={(e) => handleCellPointerUp(cIndex, rIndex, e)}
                         onPointerEnter={(e) => handleCellPointerEnter(cIndex, rIndex, e)}
                         onMouseEnter={(e) => handleCellPointerEnter(cIndex, rIndex, e)}
                         onDoubleClick={() => handleCellDoubleClick(cIndex, rIndex)}
@@ -2215,9 +2473,26 @@ export function MiniSheetsPanel({
                         {isEditing ? (
                           <input
                             autoFocus
+                            ref={inlineFormulaInputRef}
                             className={styles.cellInlineInput}
                             value={editingCellText}
-                            onChange={(e) => setEditingCellText(e.target.value)}
+                            onFocus={(e) => {
+                              formulaCursorRef.current = { start: e.currentTarget.selectionStart ?? e.currentTarget.value.length, end: e.currentTarget.selectionEnd ?? e.currentTarget.value.length };
+                            }}
+                            onSelect={(e) => {
+                              formulaCursorRef.current = { start: e.currentTarget.selectionStart ?? e.currentTarget.value.length, end: e.currentTarget.selectionEnd ?? e.currentTarget.value.length };
+                            }}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              formulaCursorRef.current = { start: e.target.selectionStart ?? value.length, end: e.target.selectionEnd ?? value.length };
+                              setEditingCellText(value);
+                              setFormulaEditMode(value.trimStart().startsWith('='));
+                              formulaSessionRef.current = value.trimStart().startsWith('=');
+                              if (value.trimStart().startsWith('=')) {
+                                formulaTargetRef.current = { col: cIndex, row: rIndex };
+                                setFormulaTargetCell({ col: cIndex, row: rIndex });
+                              }
+                            }}
                             onBlur={() => handleCellEditSubmit(cIndex, rIndex, editingCellText)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
@@ -2229,6 +2504,11 @@ export function MiniSheetsPanel({
                               } else if (e.key === 'Escape') {
                                 e.preventDefault();
                                 setEditingCellCoord(null);
+                                setFormulaEditMode(false);
+                                formulaSessionRef.current = false;
+                                setFormulaReferenceRange(null);
+                                formulaTargetRef.current = null;
+                                setFormulaTargetCell(null);
                                 setTimeout(() => {
                                   containerRef.current?.focus();
                                 }, 0);
@@ -2650,9 +2930,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
   cellInRange: css`
     background: var(--selection-bg) !important;
   `,
+  cellFormulaReference: css`
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface-primary, var(--panel-bg))) !important;
+    box-shadow: inset 0 0 0 2px var(--accent);
+  `,
   cellAutofillPreview: css`
     outline: 1px dashed var(--accent);
-    background: rgba(180, 22, 126, 0.15) !important;
+    background: var(--selection-bg) !important;
   `,
   cellSelected: css`
     outline: 2px solid var(--accent);
@@ -2691,7 +2975,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 6px;
     height: 6px;
     background: var(--accent);
-    border: 1px solid #ffffff;
+    border: 1px solid var(--selection-handle-fill, #ffffff);
     cursor: crosshair;
     z-index: 4;
   `,

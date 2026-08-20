@@ -732,12 +732,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
     --panel-header-bg: #17212d;
     --canvas-bg: #09121f;
     --canvas-dot: rgba(116, 143, 174, 0.2);
+    --canvas-glow: rgba(31, 66, 101, 0.16);
     --border-color: #2b394a;
     --border-subtle: #202d3c;
     --text-primary: #f1f2f5;
     --trend-cursor: #ffffff;
     --text-secondary: #aeb3bf;
-    --text-muted: #7f8a9a;
+    --text-muted: #8f9bad;
+    --text-disabled: #667386;
     --accent: #d33b91;
     --accent-hover: #ed62ad;
     --accent-contrast: #ffffff;
@@ -748,6 +750,16 @@ const getStyles = (theme: GrafanaTheme2) => ({
     --focus-ring: rgba(237, 98, 173, 0.34);
     --success: #4ade80;
     --danger: #f87171;
+    --warning: #fbbf24;
+    --card-bg: #151e2a;
+    --overlay-bg: rgba(3, 8, 15, 0.72);
+    --assets-header-divider: rgba(255, 255, 255, 0.22);
+    --assets-header-hover: rgba(255, 255, 255, 0.1);
+    --assets-header-active: rgba(0, 0, 0, 0.2);
+    --assets-header-focus: #ffffff;
+    --technical-image-filter: invert(1);
+    --selection-outline: #6e9fff;
+    --selection-handle-fill: #ffffff;
     --shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
     --brand-logo: url('${PLUGIN_ASSET_BASE_URL}/img/image.png');
     --chart-band: rgba(255, 255, 255, 0.035);
@@ -768,12 +780,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
     --panel-header-bg: #f8fafc;
     --canvas-bg: #f8fafc;
     --canvas-dot: rgba(100, 116, 139, 0.16);
+    --canvas-glow: rgba(168, 37, 120, 0.055);
     --border-color: #d7dee8;
     --border-subtle: #e5e9f0;
     --text-primary: #1e293b;
     --trend-cursor: #000000;
     --text-secondary: #64748b;
-    --text-muted: #94a3b8;
+    --text-muted: #64748b;
+    --text-disabled: #94a3b8;
     --accent: #a82578;
     --accent-hover: #c42e8d;
     --accent-contrast: #ffffff;
@@ -784,6 +798,16 @@ const getStyles = (theme: GrafanaTheme2) => ({
     --focus-ring: rgba(168, 37, 120, 0.24);
     --success: #22c55e;
     --danger: #dc2626;
+    --warning: #b45309;
+    --card-bg: #f8fafc;
+    --overlay-bg: rgba(15, 23, 42, 0.28);
+    --assets-header-divider: #d7dee8;
+    --assets-header-hover: #eef3f8;
+    --assets-header-active: rgba(168, 37, 120, 0.12);
+    --assets-header-focus: #a82578;
+    --technical-image-filter: none;
+    --selection-outline: #2563eb;
+    --selection-handle-fill: #ffffff;
     --shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
     --brand-logo: url('${PLUGIN_ASSET_BASE_URL}/img/logo-visualization-header-light.png');
     --chart-band: rgba(100, 116, 139, 0.055);
@@ -844,8 +868,19 @@ const getStyles = (theme: GrafanaTheme2) => ({
     overflow: hidden;
     color: var(--text-primary);
     background:
-      radial-gradient(circle at 55% 35%, rgba(31, 66, 101, 0.16), transparent 48%),
+      radial-gradient(circle at 55% 35%, var(--canvas-glow), transparent 48%),
       var(--app-bg);
+
+    input::placeholder,
+    textarea::placeholder {
+      color: var(--text-muted);
+      opacity: 1;
+    }
+
+    select option {
+      color: var(--text-primary);
+      background: var(--input-bg);
+    }
     border: 1px solid var(--border-color);
     border-radius: 8px;
   `,
@@ -941,7 +976,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: rgba(3, 8, 15, 0.72);
+    background: var(--overlay-bg);
   `,
   saveDialog: css`
     display: flex;
@@ -1282,7 +1317,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: 5px;
     padding: 0 6px;
     border: 0;
-    border-right: 1px solid rgba(255, 255, 255, 0.22);
+    border-right: 1px solid var(--assets-header-divider);
     color: var(--assets-header-muted);
     background: transparent;
     cursor: pointer;
@@ -1306,7 +1341,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: 5px;
     padding: 0 6px;
     border: 0;
-    border-right: 1px solid rgba(255, 255, 255, 0.22);
+    border-right: 1px solid var(--assets-header-divider);
     color: #ffffff;
     background: linear-gradient(135deg, #b4167e 0%, #9d126e 100%);
     cursor: pointer;

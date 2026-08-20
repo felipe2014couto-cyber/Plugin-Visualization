@@ -262,6 +262,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     input { width: 100%; padding: 2px; }
   `,
   removeButton: css`grid-column: 1 / -1; width: 100%; max-width: 100%; min-height: 24px; padding: 2px 5px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-secondary); font-size: 9px;`,
-  invalid: css`grid-column: 1 / -1; color: ${theme.colors.warning.text}; font-size: 9px;`,
-  error: css`margin-top: 7px; color: ${theme.colors.warning.text}; font-size: 9px; line-height: 1.35;`,
+  invalid: css`grid-column: 1 / -1; color: var(--warning); font-size: 9px;`,
+  error: css`margin-top: 7px; color: var(--warning); font-size: 9px; line-height: 1.35;`,
 });

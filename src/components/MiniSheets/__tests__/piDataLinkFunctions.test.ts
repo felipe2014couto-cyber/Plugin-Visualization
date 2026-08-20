@@ -139,6 +139,36 @@ describe('PI DataLink Formula Parsing & Reference Resolution', () => {
     });
   });
 
+  test('preserva opções avançadas de dados compactados', () => {
+    const parsed = parseFormula('=PICompDat("TAG", "*-8h", "*", 100, true, "row", true, "Outside", true, true, true, "value > 10", true, "count")');
+    expect(parsed).toMatchObject({
+      type: 'pi_comp_dat',
+      reverseTime: true,
+      boundaryType: 'Outside',
+      hideCount: true,
+      showValueAttributes: true,
+      showAnnotations: true,
+      options: {
+        orientation: 'row',
+        filterExpression: 'value > 10',
+        markFiltered: true,
+      },
+    });
+  });
+
+  test('preserva conversão e campos auxiliares dos dados calculados', () => {
+    const parsed = parseFormula('=PIAdvCalcVal("TAG", "*-8h", "*", "Average", "1h", 2.5, "column", true, true, true, true, "value >= 0", false, "")');
+    expect(parsed).toMatchObject({
+      type: 'pi_adv_calc_val',
+      conversionFactor: 2.5,
+      showStartTime: true,
+      showEndTime: true,
+      showMinMaxTime: true,
+      showPercentValid: true,
+      options: { orientation: 'column', filterExpression: 'value >= 0', markFiltered: false },
+    });
+  });
+
   test('parseRangeAddresses handles single cell and ranges correctly', () => {
     expect(parseRangeAddresses('B4')).toEqual([{ col: 1, row: 3 }]);
     expect(parseRangeAddresses('A1:A3')).toEqual([

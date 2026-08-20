@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
 import { createDisplayDocument } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
@@ -69,5 +69,24 @@ describe('DisplayEditor', () => {
     expect(screen.getByTestId('display-editor-toolbar')).toContainElement(screen.getByLabelText('Arrastar como Gauge'));
     expect(screen.getByTitle('Exportar Display')).toBeInTheDocument();
     expect(screen.getByTitle('Arrastar como Barra')).toBeInTheDocument();
+  });
+
+  it('aplica zoom somente com Ctrl + scroll e não altera o documento', () => {
+    const doc = createDisplayDocument({ name: 'Test Display' });
+    doc.surface.width = 800;
+    doc.surface.height = 450;
+    const before = JSON.stringify(doc);
+    render(<DisplayEditor document={doc} />);
+    const surface = screen.getByTestId('display-surface');
+    const originalViewBox = surface.getAttribute('viewBox');
+
+    fireEvent.wheel(surface, { deltaY: -1, clientX: 400, clientY: 225 });
+    expect(surface.getAttribute('viewBox')).toBe(originalViewBox);
+
+    const ctrlWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -1, clientX: 400, clientY: 225 });
+    fireEvent(surface, ctrlWheel);
+    expect(ctrlWheel.defaultPrevented).toBe(true);
+    expect(surface.getAttribute('viewBox')).not.toBe(originalViewBox);
+    expect(JSON.stringify(doc)).toBe(before);
   });
 });

@@ -3,6 +3,7 @@ import { getValueVisualOptions, type ValueVisualOptions } from '../createValue';
 import type { CalculationElement } from '../createCalculation';
 import type { CalculationEvaluation } from '../../calculations/calculationEngine';
 import { formatValue } from './ValueElementView';
+import { resolveThemeForeground } from '../themeColor';
 
 export interface CalculationElementViewProps {
   element: CalculationElement;
@@ -19,7 +20,7 @@ export function CalculationElementView({ element, calculationName, evaluation }:
   return (
     <g data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>
       <rect x={element.x} y={element.y} width={element.width} height={element.height} rx={14} fill="var(--element-bg, rgba(255, 255, 255, 0.06))" stroke="var(--element-border, rgba(255, 255, 255, 0.35))" strokeWidth={1} pointerEvents="all" />
-      <text x={textX} y={element.y + element.height / 2 - ((lines.length - 1) * fontSize * 0.6)} fill={visual.color} fontSize={fontSize} textAnchor={textAnchor} dominantBaseline="middle" data-testid={`display-calculation-${element.id}`} pointerEvents="none">
+      <text x={textX} y={element.y + element.height / 2 - ((lines.length - 1) * fontSize * 0.6)} fill={resolveThemeForeground(visual.color)} fontSize={fontSize} textAnchor={textAnchor} dominantBaseline="middle" data-testid={`display-calculation-${element.id}`} pointerEvents="none">
         {lines.map((line, index) => <tspan key={`${line}-${index}`} x={textX} dy={index === 0 ? 0 : fontSize * 1.2}>{line}</tspan>)}
       </text>
     </g>

@@ -96,6 +96,7 @@ import {
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
+import type { SurfaceViewport } from './viewportZoom';
 
 export type DisplayEditorMode = 'edit' | 'view';
 export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'table';
@@ -194,6 +195,7 @@ export function DisplayEditor({
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
+  const [optionsElementId, setOptionsElementId] = useState<string | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [surfaceZoom, setSurfaceZoom] = useState(1);
@@ -211,6 +213,12 @@ export function DisplayEditor({
       setOptionsTrendId(null);
     }
   }, [optionsTrendId, state.selectedElementId]);
+
+  useEffect(() => {
+    if (optionsElementId && state.selectedElementId !== optionsElementId) {
+      setOptionsElementId(null);
+    }
+  }, [optionsElementId, state.selectedElementId]);
 
   useEffect(() => {
     documentRef.current = displayDocument;
@@ -702,6 +710,7 @@ export function DisplayEditor({
       if (nextMode === 'view') {
         dispatch({ type: 'CLEAR_SELECTION' });
         setOptionsTrendId(null);
+        setOptionsElementId(null);
       }
     },
     [dispatch, onModeChange],
@@ -763,7 +772,8 @@ export function DisplayEditor({
     }
   }, [dispatch, publishDocument]);
 
-  const selectedValue = mode === 'edit' && state.selectedElementId
+  const propertiesOpen = mode === 'edit' && Boolean(optionsElementId && state.selectedElementId === optionsElementId);
+  const selectedValue = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => (
       element.id === state.selectedElementId
       && element.type === VALUE_TYPE
@@ -795,13 +805,13 @@ export function DisplayEditor({
     commitDocument(updateBackgroundMultistateConfig(documentRef.current, selectedId, config));
   }, [commitDocument]);
 
-  const selectedGauge = mode === 'edit' && state.selectedElementId
+  const selectedGauge = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === GAUGE_TYPE) as GaugeElement | undefined
     : undefined;
-  const selectedBar = mode === 'edit' && state.selectedElementId
+  const selectedBar = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === BAR_TYPE) as BarElement | undefined
     : undefined;
-  const selectedTable = mode === 'edit' && state.selectedElementId
+  const selectedTable = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TABLE_TYPE) as TableElement | undefined
     : undefined;
   const handleTableChange = useCallback((patch: Partial<TableProperties>) => {
@@ -810,16 +820,16 @@ export function DisplayEditor({
   const handleTableColumnsChange = useCallback((elementId: string, columns: TableColumnConfig[]) => {
     commitDocument(updateTableProperties(documentRef.current, elementId, { columns }));
   }, [commitDocument]);
-  const selectedRectangle = mode === 'edit' && state.selectedElementId
+  const selectedRectangle = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === RECTANGLE_TYPE) as RectangleElement | undefined
     : undefined;
-  const selectedText = mode === 'edit' && state.selectedElementId
+  const selectedText = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TEXT_TYPE) as TextElement | undefined
     : undefined;
-  const selectedImage = mode === 'edit' && state.selectedElementId
+  const selectedImage = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === IMAGE_TYPE) as ImageElement | undefined
     : undefined;
-  const selectedLibrarySymbol = mode === 'edit' && state.selectedElementId
+  const selectedLibrarySymbol = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === 'library-symbol') as LibrarySymbolElement | undefined
       : undefined;
   const selectedTrend = mode === 'edit' && state.selectedElementId
@@ -855,6 +865,12 @@ export function DisplayEditor({
   }, [commitDocument]);
   const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement) => {
     dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(element.id);
+  }, [dispatch]);
+  const handleElementContextMenu = useCallback((element: DisplayElement) => {
+    dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(element.id);
+    setOptionsTrendId(null);
   }, [dispatch]);
   const optionsTrend = optionsTrendId
     ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
@@ -1027,6 +1043,11 @@ export function DisplayEditor({
     setTrendPopup(null);
   }, []);
 
+  const handleViewportWheelZoom = useCallback((viewport: SurfaceViewport) => {
+    setSurfaceZoom(viewport.zoom);
+    setSurfaceViewCenter(viewport.viewCenter);
+  }, []);
+
   const handleZoomFit = useCallback(() => {
     const elements = documentRef.current.elements;
     const surface = documentRef.current.surface;
@@ -1174,12 +1195,18 @@ export function DisplayEditor({
             onTrendOpen={handleTrendOpen}
             onTrendContextMenu={(trend) => {
               dispatch({ type: 'SELECT', elementId: trend.id });
+              setOptionsElementId(null);
               setOptionsTrendId(trend.id);
             }}
+            onElementContextMenu={handleElementContextMenu}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
             onTableColumnsChange={handleTableColumnsChange}
             zoom={surfaceZoom}
             viewCenter={surfaceViewCenter}
+            minZoom={DISPLAY_ZOOM_MIN}
+            maxZoom={DISPLAY_ZOOM_MAX}
+            wheelZoomFactor={1 + DISPLAY_ZOOM_STEP}
+            onViewportWheelZoom={handleViewportWheelZoom}
           />
           {displayDocument.elements.length === 0 && (
             <div className={styles.emptyState} data-testid="display-empty-state">
@@ -1266,7 +1293,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
+        {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (
@@ -1874,8 +1901,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
   fileInput: css`display: none;`,
   importError: css`
     padding: ${theme.spacing(0.75, 1.5)};
-    color: ${theme.colors.error.text};
-    border-bottom: 1px solid ${theme.colors.border.weak};
+    color: var(--danger);
+    border-bottom: 1px solid var(--border-subtle);
   `,
   title: css`
     min-width: 0;

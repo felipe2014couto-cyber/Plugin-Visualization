@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import { css } from '@emotion/css';
 import type { DisplayDocument } from '../../displayDocument';
+import type { DisplayElement } from '../../displayElement';
 import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE, type RectangleElement } from '../../createRectangle';
 import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { CALCULATION_TYPE, type CalculationElement } from '../../createCalculation';
@@ -26,6 +27,7 @@ import type { DisplayTimeRange } from '../../../time/timeRange';
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
 import { getMultistateColor } from '../../multistate';
 import { TEXT_TYPE, type TextElement } from '../../createText';
+import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../../../library';
@@ -50,13 +52,14 @@ import {
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
+import { zoomViewportAtPoint, type SurfaceViewport } from './viewportZoom';
 
 const HANDLE_SIZE = 8;
 const ELEMENT_FILL = 'rgba(110, 159, 255, 0.15)';
 const ELEMENT_STROKE = '#6e9fff';
-const SELECTION_STROKE = '#6e9fff';
-const HANDLE_FILL = '#ffffff';
-const HANDLE_STROKE = '#6e9fff';
+const SELECTION_STROKE = 'var(--selection-outline, #6e9fff)';
+const HANDLE_FILL = 'var(--selection-handle-fill, #ffffff)';
+const HANDLE_STROKE = 'var(--selection-outline, #6e9fff)';
 const DEFAULT_SURFACE_BACKGROUND = '#1f1f1f';
 const themedDefaultSurface = css`
   fill: var(--canvas-bg);
@@ -125,10 +128,15 @@ export interface DisplaySurfaceProps {
   trendTimeRange?: DisplayTimeRange;
   onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors?: readonly TrendCursor[]) => void;
   onTrendContextMenu?: (element: TrendElement) => void;
+  onElementContextMenu?: (element: DisplayElement) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement) => void;
   onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
   zoom?: number;
   viewCenter?: Point;
+  onViewportWheelZoom?: (viewport: SurfaceViewport) => void;
+  minZoom?: number;
+  maxZoom?: number;
+  wheelZoomFactor?: number;
 }
 
 function trySetPointerCapture(target: Element, pointerId: number): void {
@@ -178,19 +186,34 @@ export function DisplaySurface({
   trendTimeRange,
   onTrendOpen,
   onTrendContextMenu,
+  onElementContextMenu,
   onLibrarySymbolContextMenu,
   onTableColumnsChange,
   zoom = 1,
   viewCenter,
+  onViewportWheelZoom,
+  minZoom = 0.1,
+  maxZoom = 5,
+  wheelZoomFactor = 1.1,
 }: DisplaySurfaceProps) {
   const { surface, elements } = displayDocument;
   const cursorEnabled = !editable;
   const svgRef = useRef<SVGSVGElement>(null);
+  const viewportRef = useRef<SurfaceViewport>({
+    zoom,
+    viewCenter: viewCenter ?? { x: displayDocument.surface.width / 2, y: displayDocument.surface.height / 2 },
+  });
   const nextCursorId = useRef(1);
   const [cursorsByTrend, setCursorsByTrend] = useState<Record<string, TrendCursor[]>>({});
   const [selectedCursor, setSelectedCursor] = useState<CursorSelection | null>(null);
   const [cursorDrag, setCursorDrag] = useState<CursorDrag | null>(null);
   const [databaseScales, setDatabaseScales] = useState<Record<string, PiPointDatabaseLimits>>({});
+  useEffect(() => {
+    viewportRef.current = {
+      zoom,
+      viewCenter: viewCenter ?? { x: surface.width / 2, y: surface.height / 2 },
+    };
+  }, [surface.height, surface.width, viewCenter, zoom]);
   useEffect(() => {
     if (!loadPiPointDatabaseLimits) {
       return;
@@ -383,6 +406,21 @@ export function DisplaySurface({
     onLibrarySymbolContextMenu?.(element as LibrarySymbolElement);
   }, [editable, elements, onLibrarySymbolContextMenu]);
 
+  const handleElementContextMenu = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
+    if (!editable) {
+      return;
+    }
+    const target = event.target as Element;
+    const elementId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
+    const element = elementId ? elements.find((candidate) => candidate.id === elementId) : undefined;
+    if (!element || element.type === TREND_TYPE || element.type === LIBRARY_SYMBOL_TYPE) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onElementContextMenu?.(element);
+  }, [editable, elements, onElementContextMenu]);
+
   useEffect(() => {
     setCursorsByTrend((current) => {
       let changed = false;
@@ -511,6 +549,37 @@ export function DisplaySurface({
       window.open(linkUrl, openInNewTab ? '_blank' : '_self', openInNewTab ? 'noopener,noreferrer' : undefined);
     }
   }, [displayDocument.elements, editable]);
+
+  const handleWheel = useCallback((event: WheelEvent) => {
+    if (!event.ctrlKey || event.deltaY === 0) {
+      return;
+    }
+    const svg = svgRef.current;
+    if (!svg) {
+      return;
+    }
+    event.preventDefault();
+    const anchor = svgPointFromEvent(svg, event.clientX, event.clientY);
+    const nextViewport = zoomViewportAtPoint(
+      viewportRef.current,
+      anchor,
+      event.deltaY < 0 ? 'in' : 'out',
+      minZoom,
+      maxZoom,
+      wheelZoomFactor,
+    );
+    viewportRef.current = nextViewport;
+    onViewportWheelZoom?.(nextViewport);
+  }, [maxZoom, minZoom, onViewportWheelZoom, wheelZoomFactor]);
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) {
+      return;
+    }
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   const handleSvgPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -679,6 +748,7 @@ export function DisplaySurface({
   return (
     <svg
       onClick={handleElementClick}
+      onContextMenu={handleElementContextMenu}
       ref={svgRef}
       width={surface.width}
       height={surface.height}
@@ -824,7 +894,7 @@ export function DisplaySurface({
           const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
           const x = textElement.properties.textAlign === 'left' ? textElement.x + 4 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 4 : textElement.x + textElement.width / 2;
           const rotation = textElement.properties.rotation ?? 0;
-          return <text key={element.id} x={x} y={textElement.y + textElement.height / 2} transform={`rotate(${rotation} ${textElement.x + textElement.width / 2} ${textElement.y + textElement.height / 2})`} fill={textElement.properties.color} fontSize={textElement.properties.fontSize} textAnchor={anchor} dominantBaseline="middle" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>{textElement.properties.text}</text>;
+          return <text key={element.id} x={x} y={textElement.y + textElement.height / 2} transform={`rotate(${rotation} ${textElement.x + textElement.width / 2} ${textElement.y + textElement.height / 2})`} fill={resolveThemeForeground(textElement.properties.color)} fontSize={textElement.properties.fontSize} textAnchor={anchor} dominantBaseline="middle" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>{textElement.properties.text}</text>;
         }
         if (element.type === IMAGE_TYPE) {
           const image = element as ImageElement;
