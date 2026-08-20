@@ -504,7 +504,7 @@ export function App() {
                             enabled={piConnection.status === 'connected'}
                             onSelect={setSelectedPiPoint}
                             filtersOpen={isPiPointFiltersOpen}
-                            onFiltersClose={() => setIsPiPointFiltersOpen(false)}
+                            onCloseFilters={() => setIsPiPointFiltersOpen(false)}
                           />
                         ) : (
                           <p className={styles.viewHint}>Selecione Editar para pesquisar e vincular PI Points.</p>
