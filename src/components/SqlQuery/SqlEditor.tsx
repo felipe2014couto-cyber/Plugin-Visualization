@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, Icon, Button, Input, Field } from '@grafana/ui';
@@ -11,16 +11,26 @@ interface SqlEditorProps {
   isExecuting: boolean;
   error?: string;
   lastResult: OracleQueryResponse | null;
+  showResult?: boolean;
+  sqlToLoad?: string;
 }
 
-export function SqlEditor({ onExecute, onDisconnect, isExecuting, error, lastResult }: SqlEditorProps) {
+export function SqlEditor({ onExecute, onDisconnect, isExecuting, error, lastResult, showResult = true, sqlToLoad }: SqlEditorProps) {
   const styles = useStyles2(getStyles);
   
   const [sql, setSql] = useState('');
   const [maxRows, setMaxRows] = useState(200);
+
+  useEffect(() => {
+    if (sqlToLoad !== undefined) {
+      setSql(sqlToLoad);
+    }
+  }, [sqlToLoad]);
   
   const handleExecute = async () => {
-    if (!sql.trim() || isExecuting) return;
+    if (!sql.trim() || isExecuting) {
+      return;
+    }
     await onExecute(sql, maxRows);
   };
   
@@ -36,7 +46,7 @@ export function SqlEditor({ onExecute, onDisconnect, isExecuting, error, lastRes
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
           <Icon name="database" />
-          <span className={styles.connectionStatus}>Conectado ao Banco de Dados</span>
+          <span className={styles.connectionStatus}>Conectado ao SIP</span>
           <Button variant="destructive" size="sm" onClick={onDisconnect} icon="signout" fill="text">
             Desconectar
           </Button>
@@ -49,7 +59,7 @@ export function SqlEditor({ onExecute, onDisconnect, isExecuting, error, lastRes
           value={sql}
           onChange={(e) => setSql(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Digite sua consulta SQL aqui (Apenas SELECT / WITH)...&#10;Pressione Ctrl+Enter para executar."
+          placeholder="Digite sua consulta SQL aqui (SELECT / WITH; final opcional)...&#10;Pressione Ctrl+Enter para executar."
           spellCheck={false}
           disabled={isExecuting}
         />
@@ -92,9 +102,11 @@ export function SqlEditor({ onExecute, onDisconnect, isExecuting, error, lastRes
         )}
       </div>
       
-      <div className={styles.resultArea}>
-        <SqlResultTable result={lastResult} isLoading={isExecuting} />
-      </div>
+      {showResult && (
+        <div className={styles.resultArea}>
+          <SqlResultTable result={lastResult} isLoading={isExecuting} />
+        </div>
+      )}
     </div>
   );
 }
@@ -111,8 +123,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     justify-content: space-between;
     align-items: center;
     padding: ${theme.spacing(1)} ${theme.spacing(2)};
-    background: ${theme.colors.background.secondary};
-    border-bottom: 1px solid ${theme.colors.border.weak};
+    color: var(--text-primary);
+    background: var(--surface-secondary);
+    border-bottom: 1px solid var(--border-color);
   `,
   toolbarLeft: css`
     display: flex;
@@ -120,7 +133,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: ${theme.spacing(2)};
   `,
   connectionStatus: css`
-    color: ${theme.colors.success.text};
+    color: var(--success);
     font-size: ${theme.typography.size.sm};
     font-weight: ${theme.typography.fontWeightMedium};
   `,
@@ -128,23 +141,35 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     flex-direction: column;
     padding: ${theme.spacing(2)};
-    border-bottom: 1px solid ${theme.colors.border.weak};
+    color: var(--text-primary);
+    background: var(--surface-primary);
+    border-bottom: 1px solid var(--border-color);
+
+    input {
+      color: var(--text-primary) !important;
+      background: var(--input-bg) !important;
+      border-color: var(--border-color) !important;
+    }
+
+    label, small {
+      color: var(--text-secondary);
+    }
   `,
   textarea: css`
     width: 100%;
     min-height: 150px;
-    background-color: ${theme.colors.background.primary};
-    border: 1px solid ${theme.colors.border.medium};
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
     border-radius: ${theme.shape.borderRadius(1)};
     padding: ${theme.spacing(1)};
-    color: ${theme.colors.text.primary};
+    color: var(--text-primary);
     font-family: ${theme.typography.fontFamilyMonospace};
     font-size: 14px;
     resize: vertical;
     margin-bottom: ${theme.spacing(2)};
     
     &:focus {
-      outline: 2px solid ${theme.colors.primary.border};
+      outline: 2px solid var(--accent);
       outline-offset: -1px;
     }
     
@@ -155,8 +180,10 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   editorControls: css`
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: flex-end;
+    gap: ${theme.spacing(1)};
   `,
   limitControl: css`
     display: flex;
@@ -164,14 +191,27 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   actionButtons: css`
     display: flex;
+    flex-wrap: wrap;
     gap: ${theme.spacing(1)};
+
+    button {
+      color: var(--text-primary);
+      border-color: var(--border-color);
+      background: var(--button-bg);
+    }
+
+    button:last-child {
+      color: var(--accent-contrast) !important;
+      border-color: var(--accent) !important;
+      background: var(--accent) !important;
+    }
   `,
   errorAlert: css`
-    background-color: ${theme.colors.error.transparent};
-    color: ${theme.colors.error.text};
+    background-color: var(--surface-elevated);
+    color: var(--danger);
     padding: ${theme.spacing(2)};
     border-radius: ${theme.shape.borderRadius(1)};
-    border-left: 4px solid ${theme.colors.error.main};
+    border-left: 4px solid var(--danger);
     margin-top: ${theme.spacing(2)};
     display: flex;
     align-items: flex-start;
@@ -182,6 +222,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex: 1;
     min-height: 0;
     padding: ${theme.spacing(2)};
-    background: ${theme.colors.background.primary};
+    background: var(--surface-primary);
   `,
 });

@@ -26,16 +26,17 @@ const DEFAULT_DSN = `(DESCRIPTION =
 export function SqlConnectionForm({ onConnect, isConnecting, error }: SqlConnectionFormProps) {
   const styles = useStyles2(getStyles);
   
-  const [dsn, setDsn] = useState(DEFAULT_DSN);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    if (!username.trim()) {
+      return;
+    }
     
     onConnect({
-      dsn,
+      dsn: DEFAULT_DSN,
       username,
       password,
     });
@@ -45,8 +46,8 @@ export function SqlConnectionForm({ onConnect, isConnecting, error }: SqlConnect
     <div className={styles.container}>
       <div className={styles.header}>
         <Icon name="database" size="xxl" className={styles.icon} />
-        <h2 className={styles.title}>Conexão Oracle</h2>
-        <p className={styles.subtitle}>Conecte-se para executar consultas read-only</p>
+        <h2 className={styles.title}>Conexão SIP</h2>
+        <p className={styles.subtitle}>Conecte-se ao SIP para executar consultas</p>
       </div>
 
       {error && (
@@ -57,18 +58,7 @@ export function SqlConnectionForm({ onConnect, isConnecting, error }: SqlConnect
       )}
 
       <form onSubmit={handleSubmit} className={styles.form}>
-        <Field label="DSN de Conexão" description="Cadeia de conexão do banco de dados (TNS)">
-          <textarea
-            className={styles.textarea}
-            value={dsn}
-            onChange={(e) => setDsn(e.target.value)}
-            rows={10}
-            required
-            spellCheck={false}
-          />
-        </Field>
-
-        <Field label="Usuário" description="Usuário restrito apenas para leitura">
+        <Field label="Usuário" description="Usuário de acesso ao SIP">
           <Input
             value={username}
             onChange={(e) => setUsername(e.currentTarget.value)}
@@ -91,8 +81,8 @@ export function SqlConnectionForm({ onConnect, isConnecting, error }: SqlConnect
         </Field>
 
         <div className={styles.actions}>
-          <Button type="submit" variant="primary" disabled={isConnecting || !username || !password || !dsn}>
-            {isConnecting ? 'Conectando...' : 'Conectar ao Banco'}
+          <Button type="submit" variant="primary" disabled={isConnecting || !username || !password}>
+            {isConnecting ? 'Conectando...' : 'Conectar ao SIP'}
           </Button>
         </div>
       </form>
@@ -107,7 +97,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: ${theme.spacing(4)};
     height: 100%;
     overflow-y: auto;
-    background-color: ${theme.colors.background.secondary};
+    color: var(--text-primary);
+    background-color: var(--surface-secondary);
   `,
   header: css`
     display: flex;
@@ -117,7 +108,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     text-align: center;
   `,
   icon: css`
-    color: ${theme.colors.primary.text};
+    color: var(--accent);
     margin-bottom: ${theme.spacing(2)};
   `,
   title: css`
@@ -125,7 +116,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   subtitle: css`
     margin: 0;
-    color: ${theme.colors.text.secondary};
+    color: var(--text-secondary);
   `,
   form: css`
     display: flex;
@@ -134,39 +125,66 @@ const getStyles = (theme: GrafanaTheme2) => ({
     max-width: 500px;
     margin: 0 auto;
     width: 100%;
+    color: var(--text-primary);
     
     /* Aumentar o fundo do form */
-    background: ${theme.colors.background.primary};
+    background: var(--surface-primary);
     padding: ${theme.spacing(3)};
     border-radius: ${theme.shape.borderRadius(2)};
-    border: 1px solid ${theme.colors.border.weak};
-  `,
-  textarea: css`
-    width: 100%;
-    background-color: ${theme.colors.background.primary};
-    border: 1px solid ${theme.colors.border.medium};
-    border-radius: ${theme.shape.borderRadius(1)};
-    padding: ${theme.spacing(1)};
-    color: ${theme.colors.text.primary};
-    font-family: ${theme.typography.fontFamilyMonospace};
-    font-size: ${theme.typography.size.sm};
-    resize: vertical;
-    &:focus {
-      outline: 2px solid ${theme.colors.primary.border};
-      outline-offset: -1px;
+    border: 1px solid var(--border-color);
+
+    input {
+      box-sizing: border-box;
+      width: 100%;
+      color: var(--text-primary) !important;
+      background: var(--input-bg) !important;
+      border-color: var(--border-color) !important;
+    }
+
+    input::placeholder {
+      color: var(--text-secondary) !important;
+      opacity: 0.8 !important;
+    }
+
+    label, small {
+      color: var(--text-secondary);
+    }
+
+    label {
+      color: var(--text-primary) !important;
+    }
+
+    /* Grafana's Field renders descriptions in a nested span. Keep them
+       readable in both themes instead of inheriting the dark input color. */
+    & > div > div > label > span,
+    & > div > label > span {
+      color: var(--text-secondary) !important;
+      opacity: 1 !important;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    & > div {
+      color: var(--text-secondary);
     }
   `,
   actions: css`
     display: flex;
     justify-content: flex-end;
     margin-top: ${theme.spacing(2)};
+
+    button {
+      color: var(--accent-contrast) !important;
+      background: var(--accent) !important;
+      border-color: var(--accent) !important;
+    }
   `,
   errorAlert: css`
-    background-color: ${theme.colors.error.transparent};
-    color: ${theme.colors.error.text};
+    background-color: var(--surface-elevated);
+    color: var(--danger);
     padding: ${theme.spacing(2)};
     border-radius: ${theme.shape.borderRadius(1)};
-    border-left: 4px solid ${theme.colors.error.main};
+    border-left: 4px solid var(--danger);
     margin-bottom: ${theme.spacing(3)};
     display: flex;
     align-items: flex-start;

@@ -12,7 +12,12 @@ import {
   type OracleQueryResponse 
 } from './oracleApi';
 
-export function SqlQueryPanel() {
+interface SqlQueryPanelProps {
+  onResultChange?: (result: OracleQueryResponse, sql: string) => void;
+  sqlToLoad?: string;
+}
+
+export function SqlQueryPanel({ onResultChange, sqlToLoad }: SqlQueryPanelProps) {
   const styles = useStyles2(getStyles);
   
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -50,12 +55,13 @@ export function SqlQueryPanel() {
       await closeOracleSession(sessionId);
     }
     setSessionId(null);
-    setLastResult(null);
     setExecutionError(undefined);
   };
 
   const handleExecute = async (sql: string, maxRows: number) => {
-    if (!sessionId) return null;
+    if (!sessionId) {
+      return null;
+    }
     
     setIsExecuting(true);
     setExecutionError(undefined);
@@ -67,6 +73,7 @@ export function SqlQueryPanel() {
         max_rows: maxRows
       });
       setLastResult(result);
+      onResultChange?.(result, sql);
       return result;
     } catch (err: any) {
       setExecutionError(err.message || 'Falha ao executar consulta');
@@ -91,6 +98,8 @@ export function SqlQueryPanel() {
           isExecuting={isExecuting}
           error={executionError}
           lastResult={lastResult}
+          showResult={false}
+          sqlToLoad={sqlToLoad}
         />
       )}
     </div>
@@ -103,6 +112,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex-direction: column;
     height: 100%;
     width: 100%;
-    background-color: ${theme.colors.background.primary};
+    color: var(--text-primary);
+    background-color: var(--surface-primary);
   `,
 });
