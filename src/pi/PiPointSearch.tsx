@@ -1,4 +1,5 @@
 import React, { FormEvent, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -15,10 +16,11 @@ export interface PiPointSearchProps {
   enabled: boolean;
   onSelect?: (result: PiPointSearchResult) => void;
   filtersOpen?: boolean;
+  onFiltersClose?: () => void;
   onSearchInteraction?: () => void;
 }
 
-export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearchInteraction }: PiPointSearchProps) {
+export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onFiltersClose, onSearchInteraction }: PiPointSearchProps) {
   const styles = useStyles2(getStyles);
   const [term, setTerm] = useState('');
   const [descriptionTerm, setDescriptionTerm] = useState('');
@@ -133,11 +135,12 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearch
       {status === 'error' && <p data-testid="pi-point-search-error">{errorMessage || 'Não foi possível pesquisar PI Points.'}</p>}
       {!enabled && <p data-testid="pi-point-search-disabled">Pesquisa PI indisponível.</p>}
 
-      {filtersOpen && (
-        <>
+      {filtersOpen && typeof document !== 'undefined' && createPortal(
+        <div className={styles.filterBackdrop} data-testid="pi-point-search-filter-backdrop" onMouseDown={() => onFiltersClose?.()}>
+          <div className={styles.filterDialog} role="dialog" aria-modal="true" aria-labelledby="pi-point-filter-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className={styles.filters} data-testid="pi-point-search-filters">
             <div className={styles.filterHeader}>
-              <span>Filtros Adicionais</span>
+              <span id="pi-point-filter-title">Filtros Adicionais</span>
               {hasActiveFilters && (
                 <button
                   type="button"
@@ -174,7 +177,10 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onSearch
               Pesquise uma tag para carregar as opções de filtro.
             </p>
           )}
-        </>
+            <button type="button" className={styles.filterClose} onClick={() => onFiltersClose?.()}>Fechar</button>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {filteredResults.length > 0 && (
@@ -374,10 +380,47 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     flex-direction: column;
     gap: ${theme.spacing(0.75)};
-    margin-top: ${theme.spacing(1)};
+    margin: 0;
     padding: ${theme.spacing(0.75)};
     border: 1px solid var(--border-subtle);
     background: var(--card-bg);
+  `,
+  filterBackdrop: css`
+    position: fixed;
+    z-index: 1000;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 116px 16px 16px;
+    box-sizing: border-box;
+    background: rgba(2, 8, 15, 0.38);
+  `,
+  filterDialog: css`
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(360px, calc(100vw - 32px));
+    max-height: min(520px, calc(100vh - 132px));
+    padding: 10px;
+    box-sizing: border-box;
+    overflow: auto;
+    border: 1px solid var(--accent);
+    border-radius: 7px;
+    background: var(--surface-elevated);
+    box-shadow: var(--shadow);
+  `,
+  filterClose: css`
+    align-self: flex-end;
+    min-height: 26px;
+    padding: 3px 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    color: var(--text-primary);
+    background: var(--button-bg);
+    cursor: pointer;
+    font-size: 11px;
+    &:hover { background: var(--button-hover); }
   `,
   filterHeader: css`
     display: flex;
