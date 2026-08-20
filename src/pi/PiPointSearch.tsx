@@ -43,6 +43,11 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onFilter
     && includesFilter(result.engineeringUnit, engineeringUnitFilter)
   )), [results, descriptionTerm, selectedPointTypes, engineeringUnitFilter]);
   const hasActiveFilters = Boolean(descriptionTerm || selectedPointTypes.length || engineeringUnitFilter);
+  // Render inside the visualization root so its dark/light CSS variables are
+  // inherited. Rendering directly under body made the dialog transparent.
+  const filterPortalTarget = typeof document !== 'undefined'
+    ? document.querySelector('[data-visualization-theme]') ?? document.body
+    : null;
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -135,7 +140,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onFilter
       {status === 'error' && <p data-testid="pi-point-search-error">{errorMessage || 'Não foi possível pesquisar PI Points.'}</p>}
       {!enabled && <p data-testid="pi-point-search-disabled">Pesquisa PI indisponível.</p>}
 
-      {filtersOpen && typeof document !== 'undefined' && createPortal(
+      {filtersOpen && filterPortalTarget && createPortal(
         <div className={styles.filterBackdrop} data-testid="pi-point-search-filter-backdrop" onMouseDown={() => onFiltersClose?.()}>
           <div className={styles.filterDialog} role="dialog" aria-modal="true" aria-labelledby="pi-point-filter-title" onMouseDown={(event) => event.stopPropagation()}>
           <div className={styles.filters} data-testid="pi-point-search-filters">
@@ -180,7 +185,7 @@ export function PiPointSearch({ enabled, onSelect, filtersOpen = false, onFilter
             <button type="button" className={styles.filterClose} onClick={() => onFiltersClose?.()}>Fechar</button>
           </div>
         </div>,
-        document.body,
+        filterPortalTarget,
       )}
 
       {filteredResults.length > 0 && (
