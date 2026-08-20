@@ -1474,14 +1474,11 @@ export function MiniSheetsPanel({
     } catch {}
   }, [ranges]);
 
-  /**
-   * PASTE: Pastes internal clipboard matrix starting at activeCell.
-   */
-  const handlePasteSelected = useCallback(() => {
-    if (!internalClipboard || internalClipboard.matrix.length === 0) {
+  /** Pastes a matrix starting at the active cell. */
+  const pasteMatrix = useCallback((matrix: ClipboardCell[][], sourceOrigin?: CellCoord) => {
+    if (matrix.length === 0) {
       return;
     }
-    const { matrix, sourceOrigin } = internalClipboard;
     const startCol = activeCell.col;
     const startRow = activeCell.row;
 
@@ -1536,7 +1533,34 @@ export function MiniSheetsPanel({
         }
       });
     });
-  }, [activeCell.col, activeCell.row, commitStateToHistory, computeCell, evaluateStaticFormulas, internalClipboard]);
+  }, [activeCell.col, activeCell.row, commitStateToHistory, computeCell, evaluateStaticFormulas]);
+
+  /** PASTE: supports both the internal buffer and text copied from Excel/Sheets. */
+  const handlePasteSelected = useCallback(() => {
+    if (internalClipboard?.matrix.length) {
+      pasteMatrix(internalClipboard.matrix, internalClipboard.sourceOrigin);
+    }
+  }, [internalClipboard, pasteMatrix]);
+
+  const handleExternalPaste = useCallback((e: React.ClipboardEvent) => {
+    if (editingCellCoord) {
+      return;
+    }
+    const text = e.clipboardData.getData('text/plain');
+    if (!text) {
+      return;
+    }
+    e.preventDefault();
+    const lines = text.replace(/\r\n?/g, '\n').split('\n');
+    if (lines.length > 1 && lines[lines.length - 1] === '') {
+      lines.pop();
+    }
+    const matrix: ClipboardCell[][] = lines.map((line) => line.split('\t').map((value) => ({
+      rawValue: value,
+      displayValue: value,
+    })));
+    pasteMatrix(matrix);
+  }, [editingCellCoord, pasteMatrix]);
 
   /**
    * FORMATTING: Applies partial CellFormat to all cells across all selected ranges.
@@ -2143,6 +2167,7 @@ export function MiniSheetsPanel({
       aria-label="Mini-Sheets"
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      onPaste={handleExternalPaste}
     >
       {dataLinkMenuHost ? createPortal(dataLinkMenu, dataLinkMenuHost) : !dataLinkMenuHostId ? dataLinkMenu : null}
 
