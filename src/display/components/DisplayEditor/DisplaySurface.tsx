@@ -52,7 +52,6 @@ import {
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
-import { MIN_AREA_ZOOM_DRAG_PX, normalizeAreaZoomRect, type AreaZoomRect } from './areaZoom';
 
 const HANDLE_SIZE = 8;
 const ELEMENT_FILL = 'rgba(110, 159, 255, 0.15)';
@@ -133,9 +132,6 @@ export interface DisplaySurfaceProps {
   onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
   zoom?: number;
   viewCenter?: Point;
-  areaZoomMode?: boolean;
-  onAreaZoom?: (selection: AreaZoomRect) => void;
-  onAreaZoomCancel?: () => void;
 }
 
 function trySetPointerCapture(target: Element, pointerId: number): void {
@@ -190,9 +186,6 @@ export function DisplaySurface({
   onTableColumnsChange,
   zoom = 1,
   viewCenter,
-  areaZoomMode = false,
-  onAreaZoom,
-  onAreaZoomCancel,
 }: DisplaySurfaceProps) {
   const { surface, elements } = displayDocument;
   const cursorEnabled = !editable;
@@ -220,18 +213,7 @@ export function DisplaySurface({
     })).then((results) => setDatabaseScales(Object.fromEntries(results.filter((item): item is readonly [string, PiPointDatabaseLimits] => item !== null))));
   }, [elements, loadPiPointDatabaseLimits]);
   const [selectionBox, setSelectionBox] = useState<{ start: Point; current: Point } | null>(null);
-  const [areaZoomBox, setAreaZoomBox] = useState<{ start: Point; current: Point; pointerId: number } | null>(null);
-  const suppressAreaZoomClick = useRef(false);
   const multiSelectionRef = useRef(false);
-
-  useEffect(() => {
-    if (!areaZoomMode) {
-      if (areaZoomBox && svgRef.current) {
-        tryReleasePointerCapture(svgRef.current, areaZoomBox.pointerId);
-      }
-      setAreaZoomBox(null);
-    }
-  }, [areaZoomBox, areaZoomMode]);
 
   useEffect(() => {
     if (!editable) {
@@ -365,7 +347,7 @@ export function DisplaySurface({
     event: React.MouseEvent<SVGGElement>,
     elementId: string,
   ) => {
-    if (editable || areaZoomMode) {
+    if (editable) {
       return;
     }
     const element = elements.find((candidate) => candidate.id === elementId);
@@ -455,7 +437,7 @@ export function DisplaySurface({
     elementId: string,
     chart: ReturnType<typeof buildTrendChartForSeries>,
   ) => {
-    if (editable || areaZoomMode) {
+    if (editable) {
       return;
     }
     const svg = svgRef.current;
@@ -482,14 +464,14 @@ export function DisplaySurface({
     });
     setSelectedCursor({ trendElementId: elementId, cursorId: cursor.id });
     svg.focus();
-  }, [allTrendRuntimeStates, areaZoomMode, cursorDrag, editable, elements]);
+  }, [allTrendRuntimeStates, cursorDrag, editable, elements]);
 
   const handleTrendCursorPointerDown = useCallback((
     event: React.PointerEvent<SVGLineElement>,
     elementId: string,
     cursor: TrendCursor,
   ) => {
-    if (editable || areaZoomMode) {
+    if (editable) {
       return;
     }
     const svg = svgRef.current;
@@ -502,7 +484,7 @@ export function DisplaySurface({
     setSelectedCursor({ trendElementId: elementId, cursorId: cursor.id });
     setCursorDrag({ trendElementId: elementId, cursorId: cursor.id, pointerId: event.pointerId });
     svg.focus();
-  }, [areaZoomMode, editable]);
+  }, [editable]);
 
   const removeTrendCursor = useCallback((cursorId: string) => {
     setCursorsByTrend((current) => Object.fromEntries(
@@ -532,12 +514,6 @@ export function DisplaySurface({
     ? getElementById(displayDocument, selectedElementId) ?? null
     : null;
   const handleElementClick = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
-    if (suppressAreaZoomClick.current) {
-      suppressAreaZoomClick.current = false;
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
     if (editable) {
       return;
     }
@@ -559,15 +535,6 @@ export function DisplaySurface({
     (e: React.PointerEvent) => {
       const svg = svgRef.current;
       if (!svg) {
-        return;
-      }
-      if (areaZoomMode) {
-        e.preventDefault();
-        e.stopPropagation();
-        const point = svgPointFromEvent(svg, e.clientX, e.clientY);
-        suppressAreaZoomClick.current = true;
-        trySetPointerCapture(svg, e.pointerId);
-        setAreaZoomBox({ start: point, current: point, pointerId: e.pointerId });
         return;
       }
       if (!editable) {
@@ -617,21 +584,13 @@ export function DisplaySurface({
         setSelectionBox({ start: point, current: point });
       }
     },
-    [areaZoomMode, editable, onSelect, onSelectMany, onStartDrag, onStartResize, selectedElementIds],
+    [editable, onSelect, onSelectMany, onStartDrag, onStartResize, selectedElementIds],
   );
 
   const handleSvgPointerMove = useCallback(
     (e: React.PointerEvent) => {
       const svg = svgRef.current;
       if (!svg) {
-        return;
-      }
-      if (areaZoomBox) {
-        if (areaZoomBox.pointerId !== e.pointerId) {
-          return;
-        }
-        const point = svgPointFromEvent(svg, e.clientX, e.clientY);
-        setAreaZoomBox((current) => current ? { ...current, current: point } : current);
         return;
       }
       if (cursorDrag) {
@@ -675,31 +634,13 @@ export function DisplaySurface({
       }
       onPointerMove(svgPointFromEvent(svg, e.clientX, e.clientY));
     },
-    [allTrendRuntimeStates, areaZoomBox, cursorDrag, editable, elements, onPointerMove, selectionBox, trendTimeRange],
+    [allTrendRuntimeStates, cursorDrag, editable, elements, onPointerMove, selectionBox, trendTimeRange],
   );
 
   const handleSvgPointerEnd = useCallback(
     (e: React.PointerEvent) => {
       const svg = svgRef.current;
       if (!svg) {
-        return;
-      }
-      if (areaZoomBox) {
-        if (areaZoomBox.pointerId === e.pointerId) {
-          if (e.type === 'pointercancel') {
-            onAreaZoomCancel?.();
-          } else {
-            const current = svgPointFromEvent(svg, e.clientX, e.clientY);
-            const box = normalizeAreaZoomRect(areaZoomBox.start, current);
-            if (box.width * zoom >= MIN_AREA_ZOOM_DRAG_PX && box.height * zoom >= MIN_AREA_ZOOM_DRAG_PX) {
-              onAreaZoom?.(box);
-            } else {
-              onAreaZoomCancel?.();
-            }
-          }
-          setAreaZoomBox(null);
-          tryReleasePointerCapture(svg, e.pointerId);
-        }
         return;
       }
       if (cursorDrag) {
@@ -729,23 +670,17 @@ export function DisplaySurface({
       tryReleasePointerCapture(svg, e.pointerId);
       onPointerEnd();
     },
-    [areaZoomBox, cursorDrag, editable, elements, onAreaZoom, onAreaZoomCancel, onPointerEnd, onSelect, onSelectMany, selectionBox, zoom],
+    [cursorDrag, editable, elements, onPointerEnd, onSelect, onSelectMany, selectionBox],
   );
 
   const handleSurfaceKeyDown = useCallback((event: React.KeyboardEvent<SVGSVGElement>) => {
-    if (areaZoomMode && event.key === 'Escape') {
-      event.preventDefault();
-      setAreaZoomBox(null);
-      onAreaZoomCancel?.();
-      return;
-    }
     if (editable || !selectedCursor || (event.key !== 'Delete' && event.key !== 'Backspace')) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
     removeTrendCursor(selectedCursor.cursorId);
-  }, [areaZoomMode, editable, onAreaZoomCancel, removeTrendCursor, selectedCursor]);
+  }, [editable, removeTrendCursor, selectedCursor]);
 
   const handlePositions = selectedElement
     ? getResizeHandlePositions({
@@ -773,9 +708,7 @@ export function DisplaySurface({
         display: block;
         touch-action: none;
         user-select: none;
-        &[data-area-zoom-mode='true'], &[data-area-zoom-mode='true'] * { cursor: crosshair !important; }
       `}
-      data-area-zoom-mode={areaZoomMode ? 'true' : undefined}
       data-testid="display-surface"
       tabIndex={0}
       aria-label="Superfície do display"
@@ -954,10 +887,6 @@ export function DisplaySurface({
       {selectionBox && (() => {
         const box = normalizeSelectionBox(selectionBox.start, selectionBox.current);
         return <rect x={box.x} y={box.y} width={box.width} height={box.height} fill="rgba(110, 159, 255, 0.12)" stroke={SELECTION_STROKE} strokeDasharray="4 2" data-testid="display-selection-box" pointerEvents="none" />;
-      })()}
-      {areaZoomBox && (() => {
-        const box = normalizeAreaZoomRect(areaZoomBox.start, areaZoomBox.current);
-        return <rect x={box.x} y={box.y} width={box.width} height={box.height} fill="var(--selection-bg, rgba(110, 159, 255, 0.15))" stroke={SELECTION_STROKE} strokeWidth={1.5} strokeDasharray="5 3" data-testid="display-area-zoom-selection" pointerEvents="none" />;
       })()}
       {selectedElementIds.filter((id) => id !== selectedElement?.id).map((id) => {
         const element = elements.find((candidate) => candidate.id === id);
