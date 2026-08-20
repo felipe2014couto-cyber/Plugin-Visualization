@@ -54,9 +54,9 @@ import {
 const HANDLE_SIZE = 8;
 const ELEMENT_FILL = 'rgba(110, 159, 255, 0.15)';
 const ELEMENT_STROKE = '#6e9fff';
-const SELECTION_STROKE = '#6e9fff';
-const HANDLE_FILL = '#ffffff';
-const HANDLE_STROKE = '#6e9fff';
+const SELECTION_STROKE = 'var(--selection-outline, #6e9fff)';
+const HANDLE_FILL = 'var(--selection-handle-fill, #ffffff)';
+const HANDLE_STROKE = 'var(--selection-outline, #6e9fff)';
 const DEFAULT_SURFACE_BACKGROUND = '#1f1f1f';
 const themedDefaultSurface = css`
   fill: var(--canvas-bg);

@@ -1874,8 +1874,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
   fileInput: css`display: none;`,
   importError: css`
     padding: ${theme.spacing(0.75, 1.5)};
-    color: ${theme.colors.error.text};
-    border-bottom: 1px solid ${theme.colors.border.weak};
+    color: var(--danger);
+    border-bottom: 1px solid var(--border-subtle);
   `,
   title: css`
     min-width: 0;

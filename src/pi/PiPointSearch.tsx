@@ -425,7 +425,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     justify-content: flex-start;
     padding: 0;
     box-sizing: border-box;
-    background: rgba(2, 8, 15, 0.38);
+    background: var(--overlay-bg);
   `,
   filterDialog: css`
     position: absolute;

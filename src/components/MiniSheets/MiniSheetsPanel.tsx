@@ -2715,7 +2715,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   cellAutofillPreview: css`
     outline: 1px dashed var(--accent);
-    background: rgba(180, 22, 126, 0.15) !important;
+    background: var(--selection-bg) !important;
   `,
   cellSelected: css`
     outline: 2px solid var(--accent);
@@ -2754,7 +2754,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 6px;
     height: 6px;
     background: var(--accent);
-    border: 1px solid #ffffff;
+    border: 1px solid var(--selection-handle-fill, #ffffff);
     cursor: crosshair;
     z-index: 4;
   `,

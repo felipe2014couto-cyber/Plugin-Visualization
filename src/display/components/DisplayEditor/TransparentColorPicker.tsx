@@ -20,6 +20,7 @@ export function TransparentColorPicker({ color, fallbackColor, onChange, testId 
   const [position, setPosition] = useState({ left: 8, top: 8 });
   const transparent = color === 'transparent';
   const selectedColor = isHexColor(color) ? color : fallbackColor;
+  const portalTarget = rootRef.current?.closest('[data-visualization-theme]') ?? globalThis.document?.body;
 
   useEffect(() => {
     if (!open) {
@@ -83,7 +84,7 @@ export function TransparentColorPicker({ color, fallbackColor, onChange, testId 
       >
         <span className={transparent ? styles.transparentSwatch : styles.swatch} style={transparent ? undefined : { background: selectedColor }} />
       </button>
-      {open && createPortal(
+      {open && portalTarget && createPortal(
         <div ref={popoverRef} className={styles.popover} style={position} data-testid={`${testId}-popover`} role="dialog" aria-label="Selecionar cor">
           <HexColorPicker color={selectedColor} onChange={onChange} />
           <div className={styles.hexRow}>
@@ -111,7 +112,7 @@ export function TransparentColorPicker({ color, fallbackColor, onChange, testId 
             Transparente
           </label>
         </div>,
-        document.body,
+        portalTarget,
       )}
     </div>
   );
@@ -155,16 +156,16 @@ const getStyles = (_theme: GrafanaTheme2) => ({
     width: 236px;
     box-sizing: border-box;
     padding: 10px;
-    border: 1px solid #718096;
-    background: #202a36;
-    color: #f8fafc;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.65);
+    border: 1px solid var(--border-color, #718096);
+    background: var(--surface-elevated, #202a36);
+    color: var(--text-primary, #f8fafc);
+    box-shadow: var(--shadow, 0 12px 28px rgba(0, 0, 0, 0.45));
     .react-colorful { width: 100%; }
     .react-colorful__saturation { height: 148px; border-radius: 0; }
     .react-colorful__hue { height: 12px; margin-top: 8px; border-radius: 0; }
     .react-colorful__pointer { width: 14px; height: 14px; }
   `,
-  hexRow: css`display: flex; align-items: center; gap: 8px; margin-top: 10px; input { flex: 1; min-width: 0; height: 30px; border: 1px solid #718096; border-radius: 0; color: #f8fafc; background: #111827; font-family: monospace; font-weight: 400; text-align: center; }`,
-  preview: css`flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid #94a3b8; opacity: 0.82;`,
-  transparentOption: css`display: flex; align-items: center; gap: 7px; margin-top: 10px; padding-top: 9px; border-top: 1px solid #516173; color: #F0F0F0; font-size: 12px; font-weight: 400; input { width: 14px; height: 14px; accent-color: #F0F0F0; opacity: 0.78; }`,
+  hexRow: css`display: flex; align-items: center; gap: 8px; margin-top: 10px; input { flex: 1; min-width: 0; height: 30px; border: 1px solid var(--border-color, #718096); border-radius: 0; color: var(--text-primary, #f8fafc); background: var(--input-bg, #111827); font-family: monospace; font-weight: 400; text-align: center; }`,
+  preview: css`flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--border-color, #94a3b8); opacity: 0.9;`,
+  transparentOption: css`display: flex; align-items: center; gap: 7px; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--border-color, #516173); color: var(--text-primary, #f8fafc); font-size: 12px; font-weight: 400; input { width: 14px; height: 14px; accent-color: var(--accent, #d33b91); }`,
 });

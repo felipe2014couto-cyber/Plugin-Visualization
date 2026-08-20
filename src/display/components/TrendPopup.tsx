@@ -797,7 +797,7 @@ const styles = {
     flex-direction: column;
     padding: 0 8px 2px;
     background:
-      radial-gradient(circle at 55% 38%, rgba(29, 64, 98, 0.22), transparent 48%),
+      radial-gradient(circle at 55% 38%, var(--canvas-glow), transparent 48%),
       var(--canvas-bg);
     color: var(--text-primary);
     width: 100vw;
