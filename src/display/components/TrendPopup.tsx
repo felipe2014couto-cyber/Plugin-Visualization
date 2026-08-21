@@ -45,6 +45,7 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
   const [cursors, setCursors] = useState<TrendCursor[]>(() => [...initialCursors]);
   const [selectedCursorId, setSelectedCursorId] = useState<string | null>(null);
   const [cursorDrag, setCursorDrag] = useState<{ id: string; pointerId: number } | null>(null);
+  const [hideLegend, setHideLegend] = useState<boolean>(() => visualOptions.hideLegend === true);
   const nextCursorId = useRef(1);
 
   useEffect(() => setCursors([...initialCursors]), [initialCursors]);
@@ -184,6 +185,18 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
           >
             <TrendToolIcon kind="clear" /><span>Limpar cursores</span>
           </button>
+          <button
+            type="button"
+            className={hideLegend ? styles.trendToolActive : styles.trendTool}
+            aria-pressed={hideLegend}
+            data-testid="trend-popup-toggle-legend"
+            title={hideLegend ? 'Mostrar legenda' : 'Ocultar legenda'}
+            onClick={() => {
+              setHideLegend((current) => !current);
+            }}
+          >
+            <TrendToolIcon kind="legend" /><span>{hideLegend ? 'Mostrar legenda' : 'Ocultar legenda'}</span>
+          </button>
         </div>
         {scaleMode === 'configurable' && (
           <div className={styles.scaleConfiguration} data-testid="trend-popup-scale-configuration">
@@ -236,7 +249,7 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
               scaleMode={scaleMode}
               customScales={customScales}
               zoom={zoomHistory.at(-1)}
-              visualOptions={visualOptions}
+              visualOptions={{ ...visualOptions, hideLegend }}
               zoomEnabled={zoomMode}
               onApplyZoom={(zoom) => setZoomHistory((current) => [...current, zoom])}
               cursorEnabled={cursorMode}
@@ -851,7 +864,7 @@ function formatAxisTime(time: number, span: number): string {
   return new Date(time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function TrendToolIcon({ kind }: { kind: 'single' | 'multiple' | 'configurable' | 'cursor' | 'zoom' | 'clear' }) {
+function TrendToolIcon({ kind }: { kind: 'single' | 'multiple' | 'configurable' | 'cursor' | 'zoom' | 'clear' | 'legend' }) {
   if (kind === 'single') {
     return <svg viewBox="0 0 32 32"><path d="M9 5h14M16 5v22M9 27h14M12 11h8M12 17h8M12 23h8" /></svg>;
   }
@@ -866,6 +879,9 @@ function TrendToolIcon({ kind }: { kind: 'single' | 'multiple' | 'configurable' 
   }
   if (kind === 'zoom') {
     return <svg viewBox="0 0 32 32"><rect x="5" y="6" width="18" height="16" rx="2" strokeDasharray="3 2" /><circle cx="20" cy="20" r="6" /><path d="m24.5 24.5 4 4M20 17v6M17 20h6" /></svg>;
+  }
+  if (kind === 'legend') {
+    return <svg viewBox="0 0 32 32"><rect x="5" y="6" width="22" height="20" rx="2" /><line x1="18" y1="6" x2="18" y2="26" /><line x1="21" y1="11" x2="25" y2="11" /><line x1="21" y1="16" x2="25" y2="16" /><line x1="21" y1="21" x2="25" y2="21" /></svg>;
   }
   return <svg viewBox="0 0 32 32"><path d="M16 4v24" strokeDasharray="4 3" /><path d="M5 16h22" /><rect x="13" y="13" width="6" height="6" rx="1" /><path d="m22 22 7 7M29 22l-7 7" /></svg>;
 }

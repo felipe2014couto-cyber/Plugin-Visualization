@@ -106,4 +106,29 @@ describe('TrendPopup - escalas', () => {
     const newPlotWidth = Number(screen.getByTestId('trend-popup-cursor-plot').getAttribute('width'));
     expect(newPlotWidth).toBeLessThan(initialPlotWidth);
   });
+
+  it('permite ocultar e exibir a legenda através do botão de ferramentas no popup', () => {
+    render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
+
+    const toggleButton = screen.getByTestId('trend-popup-toggle-legend');
+    expect(toggleButton).toBeInTheDocument();
+    expect(toggleButton).toHaveTextContent('Ocultar legenda');
+    expect(screen.getByTestId('trend-popup-legend-resizer')).toBeInTheDocument();
+
+    const plot = screen.getByTestId('trend-popup-cursor-plot');
+    const initialWidth = Number(plot.getAttribute('width'));
+
+    // Click to hide legend
+    fireEvent.click(toggleButton);
+
+    expect(toggleButton).toHaveTextContent('Mostrar legenda');
+    expect(screen.queryByTestId('trend-popup-legend-resizer')).toBeNull();
+    const expandedWidth = Number(screen.getByTestId('trend-popup-cursor-plot').getAttribute('width'));
+    expect(expandedWidth).toBeGreaterThan(initialWidth);
+
+    // Click to restore legend
+    fireEvent.click(toggleButton);
+    expect(toggleButton).toHaveTextContent('Ocultar legenda');
+    expect(screen.getByTestId('trend-popup-legend-resizer')).toBeInTheDocument();
+  });
 });
