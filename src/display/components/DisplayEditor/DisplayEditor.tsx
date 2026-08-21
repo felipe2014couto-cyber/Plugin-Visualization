@@ -427,83 +427,7 @@ export function DisplayEditor({
     setOptionsTrendId(null);
   }, [commitDocument, dispatch]);
 
-  const handleInsertValue = useCallback(() => {
-    const currentDocument = documentRef.current;
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    if (!binding) return;
-    const element = createValue({
-      binding,
-      surface: currentDocument.surface,
-      existingIds: currentDocument.elements.map(({ id }) => id),
-    });
-    if (!onChangeRef.current) return;
-    commitDocument(appendDisplayElement(currentDocument, element));
-    dispatch({ type: 'SELECT', elementId: element.id });
-    setOptionsElementId(element.id);
-    setOptionsTrendId(null);
-  }, [commitDocument, dispatch, selectedPiPoint]);
 
-  const handleInsertGauge = useCallback(() => {
-    const currentDocument = documentRef.current;
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    const element = createGauge({
-      binding,
-      surface: currentDocument.surface,
-      existingIds: currentDocument.elements.map(({ id }) => id),
-    });
-    if (!onChangeRef.current) return;
-    commitDocument(appendDisplayElement(currentDocument, element));
-    dispatch({ type: 'SELECT', elementId: element.id });
-    setOptionsElementId(element.id);
-    setOptionsTrendId(null);
-  }, [commitDocument, dispatch, selectedPiPoint]);
-
-  const handleInsertBar = useCallback(() => {
-    const currentDocument = documentRef.current;
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    const element = createBar({
-      binding,
-      surface: currentDocument.surface,
-      existingIds: currentDocument.elements.map(({ id }) => id),
-    });
-    if (!onChangeRef.current) return;
-    commitDocument(appendDisplayElement(currentDocument, element));
-    dispatch({ type: 'SELECT', elementId: element.id });
-    setOptionsElementId(element.id);
-    setOptionsTrendId(null);
-  }, [commitDocument, dispatch, selectedPiPoint]);
-
-  const handleInsertTrend = useCallback(() => {
-    const currentDocument = documentRef.current;
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    if (!binding) return;
-    const element = createTrend({
-      binding,
-      surface: currentDocument.surface,
-      existingIds: currentDocument.elements.map(({ id }) => id),
-    });
-    if (!onChangeRef.current) return;
-    commitDocument(appendDisplayElement(currentDocument, element));
-    dispatch({ type: 'SELECT', elementId: element.id });
-    setOptionsElementId(element.id);
-    setOptionsTrendId(null);
-  }, [commitDocument, dispatch, selectedPiPoint]);
-
-  const handleInsertTable = useCallback(() => {
-    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
-    if (!binding) return;
-    const currentDocument = documentRef.current;
-    const element = createTable({
-      item: { binding, description: (selectedPiPoint as { descriptor?: string; description?: string })?.descriptor ?? selectedPiPoint?.description },
-      surface: currentDocument.surface,
-      existingIds: currentDocument.elements.map(({ id }) => id),
-    });
-    if (!onChangeRef.current) return;
-    commitDocument(appendDisplayElement(currentDocument, element));
-    dispatch({ type: 'SELECT', elementId: element.id });
-    setOptionsElementId(element.id);
-    setOptionsTrendId(null);
-  }, [commitDocument, dispatch, selectedPiPoint]);
 
   const reorderSelected = useCallback((direction: 'front' | 'back', all = false) => {
     const selectedId = stateRef.current.selectedElementId;
@@ -1230,11 +1154,11 @@ export function DisplayEditor({
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
                 <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
                 <input ref={imageInputRef} type="file" accept="image/*" data-testid="display-image-input" className={styles.fileInput} onChange={handleImageFile} />
-                <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} onClick={() => { onDropSymbolTypeChange?.('value'); if (selectedPiPoint) handleInsertValue(); }}><ValueIcon /></button>
-                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertGauge(); }}><GaugeIcon /></button>
-                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBar(); }}><BarIcon /></button>
-                <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => { onDropSymbolTypeChange?.('trend'); if (selectedPiPoint) handleInsertTrend(); }}><TrendIcon /></button>
-                <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => { onDropSymbolTypeChange?.('table'); handleInsertTable(); }}>▦</button>
+                <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} onClick={() => onDropSymbolTypeChange?.('value')}><ValueIcon /></button>
+                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} onClick={() => onDropSymbolTypeChange?.('gauge')}><GaugeIcon /></button>
+                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} onClick={() => onDropSymbolTypeChange?.('bar')}><BarIcon /></button>
+                <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => onDropSymbolTypeChange?.('trend')}><TrendIcon /></button>
+                <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => onDropSymbolTypeChange?.('table')}>▦</button>
                 {selectedTrend && (
                   <button
                     type="button"

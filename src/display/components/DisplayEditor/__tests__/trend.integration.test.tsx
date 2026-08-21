@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { createDisplayDocument, createTrend, type DisplayDocument } from '../../../index';
+import { appendTrend, createDisplayDocument, createTrend, type DisplayDocument } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
 import type { LoadTrendSeries } from '../../../runtime/trendRuntime';
@@ -44,6 +44,7 @@ function Harness({
   onDocumentChange?: (document: DisplayDocument) => void;
 }) {
   const [document, setDocument] = useState<DisplayDocument>(() => initial ?? createDisplayDocument({ name: 'Trend Display' }));
+  const [dropSymbolType, setDropSymbolType] = useState<'value' | 'gauge' | 'bar' | 'trend' | 'table'>('value');
   return (
     <DisplayEditor
       document={document}
@@ -52,6 +53,8 @@ function Harness({
         onDocumentChange?.(nextDocument);
       }}
       selectedPiPoint={point}
+      dropSymbolType={dropSymbolType}
+      onDropSymbolTypeChange={setDropSymbolType}
       loadTrend={loadTrend}
       loadRecordedTrend={loadRecordedTrend}
     />
@@ -94,7 +97,7 @@ describe('DisplayEditor - Trend', () => {
     expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(1);
   });
 
-  it('cria Trend somente após seleção explícita e preserva o gráfico em Visualizar', async () => {
+  it('cria Trend via documento/drop e preserva o gráfico em Visualizar', async () => {
     const loadTrend = jest.fn(async (bindings) => ({
       'resolved-datasource\u0000pims\u0000SINUSOID': {
         status: 'success' as const,
@@ -104,17 +107,20 @@ describe('DisplayEditor - Trend', () => {
         },
       },
     }));
-    render(<Harness loadTrend={loadTrend} />);
+    const initial = appendTrend(createDisplayDocument(), createTrend({
+      id: 'trend-1',
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' },
+    }));
+    render(<Harness initial={initial} loadTrend={loadTrend} />);
 
     const insert = screen.getByTestId('display-insert-trend');
     expect(insert).not.toBeDisabled();
-    expect(screen.queryByTestId(/^display-element-/)).toBeNull();
     fireEvent.click(insert);
+    expect(insert).toHaveAttribute('aria-pressed', 'true');
 
-    const trend = screen.getByTestId(/^display-element-/);
+    const trend = screen.getByTestId('display-element-trend-1');
     expect(trend).toHaveAttribute('data-element-type', 'trend');
-    expect(screen.getByTestId('display-selection-bounding-box')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId('trend-line-' + trend.getAttribute('data-element-id'))).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('trend-line-trend-1')).toBeInTheDocument());
     expect(loadTrend).toHaveBeenCalledWith([{
       dataSourceUid: 'resolved-datasource',
       serverPath: 'pims',
@@ -123,17 +129,17 @@ describe('DisplayEditor - Trend', () => {
     }], expect.any(Function), { maxDataPoints: expect.any(Number) });
 
     expect(trend).toHaveStyle({ cursor: 'move' });
-    const backgroundBeforeDrag = screen.getByTestId(`trend-background-${trend.getAttribute('data-element-id')}`);
+    const backgroundBeforeDrag = screen.getByTestId('trend-background-trend-1');
     const xBeforeDrag = backgroundBeforeDrag.getAttribute('x');
-    fireEvent.pointerDown(screen.getByTestId(`trend-plot-${trend.getAttribute('data-element-id')}`), { clientX: 300, clientY: 180, pointerId: 7 });
+    fireEvent.pointerDown(screen.getByTestId('trend-plot-trend-1'), { clientX: 300, clientY: 180, pointerId: 7 });
     fireEvent.pointerMove(screen.getByTestId('display-surface'), { clientX: 200, clientY: 120, pointerId: 7 });
     fireEvent.pointerUp(screen.getByTestId('display-surface'), { clientX: 200, clientY: 120, pointerId: 7 });
-    expect(screen.getByTestId(`trend-background-${trend.getAttribute('data-element-id')}`).getAttribute('x')).not.toBe(xBeforeDrag);
+    expect(screen.getByTestId('trend-background-trend-1').getAttribute('x')).not.toBe(xBeforeDrag);
 
     fireEvent.click(screen.getByTestId('display-mode-view'));
     expect(screen.queryByTestId('display-selection-bounding-box')).toBeNull();
-    expect(screen.getByTestId('trend-line-' + trend.getAttribute('data-element-id'))).toBeInTheDocument();
-    expect(screen.getByTestId(`display-element-${trend.getAttribute('data-element-id')}`)).toHaveStyle({ cursor: 'default' });
+    expect(screen.getByTestId('trend-line-trend-1')).toBeInTheDocument();
+    expect(screen.getByTestId('display-element-trend-1')).toHaveStyle({ cursor: 'default' });
   });
 
   it('abre o pop-up com valores gravados no duplo clique somente em Visualizar', async () => {
@@ -156,11 +162,13 @@ describe('DisplayEditor - Trend', () => {
         },
       },
     }));
-    render(<Harness loadTrend={loadTrend} loadRecordedTrend={loadRecordedTrend} />);
-    fireEvent.click(screen.getByTestId('display-insert-trend'));
-    const trend = screen.getByTestId(/^display-element-/);
-    const elementId = trend.getAttribute('data-element-id');
-    await screen.findByTestId(`trend-line-${elementId}`);
+    const initial = appendTrend(createDisplayDocument(), createTrend({
+      id: 'trend-1',
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' },
+    }));
+    render(<Harness initial={initial} loadTrend={loadTrend} loadRecordedTrend={loadRecordedTrend} />);
+    const trend = screen.getByTestId('display-element-trend-1');
+    await screen.findByTestId('trend-line-trend-1');
 
     fireEvent.doubleClick(trend);
     expect(loadRecordedTrend).not.toHaveBeenCalled();

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { createDisplayDocument, type DisplayDocument } from '../../../index';
+import { appendTrend, createDisplayDocument, createTrend, type DisplayDocument } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
 import type { LoadTrendSeries } from '../../../runtime/trendRuntime';
@@ -65,19 +65,19 @@ describe('DisplayEditor - histórico de edição', () => {
     expect(screen.getByTestId(`display-element-${id}`)).toBeInTheDocument();
   });
 
-  it('cria Value, desfaz e refaz preservando binding e ID', () => {
+  it('cria Text, desfaz e refaz preservando propriedades e ID', () => {
     render(<Harness />);
-    fireEvent.click(screen.getByTestId('display-insert-value'));
-    const value = screen.getByTestId(/^display-element-/);
-    const id = value.getAttribute('data-element-id');
-    expect(screen.getByTestId('value-properties-panel')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('display-insert-text'));
+    const text = screen.getByTestId(/^display-element-/);
+    const id = text.getAttribute('data-element-id');
+    expect(screen.getByTestId('text-properties-panel')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('display-undo'));
     expect(screen.queryByTestId(`display-element-${id}`)).toBeNull();
     fireEvent.click(screen.getByTestId('display-redo'));
     expect(screen.getByTestId(`display-element-${id}`)).toBeInTheDocument();
   });
 
-  it('não mostra o painel de Link genérico ao inserir uma Trend', () => {
+  it('não mostra o painel de Link genérico ao alternar para o modo Trend', () => {
     render(<Harness />);
     fireEvent.click(screen.getByTestId('display-insert-trend'));
     expect(screen.queryByTestId('link-properties-panel')).toBeNull();
@@ -194,19 +194,20 @@ describe('DisplayEditor - histórico de edição', () => {
       `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`,
       { status: 'success' as const, series: { pointName: binding.pointName, points: [{ time: 1_000, value: 1 }, { time: 2_000, value: 2 }] } },
     ]));
-    render(<Harness loadTrend={loadTrend} />);
-    fireEvent.click(screen.getByTestId('display-insert-trend'));
-    const trendId = screen.getByTestId(/^display-element-/).getAttribute('data-element-id');
-    await waitFor(() => expect(screen.getByTestId(`trend-plot-${trendId}`)).toBeInTheDocument());
+    const initial = appendTrend(createDisplayDocument(), createTrend({
+      id: 'trend-1',
+      binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID' },
+    }));
+    render(<Harness initial={initial} loadTrend={loadTrend} />);
+    await waitFor(() => expect(screen.getByTestId('trend-plot-trend-1')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('display-mode-view'));
-    const plot = screen.getByTestId(`trend-plot-${trendId}`);
+    const plot = screen.getByTestId('trend-plot-trend-1');
     fireEvent.pointerDown(plot, { clientX: 300, clientY: 180, pointerId: 1 });
     fireEvent.pointerUp(getSurface(), { clientX: 300, clientY: 180, pointerId: 1 });
     fireEvent.keyDown(getSurface(), { key: 'Delete' });
     expect(screen.queryByTestId(/^trend-cursor-/)).toBeNull();
 
     fireEvent.click(screen.getByTestId('display-mode-edit'));
-    fireEvent.click(screen.getByTestId('display-undo'));
-    expect(screen.queryByTestId(/^display-element-/)).toBeNull();
+    expect(screen.getByTestId('display-undo')).toBeDisabled();
   });
 });

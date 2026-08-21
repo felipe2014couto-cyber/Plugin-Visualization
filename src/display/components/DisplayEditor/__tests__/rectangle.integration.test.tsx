@@ -3,8 +3,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createTheme } from '@grafana/data';
 import {
   appendDisplayElement,
+  appendValue,
   createDisplayDocument,
   createRectangle,
+  createValue,
   type PiPointBinding,
   type DisplayDocument,
 } from '../../../index';
@@ -254,18 +256,21 @@ describe('DisplayEditor - inserção de Value', () => {
     dataSourceUid: 'resolved-datasource',
   };
 
-  it('só cria Value após a ação explícita e grava o binding no documento', async () => {
+  it('só altera modo de símbolo no botão e grava o binding no documento quando presente', async () => {
     const loadValue = jest.fn().mockResolvedValue({ value: 23.48 });
-    render(<Harness initial={makeDocument()} selectedPiPoint={selectedPiPoint} loadValue={loadValue} />);
+    const initial = appendValue(makeDocument(), createValue({
+      id: 'val-1',
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'LFI_A268SV_TEMPERATURA_AMBIENTE', webId: 'point-webid' },
+    }));
+    render(<Harness initial={initial} selectedPiPoint={selectedPiPoint} loadValue={loadValue} />);
 
-    expect(screen.queryByTestId(/^display-element-/)).toBeNull();
     const insert = screen.getByTestId('display-insert-value');
     expect(insert).not.toBeDisabled();
     fireEvent.click(insert);
+    expect(insert).toHaveAttribute('aria-pressed', 'true');
 
-    const value = screen.getByTestId(/^display-element-/);
+    const value = screen.getByTestId('display-element-val-1');
     expect(value).toHaveAttribute('data-element-type', 'value');
-    expect(screen.getByTestId('display-selection-bounding-box')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId(/^display-value-/)).toHaveTextContent('23.48'));
     expect(loadValue).toHaveBeenCalledTimes(1);
     expect(loadValue).toHaveBeenCalledWith({
@@ -278,8 +283,11 @@ describe('DisplayEditor - inserção de Value', () => {
 
   it('reutiliza seleção, drag, resize e Visualizar sem novas consultas', async () => {
     const loadValue = jest.fn().mockResolvedValue({ value: 'Running' });
-    render(<Harness initial={makeDocument()} selectedPiPoint={selectedPiPoint} loadValue={loadValue} />);
-    fireEvent.click(screen.getByTestId('display-insert-value'));
+    const initial = appendValue(makeDocument(), createValue({
+      id: 'val-1',
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'LFI_A268SV_TEMPERATURA_AMBIENTE', webId: 'point-webid' },
+    }));
+    render(<Harness initial={initial} selectedPiPoint={selectedPiPoint} loadValue={loadValue} />);
     await waitFor(() => expect(screen.getByTestId(/^display-value-/)).toHaveTextContent('Running'));
 
     const value = screen.getByTestId(/^display-element-/);
