@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { css, cx } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, Icon } from '@grafana/ui';
+import { SqlChartRender } from './SqlChartRender';
 import type { OracleQueryResponse } from './oracleApi';
 import type { SqlTableProperties } from '../../display/createSqlTable';
 
@@ -50,46 +51,60 @@ export function SqlResultTable({ result, isLoading, properties }: SqlResultTable
 
   const styleObj = getDynamicStyles(properties);
 
+  const viewMode = properties?.viewMode ?? 'table';
+  const xAxis = properties?.xAxis;
+  const yAxes = properties?.yAxes ?? [];
+
   return (
     <div className={styles.container} style={styleObj}>
-      <div className={styles.tableWrapper}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th className={styles.rowNumHeader}>#</th>
-              {columns.map((col) => (
-                <th key={col}>{col}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {result.rows.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                <td className={styles.rowNumCell}>{rowIndex + 1}</td>
-                {columns.map((col) => {
-                  const val = row[col];
-                  const displayVal = val === null ? 'NULL' : String(val);
-                  const isNull = val === null;
-                  const isNumber = typeof val === 'number';
-                  
-                  return (
-                    <td 
-                      key={col} 
-                      className={cx(
-                        isNull && styles.nullCell, 
-                        isNumber && styles.numberCell
-                      )}
-                      title={displayVal}
-                    >
-                      {displayVal}
-                    </td>
-                  );
-                })}
+      {viewMode === 'table' ? (
+        <div className={styles.tableWrapper}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th className={styles.rowNumHeader}>#</th>
+                {columns.map((col) => (
+                  <th key={col}>{col}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {result.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  <td className={styles.rowNumCell}>{rowIndex + 1}</td>
+                  {columns.map((col) => {
+                    const val = row[col];
+                    const displayVal = val === null ? 'NULL' : String(val);
+                    const isNull = val === null;
+                    const isNumber = typeof val === 'number';
+                    
+                    return (
+                      <td 
+                        key={col} 
+                        className={cx(
+                          isNull && styles.nullCell, 
+                          isNumber && styles.numberCell
+                        )}
+                        title={displayVal}
+                      >
+                        {displayVal}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <SqlChartRender 
+          data={result.rows}
+          xAxis={xAxis}
+          yAxes={yAxes}
+          type={viewMode}
+          properties={properties}
+        />
+      )}
     </div>
   );
 }

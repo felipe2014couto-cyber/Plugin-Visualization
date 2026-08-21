@@ -14,10 +14,13 @@ import {
 
 interface SqlQueryPanelProps {
   onResultChange?: (result: OracleQueryResponse, sql: string) => void;
+  onApplyToDashboard?: (config: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] }) => void;
+  onConfigChange?: (config: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] }) => void;
   sqlToLoad?: string;
+  initialConfig?: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] };
 }
 
-export function SqlQueryPanel({ onResultChange, sqlToLoad }: SqlQueryPanelProps) {
+export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChange, sqlToLoad, initialConfig }: SqlQueryPanelProps) {
   const styles = useStyles2(getStyles);
   
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -58,7 +61,7 @@ export function SqlQueryPanel({ onResultChange, sqlToLoad }: SqlQueryPanelProps)
     setExecutionError(undefined);
   };
 
-  const handleExecute = async (sql: string, maxRows: number) => {
+  const handleExecute = async (sql: string, maxRows: number, params?: Record<string, any>) => {
     if (!sessionId) {
       return null;
     }
@@ -70,7 +73,8 @@ export function SqlQueryPanel({ onResultChange, sqlToLoad }: SqlQueryPanelProps)
       const result = await runOracleQuery({
         session_id: sessionId,
         sql,
-        max_rows: maxRows
+        max_rows: maxRows,
+        params
       });
       setLastResult(result);
       onResultChange?.(result, sql);
@@ -95,11 +99,14 @@ export function SqlQueryPanel({ onResultChange, sqlToLoad }: SqlQueryPanelProps)
         <SqlEditor 
           onExecute={handleExecute}
           onDisconnect={handleDisconnect}
+          onConfigChange={onConfigChange}
+          onApplyToDashboard={onApplyToDashboard}
           isExecuting={isExecuting}
           error={executionError}
           lastResult={lastResult}
-          showResult={false}
+          showResult={true}
           sqlToLoad={sqlToLoad}
+          initialConfig={initialConfig}
         />
       )}
     </div>

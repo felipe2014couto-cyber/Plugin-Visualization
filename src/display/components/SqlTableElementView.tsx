@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Modal } from '@grafana/ui';
 import { SqlTableElement } from '../createSqlTable';
 import { SqlResultTable, getDynamicStyles } from '../../components/SqlQuery/SqlResultTable';
 
@@ -10,10 +11,17 @@ interface SqlTableElementViewProps {
 
 export function SqlTableElementView({ element, selected, editable }: SqlTableElementViewProps) {
   const styleObj = getDynamicStyles(element.properties);
+  const [showPopup, setShowPopup] = useState(false);
+
+  const handleDoubleClick = () => {
+    if (!editable) {
+      setShowPopup(true);
+    }
+  };
 
   return (
     <g data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }} transform={`translate(${element.x}, ${element.y})`}>
-      <foreignObject x={0} y={0} width={element.width} height={element.height}>
+      <foreignObject x={0} y={0} width={element.width} height={element.height} onDoubleClick={handleDoubleClick}>
         <div style={{
           width: '100%',
           height: '100%',
@@ -50,6 +58,18 @@ export function SqlTableElementView({ element, selected, editable }: SqlTableEle
       </foreignObject>
       {editable && (
         <rect x={0} y={0} width={element.width} height={element.height} fill="transparent" pointerEvents="all" />
+      )}
+      
+      {showPopup && (
+        <Modal 
+          isOpen={true} 
+          title={element.properties.title || 'Visualização Gráfica'} 
+          onDismiss={() => setShowPopup(false)}
+        >
+          <div style={{ height: '70vh', width: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <SqlResultTable result={element.properties.result ?? null} isLoading={false} properties={element.properties} />
+          </div>
+        </Modal>
       )}
     </g>
   );

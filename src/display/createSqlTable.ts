@@ -10,6 +10,9 @@ export interface SqlTableProperties extends Record<string, unknown> {
   sql: string;
   result?: OracleQueryResponse | null;
   style?: 'dark' | 'light' | 'striped' | 'custom';
+  viewMode?: 'table' | 'xy' | 'timeseries';
+  xAxis?: string;
+  yAxes?: string[];
   fontSize?: number;
   customHeaderColor?: string;
   customRowColor?: string;
@@ -20,6 +23,9 @@ export interface SqlTableProperties extends Record<string, unknown> {
   titleTransparent?: boolean;
   titleAlign?: 'left' | 'center' | 'right';
   titleFontSize?: number;
+  dotSize?: number;
+  showTrendMarker?: boolean;
+  paginationSize?: number;
 }
 
 export type SqlTableElement = DisplayElement<typeof SQL_TABLE_TYPE, SqlTableProperties>;
@@ -28,6 +34,9 @@ export interface CreateSqlTableOptions {
   sql: string;
   result?: OracleQueryResponse | null;
   style?: 'dark' | 'light' | 'striped' | 'custom';
+  viewMode?: 'table' | 'xy' | 'timeseries';
+  xAxis?: string;
+  yAxes?: string[];
   fontSize?: number;
   customHeaderColor?: string;
   customRowColor?: string;
@@ -38,6 +47,9 @@ export interface CreateSqlTableOptions {
   titleTransparent?: boolean;
   titleAlign?: 'left' | 'center' | 'right';
   titleFontSize?: number;
+  dotSize?: number;
+  showTrendMarker?: boolean;
+  paginationSize?: number;
   id?: string;
   x?: number;
   y?: number;
@@ -73,6 +85,9 @@ export function createSqlTable(options: CreateSqlTableOptions): SqlTableElement 
       sql: options.sql,
       result: options.result,
       style: options.style ?? 'dark',
+      viewMode: options.viewMode ?? 'table',
+      xAxis: options.xAxis,
+      yAxes: options.yAxes,
       fontSize: options.fontSize ?? 20,
       customHeaderColor: options.customHeaderColor,
       customRowColor: options.customRowColor,
@@ -83,6 +98,9 @@ export function createSqlTable(options: CreateSqlTableOptions): SqlTableElement 
       titleTransparent: options.titleTransparent ?? false,
       titleAlign: options.titleAlign ?? 'left',
       titleFontSize: options.titleFontSize ?? 20,
+      dotSize: options.dotSize ?? 3,
+      showTrendMarker: options.showTrendMarker ?? false,
+      paginationSize: options.paginationSize,
     },
   };
 }
