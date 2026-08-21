@@ -48,6 +48,7 @@ export type {
 export {
   createGroup,
   extractAllGroupBindingsAndElements,
+  findTopLevelElementId,
   GROUP_TYPE,
   groupElements,
   resizeGroup,

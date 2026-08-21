@@ -278,3 +278,31 @@ export function extractAllGroupBindingsAndElements(
   }
   return result;
 }
+
+export function findTopLevelElementId(
+  elements: readonly DisplayElement[],
+  elementId: string,
+): string | undefined {
+  for (const element of elements) {
+    if (element.id === elementId) {
+      return element.id;
+    }
+    if (element.type === GROUP_TYPE) {
+      const group = element as GroupElement;
+      if (containsElementId(group.properties.elements ?? [], elementId)) {
+        return group.id;
+      }
+    }
+  }
+  return undefined;
+}
+
+function containsElementId(elements: readonly DisplayElement[], id: string): boolean {
+  for (const el of elements) {
+    if (el.id === id) return true;
+    if (el.type === GROUP_TYPE) {
+      if (containsElementId((el as GroupElement).properties.elements ?? [], id)) return true;
+    }
+  }
+  return false;
+}

@@ -30,7 +30,7 @@ import { TEXT_TYPE, type TextElement } from '../../createText';
 import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
-import { extractAllGroupBindingsAndElements, GROUP_TYPE, type GroupElement } from '../../createGroup';
+import { extractAllGroupBindingsAndElements, findTopLevelElementId, GROUP_TYPE, type GroupElement } from '../../createGroup';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../../../library';
 import {
   getTrendSeriesConsumerId,
@@ -389,42 +389,63 @@ export function DisplaySurface({
     if (!editable) {
       return;
     }
-    const element = elements.find((candidate) => candidate.id === elementId);
-    if (!element || element.type !== TREND_TYPE) {
+    const topLevelId = findTopLevelElementId(elements, elementId) ?? elementId;
+    const topLevelElement = elements.find((candidate) => candidate.id === topLevelId);
+    if (!topLevelElement) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    onTrendContextMenu?.(element as TrendElement, event);
-  }, [editable, elements, onTrendContextMenu]);
+    if (topLevelElement.type === GROUP_TYPE) {
+      onElementContextMenu?.(topLevelElement, event);
+    } else if (topLevelElement.type === TREND_TYPE) {
+      onTrendContextMenu?.(topLevelElement as TrendElement, event);
+    } else {
+      onElementContextMenu?.(topLevelElement, event);
+    }
+  }, [editable, elements, onElementContextMenu, onTrendContextMenu]);
 
   const handleLibrarySymbolContextMenu = useCallback((event: React.MouseEvent<SVGElement>, elementId: string) => {
     if (!editable) {
       return;
     }
-    const element = elements.find((candidate) => candidate.id === elementId);
-    if (!element || element.type !== LIBRARY_SYMBOL_TYPE) {
+    const topLevelId = findTopLevelElementId(elements, elementId) ?? elementId;
+    const topLevelElement = elements.find((candidate) => candidate.id === topLevelId);
+    if (!topLevelElement) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    onLibrarySymbolContextMenu?.(element as LibrarySymbolElement, event);
-  }, [editable, elements, onLibrarySymbolContextMenu]);
+    if (topLevelElement.type === GROUP_TYPE) {
+      onElementContextMenu?.(topLevelElement, event);
+    } else if (topLevelElement.type === LIBRARY_SYMBOL_TYPE) {
+      onLibrarySymbolContextMenu?.(topLevelElement as LibrarySymbolElement, event);
+    } else {
+      onElementContextMenu?.(topLevelElement, event);
+    }
+  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu]);
 
   const handleElementContextMenu = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
     if (!editable) {
       return;
     }
     const target = event.target as Element;
-    const elementId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
-    const element = elementId ? elements.find((candidate) => candidate.id === elementId) : undefined;
-    if (!element || element.type === TREND_TYPE || element.type === LIBRARY_SYMBOL_TYPE) {
+    const rawId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
+    const topLevelId = rawId ? (findTopLevelElementId(elements, rawId) ?? rawId) : undefined;
+    const element = topLevelId ? elements.find((candidate) => candidate.id === topLevelId) : undefined;
+    if (!element) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    onElementContextMenu?.(element, event);
-  }, [editable, elements, onElementContextMenu]);
+    if (element.type === TREND_TYPE) {
+      onTrendContextMenu?.(element as TrendElement, event);
+    } else if (element.type === LIBRARY_SYMBOL_TYPE) {
+      onLibrarySymbolContextMenu?.(element as LibrarySymbolElement, event);
+    } else {
+      onElementContextMenu?.(element, event);
+    }
+  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onTrendContextMenu]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
@@ -542,7 +563,8 @@ export function DisplaySurface({
       return;
     }
     const target = event.target as Element;
-    const elementId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
+    const rawId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
+    const elementId = rawId ? (findTopLevelElementId(displayDocument.elements, rawId) ?? rawId) : undefined;
     const element = elementId ? displayDocument.elements.find((candidate) => candidate.id === elementId) : undefined;
     if (element?.type === TREND_TYPE) {
       return;
@@ -597,9 +619,10 @@ export function DisplaySurface({
       }
 
       const target = e.target as Element;
-      const elementId = target.getAttribute('data-element-id')
+      const rawId = target.getAttribute('data-element-id')
         ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
       const handleAttr = target.getAttribute('data-resize-handle');
+      const elementId = handleAttr ? rawId : (rawId ? (findTopLevelElementId(elements, rawId) ?? rawId) : undefined);
 
       trySetPointerCapture(svg, e.pointerId);
 
@@ -914,7 +937,7 @@ export function DisplaySurface({
             );
           }
           if (element.type === RECTANGLE_TYPE) {
-            return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
+            return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id), elementIdToUse);
           }
           if (element.type === TEXT_TYPE) {
             const textElement = element as TextElement;
@@ -1153,14 +1176,14 @@ function getLibrarySymbolSource(element: LibrarySymbolElement): string {
   return definition ? getIndustrialSymbolAssetUrl(definition) : element.properties.src;
 }
 
-function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRuntimeState) {
+function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRuntimeState, parentElementId?: string) {
   const baseFill = getElementFill(element);
   const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
   const fill = getMultistateColor(value, element.properties.multistate, baseFill);
   const common = {
     key: element.id,
     'data-testid': `display-element-${element.id}`,
-    'data-element-id': element.id,
+    'data-element-id': parentElementId ?? element.id,
     'data-element-type': element.type,
     'data-shape': element.properties.shape ?? 'rectangle',
     x: element.x,

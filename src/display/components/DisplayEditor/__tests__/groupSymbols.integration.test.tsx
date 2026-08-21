@@ -134,4 +134,55 @@ describe('DisplayEditor - Group Symbols (Agrupar Símbolos)', () => {
     expect(finalDoc.elements).toHaveLength(2);
     expect(finalDoc.elements.map((el) => el.id)).toEqual(['r1', 't1']);
   });
+
+  it('seleciona todo o grupo ao clicar em QUALQUER um dos elementos filhos agrupados', () => {
+    const doc = createDisplayDocument({ name: 'Test Group Selection' });
+    const r1 = createRectangle({ id: 'r1', x: 50, y: 50, width: 100, height: 60 });
+    const t1 = createText({ id: 't1', x: 200, y: 100, width: 80, height: 40 });
+    doc.elements = [r1, t1];
+
+    render(<Harness initialDoc={doc} />);
+
+    // Multi-select r1 and t1 and group them via r1
+    act(() => {
+      fireEvent.pointerDown(screen.getByTestId('display-element-r1'), { clientX: 60, clientY: 60, pointerId: 1, button: 0 });
+      fireEvent.pointerUp(screen.getByTestId('display-surface'), { clientX: 60, clientY: 60, pointerId: 1, button: 0 });
+      fireEvent.pointerDown(screen.getByTestId('display-element-t1'), { clientX: 210, clientY: 110, pointerId: 2, ctrlKey: true, button: 0 });
+      fireEvent.pointerUp(screen.getByTestId('display-surface'), { clientX: 210, clientY: 110, pointerId: 2, ctrlKey: true, button: 0 });
+      fireEvent.contextMenu(screen.getByTestId('display-element-r1'), { clientX: 60, clientY: 60 });
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('context-menu-group'));
+    });
+
+    const groupElement = getDoc().elements[0];
+    expect(groupElement.type).toBe(GROUP_TYPE);
+
+    // Unselect by clicking canvas background
+    act(() => {
+      fireEvent.pointerDown(screen.getByTestId('display-surface'), { clientX: 500, clientY: 500, pointerId: 3, button: 0 });
+      fireEvent.pointerUp(screen.getByTestId('display-surface'), { clientX: 500, clientY: 500, pointerId: 3, button: 0 });
+    });
+
+    // Now click on t1 (the element that was NOT the one right-clicked to group)
+    const childT1 = screen.getByTestId('display-element-t1');
+    act(() => {
+      fireEvent.pointerDown(childT1, { clientX: 210, clientY: 110, pointerId: 4, button: 0 });
+      fireEvent.pointerUp(screen.getByTestId('display-surface'), { clientX: 210, clientY: 110, pointerId: 4, button: 0 });
+    });
+
+    // The entire group bounding box and resize handles should be selected
+    expect(screen.getByTestId('display-selection-bounding-box')).toBeInTheDocument();
+    expect(screen.getByTestId('display-resize-handle-tl')).toBeInTheDocument();
+    expect(screen.getByTestId('display-resize-handle-br')).toBeInTheDocument();
+
+    // Right-clicking on child t1 should also open context menu with "Desagrupar Símbolos"
+    act(() => {
+      fireEvent.contextMenu(childT1, { clientX: 210, clientY: 110 });
+    });
+
+    expect(screen.getByTestId('display-context-menu')).toBeInTheDocument();
+    expect(screen.getByTestId('context-menu-ungroup')).toBeInTheDocument();
+  });
 });
