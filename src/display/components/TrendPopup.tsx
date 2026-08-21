@@ -361,13 +361,16 @@ function PopupChart({
   const [previewPopupLegendWidth, setPreviewPopupLegendWidth] = useState<number | null>(null);
   const [resizingLegend, setResizingLegend] = useState<{ pointerId: number; startX: number; startLegendWidth: number } | null>(null);
 
-  const effectiveLegendWidth = getEffectiveTrendLegendWidth(
-    POPUP_WIDTH,
-    previewPopupLegendWidth ?? popupLegendWidth,
-    plotX,
-    300,
-    100,
-  );
+  const isLegendVisible = !visualOptions.hideLegend;
+  const effectiveLegendWidth = isLegendVisible
+    ? getEffectiveTrendLegendWidth(
+        POPUP_WIDTH,
+        previewPopupLegendWidth ?? popupLegendWidth,
+        plotX,
+        300,
+        100,
+      )
+    : 24;
   const plot = { x: plotX, y: 20, width: Math.max(120, POPUP_WIDTH - effectiveLegendWidth - plotX), height: 724 };
   const dividerX = plot.x + plot.width;
   const legendX = dividerX + 16;
@@ -499,61 +502,65 @@ function PopupChart({
             {statePath && <path d={statePath} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="miter" data-testid={`trend-popup-state-line-${index}`} />}
             {marker === 'circle' && points.map((point) => <circle key={point.time} cx={xFor(point.time)} cy={yFor(point.value, scale)} r={3} fill={color} />)}
             {marker === 'square' && points.map((point) => <rect key={point.time} x={xFor(point.time) - 3} y={yFor(point.value, scale) - 3} width={6} height={6} fill={color} />)}
-            <text x={legendX} y={36 + index * POPUP_LEGEND_ITEM_HEIGHT} fill={color} fontSize={visualOptions.fontSize} fontFamily={visualOptions.fontFamily}>
-              <title>{name}</title>
-              <tspan x={legendX}>{displayLabel}</tspan>
-              <tspan x={legendX} dy={POPUP_LEGEND_LINE_HEIGHT}>{currentValue !== undefined ? formatValue(currentValue, visualOptions.numberFormat) : currentState ?? '--'}</tspan>
-            </text>
+            {isLegendVisible && (
+              <text x={legendX} y={36 + index * POPUP_LEGEND_ITEM_HEIGHT} fill={color} fontSize={visualOptions.fontSize} fontFamily={visualOptions.fontFamily}>
+                <title>{name}</title>
+                <tspan x={legendX}>{displayLabel}</tspan>
+                <tspan x={legendX} dy={POPUP_LEGEND_LINE_HEIGHT}>{currentValue !== undefined ? formatValue(currentValue, visualOptions.numberFormat) : currentState ?? '--'}</tspan>
+              </text>
+            )}
           </React.Fragment>
         );
       })}
-      <TrendLegendResizeHandle
-        x={dividerX}
-        y={plot.y}
-        height={plot.height}
-        testId="trend-popup-legend-resizer"
-        isResizing={resizingLegend !== null}
-        onPointerDown={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          event.currentTarget.setPointerCapture?.(event.pointerId);
-          const pt = popupPointFromPointer(event);
-          setResizingLegend({
-            pointerId: event.pointerId,
-            startX: pt.x,
-            startLegendWidth: effectiveLegendWidth,
-          });
-        }}
-        onPointerMove={(event) => {
-          if (!resizingLegend || resizingLegend.pointerId !== event.pointerId) return;
-          event.preventDefault();
-          event.stopPropagation();
-          const pt = popupPointFromPointer(event);
-          const deltaX = pt.x - resizingLegend.startX;
-          const newWidth = resizingLegend.startLegendWidth - deltaX;
-          const clamped = getEffectiveTrendLegendWidth(POPUP_WIDTH, newWidth, plotX, 300, 100);
-          setPreviewPopupLegendWidth(clamped);
-        }}
-        onPointerUp={(event) => {
-          if (!resizingLegend || resizingLegend.pointerId !== event.pointerId) return;
-          event.preventDefault();
-          event.stopPropagation();
-          try {
-            event.currentTarget.releasePointerCapture?.(event.pointerId);
-          } catch {
-            // Ignore
-          }
-          const finalWidth = previewPopupLegendWidth ?? resizingLegend.startLegendWidth;
-          setResizingLegend(null);
-          setPreviewPopupLegendWidth(null);
-          setPopupLegendWidth(finalWidth);
-        }}
-        onPointerCancel={() => {
-          if (!resizingLegend) return;
-          setResizingLegend(null);
-          setPreviewPopupLegendWidth(null);
-        }}
-      />
+      {isLegendVisible && (
+        <TrendLegendResizeHandle
+          x={dividerX}
+          y={plot.y}
+          height={plot.height}
+          testId="trend-popup-legend-resizer"
+          isResizing={resizingLegend !== null}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            event.currentTarget.setPointerCapture?.(event.pointerId);
+            const pt = popupPointFromPointer(event);
+            setResizingLegend({
+              pointerId: event.pointerId,
+              startX: pt.x,
+              startLegendWidth: effectiveLegendWidth,
+            });
+          }}
+          onPointerMove={(event) => {
+            if (!resizingLegend || resizingLegend.pointerId !== event.pointerId) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const pt = popupPointFromPointer(event);
+            const deltaX = pt.x - resizingLegend.startX;
+            const newWidth = resizingLegend.startLegendWidth - deltaX;
+            const clamped = getEffectiveTrendLegendWidth(POPUP_WIDTH, newWidth, plotX, 300, 100);
+            setPreviewPopupLegendWidth(clamped);
+          }}
+          onPointerUp={(event) => {
+            if (!resizingLegend || resizingLegend.pointerId !== event.pointerId) return;
+            event.preventDefault();
+            event.stopPropagation();
+            try {
+              event.currentTarget.releasePointerCapture?.(event.pointerId);
+            } catch {
+              // Ignore
+            }
+            const finalWidth = previewPopupLegendWidth ?? resizingLegend.startLegendWidth;
+            setResizingLegend(null);
+            setPreviewPopupLegendWidth(null);
+            setPopupLegendWidth(finalWidth);
+          }}
+          onPointerCancel={() => {
+            if (!resizingLegend) return;
+            setResizingLegend(null);
+            setPreviewPopupLegendWidth(null);
+          }}
+        />
+      )}
       <rect
         x={plot.x}
         y={plot.y}

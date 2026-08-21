@@ -153,10 +153,10 @@ describe('displayTransfer', () => {
     expect(xml).not.toContain('<![CDATA[');
   });
 
-  it('serializa e desserializa legendWidth em elementos Trend', () => {
+  it('serializa e desserializa legendWidth e hideLegend em elementos Trend', () => {
     const document = createDisplayDocument({ id: 'trend-transfer' });
     const trend = createTrend({ id: 'trend-1', binding });
-    trend.properties.visual = { legendWidth: 320, title: 'Pressão' };
+    trend.properties.visual = { legendWidth: 320, title: 'Pressão', hideLegend: true };
     const docWithTrend = appendTrend(document, trend);
 
     const serialized = serializeDisplay(docWithTrend);
@@ -165,5 +165,6 @@ describe('displayTransfer', () => {
 
     expect(importedTrend.properties.visual?.legendWidth).toBe(320);
     expect(importedTrend.properties.visual?.title).toBe('Pressão');
+    expect(importedTrend.properties.visual?.hideLegend).toBe(true);
   });
 });

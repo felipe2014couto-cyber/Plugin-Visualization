@@ -84,10 +84,11 @@ describe('TrendElement', () => {
     const trend = createTrend({ binding, id: 'trend-1' });
     const document = appendTrend(createDisplayDocument({ id: 'display-1' }), trend);
 
-    const updated = updateTrendVisualOptions(document, trend.id, { legendWidth: 280 });
+    const updated = updateTrendVisualOptions(document, trend.id, { legendWidth: 280, hideLegend: true });
     const updatedTrend = updated.elements[0] as typeof trend;
     const visual = getTrendVisualOptions(updatedTrend);
 
     expect(visual.legendWidth).toBe(280);
+    expect(visual.hideLegend).toBe(true);
   });
 });

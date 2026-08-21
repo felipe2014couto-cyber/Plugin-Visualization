@@ -344,4 +344,28 @@ describe('TrendElementView', () => {
     expect(wideLabel.textContent).toBe(longName);
     expect(screen.getByTestId('trend-legend-value-trend-wide-0')).toHaveTextContent('4');
   });
+
+  it('oculta a legenda e o handle de redimensionamento quando hideLegend for true', () => {
+    const hiddenLegendTrend = {
+      ...element,
+      properties: {
+        ...element.properties,
+        visual: { hideLegend: true },
+      },
+    };
+
+    render(
+      <svg>
+        <TrendElementView
+          element={hiddenLegendTrend}
+          runtimeState={{ status: 'success', data: { pointName: 'SINUSOID', points: [{ time: 1000, value: 10 }] } }}
+        />
+      </svg>,
+    );
+
+    expect(screen.queryByTestId('trend-legend-trend-1-0')).toBeNull();
+    expect(screen.queryByTestId('trend-legend-value-trend-1-0')).toBeNull();
+    expect(screen.queryByTestId('trend-legend-resizer-trend-1')).toBeNull();
+    expect(screen.getByTestId('trend-plot-trend-1')).toBeInTheDocument();
+  });
 });

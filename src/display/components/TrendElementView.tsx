@@ -79,10 +79,13 @@ export function TrendElementView({
     startLegendWidth: number;
   } | null>(null);
 
-  const effectiveLegendWidth = getEffectiveTrendLegendWidth(
-    element.width,
-    previewLegendWidth ?? visual.legendWidth,
-  );
+  const isLegendVisible = !visual.hideLegend;
+  const effectiveLegendWidth = isLegendVisible
+    ? getEffectiveTrendLegendWidth(
+        element.width,
+        previewLegendWidth ?? visual.legendWidth,
+      )
+    : 16;
 
   const handleLegendResizePointerDown = (event: React.PointerEvent<SVGLineElement>) => {
     event.preventDefault();
@@ -178,17 +181,19 @@ export function TrendElementView({
       <g clipPath={`url(#${clipPathId})`} data-testid={`trend-content-${element.id}`}>
         {content}
       </g>
-      <TrendLegendResizeHandle
-        x={dividerX}
-        y={element.y}
-        height={element.height}
-        testId={`trend-legend-resizer-${element.id}`}
-        isResizing={resizing !== null}
-        onPointerDown={handleLegendResizePointerDown}
-        onPointerMove={handleLegendResizePointerMove}
-        onPointerUp={handleLegendResizePointerUp}
-        onPointerCancel={handleLegendResizePointerCancel}
-      />
+      {isLegendVisible && (
+        <TrendLegendResizeHandle
+          x={dividerX}
+          y={element.y}
+          height={element.height}
+          testId={`trend-legend-resizer-${element.id}`}
+          isResizing={resizing !== null}
+          onPointerDown={handleLegendResizePointerDown}
+          onPointerMove={handleLegendResizePointerMove}
+          onPointerUp={handleLegendResizePointerUp}
+          onPointerCancel={handleLegendResizePointerCancel}
+        />
+      )}
     </g>
   );
 }
@@ -224,7 +229,8 @@ function getTrendContent(
       : undefined;
     return data?.states && data.states.length > 0 ? [{ series, states: data.states }] : [];
   });
-  const title = (
+  const isLegendVisible = !visual.hideLegend;
+  const title = isLegendVisible ? (
     <text
       x={legendX}
       y={element.y + 18}
@@ -259,7 +265,7 @@ function getTrendContent(
         );
       })}
     </text>
-  );
+  ) : null;
 
   if (dataSeries.length > 0 && stateSeries.length > 0) {
     return <>{visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} individualScale={visual.scaleMode !== 'single'} legendWidth={effectiveLegendWidth} /></>;
@@ -829,7 +835,11 @@ export function buildTrendChartForSeries(
   timeRange?: DisplayTimeRange,
   explicitLegendWidth?: number,
 ): TrendChartModel {
-  const legendWidth = explicitLegendWidth ?? getEffectiveTrendLegendWidth(element.width, getTrendVisualOptions(element).legendWidth);
+  const visual = getTrendVisualOptions(element);
+  const isLegendVisible = !visual.hideLegend;
+  const legendWidth = explicitLegendWidth ?? (isLegendVisible
+    ? getEffectiveTrendLegendWidth(element.width, visual.legendWidth)
+    : 16);
   const plotX = element.x + PLOT_MARGIN.left;
   const plotY = element.y + PLOT_MARGIN.top;
   const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth);

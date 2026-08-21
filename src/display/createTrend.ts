@@ -27,6 +27,7 @@ export type TrendScaleMode = 'single' | 'individual' | 'multiple' | 'configurabl
 export interface TrendVisualOptions {
   title: string;
   showRegression: boolean;
+  hideLegend?: boolean;
   numberFormat: TrendNumberFormat;
   scaleIntervals: 2 | 5 | 10;
   scaleMode: TrendScaleMode;
@@ -38,6 +39,7 @@ export interface TrendVisualOptions {
 export const DEFAULT_TREND_VISUAL_OPTIONS: TrendVisualOptions = {
   title: '',
   showRegression: false,
+  hideLegend: false,
   numberFormat: 'automatic',
   scaleIntervals: 10,
   scaleMode: 'single',
@@ -162,6 +164,7 @@ export function getTrendVisualOptions(element: Pick<TrendElement, 'properties'>)
   return {
     title: typeof visual.title === 'string' ? visual.title : DEFAULT_TREND_VISUAL_OPTIONS.title,
     showRegression: visual.showRegression === true,
+    hideLegend: visual.hideLegend === true,
     numberFormat: visual.numberFormat === 'integer' || visual.numberFormat === 'oneDecimal' || visual.numberFormat === 'twoDecimals'
       ? visual.numberFormat
       : 'automatic',

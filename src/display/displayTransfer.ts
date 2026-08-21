@@ -412,6 +412,7 @@ function portableTrendVisual(input: unknown): Partial<TrendVisualOptions> | unde
   return {
     ...(typeof input.title === 'string' ? { title: input.title } : {}),
     ...(input.showRegression === true ? { showRegression: true } : {}),
+    ...(input.hideLegend === true ? { hideLegend: true } : {}),
     ...(input.numberFormat === 'integer' || input.numberFormat === 'oneDecimal' || input.numberFormat === 'twoDecimals' ? { numberFormat: input.numberFormat } : {}),
     ...(input.scaleIntervals === 2 || input.scaleIntervals === 5 || input.scaleIntervals === 10 ? { scaleIntervals: input.scaleIntervals } : {}),
     ...(input.scaleMode === 'individual' || input.scaleMode === 'configurable' ? { scaleMode: input.scaleMode } : {}),
