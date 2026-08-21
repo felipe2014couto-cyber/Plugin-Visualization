@@ -45,6 +45,17 @@ export type {
   RectangleProperties,
   GeometricShape,
 } from './createRectangle';
+export {
+  createGroup,
+  extractAllGroupBindingsAndElements,
+  GROUP_TYPE,
+  groupElements,
+  resizeGroup,
+  scaleGroupChildren,
+  ungroupElements,
+  updateGroupProperties,
+} from './createGroup';
+export type { CreateGroupOptions, GroupElement, GroupProperties } from './createGroup';
 
 export { appendValue, createValue, VALUE_TYPE } from './createValue';
 export {

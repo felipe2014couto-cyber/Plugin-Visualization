@@ -30,6 +30,7 @@ import { TEXT_TYPE, type TextElement } from '../../createText';
 import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
+import { extractAllGroupBindingsAndElements, GROUP_TYPE, type GroupElement } from '../../createGroup';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../../../library';
 import {
   getTrendSeriesConsumerId,
@@ -127,9 +128,9 @@ export interface DisplaySurfaceProps {
   trendRefreshKey?: string;
   trendTimeRange?: DisplayTimeRange;
   onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors?: readonly TrendCursor[]) => void;
-  onTrendContextMenu?: (element: TrendElement) => void;
-  onElementContextMenu?: (element: DisplayElement) => void;
-  onLibrarySymbolContextMenu?: (element: LibrarySymbolElement) => void;
+  onTrendContextMenu?: (element: TrendElement, event?: React.MouseEvent) => void;
+  onElementContextMenu?: (element: DisplayElement, event?: React.MouseEvent) => void;
+  onLibrarySymbolContextMenu?: (element: LibrarySymbolElement, event?: React.MouseEvent) => void;
   onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
   onTrendLegendWidthChange?: (elementId: string, legendWidth: number) => void;
   zoom?: number;
@@ -216,11 +217,13 @@ export function DisplaySurface({
       viewCenter: viewCenter ?? { x: surface.width / 2, y: surface.height / 2 },
     };
   }, [surface.height, surface.width, viewCenter, zoom]);
+  const allElements = useMemo(() => extractAllGroupBindingsAndElements(elements), [elements]);
+
   useEffect(() => {
     if (!loadPiPointDatabaseLimits) {
       return;
     }
-    const databaseElements = elements.filter((element): element is BarElement | GaugeElement => {
+    const databaseElements = allElements.filter((element): element is BarElement | GaugeElement => {
       if (element.type === BAR_TYPE) {
         return getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
       }
@@ -232,7 +235,7 @@ export function DisplaySurface({
     void Promise.all(databaseElements.map(async (item) => {
       try { return [item.id, await loadPiPointDatabaseLimits(item.properties.binding as PiPointBinding)] as const; } catch { return null; }
     })).then((results) => setDatabaseScales(Object.fromEntries(results.filter((item): item is readonly [string, PiPointDatabaseLimits] => item !== null))));
-  }, [elements, loadPiPointDatabaseLimits]);
+  }, [allElements, loadPiPointDatabaseLimits]);
   const [selectionBox, setSelectionBox] = useState<{ start: Point; current: Point } | null>(null);
   const multiSelectionRef = useRef(false);
 
@@ -246,7 +249,7 @@ export function DisplaySurface({
   }, [editable]);
 
   const calculations = useMemo(() => displayDocument.calculations ?? [], [displayDocument.calculations]);
-  const valueConsumers: ValueRuntimeConsumer[] = elements.flatMap((element) => {
+  const valueConsumers: ValueRuntimeConsumer[] = allElements.flatMap((element) => {
     if (element.type === CALCULATION_TYPE) {
       const calculation = calculations.find((item) => item.id === element.properties.calculationId);
       return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
@@ -262,7 +265,7 @@ export function DisplaySurface({
       && isPiPointBinding(element.properties.binding)
       ? [{ elementId: element.id, binding: element.properties.binding }]
       : [];
-  }).concat(elements.flatMap((element) => element.type === TABLE_TYPE
+  }).concat(allElements.flatMap((element) => element.type === TABLE_TYPE
     ? (element as TableElement).properties.items.map((item, index) => ({ elementId: getTableItemConsumerId(element.id, index), binding: item.binding }))
     : []));
   const fallbackLoader = useCallback<LoadCurrentValues>(async (bindings) => {
@@ -392,7 +395,7 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
-    onTrendContextMenu?.(element as TrendElement);
+    onTrendContextMenu?.(element as TrendElement, event);
   }, [editable, elements, onTrendContextMenu]);
 
   const handleLibrarySymbolContextMenu = useCallback((event: React.MouseEvent<SVGElement>, elementId: string) => {
@@ -405,7 +408,7 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
-    onLibrarySymbolContextMenu?.(element as LibrarySymbolElement);
+    onLibrarySymbolContextMenu?.(element as LibrarySymbolElement, event);
   }, [editable, elements, onLibrarySymbolContextMenu]);
 
   const handleElementContextMenu = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
@@ -420,7 +423,7 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
-    onElementContextMenu?.(element);
+    onElementContextMenu?.(element, event);
   }, [editable, elements, onElementContextMenu]);
 
   useEffect(() => {
@@ -774,7 +777,7 @@ export function DisplaySurface({
         <pattern id="visualization-editor-grid" width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--canvas-dot)" />
         </pattern>
-        {elements.filter((element) => element.type === LIBRARY_SYMBOL_TYPE).map((element) => {
+        {allElements.filter((element) => element.type === LIBRARY_SYMBOL_TYPE).map((element) => {
           const symbol = element as LibrarySymbolElement;
           const source = getLibrarySymbolSource(symbol);
           return (
@@ -805,195 +808,219 @@ export function DisplaySurface({
         />
       )}
 
-      {elements.map((element) => {
-        if (element.type === VALUE_TYPE && (isPiPointBinding(element.properties.binding) || typeof element.properties.calculationId === 'string')) {
-          const calculation = typeof element.properties.calculationId === 'string'
-            ? calculations.find((item) => item.id === element.properties.calculationId)
-            : undefined;
-          return (
-            <ValueElementView
-              key={element.id}
-              element={element as unknown as ValueElement}
-              runtimeState={calculation
-                ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
-                : runtimeStates.get(element.id) ?? { status: 'loading' }}
-              label={calculation?.name}
-            />
-          );
-        }
-        if (element.type === CALCULATION_TYPE) {
-          const calculation = calculations.find((item) => item.id === element.properties.calculationId);
-          if (!calculation) {
-            return null;
+      {(() => {
+        const renderSingleElement = (element: DisplayElement, parentGroupId?: string): React.ReactNode => {
+          const elementIdToUse = parentGroupId ?? element.id;
+          if (element.type === GROUP_TYPE) {
+            const group = element as GroupElement;
+            const rotation = group.properties.rotation ?? 0;
+            const children = group.properties.elements ?? [];
+            return (
+              <g
+                key={element.id}
+                data-testid={`display-element-${element.id}`}
+                data-element-id={elementIdToUse}
+                data-element-type={element.type}
+                transform={rotation ? `rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})` : undefined}
+                style={{ cursor: 'move' }}
+              >
+                <g transform={`translate(${element.x}, ${element.y})`}>
+                  {children.map((child) => renderSingleElement(child, elementIdToUse))}
+                </g>
+              </g>
+            );
           }
-          const inputStates = calculation.inputs.map((input) => runtimeStates.get(`${element.id}:${input.name}`));
-          const evaluation = evaluateCalculationFromRuntime(calculation, inputStates);
-          return <CalculationElementView key={element.id} element={element as CalculationElement} calculationName={calculation.name} evaluation={evaluation} />;
-        }
-        if (element.type === GAUGE_TYPE) {
-          const calculation = typeof element.properties.calculationId === 'string'
-            ? calculations.find((item) => item.id === element.properties.calculationId)
-            : undefined;
-          return (
-            <GaugeElementView
-              key={element.id}
-              element={element as unknown as GaugeElement}
-              runtimeState={calculation
-                ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
-                : runtimeStates.get(element.id)}
-              databaseScale={databaseScales[element.id]}
-              label={calculation?.name}
-            />
-          );
-        }
-        if (element.type === BAR_TYPE) {
-          const calculation = typeof element.properties.calculationId === 'string'
-            ? calculations.find((item) => item.id === element.properties.calculationId)
-            : undefined;
-          return (
-            <BarElementView
-              key={element.id}
-              element={element as unknown as BarElement}
-              runtimeState={calculation
-                ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
-                : runtimeStates.get(element.id)}
-              databaseScale={databaseScales[element.id]}
-              label={calculation?.name}
-            />
-          );
-        }
-        if (element.type === TABLE_TYPE) {
-          return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onColumnsChange={editable ? (columns) => onTableColumnsChange?.(element.id, columns) : undefined} />;
-        }
-        if (element.type === TREND_TYPE) {
-          const trendElement = element as unknown as TrendElement;
-          const seriesStates = getTrendSeriesStates(trendElement, allTrendRuntimeStates);
-          if (seriesStates.length === 0) {
-            return null;
+          if (element.type === VALUE_TYPE && (isPiPointBinding(element.properties.binding) || typeof element.properties.calculationId === 'string')) {
+            const calculation = typeof element.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === element.properties.calculationId)
+              : undefined;
+            return (
+              <ValueElementView
+                key={element.id}
+                element={element as unknown as ValueElement}
+                runtimeState={calculation
+                  ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+                  : runtimeStates.get(element.id) ?? { status: 'loading' }}
+                label={calculation?.name}
+              />
+            );
+          }
+          if (element.type === CALCULATION_TYPE) {
+            const calculation = calculations.find((item) => item.id === element.properties.calculationId);
+            if (!calculation) {
+              return null;
+            }
+            const inputStates = calculation.inputs.map((input) => runtimeStates.get(`${element.id}:${input.name}`));
+            const evaluation = evaluateCalculationFromRuntime(calculation, inputStates);
+            return <CalculationElementView key={element.id} element={element as CalculationElement} calculationName={calculation.name} evaluation={evaluation} />;
+          }
+          if (element.type === GAUGE_TYPE) {
+            const calculation = typeof element.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === element.properties.calculationId)
+              : undefined;
+            return (
+              <GaugeElementView
+                key={element.id}
+                element={element as unknown as GaugeElement}
+                runtimeState={calculation
+                  ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+                  : runtimeStates.get(element.id)}
+                databaseScale={databaseScales[element.id]}
+                label={calculation?.name}
+              />
+            );
+          }
+          if (element.type === BAR_TYPE) {
+            const calculation = typeof element.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === element.properties.calculationId)
+              : undefined;
+            return (
+              <BarElementView
+                key={element.id}
+                element={element as unknown as BarElement}
+                runtimeState={calculation
+                  ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+                  : runtimeStates.get(element.id)}
+                databaseScale={databaseScales[element.id]}
+                label={calculation?.name}
+              />
+            );
+          }
+          if (element.type === TABLE_TYPE) {
+            return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onColumnsChange={editable ? (columns) => onTableColumnsChange?.(element.id, columns) : undefined} />;
+          }
+          if (element.type === TREND_TYPE) {
+            const trendElement = element as unknown as TrendElement;
+            const seriesStates = getTrendSeriesStates(trendElement, allTrendRuntimeStates);
+            if (seriesStates.length === 0) {
+              return null;
+            }
+            return (
+              <TrendElementView
+                key={element.id}
+                element={trendElement}
+                seriesStates={seriesStates}
+                cursors={cursorsByTrend[element.id] ?? []}
+                cursorEnabled={cursorEnabled}
+                selectedCursorId={cursorEnabled ? selectedCursor?.cursorId ?? null : null}
+                onPlotPointerDown={cursorEnabled ? handleTrendPlotPointerDown : undefined}
+                onCursorPointerDown={cursorEnabled ? handleTrendCursorPointerDown : undefined}
+                onCursorDoubleClick={cursorEnabled ? handleTrendCursorDoubleClick : undefined}
+                onLegendWidthChange={onTrendLegendWidthChange}
+                timeRange={trendTimeRange}
+                onDoubleClick={handleTrendDoubleClick}
+                onContextMenu={handleTrendContextMenu}
+              />
+            );
+          }
+          if (element.type === RECTANGLE_TYPE) {
+            return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
+          }
+          if (element.type === TEXT_TYPE) {
+            const textElement = element as TextElement;
+            const runtimeState = runtimeStates.get(element.id);
+            const runtimeVal = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
+            const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
+            const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
+            const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
+            const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
+            const rotation = textElement.properties.rotation ?? 0;
+            const lines = (textElement.properties.text || '').split('\n');
+            const lineCount = lines.length;
+            const fontSize = textElement.properties.fontSize || 24;
+            const lineHeight = fontSize * 1.2;
+            const totalHeight = lineCount * lineHeight;
+            const startY = textElement.y + (textElement.height - totalHeight) / 2 + fontSize * 0.9;
+            return (
+              <g
+                key={element.id}
+                x={element.x}
+                y={element.y}
+                width={element.width}
+                height={element.height}
+                transform={`rotate(${rotation} ${textElement.x + textElement.width / 2} ${textElement.y + textElement.height / 2})`}
+                data-testid={`display-element-${element.id}`}
+                data-element-id={elementIdToUse}
+                data-element-type={element.type}
+                style={{ cursor: 'move' }}
+              >
+                <rect
+                  x={textElement.x}
+                  y={textElement.y}
+                  width={textElement.width}
+                  height={textElement.height}
+                  fill={bgColor}
+                  stroke="none"
+                  strokeWidth={0}
+                  data-testid={`text-background-${element.id}`}
+                  data-element-id={elementIdToUse}
+                  data-element-type={element.type}
+                  pointerEvents="all"
+                />
+                <text
+                  x={lineCount === 1 ? x : undefined}
+                  y={lineCount === 1 ? textElement.y + textElement.height / 2 : undefined}
+                  fill={textColor}
+                  fontSize={fontSize}
+                  textAnchor={anchor}
+                  dominantBaseline={lineCount === 1 ? 'middle' : undefined}
+                  pointerEvents="none"
+                >
+                  {lineCount === 1
+                    ? lines[0]
+                    : lines.map((line, idx) => (
+                      <tspan
+                        key={idx}
+                        x={x}
+                        y={startY + idx * lineHeight}
+                      >
+                        {line}
+                      </tspan>
+                    ))}
+                </text>
+              </g>
+            );
+          }
+          if (element.type === IMAGE_TYPE) {
+            const image = element as ImageElement;
+            const rotation = image.properties.rotation ?? 0;
+            return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} transform={`rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={elementIdToUse} data-element-type={element.type} style={{ cursor: 'move' }} />;
+          }
+          if (element.type === LIBRARY_SYMBOL_TYPE) {
+            const symbol = element as LibrarySymbolElement;
+            const source = getLibrarySymbolSource(symbol);
+            const runtimeState = runtimeStates.get(element.id);
+            const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
+            const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
+            return (
+              <g key={element.id} data-element-id={elementIdToUse} data-element-type={element.type} style={{ cursor: 'move' }}>
+                <g transform={`rotate(${symbol.properties.rotation ?? 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`}>
+                  <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
+                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={elementIdToUse} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
+                </g>
+              </g>
+            );
           }
           return (
-            <TrendElementView
-              key={element.id}
-              element={trendElement}
-              seriesStates={seriesStates}
-              cursors={cursorsByTrend[element.id] ?? []}
-              cursorEnabled={cursorEnabled}
-              selectedCursorId={cursorEnabled ? selectedCursor?.cursorId ?? null : null}
-              onPlotPointerDown={cursorEnabled ? handleTrendPlotPointerDown : undefined}
-              onCursorPointerDown={cursorEnabled ? handleTrendCursorPointerDown : undefined}
-              onCursorDoubleClick={cursorEnabled ? handleTrendCursorDoubleClick : undefined}
-              onLegendWidthChange={onTrendLegendWidthChange}
-              timeRange={trendTimeRange}
-              onDoubleClick={handleTrendDoubleClick}
-              onContextMenu={handleTrendContextMenu}
-            />
-          );
-        }
-        if (element.type === RECTANGLE_TYPE) {
-          return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
-        }
-        if (element.type === TEXT_TYPE) {
-          const textElement = element as TextElement;
-          const runtimeState = runtimeStates.get(element.id);
-          const runtimeVal = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
-          const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
-          const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
-          const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
-          const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
-          const rotation = textElement.properties.rotation ?? 0;
-          const lines = (textElement.properties.text || '').split('\n');
-          const lineCount = lines.length;
-          const fontSize = textElement.properties.fontSize || 24;
-          const lineHeight = fontSize * 1.2;
-          const totalHeight = lineCount * lineHeight;
-          const startY = textElement.y + (textElement.height - totalHeight) / 2 + fontSize * 0.9;
-          return (
-            <g
+            <rect
               key={element.id}
               x={element.x}
               y={element.y}
               width={element.width}
               height={element.height}
-              transform={`rotate(${rotation} ${textElement.x + textElement.width / 2} ${textElement.y + textElement.height / 2})`}
+              fill={getElementFill(element)}
+              stroke={getElementStroke(element)}
+              strokeWidth={1}
               data-testid={`display-element-${element.id}`}
-              data-element-id={element.id}
+              data-element-id={elementIdToUse}
               data-element-type={element.type}
               style={{ cursor: 'move' }}
-            >
-              <rect
-                x={textElement.x}
-                y={textElement.y}
-                width={textElement.width}
-                height={textElement.height}
-                fill={bgColor}
-                stroke="none"
-                strokeWidth={0}
-                data-testid={`text-background-${element.id}`}
-                data-element-id={element.id}
-                data-element-type={element.type}
-                pointerEvents="all"
-              />
-              <text
-                x={lineCount === 1 ? x : undefined}
-                y={lineCount === 1 ? textElement.y + textElement.height / 2 : undefined}
-                fill={textColor}
-                fontSize={fontSize}
-                textAnchor={anchor}
-                dominantBaseline={lineCount === 1 ? 'middle' : undefined}
-                pointerEvents="none"
-              >
-                {lineCount === 1
-                  ? lines[0]
-                  : lines.map((line, idx) => (
-                    <tspan
-                      key={idx}
-                      x={x}
-                      y={startY + idx * lineHeight}
-                    >
-                      {line}
-                    </tspan>
-                  ))}
-              </text>
-            </g>
+            />
           );
-        }
-        if (element.type === IMAGE_TYPE) {
-          const image = element as ImageElement;
-          const rotation = image.properties.rotation ?? 0;
-          return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} transform={`rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }} />;
-        }
-        if (element.type === LIBRARY_SYMBOL_TYPE) {
-          const symbol = element as LibrarySymbolElement;
-          const source = getLibrarySymbolSource(symbol);
-          const runtimeState = runtimeStates.get(element.id);
-          const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
-          const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
-          return (
-            <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>
-              <g transform={`rotate(${symbol.properties.rotation ?? 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`}>
-                <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
-                <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
-              </g>
-            </g>
-          );
-        }
-        return (
-          <rect
-            key={element.id}
-            x={element.x}
-            y={element.y}
-            width={element.width}
-            height={element.height}
-            fill={getElementFill(element)}
-            stroke={getElementStroke(element)}
-            strokeWidth={1}
-            data-testid={`display-element-${element.id}`}
-            data-element-id={element.id}
-            data-element-type={element.type}
-            style={{ cursor: 'move' }}
-          />
-        );
-      })}
+        };
+
+        return elements.map((element) => renderSingleElement(element));
+      })()}
 
       {selectionBox && (() => {
         const box = normalizeSelectionBox(selectionBox.start, selectionBox.current);

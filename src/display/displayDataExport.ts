@@ -4,6 +4,7 @@ import type { DisplayTimeRange } from '../time/timeRange';
 import { formatAbsoluteTime } from '../time/timeRange';
 import type { DisplayDocument } from './displayDocument';
 import { isPiPointBinding } from '../pi/piPointBinding';
+import { extractAllGroupBindingsAndElements } from './createGroup';
 import { getTrendSeries, TREND_TYPE } from './createTrend';
 import { TABLE_TYPE, type TableElement } from './createTable';
 
@@ -18,7 +19,7 @@ export function collectDisplayDataBindings(document: DisplayDocument): PiPointBi
     const key = `${binding.dataSourceUid}\u0000${binding.webId ?? ''}\u0000${binding.serverPath}\u0000${binding.pointName}`;
     if (!seen.has(key)) { seen.add(key); output.push(binding); }
   };
-  document.elements.forEach((element) => {
+  extractAllGroupBindingsAndElements(document.elements).forEach((element) => {
     if (element.type === TREND_TYPE) getTrendSeries(element).forEach((series) => add(series.binding));
     else if (element.type === TABLE_TYPE) (element as TableElement).properties.items.forEach((item) => add(item.binding));
     else add(element.properties.binding);

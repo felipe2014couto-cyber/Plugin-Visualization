@@ -1,4 +1,4 @@
-import React, { useReducer, useEffect, useRef, useCallback, useState } from 'react';
+import React, { useReducer, useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -77,6 +77,16 @@ import { appendImage, createImage, IMAGE_TYPE, updateImageProperties, type Image
 import { LibrarySymbolPropertiesPanel } from './LibrarySymbolPropertiesPanel';
 import { appendLibrarySymbol, createLibrarySymbol, updateLibrarySymbolProperties, type LibrarySymbolElement, type LibrarySymbolProperties } from '../../createLibrarySymbol';
 import { appendText, createText, TEXT_TYPE, updateTextProperties, type TextElement } from '../../createText';
+import {
+  GROUP_TYPE,
+  groupElements,
+  resizeGroup,
+  ungroupElements,
+  updateGroupProperties,
+  type GroupElement,
+  type GroupProperties,
+} from '../../createGroup';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import { TablePropertiesPanel } from './TablePropertiesPanel';
 import type { TrendCursor } from '../../runtime/trendCursor';
@@ -196,6 +206,13 @@ export function DisplayEditor({
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
   const [optionsElementId, setOptionsElementId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    elementId?: string;
+    showGroup?: boolean;
+    showUngroup?: boolean;
+  } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [surfaceZoom, setSurfaceZoom] = useState(1);
@@ -404,6 +421,16 @@ export function DisplayEditor({
         const nextFontSize = Math.max(6, Math.min(240, Math.round(originalFontSize * scale)));
         let updatedDoc = updateElementGeometry(documentRef.current, interaction.elementId, newGeometry);
         updatedDoc = updateTextProperties(updatedDoc, interaction.elementId, { fontSize: nextFontSize });
+        publishDocument(updatedDoc);
+      } else if (targetEl && targetEl.type === GROUP_TYPE) {
+        const resizedGroup = resizeGroup(
+          targetEl as GroupElement,
+          newGeometry,
+          interaction.originalGeometry,
+          interaction.originalProperties as GroupProperties | undefined,
+        );
+        let updatedDoc = updateElementGeometry(documentRef.current, interaction.elementId, newGeometry);
+        updatedDoc = updateGroupProperties(updatedDoc, interaction.elementId, resizedGroup.properties);
         publishDocument(updatedDoc);
       } else {
         publishDocument(updateElementGeometry(documentRef.current, interaction.elementId, newGeometry));
@@ -917,15 +944,116 @@ export function DisplayEditor({
   const handleLibrarySymbolChange = useCallback((patch: Partial<LibrarySymbolProperties>) => {
     commitDocument(updateLibrarySymbolProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
-  const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement) => {
+  const handleGroupSelected = useCallback(() => {
+    const selectedIds = stateRef.current.selectedElementIds;
+    if (selectedIds.length < 2) {
+      return;
+    }
+    const result = groupElements(documentRef.current, selectedIds);
+    if (result) {
+      commitDocument(result.document);
+      dispatch({ type: 'SELECT', elementId: result.group.id });
+    }
+    setContextMenu(null);
+  }, [commitDocument, dispatch]);
+
+  const handleUngroupSelected = useCallback(() => {
+    const targetId = contextMenu?.elementId ?? stateRef.current.selectedElementId;
+    if (!targetId) {
+      return;
+    }
+    const result = ungroupElements(documentRef.current, targetId);
+    if (result) {
+      commitDocument(result.document);
+      dispatch({ type: 'SELECT_MANY', elementIds: result.unpackedIds });
+    }
+    setContextMenu(null);
+  }, [commitDocument, contextMenu?.elementId, dispatch]);
+
+  const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement, event?: React.MouseEvent) => {
+    const selectedIds = stateRef.current.selectedElementIds;
+    if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
+      setContextMenu({
+        x: event?.clientX ?? 100,
+        y: event?.clientY ?? 100,
+        elementId: element.id,
+        showGroup: true,
+        showUngroup: false,
+      });
+      return;
+    }
     dispatch({ type: 'SELECT', elementId: element.id });
     setOptionsElementId(element.id);
   }, [dispatch]);
-  const handleElementContextMenu = useCallback((element: DisplayElement) => {
+
+  const handleTrendContextMenu = useCallback((element: TrendElement, event?: React.MouseEvent) => {
+    const selectedIds = stateRef.current.selectedElementIds;
+    if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
+      setContextMenu({
+        x: event?.clientX ?? 100,
+        y: event?.clientY ?? 100,
+        elementId: element.id,
+        showGroup: true,
+        showUngroup: false,
+      });
+      return;
+    }
+    dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(null);
+    setOptionsTrendId(element.id);
+  }, [dispatch]);
+
+  const handleElementContextMenu = useCallback((element: DisplayElement, event?: React.MouseEvent) => {
+    const selectedIds = stateRef.current.selectedElementIds;
+    if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
+      setContextMenu({
+        x: event?.clientX ?? 100,
+        y: event?.clientY ?? 100,
+        elementId: element.id,
+        showGroup: true,
+        showUngroup: false,
+      });
+      return;
+    }
+    if (element.type === GROUP_TYPE) {
+      dispatch({ type: 'SELECT', elementId: element.id });
+      setContextMenu({
+        x: event?.clientX ?? 100,
+        y: event?.clientY ?? 100,
+        elementId: element.id,
+        showGroup: false,
+        showUngroup: true,
+      });
+      return;
+    }
     dispatch({ type: 'SELECT', elementId: element.id });
     setOptionsElementId(element.id);
     setOptionsTrendId(null);
   }, [dispatch]);
+
+  const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
+    if (!contextMenu) {
+      return [];
+    }
+    const items: ContextMenuItem[] = [];
+    if (contextMenu.showGroup) {
+      items.push({
+        id: 'group',
+        label: 'Agrupar Símbolos',
+        testId: 'context-menu-group',
+        onClick: handleGroupSelected,
+      });
+    }
+    if (contextMenu.showUngroup) {
+      items.push({
+        id: 'ungroup',
+        label: 'Desagrupar Símbolos',
+        testId: 'context-menu-ungroup',
+        onClick: handleUngroupSelected,
+      });
+    }
+    return items;
+  }, [contextMenu, handleGroupSelected, handleUngroupSelected]);
   const optionsTrend = optionsTrendId
     ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
     : undefined;
@@ -1264,11 +1392,7 @@ export function DisplayEditor({
             trendRefreshKey={trendRefreshKey}
             trendTimeRange={trendTimeRange}
             onTrendOpen={handleTrendOpen}
-            onTrendContextMenu={(trend) => {
-              dispatch({ type: 'SELECT', elementId: trend.id });
-              setOptionsElementId(null);
-              setOptionsTrendId(trend.id);
-            }}
+            onTrendContextMenu={handleTrendContextMenu}
             onElementContextMenu={handleElementContextMenu}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
             onTableColumnsChange={handleTableColumnsChange}
@@ -1391,6 +1515,14 @@ export function DisplayEditor({
           onTimeSelectionChange={onTimeSelectionChange}
           loading={trendPopup.loading}
           onClose={handleTrendPopupClose}
+        />
+      )}
+      {contextMenu && contextMenuItems.length > 0 && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenuItems}
+          onClose={() => setContextMenu(null)}
         />
       )}
     </div>
