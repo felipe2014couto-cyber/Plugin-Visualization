@@ -101,21 +101,20 @@ export function getGaugeOptions(properties: Partial<GaugeProperties>): GaugeVisu
   return normalizeGaugeOptions(properties);
 }
 
+import { updateElementInDocument } from './createGroup';
+
 export function updateGaugeOptions(
   document: DisplayDocument,
   elementId: string,
   patch: Partial<GaugeVisualOptions>,
 ): DisplayDocument {
-  let changed = false;
-  const elements = document.elements.map((element) => {
-    if (element.id !== elementId || element.type !== GAUGE_TYPE) {
+  return updateElementInDocument(document, elementId, (element) => {
+    if (element.type !== GAUGE_TYPE) {
       return element;
     }
-    changed = true;
     const properties = element.properties as Partial<GaugeProperties>;
     return { ...element, properties: { ...properties, ...normalizeGaugeOptions({ ...properties, ...patch }) } } as GaugeElement;
   });
-  return changed ? { ...document, elements } : document;
 }
 
 export { DEFAULT_SCALE_OPTIONS };

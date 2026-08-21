@@ -32,7 +32,7 @@ import { TEXT_TYPE, type TextElement } from '../../createText';
 import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
-import { extractAllGroupBindingsAndElements, findTopLevelElementId, GROUP_TYPE, type GroupElement } from '../../createGroup';
+import { extractAllGroupBindingsAndElements, findTopLevelElementId, getElementAbsoluteGeometry, GROUP_TYPE, type GroupElement } from '../../createGroup';
 import { isElementLocked } from '../../createLocked';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../../../library';
 import {
@@ -239,7 +239,12 @@ export function DisplaySurface({
       try { return [item.id, await loadPiPointDatabaseLimits(item.properties.binding as PiPointBinding)] as const; } catch { return null; }
     })).then((results) => setDatabaseScales(Object.fromEntries(results.filter((item): item is readonly [string, PiPointDatabaseLimits] => item !== null))));
   }, [allElements, loadPiPointDatabaseLimits]);
-  const [selectionBox, setSelectionBox] = useState<{ start: Point; current: Point } | null>(null);
+  const [selectionBox, setSelectionBoxState] = useState<{ start: Point; current: Point } | null>(null);
+  const selectionBoxRef = useRef<{ start: Point; current: Point } | null>(null);
+  const setSelectionBox = useCallback((box: { start: Point; current: Point } | null) => {
+    selectionBoxRef.current = box;
+    setSelectionBoxState(box);
+  }, []);
   const multiSelectionRef = useRef(false);
 
   useEffect(() => {
@@ -561,6 +566,25 @@ export function DisplaySurface({
   const selectedElement = selectedElementId
     ? getElementById(displayDocument, selectedElementId) ?? null
     : null;
+  const selectedElementGeom = selectedElement
+    ? (getElementAbsoluteGeometry(elements, selectedElement.id) ?? selectedElement)
+    : null;
+
+  const handleSvgDoubleClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!editable) {
+      return;
+    }
+    const target = e.target as Element;
+    const rawId = target.getAttribute('data-element-id')
+      ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
+    if (!rawId) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    onSelect(rawId);
+  }, [editable, onSelect]);
+
   const handleElementClick = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
     if (editable) {
       return;
@@ -626,7 +650,7 @@ export function DisplaySurface({
         ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
       const handleAttr = target.getAttribute('data-resize-handle');
       const elementId = handleAttr ? rawId : (rawId ? (findTopLevelElementId(elements, rawId) ?? rawId) : undefined);
-      const clickedEl = elementId ? elements.find((el) => el.id === elementId) : undefined;
+      const clickedEl = elementId ? getElementById(displayDocument, elementId) : undefined;
       const isLocked = isElementLocked(clickedEl);
 
       if (e.button === 2) {
@@ -676,10 +700,11 @@ export function DisplaySurface({
       } else {
         onSelect(null);
         const point = svgPointFromEvent(svg, e.clientX, e.clientY);
-        setSelectionBox({ start: point, current: point });
+        selectionBoxRef.current = { start: point, current: point };
+        setSelectionBox(selectionBoxRef.current);
       }
     },
-    [editable, onSelect, onSelectMany, onStartDrag, onStartResize, selectedElementIds],
+    [displayDocument, editable, elements, onSelect, onSelectMany, onStartDrag, onStartResize, selectedElementIds, setSelectionBox],
   );
 
   const handleSvgPointerMove = useCallback(
@@ -719,9 +744,10 @@ export function DisplaySurface({
       if (!editable) {
         return;
       }
-      if (selectionBox) {
+      if (selectionBoxRef.current) {
         const point = svgPointFromEvent(svg, e.clientX, e.clientY);
-        setSelectionBox((current) => current ? { ...current, current: point } : current);
+        selectionBoxRef.current = { ...selectionBoxRef.current, current: point };
+        setSelectionBox(selectionBoxRef.current);
         return;
       }
       if (!hasPointerCapture(svg, e.pointerId)) {
@@ -729,7 +755,7 @@ export function DisplaySurface({
       }
       onPointerMove(svgPointFromEvent(svg, e.clientX, e.clientY));
     },
-    [allTrendRuntimeStates, cursorDrag, editable, elements, onPointerMove, selectionBox, trendTimeRange],
+    [allElements, allTrendRuntimeStates, cursorDrag, cursorsByTrend, editable, onPointerMove, setSelectionBox, trendTimeRange],
   );
 
   const handleSvgPointerEnd = useCallback(
@@ -748,8 +774,8 @@ export function DisplaySurface({
       if (!editable) {
         return;
       }
-      if (selectionBox) {
-        const box = normalizeSelectionBox(selectionBox.start, selectionBox.current);
+      if (selectionBoxRef.current) {
+        const box = normalizeSelectionBox(selectionBoxRef.current.start, selectionBoxRef.current.current);
         if (box.width > 2 || box.height > 2) {
           const ids = elements.filter((element) => intersectsSelection(element, box)).map((element) => element.id);
           onSelectMany(ids);
@@ -758,6 +784,7 @@ export function DisplaySurface({
           onSelect(null);
           multiSelectionRef.current = false;
         }
+        selectionBoxRef.current = null;
         setSelectionBox(null);
         tryReleasePointerCapture(svg, e.pointerId);
         return;
@@ -765,7 +792,7 @@ export function DisplaySurface({
       tryReleasePointerCapture(svg, e.pointerId);
       onPointerEnd();
     },
-    [cursorDrag, editable, elements, onPointerEnd, onSelect, onSelectMany, selectionBox],
+    [cursorDrag, editable, elements, onPointerEnd, onSelect, onSelectMany, setSelectionBox],
   );
 
   const handleSurfaceKeyDown = useCallback((event: React.KeyboardEvent<SVGSVGElement>) => {
@@ -777,12 +804,12 @@ export function DisplaySurface({
     removeTrendCursor(selectedCursor.cursorId);
   }, [editable, removeTrendCursor, selectedCursor]);
 
-  const handlePositions = selectedElement
+  const handlePositions = selectedElementGeom
     ? getResizeHandlePositions({
-        x: selectedElement.x,
-        y: selectedElement.y,
-        width: selectedElement.width,
-        height: selectedElement.height,
+        x: selectedElementGeom.x,
+        y: selectedElementGeom.y,
+        width: selectedElementGeom.width,
+        height: selectedElementGeom.height,
       })
     : [];
   const viewportWidth = surface.width / zoom;
@@ -793,6 +820,7 @@ export function DisplaySurface({
   return (
     <svg
       onClick={handleElementClick}
+      onDoubleClick={handleSvgDoubleClick}
       onContextMenu={handleElementContextMenu}
       ref={svgRef}
       width={surface.width}
@@ -849,8 +877,7 @@ export function DisplaySurface({
       )}
 
       {(() => {
-        const renderSingleElement = (element: DisplayElement, parentGroupId?: string): React.ReactNode => {
-          const elementIdToUse = parentGroupId ?? element.id;
+        const renderSingleElement = (element: DisplayElement): React.ReactNode => {
           if (element.type === GROUP_TYPE) {
             const group = element as GroupElement;
             const rotation = group.properties.rotation ?? 0;
@@ -859,13 +886,13 @@ export function DisplaySurface({
               <g
                 key={element.id}
                 data-testid={`display-element-${element.id}`}
-                data-element-id={elementIdToUse}
+                data-element-id={element.id}
                 data-element-type={element.type}
                 transform={rotation ? `rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})` : undefined}
                 style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}
               >
                 <g transform={`translate(${element.x}, ${element.y})`}>
-                  {children.map((child) => renderSingleElement(child, elementIdToUse))}
+                  {children.map((child) => renderSingleElement(child))}
                 </g>
               </g>
             );
@@ -957,7 +984,7 @@ export function DisplaySurface({
             );
           }
           if (element.type === RECTANGLE_TYPE) {
-            return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id), elementIdToUse);
+            return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
           }
           if (element.type === TEXT_TYPE) {
             const textElement = element as TextElement;
@@ -977,13 +1004,13 @@ export function DisplaySurface({
             return (
               <g
                 key={element.id}
-                x={element.x}
-                y={element.y}
-                width={element.width}
-                height={element.height}
+                x={textElement.x}
+                y={textElement.y}
+                width={textElement.width}
+                height={textElement.height}
                 transform={`rotate(${rotation} ${textElement.x + textElement.width / 2} ${textElement.y + textElement.height / 2})`}
                 data-testid={`display-element-${element.id}`}
-                data-element-id={elementIdToUse}
+                data-element-id={element.id}
                 data-element-type={element.type}
                 style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}
               >
@@ -996,7 +1023,7 @@ export function DisplaySurface({
                   stroke="none"
                   strokeWidth={0}
                   data-testid={`text-background-${element.id}`}
-                  data-element-id={elementIdToUse}
+                  data-element-id={element.id}
                   data-element-type={element.type}
                   pointerEvents="all"
                 />
@@ -1027,7 +1054,7 @@ export function DisplaySurface({
           if (element.type === IMAGE_TYPE) {
             const image = element as ImageElement;
             const rotation = image.properties.rotation ?? 0;
-            return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} transform={`rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={elementIdToUse} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }} />;
+            return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} transform={`rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }} />;
           }
           if (element.type === LIBRARY_SYMBOL_TYPE) {
             const symbol = element as LibrarySymbolElement;
@@ -1036,10 +1063,10 @@ export function DisplaySurface({
             const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
             const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
             return (
-              <g key={element.id} data-element-id={elementIdToUse} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}>
+              <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}>
                 <g transform={`rotate(${symbol.properties.rotation ?? 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`}>
                   <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
-                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={elementIdToUse} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
+                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
                 </g>
               </g>
             );
@@ -1055,7 +1082,7 @@ export function DisplaySurface({
               stroke={getElementStroke(element)}
               strokeWidth={1}
               data-testid={`display-element-${element.id}`}
-              data-element-id={elementIdToUse}
+              data-element-id={element.id}
               data-element-type={element.type}
               style={{ cursor: 'move' }}
             />
@@ -1070,19 +1097,20 @@ export function DisplaySurface({
         return <rect x={box.x} y={box.y} width={box.width} height={box.height} fill="rgba(110, 159, 255, 0.12)" stroke={SELECTION_STROKE} strokeDasharray="4 2" data-testid="display-selection-box" pointerEvents="none" />;
       })()}
       {selectedElementIds.filter((id) => id !== selectedElement?.id).map((id) => {
-        const element = elements.find((candidate) => candidate.id === id);
+        const element = getElementById(displayDocument, id);
         if (!element) {
           return null;
         }
         const isLocked = isElementLocked(element);
-        const positions = getResizeHandlePositions(element);
+        const geom = getElementAbsoluteGeometry(elements, id) ?? element;
+        const positions = getResizeHandlePositions(geom);
         return (
           <g key={id} data-testid={`display-selection-overlay-${id}`}>
             <rect
-              x={element.x - 1}
-              y={element.y - 1}
-              width={element.width + 2}
-              height={element.height + 2}
+              x={geom.x - 1}
+              y={geom.y - 1}
+              width={geom.width + 2}
+              height={geom.height + 2}
               fill="none"
               stroke={isLocked ? '#f5a623' : SELECTION_STROKE}
               strokeWidth={1}
@@ -1099,13 +1127,14 @@ export function DisplaySurface({
       })}
       {selectedElement && (() => {
         const isLocked = isElementLocked(selectedElement);
+        const geom = selectedElementGeom ?? selectedElement;
         return (
           <g data-testid="display-selection-overlay">
             <rect
-              x={selectedElement.x - 1}
-              y={selectedElement.y - 1}
-              width={selectedElement.width + 2}
-              height={selectedElement.height + 2}
+              x={geom.x - 1}
+              y={geom.y - 1}
+              width={geom.width + 2}
+              height={geom.height + 2}
               fill="none"
               stroke={isLocked ? '#f5a623' : SELECTION_STROKE}
               strokeWidth={1}

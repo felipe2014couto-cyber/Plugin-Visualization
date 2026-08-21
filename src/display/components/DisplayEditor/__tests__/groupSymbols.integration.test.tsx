@@ -218,4 +218,24 @@ describe('DisplayEditor - Group Symbols (Agrupar Símbolos)', () => {
       );
     });
   });
+
+  it('seleciona apenas o elemento filho e abre suas propriedades ao clicar duas vezes nele dentro do grupo', async () => {
+    const doc = createDisplayDocument({ name: 'Test Group Double Click' });
+    const r1 = createRectangle({ id: 'r1', x: 50, y: 50, width: 100, height: 60 });
+    const t1 = createText({ id: 't1', x: 200, y: 100, width: 80, height: 40, properties: { text: 'Meu Texto' } });
+    const grouped = groupElements({ ...doc, elements: [r1, t1] }, ['r1', 't1']);
+    if (!grouped) throw new Error('Grouping failed');
+
+    render(<Harness initialDoc={grouped.document} />);
+
+    const childT1 = screen.getByTestId('text-background-t1');
+
+    // Double click on child text element inside group
+    act(() => {
+      fireEvent.doubleClick(childT1);
+    });
+
+    // Properties panel for text element should open
+    expect(screen.getByTestId('text-properties-panel')).toBeInTheDocument();
+  });
 });

@@ -151,21 +151,21 @@ export function getValueVisualOptions(properties: Partial<ValueProperties>): Val
   return normalizeValueVisualOptions(properties.visual);
 }
 
+import { updateElementInDocument } from './createGroup';
+
 export function updateValueVisualOptions(
   document: DisplayDocument,
   elementId: string,
   patch: Partial<ValueVisualOptions>,
 ): DisplayDocument {
-  let changed = false;
-  const elements = document.elements.map((element) => {
-    if (element.id !== elementId || element.type !== VALUE_TYPE) {
+  return updateElementInDocument(document, elementId, (element) => {
+    if (element.type !== VALUE_TYPE) {
       return element;
     }
     const properties = element.properties as Partial<ValueProperties>;
     if (!isPiPointBinding(properties.binding)) {
       return element;
     }
-    changed = true;
     return {
       ...element,
       properties: {
@@ -175,8 +175,6 @@ export function updateValueVisualOptions(
       },
     } as ValueElement;
   });
-
-  return changed ? { ...document, elements } : document;
 }
 
 function isValidColor(color: string): boolean {

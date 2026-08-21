@@ -309,3 +309,75 @@ function containsElementId(elements: readonly DisplayElement[], id: string): boo
   }
   return false;
 }
+
+export function updateElementInDocument(
+  document: DisplayDocument,
+  elementId: string,
+  updater: (element: DisplayElement) => DisplayElement,
+): DisplayDocument {
+  let changed = false;
+  const updateList = (list: readonly DisplayElement[]): DisplayElement[] => {
+    return list.map((item) => {
+      if (item.id === elementId) {
+        changed = true;
+        return updater(item);
+      }
+      if (item.type === GROUP_TYPE && Array.isArray((item.properties as { elements?: DisplayElement[] }).elements)) {
+        const children = (item.properties as { elements: DisplayElement[] }).elements;
+        const nextChildren = updateList(children);
+        if (nextChildren !== children) {
+          return {
+            ...item,
+            properties: {
+              ...item.properties,
+              elements: nextChildren,
+            },
+          };
+        }
+      }
+      return item;
+    });
+  };
+  const elements = updateList(document.elements);
+  return changed ? { ...document, elements } : document;
+}
+
+export function getElementAbsoluteGeometry(
+  elements: readonly DisplayElement[],
+  elementId: string,
+): { x: number; y: number; width: number; height: number } | undefined {
+  for (const el of elements) {
+    if (el.id === elementId) {
+      return { x: el.x, y: el.y, width: el.width, height: el.height };
+    }
+    if (el.type === GROUP_TYPE && Array.isArray((el.properties as { elements?: DisplayElement[] }).elements)) {
+      const children = (el.properties as { elements: DisplayElement[] }).elements;
+      const childGeom = getChildAbsoluteGeometry(children, elementId, el.x, el.y);
+      if (childGeom) {
+        return childGeom;
+      }
+    }
+  }
+  return undefined;
+}
+
+function getChildAbsoluteGeometry(
+  elements: readonly DisplayElement[],
+  elementId: string,
+  parentX: number,
+  parentY: number,
+): { x: number; y: number; width: number; height: number } | undefined {
+  for (const el of elements) {
+    if (el.id === elementId) {
+      return { x: parentX + el.x, y: parentY + el.y, width: el.width, height: el.height };
+    }
+    if (el.type === GROUP_TYPE && Array.isArray((el.properties as { elements?: DisplayElement[] }).elements)) {
+      const children = (el.properties as { elements: DisplayElement[] }).elements;
+      const childGeom = getChildAbsoluteGeometry(children, elementId, parentX + el.x, parentY + el.y);
+      if (childGeom) {
+        return childGeom;
+      }
+    }
+  }
+  return undefined;
+}

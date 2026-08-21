@@ -76,17 +76,17 @@ export function appendLibrarySymbol(document: DisplayDocument, element: LibraryS
   return { ...document, elements: [...document.elements, element] };
 }
 
+import { updateElementInDocument } from './createGroup';
+
 export function updateLibrarySymbolProperties(
   document: DisplayDocument,
   elementId: string,
   patch: Partial<LibrarySymbolProperties>,
 ): DisplayDocument {
-  let changed = false;
-  const elements = document.elements.map((element) => {
-    if (element.id !== elementId || element.type !== LIBRARY_SYMBOL_TYPE) {
+  return updateElementInDocument(document, elementId, (element) => {
+    if (element.type !== LIBRARY_SYMBOL_TYPE) {
       return element;
     }
-    changed = true;
     const properties = element.properties as Partial<LibrarySymbolProperties>;
     return {
       ...element,
@@ -98,7 +98,6 @@ export function updateLibrarySymbolProperties(
       },
     } as LibrarySymbolElement;
   });
-  return changed ? { ...document, elements } : document;
 }
 
 export function getLibrarySymbolColor(properties: Partial<LibrarySymbolProperties>): string {

@@ -283,7 +283,7 @@ export function DisplayEditor({
 
   const reconcileSelection = useCallback((nextDocument: DisplayDocument) => {
     const selectedId = stateRef.current.selectedElementId;
-    if (selectedId && !nextDocument.elements.some((element) => element.id === selectedId)) {
+    if (selectedId && !getElementById(nextDocument, selectedId)) {
       dispatch({ type: 'CLEAR_SELECTION' });
     }
   }, [dispatch]);
@@ -326,7 +326,7 @@ export function DisplayEditor({
     (elementId: string | null) => {
       dispatch({ type: 'SELECT', elementId });
       setOptionsElementId(elementId);
-      const element = elementId ? documentRef.current.elements.find((item) => item.id === elementId) : undefined;
+      const element = elementId ? getElementById(documentRef.current, elementId) : undefined;
       const calculationId = element && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
         ? (element.properties as { calculationId: string }).calculationId
         : element?.type === 'calculation' && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
@@ -867,12 +867,12 @@ export function DisplayEditor({
   }, [dispatch, publishDocument]);
 
   const propertiesOpen = mode === 'edit' && Boolean(state.selectedElementId);
-  const selectedValue = propertiesOpen && state.selectedElementId
-    ? displayDocument.elements.find((element) => (
-      element.id === state.selectedElementId
-      && element.type === VALUE_TYPE
-      && isPiPointBinding(element.properties.binding)
-    )) as ValueElement | undefined
+  const selectedElement = propertiesOpen && state.selectedElementId
+    ? getElementById(displayDocument, state.selectedElementId)
+    : undefined;
+
+  const selectedValue = selectedElement && selectedElement.type === VALUE_TYPE && isPiPointBinding(selectedElement.properties.binding)
+    ? selectedElement as ValueElement
     : undefined;
 
   const handleValueVisualChange = useCallback((patch: Partial<ValueVisualOptions>) => {
@@ -899,52 +899,52 @@ export function DisplayEditor({
     commitDocument(updateBackgroundMultistateConfig(documentRef.current, selectedId, config));
   }, [commitDocument]);
 
-  const selectedGauge = propertiesOpen && state.selectedElementId
-    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === GAUGE_TYPE) as GaugeElement | undefined
+  const selectedGauge = selectedElement && selectedElement.type === GAUGE_TYPE
+    ? selectedElement as GaugeElement
     : undefined;
-  const selectedBar = propertiesOpen && state.selectedElementId
-    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === BAR_TYPE) as BarElement | undefined
+  const selectedBar = selectedElement && selectedElement.type === BAR_TYPE
+    ? selectedElement as BarElement
     : undefined;
-  const selectedTable = propertiesOpen && state.selectedElementId
-    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TABLE_TYPE) as TableElement | undefined
+  const selectedTable = selectedElement && selectedElement.type === TABLE_TYPE
+    ? selectedElement as TableElement
     : undefined;
-  const selectedSqlTable = propertiesOpen && state.selectedElementId
-    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === SQL_TABLE_TYPE) as SqlTableElement | undefined
+  const selectedSqlTable = selectedElement && selectedElement.type === SQL_TABLE_TYPE
+    ? selectedElement as SqlTableElement
     : undefined;
-  const selectedRectangle = propertiesOpen && state.selectedElementId
-    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === RECTANGLE_TYPE) as RectangleElement | undefined
+  const selectedRectangle = selectedElement && selectedElement.type === RECTANGLE_TYPE
+    ? selectedElement as RectangleElement
     : undefined;
 
   const handleTableChange = useCallback((patch: Partial<TableElement['properties']>) => {
     if (!stateRef.current.selectedElementId) return;
-    commitDocument({
-      ...documentRef.current,
-      elements: documentRef.current.elements.map(e => e.id === stateRef.current.selectedElementId ? { ...e, properties: { ...e.properties, ...patch } } : e)
-    });
+    commitDocument(updateElementInDocument(documentRef.current, stateRef.current.selectedElementId, (e) => ({
+      ...e,
+      properties: { ...e.properties, ...patch },
+    })));
   }, [commitDocument]);
 
   const handleSqlTableChange = useCallback((patch: Partial<SqlTableElement['properties']>) => {
     if (!stateRef.current.selectedElementId) return;
-    commitDocument({
-      ...documentRef.current,
-      elements: documentRef.current.elements.map(e => e.id === stateRef.current.selectedElementId ? { ...e, properties: { ...e.properties, ...patch } } : e)
-    });
+    commitDocument(updateElementInDocument(documentRef.current, stateRef.current.selectedElementId, (e) => ({
+      ...e,
+      properties: { ...e.properties, ...patch },
+    })));
   }, [commitDocument]);
   
   const handleTableColumnsChange = useCallback((elementId: string, columns: TableColumnConfig[]) => {
     commitDocument(updateTableProperties(documentRef.current, elementId, { columns }));
   }, [commitDocument]);
-  const selectedText = propertiesOpen && state.selectedElementId
-    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TEXT_TYPE) as TextElement | undefined
+  const selectedText = selectedElement && selectedElement.type === TEXT_TYPE
+    ? selectedElement as TextElement
     : undefined;
-  const selectedImage = propertiesOpen && state.selectedElementId
-    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === IMAGE_TYPE) as ImageElement | undefined
+  const selectedImage = selectedElement && selectedElement.type === IMAGE_TYPE
+    ? selectedElement as ImageElement
     : undefined;
-  const selectedLibrarySymbol = propertiesOpen && state.selectedElementId
-    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === 'library-symbol') as LibrarySymbolElement | undefined
-      : undefined;
+  const selectedLibrarySymbol = selectedElement && selectedElement.type === 'library-symbol'
+    ? selectedElement as LibrarySymbolElement
+    : undefined;
   const selectedTrend = mode === 'edit' && state.selectedElementId
-    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TREND_TYPE) as TrendElement | undefined
+    ? (selectedElement && selectedElement.type === TREND_TYPE ? selectedElement as TrendElement : undefined)
     : undefined;
   const handleAddPiPointToSelectedTrend = useCallback(() => {
     if (!selectedTrend || !selectedPiPoint) return;
@@ -970,12 +970,18 @@ export function DisplayEditor({
   const handleLinkChange = useCallback((linkUrl: string) => {
     const selectedId = stateRef.current.selectedElementId;
     if (!selectedId) return;
-    commitDocument({ ...documentRef.current, elements: documentRef.current.elements.map((element) => element.id === selectedId ? { ...element, properties: { ...element.properties, linkUrl: linkUrl.trim() || undefined } } : element) });
+    commitDocument(updateElementInDocument(documentRef.current, selectedId, (element) => ({
+      ...element,
+      properties: { ...element.properties, linkUrl: linkUrl.trim() || undefined },
+    })));
   }, [commitDocument]);
   const handleLinkOpenInNewTabChange = useCallback((openInNewTab: boolean) => {
     const selectedId = stateRef.current.selectedElementId;
     if (!selectedId) return;
-    commitDocument({ ...documentRef.current, elements: documentRef.current.elements.map((element) => element.id === selectedId ? { ...element, properties: { ...element.properties, openInNewTab } } : element) });
+    commitDocument(updateElementInDocument(documentRef.current, selectedId, (element) => ({
+      ...element,
+      properties: { ...element.properties, openInNewTab },
+    })));
   }, [commitDocument]);
   const handleLibrarySymbolChange = useCallback((patch: Partial<LibrarySymbolProperties>) => {
     commitDocument(updateLibrarySymbolProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
@@ -1266,10 +1272,10 @@ export function DisplayEditor({
   }, [handleCopySelectedElements, handleDeleteSelectedElement, handlePasteElements, handleRedo, handleUndo, mode]);
 
   useEffect(() => {
-    if (state.selectedElementId && !displayDocument.elements.some((element) => element.id === state.selectedElementId)) {
+    if (state.selectedElementId && !getElementById(displayDocument, state.selectedElementId)) {
       dispatch({ type: 'CLEAR_SELECTION' });
     }
-  }, [dispatch, displayDocument.elements, state.selectedElementId]);
+  }, [dispatch, displayDocument, state.selectedElementId]);
 
   const handleTrendOpen = useCallback((element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors: readonly TrendCursor[] = []) => {
     const requestId = trendPopupRequest.current + 1;

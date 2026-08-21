@@ -1,6 +1,8 @@
 import type { DisplayDocument } from '../../displayDocument';
 import type { DisplayElement } from '../../displayElement';
 
+import { GROUP_TYPE, updateElementInDocument } from '../../createGroup';
+
 export interface Point {
   x: number;
   y: number;
@@ -19,7 +21,22 @@ export function getElementById(
   document: DisplayDocument,
   elementId: string,
 ): DisplayElement | undefined {
-  return document.elements.find((el) => el.id === elementId);
+  return findElementInList(document.elements, elementId);
+}
+
+function findElementInList(elements: readonly DisplayElement[], elementId: string): DisplayElement | undefined {
+  for (const el of elements) {
+    if (el.id === elementId) {
+      return el;
+    }
+    if (el.type === GROUP_TYPE && Array.isArray((el.properties as { elements?: DisplayElement[] }).elements)) {
+      const found = findElementInList((el.properties as { elements: DisplayElement[] }).elements, elementId);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return undefined;
 }
 
 export function updateElementGeometry(
@@ -27,12 +44,7 @@ export function updateElementGeometry(
   elementId: string,
   geometry: Partial<ElementGeometry>,
 ): DisplayDocument {
-  return {
-    ...document,
-    elements: document.elements.map((el) =>
-      el.id === elementId ? { ...el, ...geometry } : el,
-    ),
-  };
+  return updateElementInDocument(document, elementId, (el) => ({ ...el, ...geometry }));
 }
 
 export function clampSize(value: number): number {

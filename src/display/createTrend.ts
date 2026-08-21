@@ -209,6 +209,8 @@ export function removeTrendSeries(document: DisplayDocument, elementId: string, 
   });
 }
 
+import { updateElementInDocument } from './createGroup';
+
 export function addTrendSeries(
   document: DisplayDocument,
   elementId: string,
@@ -217,29 +219,23 @@ export function addTrendSeries(
   if (!isPiPointBinding(binding)) {
     return document;
   }
-  const elementIndex = document.elements.findIndex((element) => element.id === elementId && element.type === TREND_TYPE);
-  if (elementIndex < 0) {
-    return document;
-  }
-  const element = document.elements[elementIndex] as TrendElement;
-  const series = getTrendSeries(element);
-  const bindingKey = trendBindingKey(binding);
-  if (series.some((item) => trendBindingKey(item.binding) === bindingKey)) {
-    return document;
-  }
-  const currentProperties = { ...element.properties };
-  delete currentProperties.binding;
-  const nextElement: TrendElement = {
-    ...element,
-    properties: {
-      ...currentProperties,
-      visual: { ...getTrendVisualOptions(element), scaleMode: 'single' },
-      series: [...series, { binding: { ...binding }, color: trendSeriesColor(series.length) }],
-    },
-  };
-  const elements = [...document.elements];
-  elements[elementIndex] = nextElement;
-  return { ...document, elements };
+  return updateTrendElement(document, elementId, (element) => {
+    const series = getTrendSeries(element);
+    const bindingKey = trendBindingKey(binding);
+    if (series.some((item) => trendBindingKey(item.binding) === bindingKey)) {
+      return element;
+    }
+    const currentProperties = { ...element.properties };
+    delete currentProperties.binding;
+    return {
+      ...element,
+      properties: {
+        ...currentProperties,
+        visual: { ...getTrendVisualOptions(element), scaleMode: 'single' },
+        series: [...series, { binding: { ...binding }, color: trendSeriesColor(series.length) }],
+      },
+    };
+  });
 }
 
 export function addCalculationTrendSeries(
@@ -248,33 +244,30 @@ export function addCalculationTrendSeries(
   calculationId: string,
   calculationName?: string,
 ): DisplayDocument {
-  const elementIndex = document.elements.findIndex((element) => element.id === elementId && element.type === TREND_TYPE);
-  if (elementIndex < 0 || !calculationId.trim()) {
+  if (!calculationId.trim()) {
     return document;
   }
-  const element = document.elements[elementIndex] as TrendElement;
-  const series = getTrendSeries(element);
-  if (series.some((item) => item.calculationId === calculationId)) {
-    return document;
-  }
-  const currentProperties = { ...element.properties };
-  delete currentProperties.binding;
-  const nextElement: TrendElement = {
-    ...element,
-    properties: {
-      ...currentProperties,
-      visual: { ...getTrendVisualOptions(element), scaleMode: 'single' },
-      series: [...series, {
-        binding: createCalculationTrendBinding(calculationId),
-        calculationId,
-        ...(calculationName ? { legendLabel: calculationName } : {}),
-        color: trendSeriesColor(series.length),
-      }],
-    },
-  };
-  const elements = [...document.elements];
-  elements[elementIndex] = nextElement;
-  return { ...document, elements };
+  return updateTrendElement(document, elementId, (element) => {
+    const series = getTrendSeries(element);
+    if (series.some((item) => item.calculationId === calculationId)) {
+      return element;
+    }
+    const currentProperties = { ...element.properties };
+    delete currentProperties.binding;
+    return {
+      ...element,
+      properties: {
+        ...currentProperties,
+        visual: { ...getTrendVisualOptions(element), scaleMode: 'single' },
+        series: [...series, {
+          binding: createCalculationTrendBinding(calculationId),
+          calculationId,
+          ...(calculationName ? { legendLabel: calculationName } : {}),
+          color: trendSeriesColor(series.length),
+        }],
+      },
+    };
+  });
 }
 
 export function trendBindingKey(binding: PiPointBinding): string {
@@ -301,11 +294,8 @@ function deduplicateTrendSeries(series: readonly TrendSeries[]): TrendSeries[] {
 }
 
 function updateTrendElement(document: DisplayDocument, elementId: string, update: (element: TrendElement) => TrendElement): DisplayDocument {
-  const index = document.elements.findIndex((element) => element.id === elementId && element.type === TREND_TYPE);
-  if (index < 0) {
-    return document;
-  }
-  const elements = [...document.elements];
-  elements[index] = update(elements[index] as TrendElement);
-  return { ...document, elements };
+  return updateElementInDocument(document, elementId, (element) => {
+    if (element.type !== TREND_TYPE) return element;
+    return update(element as TrendElement);
+  });
 }

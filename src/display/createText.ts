@@ -67,12 +67,21 @@ export function createText(options: CreateTextOptions = {}): TextElement {
   };
 }
 
+import { updateElementInDocument } from './createGroup';
+
 export function appendText(document: DisplayDocument, element: TextElement): DisplayDocument { return { ...document, elements: [...document.elements, element] }; }
 export function updateTextProperties(document: DisplayDocument, elementId: string, patch: Partial<TextProperties>): DisplayDocument {
-  let changed = false;
-  const elements = document.elements.map((element) => element.id === elementId && element.type === TEXT_TYPE
-    ? (changed = true, { ...element, properties: { ...DEFAULT_TEXT_PROPERTIES, ...element.properties, ...patch, rotation: normalizeRotation({ ...element.properties, ...patch }.rotation) } } as TextElement)
-    : element);
-  return changed ? { ...document, elements } : document;
+  return updateElementInDocument(document, elementId, (element) => {
+    if (element.type !== TEXT_TYPE) return element;
+    return {
+      ...element,
+      properties: {
+        ...DEFAULT_TEXT_PROPERTIES,
+        ...element.properties,
+        ...patch,
+        rotation: normalizeRotation({ ...element.properties, ...patch }.rotation),
+      },
+    } as TextElement;
+  });
 }
 function normalizeRotation(value: unknown): number { return typeof value === 'number' && Number.isFinite(value) ? value % 360 : 0; }

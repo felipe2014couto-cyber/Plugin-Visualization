@@ -105,17 +105,17 @@ export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOp
   };
 }
 
+import { updateElementInDocument } from './createGroup';
+
 export function updateBarOptions(
   document: DisplayDocument,
   elementId: string,
   patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database'; showScale?: boolean; showUnit?: boolean; showTimestamp?: boolean; tagNameMode?: 'tag' | 'custom'; customTagName?: string; fillColor?: string; backgroundColor?: string; borderColor?: string; borderWidth?: number },
 ): DisplayDocument {
-  let changed = false;
-  const elements = document.elements.map((element) => {
-    if (element.id !== elementId || element.type !== BAR_TYPE) {
+  return updateElementInDocument(document, elementId, (element) => {
+    if (element.type !== BAR_TYPE) {
       return element;
     }
-    changed = true;
     const properties = element.properties as Partial<BarProperties>;
     return {
       ...element,
@@ -136,5 +136,4 @@ export function updateBarOptions(
       },
     } as BarElement;
   });
-  return changed ? { ...document, elements } : document;
 }

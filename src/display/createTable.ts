@@ -41,7 +41,14 @@ export function addTableItem(document: DisplayDocument, elementId: string, item:
   const elements = document.elements.map((element) => { if (element.id !== elementId || element.type !== TABLE_TYPE) return element; const table = element as TableElement; if (table.properties.items.some((current) => tableBindingKey(current.binding) === tableBindingKey(item.binding))) return element; changed = true; return { ...table, properties: { ...table.properties, items: [...table.properties.items, copyItem(item)] } }; });
   return changed ? { ...document, elements } : document;
 }
-export function updateTableProperties(document: DisplayDocument, elementId: string, patch: Partial<TableProperties>): DisplayDocument { let changed = false; const elements = document.elements.map((element) => { if (element.id !== elementId || element.type !== TABLE_TYPE) return element; changed = true; return { ...element, properties: { ...(element as TableElement).properties, ...patch } } as TableElement; }); return changed ? { ...document, elements } : document; }
+import { updateElementInDocument } from './createGroup';
+
+export function updateTableProperties(document: DisplayDocument, elementId: string, patch: Partial<TableProperties>): DisplayDocument {
+  return updateElementInDocument(document, elementId, (element) => {
+    if (element.type !== TABLE_TYPE) return element;
+    return { ...element, properties: { ...(element as TableElement).properties, ...patch } } as TableElement;
+  });
+}
 export function removeTableItem(document: DisplayDocument, elementId: string, index: number): DisplayDocument {
   const table = document.elements.find((element) => element.id === elementId && element.type === TABLE_TYPE) as TableElement | undefined;
   if (!table || index < 0 || index >= table.properties.items.length || table.properties.items.length <= 1) return document;

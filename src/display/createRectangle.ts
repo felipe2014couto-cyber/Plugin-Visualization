@@ -89,17 +89,15 @@ export function appendDisplayElement(
   };
 }
 
+import { updateElementInDocument } from './createGroup';
+
 export function updateRectangleProperties(
   document: DisplayDocument,
   elementId: string,
   patch: Partial<RectangleProperties>,
 ): DisplayDocument {
-  let changed = false;
-  const elements = document.elements.map((element) => {
-    if (element.id !== elementId || element.type !== RECTANGLE_TYPE) {
-      return element;
-    }
-    changed = true;
+  return updateElementInDocument(document, elementId, (element) => {
+    if (element.type !== RECTANGLE_TYPE) return element;
     return {
       ...element,
       properties: {
@@ -110,5 +108,4 @@ export function updateRectangleProperties(
       },
     } as RectangleElement;
   });
-  return changed ? { ...document, elements } : document;
 }

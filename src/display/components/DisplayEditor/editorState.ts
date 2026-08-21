@@ -46,49 +46,54 @@ export type EditorAction =
   | { type: 'END_INTERACTION' };
 
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
-  switch (action.type) {
-    case 'CLEAR_SELECTION':
-      return { selectedElementId: null, selectedElementIds: [], interaction: { kind: 'idle' } };
-    case 'SELECT':
-      if (state.interaction.kind !== 'idle') {
-        return state;
+  const next = (() => {
+    switch (action.type) {
+      case 'CLEAR_SELECTION':
+        return { selectedElementId: null, selectedElementIds: [], interaction: { kind: 'idle' as const } };
+      case 'SELECT':
+        return {
+          ...state,
+          selectedElementId: action.elementId,
+          selectedElementIds: action.elementId ? [action.elementId] : [],
+          interaction: { kind: 'idle' as const },
+        };
+      case 'SELECT_MANY': {
+        const ids = action.additive
+          ? [...new Set([...state.selectedElementIds, ...action.elementIds])]
+          : action.elementIds;
+        return { ...state, selectedElementIds: ids, selectedElementId: ids[ids.length - 1] ?? null };
       }
-      return { ...state, selectedElementId: action.elementId, selectedElementIds: action.elementId ? [action.elementId] : [] };
-    case 'SELECT_MANY': {
-      const ids = action.additive
-        ? [...new Set([...state.selectedElementIds, ...action.elementIds])]
-        : action.elementIds;
-      return { ...state, selectedElementIds: ids, selectedElementId: ids[ids.length - 1] ?? null };
+      case 'START_DRAG':
+        return {
+          selectedElementId: action.elementId,
+          selectedElementIds: state.selectedElementIds.includes(action.elementId) ? state.selectedElementIds : [action.elementId],
+          interaction: {
+            kind: 'dragging' as const,
+            elementId: action.elementId,
+            startPointer: action.pointer,
+            originalGeometry: action.originalGeometry,
+            originalGeometries: action.originalGeometries ?? { [action.elementId]: action.originalGeometry },
+          },
+        };
+      case 'START_RESIZE':
+        return {
+          selectedElementId: action.elementId,
+          selectedElementIds: [action.elementId],
+          interaction: {
+            kind: 'resizing' as const,
+            elementId: action.elementId,
+            handle: action.handle,
+            startPointer: action.pointer,
+            originalGeometry: action.originalGeometry,
+            originalProperties: action.originalProperties,
+          },
+        };
+      case 'END_INTERACTION':
+        if (state.interaction.kind === 'idle') {
+          return state;
+        }
+        return { ...state, interaction: { kind: 'idle' as const } };
     }
-    case 'START_DRAG':
-      return {
-        selectedElementId: action.elementId,
-        selectedElementIds: state.selectedElementIds.includes(action.elementId) ? state.selectedElementIds : [action.elementId],
-        interaction: {
-          kind: 'dragging',
-          elementId: action.elementId,
-          startPointer: action.pointer,
-          originalGeometry: action.originalGeometry,
-          originalGeometries: action.originalGeometries ?? { [action.elementId]: action.originalGeometry },
-        },
-      };
-    case 'START_RESIZE':
-      return {
-        selectedElementId: action.elementId,
-        selectedElementIds: [action.elementId],
-        interaction: {
-          kind: 'resizing',
-          elementId: action.elementId,
-          handle: action.handle,
-          startPointer: action.pointer,
-          originalGeometry: action.originalGeometry,
-          originalProperties: action.originalProperties,
-        },
-      };
-    case 'END_INTERACTION':
-      if (state.interaction.kind === 'idle') {
-        return state;
-      }
-      return { ...state, interaction: { kind: 'idle' } };
-  }
+  })();
+  return next;
 }

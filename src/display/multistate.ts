@@ -128,17 +128,17 @@ export function createDefaultMultistateRule(id: string): MultistateRule {
   return { id, operator: 'lt', value: 0, color: DEFAULT_RULE_COLOR };
 }
 
+import { updateElementInDocument } from './createGroup';
+
 export function updateMultistateConfig(
   document: DisplayDocument,
   elementId: string,
   config: MultistateConfig | undefined,
 ): DisplayDocument {
-  let changed = false;
-  const elements = document.elements.map((element) => {
-    if (element.id !== elementId || !['value', 'gauge', 'bar', 'rectangle', 'library-symbol', 'text'].includes(element.type)) {
+  return updateElementInDocument(document, elementId, (element) => {
+    if (!['value', 'gauge', 'bar', 'rectangle', 'library-symbol', 'text'].includes(element.type)) {
       return element;
     }
-    changed = true;
     const properties = { ...element.properties } as Record<string, unknown>;
     if (config === undefined) {
       delete properties.multistate;
@@ -147,7 +147,6 @@ export function updateMultistateConfig(
     }
     return { ...element, properties };
   });
-  return changed ? { ...document, elements } : document;
 }
 
 export function updateBackgroundMultistateConfig(
@@ -155,12 +154,10 @@ export function updateBackgroundMultistateConfig(
   elementId: string,
   config: MultistateConfig | undefined,
 ): DisplayDocument {
-  let changed = false;
-  const elements = document.elements.map((element) => {
-    if (element.id !== elementId || (element.type !== 'value' && element.type !== 'text')) {
+  return updateElementInDocument(document, elementId, (element) => {
+    if (element.type !== 'value' && element.type !== 'text') {
       return element;
     }
-    changed = true;
     const properties = { ...element.properties } as Record<string, unknown>;
     if (config === undefined) {
       delete properties.backgroundMultistate;
@@ -169,7 +166,6 @@ export function updateBackgroundMultistateConfig(
     }
     return { ...element, properties };
   });
-  return changed ? { ...document, elements } : document;
 }
 
 function matchesRule(rawVal: unknown, rule: MultistateRule): boolean {
