@@ -49,7 +49,7 @@ export function SqlTableElementView({ element, selected, editable }: SqlTableEle
         </div>
       </foreignObject>
       {editable && (
-        <rect x={0} y={0} width={element.width} height={element.height} fill="transparent" pointerEvents="all" />
+        <rect x={0} y={0} width={element.width} height={element.height} fill="transparent" pointerEvents="all" data-element-id={element.id} data-element-type={element.type} />
       )}
     </g>
   );

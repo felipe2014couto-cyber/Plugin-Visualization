@@ -629,6 +629,16 @@ export function DisplaySurface({
       const clickedEl = elementId ? elements.find((el) => el.id === elementId) : undefined;
       const isLocked = isElementLocked(clickedEl);
 
+      if (e.button === 2) {
+        if (elementId) {
+          if (!selectedElementIds.includes(elementId)) {
+            multiSelectionRef.current = false;
+            onSelectMany([elementId]);
+          }
+        }
+        return;
+      }
+
       trySetPointerCapture(svg, e.pointerId);
 
       if (handleAttr && elementId && !isLocked) {
@@ -646,7 +656,7 @@ export function DisplaySurface({
           onSelectMany([elementId], true);
           return;
         }
-        const preserveSelection = multiSelectionRef.current && selectedElementIds.includes(elementId);
+        const preserveSelection = selectedElementIds.includes(elementId);
         if (!preserveSelection) {
           multiSelectionRef.current = false;
           onSelectMany([elementId]);

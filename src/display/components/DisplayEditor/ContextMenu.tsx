@@ -43,13 +43,19 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       }
     };
 
-    window.addEventListener('mousedown', handlePointerDownOutside, true);
-    window.addEventListener('touchstart', handlePointerDownOutside, true);
+    const timer = setTimeout(() => {
+      window.addEventListener('mousedown', handlePointerDownOutside, true);
+      window.addEventListener('touchstart', handlePointerDownOutside, true);
+      window.addEventListener('contextmenu', handlePointerDownOutside, true);
+    }, 50);
+
     window.addEventListener('keydown', handleKeyDown, true);
 
     return () => {
+      clearTimeout(timer);
       window.removeEventListener('mousedown', handlePointerDownOutside, true);
       window.removeEventListener('touchstart', handlePointerDownOutside, true);
+      window.removeEventListener('contextmenu', handlePointerDownOutside, true);
       window.removeEventListener('keydown', handleKeyDown, true);
     };
   }, [onClose]);
