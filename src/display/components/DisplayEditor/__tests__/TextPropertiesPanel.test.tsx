@@ -83,4 +83,57 @@ describe('TextPropertiesPanel', () => {
     expect(screen.getByTestId('text-multistate-enabled')).toBeChecked();
     expect(screen.getByTestId('text-bg-multistate-enabled')).toBeChecked();
   });
+
+  test('permite vincular PI Point selecionado e desvincular PI Point existente', () => {
+    const handleChange = jest.fn();
+    const selectedPiPoint = {
+      name: 'SINUSOID',
+      path: '\\\\pims\\SINUSOID',
+      webId: 'webid-1',
+      dataSourceUid: 'ds-1',
+    };
+
+    const { rerender } = render(
+      <TextPropertiesPanel
+        properties={DEFAULT_TEXT_PROPERTIES}
+        selectedPiPoint={selectedPiPoint}
+        onChange={handleChange}
+      />,
+    );
+
+    const bindButton = screen.getByTestId('text-bind-point');
+    expect(bindButton).toBeInTheDocument();
+    fireEvent.click(bindButton);
+    expect(handleChange).toHaveBeenCalledWith({
+      binding: {
+        dataSourceUid: 'ds-1',
+        serverPath: 'pims',
+        pointName: 'SINUSOID',
+        webId: 'webid-1',
+      },
+    });
+
+    const boundProperties = {
+      ...DEFAULT_TEXT_PROPERTIES,
+      binding: {
+        dataSourceUid: 'ds-1',
+        serverPath: 'pims',
+        pointName: 'SINUSOID',
+        webId: 'webid-1',
+      },
+    };
+
+    rerender(
+      <TextPropertiesPanel
+        properties={boundProperties}
+        selectedPiPoint={selectedPiPoint}
+        onChange={handleChange}
+      />,
+    );
+
+    const unbindButton = screen.getByTestId('text-unbind-point');
+    expect(unbindButton).toBeInTheDocument();
+    fireEvent.click(unbindButton);
+    expect(handleChange).toHaveBeenCalledWith({ binding: undefined });
+  });
 });

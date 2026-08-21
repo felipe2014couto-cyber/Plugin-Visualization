@@ -9,11 +9,13 @@ import { ColorControl } from './ColorControl';
 import { RotationControl } from './RotationControl';
 import { LinkField } from './LinkField';
 import type { PiPointBinding } from '../../../pi/piPointBinding';
-import type { PiDigitalStatesResult } from '../../../pi/piDataSource';
+import type { PiDigitalStatesResult, PiPointSearchResult } from '../../../pi/piDataSource';
+import { createPiPointBinding, isPiPointBinding } from '../../../pi/piPointBinding';
 
 export interface TextPropertiesPanelProps {
   properties: TextProperties;
   onChange: (patch: Partial<TextProperties>) => void;
+  selectedPiPoint?: PiPointSearchResult | null;
   pointName?: string;
   binding?: PiPointBinding;
   loadDigitalStates?: (binding: PiPointBinding) => Promise<PiDigitalStatesResult>;
@@ -26,8 +28,9 @@ export interface TextPropertiesPanelProps {
 export function TextPropertiesPanel({
   properties,
   onChange,
+  selectedPiPoint,
   pointName,
-  binding,
+  binding: propBinding,
   loadDigitalStates,
   multistate,
   onMultistateChange,
@@ -35,11 +38,15 @@ export function TextPropertiesPanel({
   onBackgroundMultistateChange,
 }: TextPropertiesPanelProps) {
   const styles = useStyles2(getStyles);
+  const binding = isPiPointBinding(properties.binding) ? properties.binding : (propBinding ?? undefined);
+  const effectivePointName = pointName ?? binding?.pointName;
+  const selectedBinding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+
   return (
     <aside className={styles.panel} data-testid="text-properties-panel" aria-label="Configuração do Texto">
       <div className={styles.header}>
         <span className={styles.title}>Texto</span>
-        {pointName && <span className={styles.pointName}>{pointName}</span>}
+        {effectivePointName && <span className={styles.pointName}>{effectivePointName}</span>}
       </div>
       <div className={styles.fields}>
         <label className={styles.field}>
@@ -53,7 +60,28 @@ export function TextPropertiesPanel({
           onOpenInNewTabChange={(openInNewTab) => onChange({ openInNewTab })}
           testId="text-link-url"
         />
-        {pointName && <div className={styles.binding}>PI Point: {pointName}</div>}
+        {binding ? (
+          <div className={styles.bindingRow}>
+            <span className={styles.binding}>PI Point: {binding.pointName}</span>
+            <button
+              type="button"
+              className={styles.unbindButton}
+              data-testid="text-unbind-point"
+              onClick={() => onChange({ binding: undefined })}
+            >
+              Desvincular
+            </button>
+          </div>
+        ) : selectedBinding ? (
+          <button
+            type="button"
+            className={styles.bindButton}
+            data-testid="text-bind-point"
+            onClick={() => onChange({ binding: selectedBinding })}
+          >
+            Vincular PI Point selecionado
+          </button>
+        ) : null}
         <ColorControl label="Cor do texto" color={properties.color} onChange={(color) => onChange({ color })} testId="text-color" />
         <ColorControl
           label="Cor do fundo"
@@ -86,7 +114,7 @@ export function TextPropertiesPanel({
         </label>
         <RotationControl value={properties.rotation} onChange={(rotation) => onChange({ rotation })} testId="text-rotation" />
       </div>
-      {pointName ? (
+      {binding ? (
         <>
           <MultistatePropertiesPanel
             title="Multistate (Texto)"
@@ -106,7 +134,7 @@ export function TextPropertiesPanel({
           />
         </>
       ) : (
-        <div className={styles.hint}>Selecione um PI Point antes de inserir o texto para habilitar o Multistate.</div>
+        <div className={styles.hint}>Arraste uma tag para o texto ou selecione um PI Point para habilitar o Multistate.</div>
       )}
     </aside>
   );
@@ -169,10 +197,41 @@ const getStyles = (theme: GrafanaTheme2) => ({
       resize: vertical;
     }
   `,
+  bindingRow: css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  `,
   binding: css`
     color: var(--text-secondary);
     font-size: 10px;
     overflow-wrap: anywhere;
+    flex: 1;
+  `,
+  bindButton: css`
+    width: 100%;
+    min-height: 27px;
+    padding: 3px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: var(--button-bg);
+    color: var(--text-primary);
+    font-size: 10px;
+    cursor: pointer;
+  `,
+  unbindButton: css`
+    padding: 2px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 9px;
+    cursor: pointer;
+    &:hover {
+      color: #ff5555;
+      border-color: #ff5555;
+    }
   `,
   hint: css`
     border-top: 1px solid var(--border-color);

@@ -15,6 +15,7 @@ export type EditorInteraction =
       handle: ResizeHandle;
       startPointer: Point;
       originalGeometry: ElementGeometry;
+      originalProperties?: Record<string, unknown>;
     };
 
 export interface EditorState {
@@ -40,6 +41,7 @@ export type EditorAction =
       handle: ResizeHandle;
       pointer: Point;
       originalGeometry: ElementGeometry;
+      originalProperties?: Record<string, unknown>;
     }
   | { type: 'END_INTERACTION' };
 
@@ -80,6 +82,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           handle: action.handle,
           startPointer: action.pointer,
           originalGeometry: action.originalGeometry,
+          originalProperties: action.originalProperties,
         },
       };
     case 'END_INTERACTION':

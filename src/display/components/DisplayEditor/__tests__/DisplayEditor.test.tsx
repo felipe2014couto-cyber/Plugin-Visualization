@@ -1,12 +1,32 @@
-import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import React, { useState } from 'react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { createDisplayDocument } from '../../../index';
+import { appendText, createDisplayDocument, createText } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
 
 jest.mock('@grafana/ui', () => ({
   useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
 }));
+
+beforeAll(() => {
+  const w = window as unknown as {
+    PointerEvent?: typeof MouseEvent;
+    MouseEvent: typeof MouseEvent;
+  };
+  if (typeof w.PointerEvent !== 'function') {
+    w.PointerEvent = class FakePointerEvent extends MouseEvent {
+      readonly pointerId: number;
+      readonly pointerType: string;
+      readonly isPrimary: boolean;
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 0;
+        this.pointerType = init.pointerType ?? 'mouse';
+        this.isPrimary = init.isPrimary ?? true;
+      }
+    } as unknown as typeof MouseEvent;
+  }
+});
 
 describe('DisplayEditor', () => {
   it('renderiza o editor a partir de um DisplayDocument valido', () => {
@@ -88,5 +108,39 @@ describe('DisplayEditor', () => {
     expect(ctrlWheel.defaultPrevented).toBe(true);
     expect(surface.getAttribute('viewBox')).not.toBe(originalViewBox);
     expect(JSON.stringify(doc)).toBe(before);
+  });
+
+  it('escala o tamanho da fonte do elemento de texto ao redimensionar a caixa', () => {
+    let currentDoc = appendText(createDisplayDocument({ name: 'Test Display' }), createText({
+      id: 'text-1',
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 50,
+      properties: { text: 'Meu Texto', fontSize: 20 },
+    }));
+
+    function EditorWrapper() {
+      const [doc, setDoc] = useState(currentDoc);
+      return <DisplayEditor document={doc} onChange={(next) => { setDoc(next); currentDoc = next; }} />;
+    }
+
+    render(<EditorWrapper />);
+    const textEl = screen.getByTestId('display-element-text-1');
+    act(() => {
+      fireEvent.pointerDown(textEl, { clientX: 150, clientY: 125, pointerId: 1, button: 0 });
+      fireEvent.pointerUp(screen.getByTestId('display-surface'), { clientX: 150, clientY: 125, pointerId: 1, button: 0 });
+    });
+
+    const handleBr = screen.getByTestId('display-resize-handle-br');
+    act(() => {
+      fireEvent.pointerDown(handleBr, { clientX: 300, clientY: 150, pointerId: 2, button: 0 });
+      // Expand by 2x in both width and height (from 300,150 to 500,200)
+      fireEvent.pointerMove(screen.getByTestId('display-surface'), { clientX: 500, clientY: 200, pointerId: 2 });
+      fireEvent.pointerUp(screen.getByTestId('display-surface'), { clientX: 500, clientY: 200, pointerId: 2, button: 0 });
+    });
+
+    const updatedText = currentDoc.elements.find((el) => el.id === 'text-1');
+    expect(updatedText?.properties.fontSize).toBe(40);
   });
 });

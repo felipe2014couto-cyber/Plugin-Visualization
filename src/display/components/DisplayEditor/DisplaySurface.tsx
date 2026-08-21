@@ -889,7 +889,7 @@ export function DisplaySurface({
             />
           );
         }
-  if (element.type === RECTANGLE_TYPE) {
+        if (element.type === RECTANGLE_TYPE) {
           return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
         }
         if (element.type === TEXT_TYPE) {
@@ -899,8 +899,14 @@ export function DisplaySurface({
           const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
           const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
           const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
-          const x = textElement.properties.textAlign === 'left' ? textElement.x + 4 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 4 : textElement.x + textElement.width / 2;
+          const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
           const rotation = textElement.properties.rotation ?? 0;
+          const lines = (textElement.properties.text || '').split('\n');
+          const lineCount = lines.length;
+          const fontSize = textElement.properties.fontSize || 24;
+          const lineHeight = fontSize * 1.2;
+          const totalHeight = lineCount * lineHeight;
+          const startY = textElement.y + (textElement.height - totalHeight) / 2 + fontSize * 0.9;
           return (
             <g
               key={element.id}
@@ -928,15 +934,25 @@ export function DisplaySurface({
                 pointerEvents="all"
               />
               <text
-                x={x}
-                y={textElement.y + textElement.height / 2}
+                x={lineCount === 1 ? x : undefined}
+                y={lineCount === 1 ? textElement.y + textElement.height / 2 : undefined}
                 fill={textColor}
-                fontSize={textElement.properties.fontSize}
+                fontSize={fontSize}
                 textAnchor={anchor}
-                dominantBaseline="middle"
+                dominantBaseline={lineCount === 1 ? 'middle' : undefined}
                 pointerEvents="none"
               >
-                {textElement.properties.text}
+                {lineCount === 1
+                  ? lines[0]
+                  : lines.map((line, idx) => (
+                    <tspan
+                      key={idx}
+                      x={x}
+                      y={startY + idx * lineHeight}
+                    >
+                      {line}
+                    </tspan>
+                  ))}
               </text>
             </g>
           );

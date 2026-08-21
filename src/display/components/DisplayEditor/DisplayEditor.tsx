@@ -349,6 +349,7 @@ export function DisplayEditor({
         handle,
         pointer,
         originalGeometry: { x: el.x, y: el.y, width: el.width, height: el.height },
+        originalProperties: el.properties,
       });
     },
     [dispatch],
@@ -385,7 +386,28 @@ export function DisplayEditor({
       });
       publishDocument(nextDocument);
     } else {
-      publishDocument(updateElementGeometry(documentRef.current, interaction.elementId, newGeometry));
+      const targetEl = getElementById(documentRef.current, interaction.elementId);
+      if (targetEl && targetEl.type === TEXT_TYPE) {
+        const originalFontSize = typeof interaction.originalProperties?.fontSize === 'number'
+          ? interaction.originalProperties.fontSize
+          : (typeof (targetEl.properties as { fontSize?: number }).fontSize === 'number' ? (targetEl.properties as { fontSize: number }).fontSize : 24);
+        const widthRatio = newGeometry.width / Math.max(1, interaction.originalGeometry.width);
+        const heightRatio = newGeometry.height / Math.max(1, interaction.originalGeometry.height);
+        let scale = 1;
+        if (interaction.handle === 'ml' || interaction.handle === 'mr') {
+          scale = widthRatio;
+        } else if (interaction.handle === 'tc' || interaction.handle === 'bc') {
+          scale = heightRatio;
+        } else {
+          scale = Math.min(widthRatio, heightRatio);
+        }
+        const nextFontSize = Math.max(6, Math.min(240, Math.round(originalFontSize * scale)));
+        let updatedDoc = updateElementGeometry(documentRef.current, interaction.elementId, newGeometry);
+        updatedDoc = updateTextProperties(updatedDoc, interaction.elementId, { fontSize: nextFontSize });
+        publishDocument(updatedDoc);
+      } else {
+        publishDocument(updateElementGeometry(documentRef.current, interaction.elementId, newGeometry));
+      }
     }
   }, [publishDocument]);
 
@@ -648,10 +670,18 @@ export function DisplayEditor({
     const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
     const targetTable = dropSymbolType === 'table' ? resolveTableDropTarget(currentDocument, event.target, point) : undefined;
     const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
-    if (!binding || (!point && !targetTrend && !targetShape && !targetLibrarySymbol && !targetTable)) {
+    const targetText = resolveTextDropTarget(currentDocument, event.target, point);
+    if (!binding || (!point && !targetTrend && !targetShape && !targetLibrarySymbol && !targetTable && !targetText)) {
       return;
     }
     event.preventDefault();
+
+    if (targetText) {
+      commitDocument(updateTextProperties(currentDocument, targetText.id, { binding }));
+      dispatch({ type: 'SELECT', elementId: targetText.id });
+      setOptionsElementId(targetText.id);
+      return;
+    }
 
     if (targetLibrarySymbol) {
       const multistate = targetLibrarySymbol.properties.multistate
@@ -1327,6 +1357,7 @@ export function DisplayEditor({
         {selectedText && (
           <TextPropertiesPanel
             properties={selectedText.properties}
+            selectedPiPoint={selectedPiPoint}
             pointName={isPiPointBinding(selectedText.properties.binding) ? selectedText.properties.binding.pointName : undefined}
             binding={isPiPointBinding(selectedText.properties.binding) ? selectedText.properties.binding : undefined}
             loadDigitalStates={loadDigitalStates}
@@ -1594,6 +1625,34 @@ function resolveGeometricDropTarget(
       && point.y <= element.y + element.height
   ));
   return topmostElement as RectangleElement | undefined;
+}
+
+function resolveTextDropTarget(
+  document: DisplayDocument,
+  eventTarget: EventTarget | null,
+  point: Point | undefined,
+): TextElement | undefined {
+  const textNode = eventTarget instanceof Element
+    ? eventTarget.closest('[data-element-id][data-element-type="text"]')
+    : null;
+  const elementId = textNode?.getAttribute('data-element-id');
+  if (elementId) {
+    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === TEXT_TYPE);
+    if (element) {
+      return element as TextElement;
+    }
+  }
+  if (!point) {
+    return undefined;
+  }
+  const topmostElement = [...document.elements].reverse().find((element) => (
+    element.type === TEXT_TYPE
+      && point.x >= element.x
+      && point.x <= element.x + element.width
+      && point.y >= element.y
+      && point.y <= element.y + element.height
+  ));
+  return topmostElement as TextElement | undefined;
 }
 
 function resolveLibrarySymbolDropTarget(
