@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { appendBar, appendGauge, appendValue, createBar, createDisplayDocument, createGauge, createValue, type DisplayDocument } from '../../../index';
+import { appendBar, appendDisplayElement, appendGauge, appendText, appendValue, createBar, createDisplayDocument, createGauge, createRectangle, createText, createValue, type DisplayDocument } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
+import { createPiPointBinding } from '../../../../pi/piPointBinding';
 
 jest.mock('@grafana/ui', () => ({
   useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
@@ -53,8 +54,11 @@ function selectElement(id: string): void {
 
 describe('Multistate no editor', () => {
   it('não permite adicionar regra enquanto o Multistate estiver desabilitado', () => {
-    render(<Harness />);
-    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    const binding = createPiPointBinding(point)!;
+    const base = createDisplayDocument({ name: 'Multistate' });
+    const initial = appendDisplayElement(base, createRectangle({ id: 'rect-ms', binding }));
+    render(<Harness initial={initial} />);
+    selectElement('rect-ms');
     const addRule = screen.getByTestId('multistate-add-rule');
     expect(addRule).toBeDisabled();
     fireEvent.click(addRule);
@@ -67,8 +71,11 @@ describe('Multistate no editor', () => {
 
   it('aplica Multistate a uma forma geométrica vinculada ao PI Point', async () => {
     const loadValue = jest.fn().mockResolvedValue({ value: 85 });
-    render(<Harness loadValue={loadValue} />);
-    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    const binding = createPiPointBinding(point)!;
+    const base = createDisplayDocument({ name: 'Multistate' });
+    const initial = appendDisplayElement(base, createRectangle({ id: 'rect-ms', binding }));
+    render(<Harness initial={initial} loadValue={loadValue} />);
+    selectElement('rect-ms');
     fireEvent.change(screen.getByTestId('geometric-shape-type'), { target: { value: 'ellipse' } });
     fireEvent.click(screen.getByTestId('multistate-enabled'));
     fireEvent.click(screen.getByTestId('multistate-add-rule'));
@@ -76,16 +83,19 @@ describe('Multistate no editor', () => {
     fireEvent.change(screen.getByTestId(`multistate-operator-${ruleId}`), { target: { value: 'gte' } });
     fireEvent.change(screen.getByTestId(`multistate-value-${ruleId}`), { target: { value: '80' } });
     setMultistateRuleColor(ruleId, '#00ff00');
-    const shape = await screen.findByTestId(/^display-element-/);
+    const shape = await screen.findByTestId('display-element-rect-ms');
     expect(shape).toHaveAttribute('data-shape', 'ellipse');
     await waitFor(() => {
-      expect(screen.getByTestId(/^display-element-/).querySelector('ellipse')).toHaveAttribute('fill', '#00ff00');
+      expect(screen.getByTestId('display-element-rect-ms')).toHaveAttribute('fill', '#00ff00');
     });
   });
 
   it('habilita, adiciona, edita e remove regra com histórico', () => {
-    render(<Harness />);
-    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    const binding = createPiPointBinding(point)!;
+    const base = createDisplayDocument({ name: 'Multistate' });
+    const initial = appendDisplayElement(base, createRectangle({ id: 'rect-ms', binding }));
+    render(<Harness initial={initial} />);
+    selectElement('rect-ms');
     fireEvent.click(screen.getByTestId('multistate-enabled'));
     fireEvent.click(screen.getByTestId('multistate-add-rule'));
     const rule = screen.getByTestId(/^multistate-rule-/);
@@ -104,8 +114,11 @@ describe('Multistate no editor', () => {
 
   it('exibe e edita limite simples e os dois limites de BETWEEN', () => {
     const changes: DisplayDocument[] = [];
-    render(<Harness onChange={(document) => changes.push(document)} />);
-    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    const binding = createPiPointBinding(point)!;
+    const base = createDisplayDocument({ name: 'Multistate' });
+    const initial = appendDisplayElement(base, createRectangle({ id: 'rect-ms', binding }));
+    render(<Harness initial={initial} onChange={(document) => changes.push(document)} />);
+    selectElement('rect-ms');
     fireEvent.click(screen.getByTestId('multistate-enabled'));
     fireEvent.click(screen.getByTestId('multistate-add-rule'));
     const ruleId = screen.getByTestId(/^multistate-rule-/).getAttribute('data-testid')?.replace('multistate-rule-', '') as string;
@@ -147,8 +160,11 @@ describe('Multistate no editor', () => {
   });
 
   it('preserva o limite no Undo/Redo sem alterar o binding', () => {
-    render(<Harness />);
-    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    const binding = createPiPointBinding(point)!;
+    const base = createDisplayDocument({ name: 'Multistate' });
+    const initial = appendDisplayElement(base, createRectangle({ id: 'rect-ms', binding }));
+    render(<Harness initial={initial} />);
+    selectElement('rect-ms');
     fireEvent.click(screen.getByTestId('multistate-enabled'));
     fireEvent.click(screen.getByTestId('multistate-add-rule'));
     const ruleId = screen.getByTestId(/^multistate-rule-/).getAttribute('data-testid')?.replace('multistate-rule-', '') as string;
@@ -169,5 +185,29 @@ describe('Multistate no editor', () => {
     expect(screen.getByTestId('display-element-value-old')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('display-mode-view'));
     expect(screen.queryByTestId('display-selection-overlay')).toBeNull();
+  });
+
+  it('aplica multistate de texto e fundo a um elemento de texto', async () => {
+    const binding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID' };
+    const loadValue = jest.fn().mockResolvedValue({ value: 95 });
+    const base = createDisplayDocument();
+    const initial = appendText(base, createText({ id: 'text-ms', binding, properties: { text: 'Nível' } }));
+    render(<Harness initial={initial} loadValue={loadValue} />);
+    selectElement('text-ms');
+
+    expect(screen.getByText('Multistate (Texto)')).toBeInTheDocument();
+    expect(screen.getByText('Multistate (Fundo)')).toBeInTheDocument();
+
+    // Configure Background Multistate
+    fireEvent.click(screen.getByTestId('text-bg-multistate-enabled'));
+    fireEvent.click(screen.getByTestId('text-bg-multistate-add-rule'));
+    const ruleId = screen.getByTestId(/^text-bg-multistate-rule-/).getAttribute('data-testid')?.replace('text-bg-multistate-rule-', '') as string;
+    fireEvent.change(screen.getByTestId(`text-bg-multistate-operator-${ruleId}`), { target: { value: 'gte' } });
+    fireEvent.change(screen.getByTestId(`text-bg-multistate-value-${ruleId}`), { target: { value: '90' } });
+    setMultistateRuleColor(ruleId, '#ff5500', 'text-bg-multistate');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('text-background-text-ms')).toHaveAttribute('fill', '#ff5500');
+    });
   });
 });

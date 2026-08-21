@@ -81,7 +81,7 @@ describe('DisplayEditor - cor do Gauge', () => {
     render(<Harness initial={initial} loadValue={loadValue} onChange={(next) => changes.push(next)} />);
 
     selectElement('gauge');
-    await waitFor(() => expect(screen.getByTestId('gauge-fill-gauge')).toHaveAttribute('stroke', '#6e9fff'));
+    await waitFor(() => expect(screen.getByTestId('gauge-fill-gauge')).toHaveAttribute('stroke', '#00a2e8'));
 
     fireEvent.change(screen.getByTestId('gauge-color'), { target: { value: '#ff9830' } });
 
@@ -209,6 +209,7 @@ describe('DisplayEditor - cor do Rectangle', () => {
     fireEvent.click(screen.getByTestId('display-redo'));
     expect(screen.getByTestId('display-element-rectangle')).toHaveAttribute('stroke', '#00ff00');
 
+    fireEvent.click(screen.getByTestId('display-undo'));
     fireEvent.click(screen.getByTestId('display-undo'));
     expect(screen.getByTestId('display-element-rectangle')).toHaveAttribute('fill', DEFAULT_RECTANGLE_PROPERTIES.fill);
     expect(screen.getByTestId('display-element-rectangle')).toHaveAttribute('stroke', '#6e9fff');

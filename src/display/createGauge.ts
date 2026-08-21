@@ -88,7 +88,6 @@ export function createGauge(options: CreateGaugeOptions): GaugeElement {
       ...(options.binding ? { binding: { ...options.binding } } : {}),
       ...(options.calculationId ? { calculationId: options.calculationId } : {}),
       ...normalizeGaugeOptions(options.options),
-    scaleMode: 'database',
       ...(options.multistate ? { multistate: options.multistate } : {}),
     },
   };
@@ -130,7 +129,7 @@ export function normalizeGaugeOptions(options?: Partial<GaugeProperties> | null)
     ...scale,
     color: isColor(options?.color) ? scale.color : '#00a2e8',
     gaugeStyle,
-    scaleMode: options?.scaleMode === 'custom' ? 'custom' : 'database',
+    scaleMode: options?.scaleMode === 'database' ? 'database' : 'custom',
     title: typeof options?.title === 'string' ? options.title : '',
     labelPosition: options?.labelPosition === 'below' ? 'below' : 'above',
     scaleDisplay: options?.scaleDisplay === 'endpoints' ? 'endpoints' : 'all',

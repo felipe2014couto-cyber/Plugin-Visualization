@@ -256,10 +256,14 @@ function portableElement(input: unknown): DisplayElement {
       return { ...base, type: TEXT_TYPE, properties: {
         text: typeof input.properties.text === 'string' ? input.properties.text : DEFAULT_TEXT_PROPERTIES.text,
         color: typeof input.properties.color === 'string' ? input.properties.color : DEFAULT_TEXT_PROPERTIES.color,
+        ...(typeof input.properties.backgroundColor === 'string' ? { backgroundColor: input.properties.backgroundColor } : {}),
         fontSize: isFiniteNumber(input.properties.fontSize) ? Math.max(8, Math.min(120, input.properties.fontSize)) : DEFAULT_TEXT_PROPERTIES.fontSize,
         textAlign: input.properties.textAlign === 'left' || input.properties.textAlign === 'right' ? input.properties.textAlign : 'center',
         rotation: normalizeRotation(input.properties.rotation),
         ...portableLink(input.properties),
+        ...portableOptionalBinding(input.properties.binding),
+        ...portableMultistate(input.properties.multistate),
+        ...portableBackgroundMultistate(input.properties.backgroundMultistate),
       } };
     case RECTANGLE_TYPE:
       return {
@@ -284,6 +288,7 @@ function portableElement(input: unknown): DisplayElement {
           : { binding: portableBinding(input.properties.binding) }),
         visual: portableVisual(input.properties.visual),
         ...portableMultistate(input.properties.multistate),
+        ...portableBackgroundMultistate(input.properties.backgroundMultistate),
         ...portableLink(input.properties),
       } };
     case CALCULATION_TYPE:
@@ -470,6 +475,18 @@ function portableMultistate(input: unknown): { multistate?: MultistateConfig } {
   const rules = input.rules.map((rule) => portableMultistateRule(rule));
   const config = normalizeMultistateConfig({ enabled: input.enabled, rules });
   return config ? { multistate: config } : {};
+}
+
+function portableBackgroundMultistate(input: unknown): { backgroundMultistate?: MultistateConfig } {
+  if (input === undefined) {
+    return {};
+  }
+  if (!isRecord(input) || typeof input.enabled !== 'boolean' || !Array.isArray(input.rules)) {
+    throw new DisplayImportError('Arquivo de Display inválido.');
+  }
+  const rules = input.rules.map((rule) => portableMultistateRule(rule));
+  const config = normalizeMultistateConfig({ enabled: input.enabled, rules });
+  return config ? { backgroundMultistate: config } : {};
 }
 
 function portableMultistateRule(input: unknown): MultistateRule {

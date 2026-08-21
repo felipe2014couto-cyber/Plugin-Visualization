@@ -135,7 +135,7 @@ export function updateMultistateConfig(
 ): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => {
-    if (element.id !== elementId || !['value', 'gauge', 'bar', 'rectangle', 'library-symbol'].includes(element.type)) {
+    if (element.id !== elementId || !['value', 'gauge', 'bar', 'rectangle', 'library-symbol', 'text'].includes(element.type)) {
       return element;
     }
     changed = true;
@@ -157,7 +157,7 @@ export function updateBackgroundMultistateConfig(
 ): DisplayDocument {
   let changed = false;
   const elements = document.elements.map((element) => {
-    if (element.id !== elementId || element.type !== 'value') {
+    if (element.id !== elementId || (element.type !== 'value' && element.type !== 'text')) {
       return element;
     }
     changed = true;

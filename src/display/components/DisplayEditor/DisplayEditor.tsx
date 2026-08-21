@@ -293,6 +293,7 @@ export function DisplayEditor({
   const handleSelect = useCallback(
     (elementId: string | null) => {
       dispatch({ type: 'SELECT', elementId });
+      setOptionsElementId(elementId);
       const element = elementId ? documentRef.current.elements.find((item) => item.id === elementId) : undefined;
       const calculationId = element && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
         ? (element.properties as { calculationId: string }).calculationId
@@ -305,6 +306,11 @@ export function DisplayEditor({
   );
   const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
     dispatch({ type: 'SELECT_MANY', elementIds, additive });
+    if (!additive && elementIds.length === 1) {
+      setOptionsElementId(elementIds[0]);
+    } else if (!additive) {
+      setOptionsElementId(null);
+    }
   }, [dispatch]);
 
   const handleStartDrag = useCallback(
@@ -396,7 +402,6 @@ export function DisplayEditor({
     const element = createRectangle({
       surface: currentDocument.surface,
       existingIds: currentDocument.elements.map(({ id }) => id),
-      binding: selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined,
     });
     if (!onChangeRef.current) {
       return;
@@ -405,14 +410,100 @@ export function DisplayEditor({
     dispatch({ type: 'SELECT', elementId: element.id });
     setOptionsElementId(element.id);
     setOptionsTrendId(null);
-  }, [commitDocument, dispatch, selectedPiPoint]);
+  }, [commitDocument, dispatch]);
 
   const handleInsertText = useCallback(() => {
     const currentDocument = documentRef.current;
-    const element = createText({ surface: currentDocument.surface, existingIds: currentDocument.elements.map(({ id }) => id) });
+    const element = createText({
+      surface: currentDocument.surface,
+      existingIds: currentDocument.elements.map(({ id }) => id),
+    });
+    if (!onChangeRef.current) {
+      return;
+    }
     commitDocument(appendText(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(element.id);
+    setOptionsTrendId(null);
   }, [commitDocument, dispatch]);
+
+  const handleInsertValue = useCallback(() => {
+    const currentDocument = documentRef.current;
+    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+    if (!binding) return;
+    const element = createValue({
+      binding,
+      surface: currentDocument.surface,
+      existingIds: currentDocument.elements.map(({ id }) => id),
+    });
+    if (!onChangeRef.current) return;
+    commitDocument(appendDisplayElement(currentDocument, element));
+    dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(element.id);
+    setOptionsTrendId(null);
+  }, [commitDocument, dispatch, selectedPiPoint]);
+
+  const handleInsertGauge = useCallback(() => {
+    const currentDocument = documentRef.current;
+    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+    const element = createGauge({
+      binding,
+      surface: currentDocument.surface,
+      existingIds: currentDocument.elements.map(({ id }) => id),
+    });
+    if (!onChangeRef.current) return;
+    commitDocument(appendDisplayElement(currentDocument, element));
+    dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(element.id);
+    setOptionsTrendId(null);
+  }, [commitDocument, dispatch, selectedPiPoint]);
+
+  const handleInsertBar = useCallback(() => {
+    const currentDocument = documentRef.current;
+    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+    const element = createBar({
+      binding,
+      surface: currentDocument.surface,
+      existingIds: currentDocument.elements.map(({ id }) => id),
+    });
+    if (!onChangeRef.current) return;
+    commitDocument(appendDisplayElement(currentDocument, element));
+    dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(element.id);
+    setOptionsTrendId(null);
+  }, [commitDocument, dispatch, selectedPiPoint]);
+
+  const handleInsertTrend = useCallback(() => {
+    const currentDocument = documentRef.current;
+    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+    if (!binding) return;
+    const element = createTrend({
+      binding,
+      surface: currentDocument.surface,
+      existingIds: currentDocument.elements.map(({ id }) => id),
+    });
+    if (!onChangeRef.current) return;
+    commitDocument(appendDisplayElement(currentDocument, element));
+    dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(element.id);
+    setOptionsTrendId(null);
+  }, [commitDocument, dispatch, selectedPiPoint]);
+
+  const handleInsertTable = useCallback(() => {
+    const binding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+    if (!binding) return;
+    const currentDocument = documentRef.current;
+    const element = createTable({
+      item: { binding, description: (selectedPiPoint as { descriptor?: string; description?: string })?.descriptor ?? selectedPiPoint?.description },
+      surface: currentDocument.surface,
+      existingIds: currentDocument.elements.map(({ id }) => id),
+    });
+    if (!onChangeRef.current) return;
+    commitDocument(appendDisplayElement(currentDocument, element));
+    dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(element.id);
+    setOptionsTrendId(null);
+  }, [commitDocument, dispatch, selectedPiPoint]);
 
   const reorderSelected = useCallback((direction: 'front' | 'back', all = false) => {
     const selectedId = stateRef.current.selectedElementId;
@@ -775,7 +866,7 @@ export function DisplayEditor({
     }
   }, [dispatch, publishDocument]);
 
-  const propertiesOpen = mode === 'edit' && Boolean(optionsElementId && state.selectedElementId === optionsElementId);
+  const propertiesOpen = mode === 'edit' && Boolean(state.selectedElementId);
   const selectedValue = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => (
       element.id === state.selectedElementId
@@ -838,6 +929,12 @@ export function DisplayEditor({
   const selectedTrend = mode === 'edit' && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TREND_TYPE) as TrendElement | undefined
     : undefined;
+  const handleAddPiPointToSelectedTrend = useCallback(() => {
+    if (!selectedTrend || !selectedPiPoint) return;
+    const binding = createPiPointBinding(selectedPiPoint);
+    if (!binding) return;
+    commitDocument(addTrendSeries(documentRef.current, selectedTrend.id, binding));
+  }, [commitDocument, selectedPiPoint, selectedTrend]);
   const handleGaugeChange = useCallback((patch: Parameters<typeof updateGaugeOptions>[2]) => {
     commitDocument(updateGaugeOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
@@ -1133,11 +1230,25 @@ export function DisplayEditor({
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
                 <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
                 <input ref={imageInputRef} type="file" accept="image/*" data-testid="display-image-input" className={styles.fileInput} onChange={handleImageFile} />
-                <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} onClick={() => onDropSymbolTypeChange?.('value')}><ValueIcon /></button>
-                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} onClick={() => onDropSymbolTypeChange?.('gauge')}><GaugeIcon /></button>
-                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} onClick={() => onDropSymbolTypeChange?.('bar')}><BarIcon /></button>
-                <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => onDropSymbolTypeChange?.('trend')}><TrendIcon /></button>
-                <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => onDropSymbolTypeChange?.('table')}>▦</button>
+                <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} onClick={() => { onDropSymbolTypeChange?.('value'); if (selectedPiPoint) handleInsertValue(); }}><ValueIcon /></button>
+                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} onClick={() => { onDropSymbolTypeChange?.('gauge'); handleInsertGauge(); }}><GaugeIcon /></button>
+                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} onClick={() => { onDropSymbolTypeChange?.('bar'); handleInsertBar(); }}><BarIcon /></button>
+                <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => { onDropSymbolTypeChange?.('trend'); if (selectedPiPoint) handleInsertTrend(); }}><TrendIcon /></button>
+                <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => { onDropSymbolTypeChange?.('table'); handleInsertTable(); }}>▦</button>
+                {selectedTrend && (
+                  <button
+                    type="button"
+                    title="Adicionar tag à Trend selecionada"
+                    aria-label="Adicionar tag à Trend selecionada"
+                    className={styles.addTrendSeriesButton}
+                    data-testid="display-add-tag-to-selected-trend"
+                    disabled={!selectedTrend || !createPiPointBinding(selectedPiPoint ?? {})}
+                    onClick={handleAddPiPointToSelectedTrend}
+                  >
+                    <AddTagIcon />
+                    <span>Adicionar tag</span>
+                  </button>
+                )}
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
@@ -1289,7 +1400,19 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {selectedText && <TextPropertiesPanel properties={selectedText.properties} onChange={handleTextChange} />}
+        {selectedText && (
+          <TextPropertiesPanel
+            properties={selectedText.properties}
+            pointName={isPiPointBinding(selectedText.properties.binding) ? selectedText.properties.binding.pointName : undefined}
+            binding={isPiPointBinding(selectedText.properties.binding) ? selectedText.properties.binding : undefined}
+            loadDigitalStates={loadDigitalStates}
+            onChange={handleTextChange}
+            multistate={selectedText.properties.multistate}
+            onMultistateChange={handleMultistateChange}
+            backgroundMultistate={selectedText.properties.backgroundMultistate}
+            onBackgroundMultistateChange={handleBackgroundMultistateChange}
+          />
+        )}
         {selectedImage && <ImagePropertiesPanel properties={selectedImage.properties} onChange={handleImageChange} />}
         {selectedLibrarySymbol && (
           <LibrarySymbolPropertiesPanel
@@ -2188,4 +2311,8 @@ function ExportIcon() {
 
 function ImportIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M12 15V4m-4 7 4 4 4-4" /><path d="M5 13v6h14v-6" /></svg>;
+}
+
+function AddTagIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 12.4 11.4 4H20v8.6L11.6 21 3 12.4Z" /><circle cx="16" cy="8" r="1" fill="currentColor" stroke="none" /><path d="M18 15v6M15 18h6" /></svg>;
 }

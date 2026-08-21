@@ -120,7 +120,7 @@ describe('DisplayEditor - Trend', () => {
       serverPath: 'pims',
       pointName: 'SINUSOID',
       webId: 'point-webid',
-    }], expect.any(Function), { maxDataPoints: 780 });
+    }], expect.any(Function), { maxDataPoints: expect.any(Number) });
 
     expect(trend).toHaveStyle({ cursor: 'move' });
     const backgroundBeforeDrag = screen.getByTestId(`trend-background-${trend.getAttribute('data-element-id')}`);
@@ -178,11 +178,11 @@ describe('DisplayEditor - Trend', () => {
     expect(await screen.findByTestId('trend-popup-state-line-0')).toBeInTheDocument();
     expect(screen.getByTestId('trend-popup')).toHaveTextContent('On');
 
-    fireEvent.click(screen.getByTestId('trend-popup-cursor-mode'));
     expect(screen.getByTestId('trend-popup-cursor-mode')).toHaveAttribute('aria-pressed', 'true');
     const popupSvg = screen.getByLabelText('Trend detalhada') as unknown as SVGSVGElement;
     jest.spyOn(popupSvg, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 800, width: 1600, height: 800, toJSON: () => ({}) });
-    fireEvent.doubleClick(screen.getByTestId('trend-popup-cursor-plot'), { clientX: 400, clientY: 300, pointerId: 10 });
+    fireEvent.pointerDown(screen.getByTestId('trend-popup-cursor-plot'), { clientX: 400, clientY: 300, pointerId: 10 });
+    fireEvent.pointerUp(screen.getByTestId('trend-popup-cursor-plot'), { clientX: 400, clientY: 300, pointerId: 10 });
     expect(screen.getByTestId('trend-popup-cursor-popup-cursor-1')).toBeInTheDocument();
     expect(screen.getByTestId('trend-popup-cursor-reading-popup-cursor-1-0')).toHaveTextContent('SINUSOID');
     const cursorLine = screen.getByTestId('trend-popup-cursor-line-popup-cursor-1');

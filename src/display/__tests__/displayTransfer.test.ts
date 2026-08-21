@@ -4,12 +4,14 @@ import {
   appendDisplayElement,
   appendGauge,
   appendTrend,
+  appendText,
   appendValue,
   createBar,
   createDisplayDocument,
   createGauge,
   createRectangle,
   createTable,
+  createText,
   createTrend,
   createValue,
   DISPLAY_EXPORT_FORMAT,
@@ -19,6 +21,7 @@ import {
   serializeDisplayCsv,
   serializeDisplay,
   serializeDisplayXml,
+  type TextElement,
 } from '../index';
 
 const binding = { dataSourceUid: 'datasource-uid', serverPath: 'pims', pointName: 'SINUSOID' };
@@ -166,5 +169,38 @@ describe('displayTransfer', () => {
     expect(importedTrend.properties.visual?.legendWidth).toBe(320);
     expect(importedTrend.properties.visual?.title).toBe('Pressão');
     expect(importedTrend.properties.visual?.hideLegend).toBe(true);
+  });
+
+  it('serializa e desserializa propriedades de texto com cor de fundo e multistates separados', () => {
+    const document = createDisplayDocument({ id: 'text-transfer' });
+    const textElement = createText({
+      id: 'text-1',
+      binding,
+      properties: {
+        text: 'Nível Tanque',
+        color: '#ffffff',
+        backgroundColor: '#003366',
+        multistate: {
+          enabled: true,
+          rules: [{ id: 'r1', operator: 'gt', value: 80, color: '#ff0000' }],
+        },
+        backgroundMultistate: {
+          enabled: true,
+          rules: [{ id: 'r2', operator: 'lt', value: 20, color: '#ffff00' }],
+        },
+      },
+    });
+    const docWithText = appendText(document, textElement);
+
+    const serialized = serializeDisplay(docWithText);
+    const imported = parseImportedDisplay(serialized);
+    const importedText = imported.elements[0] as TextElement;
+
+    expect(importedText.properties.text).toBe('Nível Tanque');
+    expect(importedText.properties.backgroundColor).toBe('#003366');
+    expect(importedText.properties.multistate?.enabled).toBe(true);
+    expect(importedText.properties.multistate?.rules[0].color).toBe('#ff0000');
+    expect(importedText.properties.backgroundMultistate?.enabled).toBe(true);
+    expect(importedText.properties.backgroundMultistate?.rules[0].color).toBe('#ffff00');
   });
 });

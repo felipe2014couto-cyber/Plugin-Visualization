@@ -258,7 +258,7 @@ export function DisplaySurface({
       const calculation = calculations.find((item) => item.id === calculationId);
       return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
     }
-    return (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE)
+    return (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE || element.type === TEXT_TYPE)
       && isPiPointBinding(element.properties.binding)
       ? [{ elementId: element.id, binding: element.properties.binding }]
       : [];
@@ -894,10 +894,52 @@ export function DisplaySurface({
         }
         if (element.type === TEXT_TYPE) {
           const textElement = element as TextElement;
+          const runtimeState = runtimeStates.get(element.id);
+          const runtimeVal = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
+          const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
+          const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
           const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
           const x = textElement.properties.textAlign === 'left' ? textElement.x + 4 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 4 : textElement.x + textElement.width / 2;
           const rotation = textElement.properties.rotation ?? 0;
-          return <text key={element.id} x={x} y={textElement.y + textElement.height / 2} transform={`rotate(${rotation} ${textElement.x + textElement.width / 2} ${textElement.y + textElement.height / 2})`} fill={resolveThemeForeground(textElement.properties.color)} fontSize={textElement.properties.fontSize} textAnchor={anchor} dominantBaseline="middle" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: 'move' }}>{textElement.properties.text}</text>;
+          return (
+            <g
+              key={element.id}
+              x={element.x}
+              y={element.y}
+              width={element.width}
+              height={element.height}
+              transform={`rotate(${rotation} ${textElement.x + textElement.width / 2} ${textElement.y + textElement.height / 2})`}
+              data-testid={`display-element-${element.id}`}
+              data-element-id={element.id}
+              data-element-type={element.type}
+              style={{ cursor: 'move' }}
+            >
+              <rect
+                x={textElement.x}
+                y={textElement.y}
+                width={textElement.width}
+                height={textElement.height}
+                fill={bgColor}
+                stroke="none"
+                strokeWidth={0}
+                data-testid={`text-background-${element.id}`}
+                data-element-id={element.id}
+                data-element-type={element.type}
+                pointerEvents="all"
+              />
+              <text
+                x={x}
+                y={textElement.y + textElement.height / 2}
+                fill={textColor}
+                fontSize={textElement.properties.fontSize}
+                textAnchor={anchor}
+                dominantBaseline="middle"
+                pointerEvents="none"
+              >
+                {textElement.properties.text}
+              </text>
+            </g>
+          );
         }
         if (element.type === IMAGE_TYPE) {
           const image = element as ImageElement;
@@ -1084,15 +1126,18 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
     height: element.height,
     style: { cursor: 'move' },
     transform: `rotate(${Number(element.properties.rotation) || 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
+    fill,
+    stroke: getElementStroke(element),
+    strokeWidth: 1,
+    pointerEvents: 'all' as const,
   };
-  const appearance = { fill, stroke: getElementStroke(element), strokeWidth: 1, pointerEvents: 'all' as const };
   if (element.properties.shape === 'ellipse') {
-    return <g {...common}><ellipse {...appearance} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} /></g>;
+    return <ellipse {...common} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} />;
   }
   if (element.properties.shape === 'triangle') {
-    return <g {...common}><polygon {...appearance} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} /></g>;
+    return <polygon {...common} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} />;
   }
-  return <g {...common}><rect {...appearance} x={element.x} y={element.y} width={element.width} height={element.height} /></g>;
+  return <rect {...common} />;
 }
 
 function normalizeSelectionBox(start: Point, current: Point) {

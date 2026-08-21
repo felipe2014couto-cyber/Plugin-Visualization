@@ -72,23 +72,39 @@ export function TransparentColorPicker({ color, fallbackColor, onChange, testId 
     };
   }, [open]);
 
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const button = buttonRef.current;
+    if (!button) return;
+    const handleChange = (event: Event) => {
+      const target = event.target as { value?: string } | null;
+      const value = target?.value;
+      if (typeof value === 'string') {
+        if (value === 'transparent') {
+          onChange('transparent');
+        } else {
+          const next = normalizeHex(value);
+          if (next) {
+            onChange(next);
+          }
+        }
+      }
+    };
+    button.addEventListener('change', handleChange);
+    return () => button.removeEventListener('change', handleChange);
+  }, [onChange]);
+
   return (
     <div className={styles.root} ref={rootRef}>
       <button
+        ref={buttonRef}
         type="button"
         className={styles.trigger}
         data-testid={testId}
         aria-label="Selecionar cor"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
-        // Keep the shared test/automation contract used by the former native
-        // color input while the visible control is the SVG-style picker.
-        onChange={(event) => {
-          const next = (event.target as HTMLInputElement).value;
-          if (isHexColor(next)) {
-            onChange(next);
-          }
-        }}
       >
         <span className={transparent ? styles.transparentSwatch : styles.swatch} style={transparent ? undefined : { background: selectedColor }} />
       </button>
