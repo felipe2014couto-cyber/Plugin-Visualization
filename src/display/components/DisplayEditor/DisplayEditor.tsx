@@ -86,6 +86,7 @@ import {
   type GroupElement,
   type GroupProperties,
 } from '../../createGroup';
+import { isElementLocked, updateElementLocked } from '../../createLocked';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import { TablePropertiesPanel } from './TablePropertiesPanel';
@@ -210,8 +211,10 @@ export function DisplayEditor({
     x: number;
     y: number;
     elementId?: string;
+    elementIds?: string[];
     showGroup?: boolean;
     showUngroup?: boolean;
+    isLocked?: boolean;
   } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -333,9 +336,13 @@ export function DisplayEditor({
   const handleStartDrag = useCallback(
     (elementId: string, pointer: Point, selectedIds: string[] = [elementId]) => {
       const el = getElementById(documentRef.current, elementId);
-      if (!el) {
+      if (!el || isElementLocked(el)) {
         return;
       }
+      const unlockedSelectedIds = selectedIds.filter((id) => {
+        const candidate = getElementById(documentRef.current, id);
+        return candidate && !isElementLocked(candidate);
+      });
       pendingTransactionRef.current = { before: documentRef.current };
       dispatch({
         type: 'START_DRAG',
@@ -343,7 +350,7 @@ export function DisplayEditor({
         pointer,
         originalGeometry: { x: el.x, y: el.y, width: el.width, height: el.height },
         originalGeometries: Object.fromEntries(
-          selectedIds.map((id) => {
+          unlockedSelectedIds.map((id) => {
             const selected = getElementById(documentRef.current, id);
             return selected ? [id, { x: selected.x, y: selected.y, width: selected.width, height: selected.height }] : [];
           }).filter((entry): entry is [string, ElementGeometry] => entry.length > 0),
@@ -356,7 +363,7 @@ export function DisplayEditor({
   const handleStartResize = useCallback(
     (elementId: string, handle: ResizeHandle, pointer: Point) => {
       const el = getElementById(documentRef.current, elementId);
-      if (!el) {
+      if (!el || isElementLocked(el)) {
         return;
       }
       pendingTransactionRef.current = { before: documentRef.current };
@@ -970,35 +977,66 @@ export function DisplayEditor({
     setContextMenu(null);
   }, [commitDocument, contextMenu?.elementId, dispatch]);
 
+  const handleToggleLock = useCallback((elementIds: string | string[], locked: boolean) => {
+    commitDocument(updateElementLocked(documentRef.current, elementIds, locked));
+    setContextMenu(null);
+  }, [commitDocument]);
+
   const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement, event?: React.MouseEvent) => {
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
+      const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
+      const allLocked = selectedElements.length > 0 && selectedElements.every((el) => isElementLocked(el));
       setContextMenu({
         x: event?.clientX ?? 100,
         y: event?.clientY ?? 100,
         elementId: element.id,
+        elementIds: selectedIds,
         showGroup: true,
         showUngroup: false,
+        isLocked: allLocked,
       });
       return;
     }
     dispatch({ type: 'SELECT', elementId: element.id });
+    setContextMenu({
+      x: event?.clientX ?? 100,
+      y: event?.clientY ?? 100,
+      elementId: element.id,
+      elementIds: [element.id],
+      showGroup: false,
+      showUngroup: false,
+      isLocked: isElementLocked(element),
+    });
     setOptionsElementId(element.id);
   }, [dispatch]);
 
   const handleTrendContextMenu = useCallback((element: TrendElement, event?: React.MouseEvent) => {
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
+      const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
+      const allLocked = selectedElements.length > 0 && selectedElements.every((el) => isElementLocked(el));
       setContextMenu({
         x: event?.clientX ?? 100,
         y: event?.clientY ?? 100,
         elementId: element.id,
+        elementIds: selectedIds,
         showGroup: true,
         showUngroup: false,
+        isLocked: allLocked,
       });
       return;
     }
     dispatch({ type: 'SELECT', elementId: element.id });
+    setContextMenu({
+      x: event?.clientX ?? 100,
+      y: event?.clientY ?? 100,
+      elementId: element.id,
+      elementIds: [element.id],
+      showGroup: false,
+      showUngroup: false,
+      isLocked: isElementLocked(element),
+    });
     setOptionsElementId(null);
     setOptionsTrendId(element.id);
   }, [dispatch]);
@@ -1006,12 +1044,16 @@ export function DisplayEditor({
   const handleElementContextMenu = useCallback((element: DisplayElement, event?: React.MouseEvent) => {
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
+      const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
+      const allLocked = selectedElements.length > 0 && selectedElements.every((el) => isElementLocked(el));
       setContextMenu({
         x: event?.clientX ?? 100,
         y: event?.clientY ?? 100,
         elementId: element.id,
+        elementIds: selectedIds,
         showGroup: true,
         showUngroup: false,
+        isLocked: allLocked,
       });
       return;
     }
@@ -1021,12 +1063,23 @@ export function DisplayEditor({
         x: event?.clientX ?? 100,
         y: event?.clientY ?? 100,
         elementId: element.id,
+        elementIds: [element.id],
         showGroup: false,
         showUngroup: true,
+        isLocked: isElementLocked(element),
       });
       return;
     }
     dispatch({ type: 'SELECT', elementId: element.id });
+    setContextMenu({
+      x: event?.clientX ?? 100,
+      y: event?.clientY ?? 100,
+      elementId: element.id,
+      elementIds: [element.id],
+      showGroup: false,
+      showUngroup: false,
+      isLocked: isElementLocked(element),
+    });
     setOptionsElementId(element.id);
     setOptionsTrendId(null);
   }, [dispatch]);
@@ -1052,8 +1105,20 @@ export function DisplayEditor({
         onClick: handleUngroupSelected,
       });
     }
+    const targets = contextMenu.elementIds && contextMenu.elementIds.length > 0
+      ? contextMenu.elementIds
+      : (contextMenu.elementId ? [contextMenu.elementId] : []);
+    if (targets.length > 0) {
+      const isLocked = Boolean(contextMenu.isLocked);
+      items.push({
+        id: isLocked ? 'unlock' : 'lock',
+        label: isLocked ? (targets.length > 1 ? 'Desbloquear Seleção' : 'Desbloquear') : (targets.length > 1 ? 'Bloquear Seleção' : 'Bloquear'),
+        testId: isLocked ? 'context-menu-unlock' : 'context-menu-lock',
+        onClick: () => handleToggleLock(targets, !isLocked),
+      });
+    }
     return items;
-  }, [contextMenu, handleGroupSelected, handleUngroupSelected]);
+  }, [contextMenu, handleGroupSelected, handleToggleLock, handleUngroupSelected]);
   const optionsTrend = optionsTrendId
     ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
     : undefined;

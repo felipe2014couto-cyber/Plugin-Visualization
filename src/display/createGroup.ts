@@ -10,6 +10,7 @@ export interface GroupProperties extends Record<string, unknown> {
   elements: DisplayElement[];
   rotation?: number;
   name?: string;
+  locked?: boolean;
 }
 
 export type GroupElement = DisplayElement<typeof GROUP_TYPE, GroupProperties>;
@@ -23,6 +24,7 @@ export interface CreateGroupOptions {
   elements: DisplayElement[];
   rotation?: number;
   name?: string;
+  properties?: Partial<GroupProperties>;
 }
 
 export function createGroup(options: CreateGroupOptions): GroupElement {
@@ -46,6 +48,7 @@ export function createGroup(options: CreateGroupOptions): GroupElement {
       elements: children,
       rotation: options.rotation ?? 0,
       ...(options.name ? { name: options.name } : {}),
+      ...(options.properties ?? {}),
     },
   };
 }

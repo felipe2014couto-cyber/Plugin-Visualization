@@ -58,6 +58,8 @@ export {
 } from './createGroup';
 export type { CreateGroupOptions, GroupElement, GroupProperties } from './createGroup';
 
+export { isElementLocked, updateElementLocked } from './createLocked';
+
 export { appendValue, createValue, VALUE_TYPE } from './createValue';
 export {
   DEFAULT_VALUE_VISUAL_OPTIONS,

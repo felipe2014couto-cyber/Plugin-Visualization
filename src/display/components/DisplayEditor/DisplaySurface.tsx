@@ -31,6 +31,7 @@ import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
 import { extractAllGroupBindingsAndElements, findTopLevelElementId, GROUP_TYPE, type GroupElement } from '../../createGroup';
+import { isElementLocked } from '../../createLocked';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../../../library';
 import {
   getTrendSeriesConsumerId,
@@ -623,10 +624,12 @@ export function DisplaySurface({
         ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
       const handleAttr = target.getAttribute('data-resize-handle');
       const elementId = handleAttr ? rawId : (rawId ? (findTopLevelElementId(elements, rawId) ?? rawId) : undefined);
+      const clickedEl = elementId ? elements.find((el) => el.id === elementId) : undefined;
+      const isLocked = isElementLocked(clickedEl);
 
       trySetPointerCapture(svg, e.pointerId);
 
-      if (handleAttr && elementId) {
+      if (handleAttr && elementId && !isLocked) {
         onStartResize(
           elementId,
           handleAttr as ResizeHandle,
@@ -646,11 +649,13 @@ export function DisplaySurface({
           multiSelectionRef.current = false;
           onSelectMany([elementId]);
         }
-        onStartDrag(
-          elementId,
-          svgPointFromEvent(svg, e.clientX, e.clientY),
-          preserveSelection ? selectedElementIds : [elementId],
-        );
+        if (!isLocked) {
+          onStartDrag(
+            elementId,
+            svgPointFromEvent(svg, e.clientX, e.clientY),
+            preserveSelection ? selectedElementIds : [elementId],
+          );
+        }
         return;
       }
 
@@ -1054,53 +1059,68 @@ export function DisplaySurface({
         if (!element) {
           return null;
         }
+        const isLocked = isElementLocked(element);
         const positions = getResizeHandlePositions(element);
         return (
           <g key={id} data-testid={`display-selection-overlay-${id}`}>
-            <rect x={element.x - 1} y={element.y - 1} width={element.width + 2} height={element.height + 2} fill="none" stroke={SELECTION_STROKE} strokeWidth={1} strokeDasharray="4 2" data-testid={`display-selection-box-${id}`} pointerEvents="none" />
-            {positions.map((pos) => {
+            <rect
+              x={element.x - 1}
+              y={element.y - 1}
+              width={element.width + 2}
+              height={element.height + 2}
+              fill="none"
+              stroke={isLocked ? '#f5a623' : SELECTION_STROKE}
+              strokeWidth={1}
+              strokeDasharray={isLocked ? '2 2' : '4 2'}
+              data-testid={`display-selection-box-${id}`}
+              pointerEvents="none"
+            />
+            {!isLocked && positions.map((pos) => {
               const rect = getResizeHandleRect(pos, HANDLE_SIZE);
               return <rect key={pos.handle} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={1} data-testid={`display-resize-handle-${id}-${pos.handle}`} data-element-id={id} data-resize-handle={pos.handle} style={{ cursor: getHandleCursor(pos.handle) }} />;
             })}
           </g>
         );
       })}
-      {selectedElement && (
-        <g data-testid="display-selection-overlay">
-          <rect
-            x={selectedElement.x - 1}
-            y={selectedElement.y - 1}
-            width={selectedElement.width + 2}
-            height={selectedElement.height + 2}
-            fill="none"
-            stroke={SELECTION_STROKE}
-            strokeWidth={1}
-            strokeDasharray="4 2"
-            data-testid="display-selection-bounding-box"
-            pointerEvents="none"
-          />
+      {selectedElement && (() => {
+        const isLocked = isElementLocked(selectedElement);
+        return (
+          <g data-testid="display-selection-overlay">
+            <rect
+              x={selectedElement.x - 1}
+              y={selectedElement.y - 1}
+              width={selectedElement.width + 2}
+              height={selectedElement.height + 2}
+              fill="none"
+              stroke={isLocked ? '#f5a623' : SELECTION_STROKE}
+              strokeWidth={1}
+              strokeDasharray={isLocked ? '2 2' : '4 2'}
+              data-testid="display-selection-bounding-box"
+              pointerEvents="none"
+            />
 
-          {handlePositions.map((pos) => {
-            const rect = getResizeHandleRect(pos, HANDLE_SIZE);
-            return (
-              <rect
-                key={pos.handle}
-                x={rect.x}
-                y={rect.y}
-                width={rect.width}
-                height={rect.height}
-                fill={HANDLE_FILL}
-                stroke={HANDLE_STROKE}
-                strokeWidth={1}
-                data-testid={`display-resize-handle-${pos.handle}`}
-                data-element-id={selectedElement.id}
-                data-resize-handle={pos.handle}
-                style={{ cursor: getHandleCursor(pos.handle) }}
-              />
-            );
-          })}
-        </g>
-      )}
+            {!isLocked && handlePositions.map((pos) => {
+              const rect = getResizeHandleRect(pos, HANDLE_SIZE);
+              return (
+                <rect
+                  key={pos.handle}
+                  x={rect.x}
+                  y={rect.y}
+                  width={rect.width}
+                  height={rect.height}
+                  fill={HANDLE_FILL}
+                  stroke={HANDLE_STROKE}
+                  strokeWidth={1}
+                  data-testid={`display-resize-handle-${pos.handle}`}
+                  data-element-id={selectedElement.id}
+                  data-resize-handle={pos.handle}
+                  style={{ cursor: getHandleCursor(pos.handle) }}
+                />
+              );
+            })}
+          </g>
+        );
+      })()}
     </svg>
   );
 }

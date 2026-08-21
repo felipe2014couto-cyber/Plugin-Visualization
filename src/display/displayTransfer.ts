@@ -20,6 +20,7 @@ import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE } from './createLibrarySymbo
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../library';
 import type { CalculationDefinition } from '../calculations/calculationEngine';
 import { CALCULATION_TYPE } from './createCalculation';
+import { GROUP_TYPE } from './createGroup';
 import { defaultTableColumns, TABLE_COLUMNS, TABLE_TYPE, type TableColumnAlign, type TableColumnConfig, type TableDataItem } from './createTable';
 
 export const DISPLAY_EXPORT_FORMAT = 'pims-vision-display';
@@ -230,7 +231,7 @@ function portableElement(input: unknown): DisplayElement {
       if (typeof input.properties.src !== 'string' || !input.properties.src.startsWith('data:image/')) {
         throw new DisplayImportError('Imagem de Display inválida.');
       }
-      return { ...base, type: IMAGE_TYPE, properties: { src: input.properties.src, alt: typeof input.properties.alt === 'string' ? input.properties.alt : 'Imagem', rotation: normalizeRotation(input.properties.rotation), ...portableLink(input.properties) } };
+      return { ...base, type: IMAGE_TYPE, properties: { src: input.properties.src, alt: typeof input.properties.alt === 'string' ? input.properties.alt : 'Imagem', rotation: normalizeRotation(input.properties.rotation), ...portableLocked(input.properties), ...portableLink(input.properties) } };
     case LIBRARY_SYMBOL_TYPE: {
       const symbol = typeof input.properties.symbolId === 'string' ? findIndustrialSymbol(input.properties.symbolId) : undefined;
       if (!symbol) {
@@ -246,6 +247,7 @@ function portableElement(input: unknown): DisplayElement {
           viewBox: symbol.viewBox,
           color: getLibrarySymbolColor(input.properties),
           ...portableLink(input.properties),
+          ...portableLocked(input.properties),
           rotation: normalizeRotation(input.properties.rotation),
           ...portableOptionalBinding(input.properties.binding),
           ...portableMultistate(input.properties.multistate),
@@ -261,6 +263,7 @@ function portableElement(input: unknown): DisplayElement {
         textAlign: input.properties.textAlign === 'left' || input.properties.textAlign === 'right' ? input.properties.textAlign : 'center',
         rotation: normalizeRotation(input.properties.rotation),
         ...portableLink(input.properties),
+        ...portableLocked(input.properties),
         ...portableOptionalBinding(input.properties.binding),
         ...portableMultistate(input.properties.multistate),
         ...portableBackgroundMultistate(input.properties.backgroundMultistate),
@@ -277,6 +280,7 @@ function portableElement(input: unknown): DisplayElement {
             : 'rectangle',
           rotation: normalizeRotation(input.properties.rotation),
           ...portableLink(input.properties),
+          ...portableLocked(input.properties),
           ...portableOptionalBinding(input.properties.binding),
           ...portableMultistate(input.properties.multistate),
         },
@@ -289,6 +293,7 @@ function portableElement(input: unknown): DisplayElement {
         visual: portableVisual(input.properties.visual),
         ...portableMultistate(input.properties.multistate),
         ...portableBackgroundMultistate(input.properties.backgroundMultistate),
+        ...portableLocked(input.properties),
         ...portableLink(input.properties),
       } };
     case CALCULATION_TYPE:
@@ -298,6 +303,7 @@ function portableElement(input: unknown): DisplayElement {
       return { ...base, type: CALCULATION_TYPE, properties: {
         calculationId: input.properties.calculationId,
         visual: portableVisual(input.properties.visual),
+        ...portableLocked(input.properties),
         ...portableLink(input.properties),
       } };
     case TREND_TYPE:
@@ -307,16 +313,18 @@ function portableElement(input: unknown): DisplayElement {
         properties: {
           series: portableTrendSeries(input.properties),
           ...(isRecord(input.properties.visual) ? { visual: portableTrendVisual(input.properties.visual) } : {}),
+          ...portableLocked(input.properties),
         },
       };
     case TABLE_TYPE:
-      return { ...base, type: TABLE_TYPE, properties: portableTable(input.properties) };
+      return { ...base, type: TABLE_TYPE, properties: { ...portableTable(input.properties), ...portableLocked(input.properties) } };
     case GAUGE_TYPE:
       return { ...base, type: GAUGE_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
         ...(isNonEmptyString(input.properties.calculationId) ? { calculationId: input.properties.calculationId } : {}),
         ...portableGauge(input.properties),
         ...portableMultistate(input.properties.multistate),
+        ...portableLocked(input.properties),
         ...portableLink(input.properties),
       } };
     case BAR_TYPE:
@@ -326,8 +334,24 @@ function portableElement(input: unknown): DisplayElement {
         ...portableScale(input.properties),
         orientation: input.properties.orientation === 'horizontal' ? 'horizontal' : 'vertical',
         ...portableMultistate(input.properties.multistate),
+        ...portableLocked(input.properties),
         ...portableLink(input.properties),
       } };
+    case GROUP_TYPE: {
+      if (!Array.isArray(input.properties?.elements)) {
+        throw new DisplayImportError('Grupo de Display inválido.');
+      }
+      return {
+        ...base,
+        type: GROUP_TYPE,
+        properties: {
+          elements: (input.properties.elements as unknown[]).map(parseElement),
+          rotation: normalizeRotation(input.properties.rotation),
+          ...portableLocked(input.properties),
+          ...portableLink(input.properties),
+        },
+      };
+    }
     default:
       throw new DisplayImportError('Tipo de elemento não suportado.');
   }
@@ -527,4 +551,8 @@ function isPositiveFinite(value: unknown): value is number {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function portableLocked(properties: unknown): { locked?: boolean } {
+  return isRecord(properties) && properties.locked === true ? { locked: true } : {};
 }
