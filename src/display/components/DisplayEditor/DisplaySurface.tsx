@@ -11,6 +11,8 @@ import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
 import { TABLE_TYPE, type TableColumnConfig, type TableElement } from '../../createTable';
 import { TableElementView, getTableItemConsumerId, getTableTrendConsumerId } from '../TableElementView';
+import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
+import { SqlTableElementView } from '../SqlTableElementView';
 import { GAUGE_TYPE, getGaugeOptions, type GaugeElement } from '../../createGauge';
 import { ValueElementView } from '../ValueElementView';
 import { GaugeElementView } from '../GaugeElementView';
@@ -850,7 +852,7 @@ export function DisplaySurface({
                 data-element-id={elementIdToUse}
                 data-element-type={element.type}
                 transform={rotation ? `rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})` : undefined}
-                style={{ cursor: 'move' }}
+                style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}
               >
                 <g transform={`translate(${element.x}, ${element.y})`}>
                   {children.map((child) => renderSingleElement(child, elementIdToUse))}
@@ -917,6 +919,9 @@ export function DisplaySurface({
           if (element.type === TABLE_TYPE) {
             return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onColumnsChange={editable ? (columns) => onTableColumnsChange?.(element.id, columns) : undefined} />;
           }
+          if (element.type === SQL_TABLE_TYPE) {
+            return <SqlTableElementView key={element.id} element={element as unknown as SqlTableElement} selected={selectedElementIds?.includes(element.id)} editable={editable} />;
+          }
           if (element.type === TREND_TYPE) {
             const trendElement = element as unknown as TrendElement;
             const seriesStates = getTrendSeriesStates(trendElement, allTrendRuntimeStates);
@@ -970,7 +975,7 @@ export function DisplaySurface({
                 data-testid={`display-element-${element.id}`}
                 data-element-id={elementIdToUse}
                 data-element-type={element.type}
-                style={{ cursor: 'move' }}
+                style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}
               >
                 <rect
                   x={textElement.x}
@@ -1012,7 +1017,7 @@ export function DisplaySurface({
           if (element.type === IMAGE_TYPE) {
             const image = element as ImageElement;
             const rotation = image.properties.rotation ?? 0;
-            return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} transform={`rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={elementIdToUse} data-element-type={element.type} style={{ cursor: 'move' }} />;
+            return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} transform={`rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={elementIdToUse} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }} />;
           }
           if (element.type === LIBRARY_SYMBOL_TYPE) {
             const symbol = element as LibrarySymbolElement;
@@ -1021,7 +1026,7 @@ export function DisplaySurface({
             const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
             const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
             return (
-              <g key={element.id} data-element-id={elementIdToUse} data-element-type={element.type} style={{ cursor: 'move' }}>
+              <g key={element.id} data-element-id={elementIdToUse} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}>
                 <g transform={`rotate(${symbol.properties.rotation ?? 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`}>
                   <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
                   <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={elementIdToUse} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />

@@ -50,7 +50,7 @@ import {
   updateBarOptions,
   type BarElement,
 } from '../../createBar';
-import { addTableItem, appendTable, createTable, moveTableItem, removeTableItem, TABLE_TYPE, updateTableProperties, type TableColumnConfig, type TableElement, type TableDataItem, type TableProperties } from '../../createTable';
+import { addTableItem, appendTable, createTable, moveTableItem, removeTableItem, TABLE_TYPE, updateTableProperties, type TableColumnConfig, type TableElement, type TableDataItem } from '../../createTable';
 import {
   appendDisplayElement,
   createRectangle,
@@ -90,6 +90,8 @@ import { isElementLocked, updateElementLocked } from '../../createLocked';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import { TablePropertiesPanel } from './TablePropertiesPanel';
+import { SqlTablePropertiesPanel } from './SqlTablePropertiesPanel';
+import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
 import type { TrendCursor } from '../../runtime/trendCursor';
 import type { LoadCurrentValues } from '../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../runtime/trendRuntime';
@@ -115,6 +117,7 @@ export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'table
 export interface DisplayEditorProps {
   document: DisplayDocument;
   onChange?: (document: DisplayDocument) => void;
+  onSelectionChange?: (selectedIds: string[]) => void;
   onModeChange?: (mode: DisplayEditorMode) => void;
   selectedPiPoint?: PiPointSearchResult | null;
   loadValue?: (binding: PiPointBinding) => Promise<PiPointValue>;
@@ -188,6 +191,7 @@ export function DisplayEditor({
   showToolbar = true,
   loadRecordedData,
   loadInterpolatedData,
+  onSelectionChange,
 }: DisplayEditorProps) {
   const styles = useStyles2(getStyles);
   const [state, baseDispatch] = useReducer(editorReducer, initialEditorState);
@@ -251,6 +255,14 @@ export function DisplayEditor({
       refreshHistory((version) => version + 1);
     }
   }, [displayDocument]);
+  useEffect(() => {
+    onModeChange?.(mode);
+  }, [mode, onModeChange]);
+
+  useEffect(() => {
+    onSelectionChange?.(state.selectedElementIds);
+  }, [state.selectedElementIds, onSelectionChange]);
+
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
@@ -896,15 +908,32 @@ export function DisplayEditor({
   const selectedTable = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TABLE_TYPE) as TableElement | undefined
     : undefined;
-  const handleTableChange = useCallback((patch: Partial<TableProperties>) => {
-    commitDocument(updateTableProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
-  }, [commitDocument]);
-  const handleTableColumnsChange = useCallback((elementId: string, columns: TableColumnConfig[]) => {
-    commitDocument(updateTableProperties(documentRef.current, elementId, { columns }));
-  }, [commitDocument]);
+  const selectedSqlTable = propertiesOpen && state.selectedElementId
+    ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === SQL_TABLE_TYPE) as SqlTableElement | undefined
+    : undefined;
   const selectedRectangle = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === RECTANGLE_TYPE) as RectangleElement | undefined
     : undefined;
+
+  const handleTableChange = useCallback((patch: Partial<TableElement['properties']>) => {
+    if (!stateRef.current.selectedElementId) return;
+    commitDocument({
+      ...documentRef.current,
+      elements: documentRef.current.elements.map(e => e.id === stateRef.current.selectedElementId ? { ...e, properties: { ...e.properties, ...patch } } : e)
+    });
+  }, [commitDocument]);
+
+  const handleSqlTableChange = useCallback((patch: Partial<SqlTableElement['properties']>) => {
+    if (!stateRef.current.selectedElementId) return;
+    commitDocument({
+      ...documentRef.current,
+      elements: documentRef.current.elements.map(e => e.id === stateRef.current.selectedElementId ? { ...e, properties: { ...e.properties, ...patch } } : e)
+    });
+  }, [commitDocument]);
+  
+  const handleTableColumnsChange = useCallback((elementId: string, columns: TableColumnConfig[]) => {
+    commitDocument(updateTableProperties(documentRef.current, elementId, { columns }));
+  }, [commitDocument]);
   const selectedText = propertiesOpen && state.selectedElementId
     ? displayDocument.elements.find((element) => element.id === state.selectedElementId && element.type === TEXT_TYPE) as TextElement | undefined
     : undefined;
@@ -1525,6 +1554,7 @@ export function DisplayEditor({
           <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} binding={selectedBar.properties.binding} loadDigitalStates={loadDigitalStates} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} openInNewTab={selectedBar.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} />}
+        {selectedSqlTable && <SqlTablePropertiesPanel properties={selectedSqlTable.properties} onChange={handleSqlTableChange} />}
         {selectedRectangle && (
           <RectanglePropertiesPanel
             fill={selectedRectangle.properties.fill ?? DEFAULT_RECTANGLE_PROPERTIES.fill}
@@ -1567,7 +1597,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
+        {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedTable && !selectedSqlTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (

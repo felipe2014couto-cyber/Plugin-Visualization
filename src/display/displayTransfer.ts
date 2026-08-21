@@ -22,6 +22,7 @@ import type { CalculationDefinition } from '../calculations/calculationEngine';
 import { CALCULATION_TYPE } from './createCalculation';
 import { GROUP_TYPE } from './createGroup';
 import { defaultTableColumns, TABLE_COLUMNS, TABLE_TYPE, type TableColumnAlign, type TableColumnConfig, type TableDataItem } from './createTable';
+import { SQL_TABLE_TYPE } from './createSqlTable';
 
 export const DISPLAY_EXPORT_FORMAT = 'pims-vision-display';
 export const DISPLAY_EXPORT_VERSION = 1;
@@ -318,6 +319,19 @@ function portableElement(input: unknown): DisplayElement {
       };
     case TABLE_TYPE:
       return { ...base, type: TABLE_TYPE, properties: { ...portableTable(input.properties), ...portableLocked(input.properties) } };
+    case SQL_TABLE_TYPE:
+      if (typeof input.properties.sql !== 'string') {
+        throw new DisplayImportError('Tabela SQL inválida.');
+      }
+      return {
+        ...base,
+        type: SQL_TABLE_TYPE,
+        properties: {
+          sql: input.properties.sql,
+          result: isRecord(input.properties.result) ? (input.properties.result as any) : undefined,
+          ...portableLocked(input.properties),
+        },
+      };
     case GAUGE_TYPE:
       return { ...base, type: GAUGE_TYPE, properties: {
         ...portableOptionalBinding(input.properties.binding),
@@ -345,7 +359,7 @@ function portableElement(input: unknown): DisplayElement {
         ...base,
         type: GROUP_TYPE,
         properties: {
-          elements: (input.properties.elements as unknown[]).map(parseElement),
+          elements: (input.properties.elements as unknown[]).map(portableElement),
           rotation: normalizeRotation(input.properties.rotation),
           ...portableLocked(input.properties),
           ...portableLink(input.properties),

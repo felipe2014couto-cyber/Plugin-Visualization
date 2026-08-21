@@ -17,6 +17,11 @@ jest.mock('@grafana/runtime', () => ({
 
 jest.mock('@grafana/ui', () => ({
   useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  Icon: () => null,
+  Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
+  Input: (props: any) => <input {...props} />,
+  Field: ({ children, label }: any) => <div>{label}{children}</div>,
+  SecretInput: ({ isConfigured, ...props }: any) => <input type="password" {...props} />,
 }));
 
 jest.mock('../../../pi', () => ({
