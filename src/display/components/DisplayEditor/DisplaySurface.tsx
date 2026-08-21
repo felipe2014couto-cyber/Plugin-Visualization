@@ -292,7 +292,7 @@ export function DisplaySurface({
     return Object.fromEntries(entries);
   }, [loadValue]);
   const runtimeStates = useValueRuntime(valueConsumers, loadValues ?? fallbackLoader);
-  const trendConsumers: TrendRuntimeConsumer[] = elements.flatMap((element) => {
+  const trendConsumers: TrendRuntimeConsumer[] = allElements.flatMap((element) => {
     if (element.type === TABLE_TYPE) {
       return (element as TableElement).properties.items.map((item, index) => ({ elementId: element.id, consumerId: getTableTrendConsumerId(element.id, index), binding: item.binding, width: Math.max(80, element.width / 4) }));
     }
@@ -313,14 +313,14 @@ export function DisplaySurface({
     ]),
   ), []);
   const trendRuntimeStates = useTrendRuntime(trendConsumers, loadTrend ?? fallbackTrendLoader, trendRefreshKey);
-  const calculationTrendElements = useMemo(() => elements.flatMap((element) => {
+  const calculationTrendElements = useMemo(() => allElements.flatMap((element) => {
     if (element.type !== TREND_TYPE) {
       return [];
     }
     return getTrendSeries(element as TrendElement)
       .filter((series) => Boolean(series.calculationId))
       .map((series) => ({ element: element as TrendElement, series }));
-  }), [elements]);
+  }), [allElements]);
   const calculationTrendSignature = calculationTrendElements.map(({ element, series }) => `${element.id}:${series.calculationId}`).join('|');
   const [calculationTrendStates, setCalculationTrendStates] = useState<Map<string, TrendRuntimeState>>(new Map());
   useEffect(() => {
@@ -375,7 +375,7 @@ export function DisplaySurface({
     if (editable) {
       return;
     }
-    const element = elements.find((candidate) => candidate.id === elementId);
+    const element = allElements.find((candidate) => candidate.id === elementId);
     if (!element || element.type !== TREND_TYPE) {
       return;
     }
@@ -385,7 +385,7 @@ export function DisplaySurface({
       return;
     }
     onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, allTrendRuntimeStates), cursorsByTrend[element.id] ?? []);
-  }, [allTrendRuntimeStates, cursorsByTrend, editable, elements, onTrendOpen]);
+  }, [allElements, allTrendRuntimeStates, cursorsByTrend, editable, onTrendOpen]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
     if (!editable) {
       return;
@@ -453,11 +453,11 @@ export function DisplaySurface({
       let changed = false;
       const next: Record<string, TrendCursor[]> = {};
       for (const [elementId, cursors] of Object.entries(current)) {
-        if (!elements.some((element) => element.id === elementId && element.type === TREND_TYPE)) {
+        if (!allElements.some((element) => element.id === elementId && element.type === TREND_TYPE)) {
           changed = true;
           continue;
         }
-        const element = elements.find((candidate) => candidate.id === elementId) as TrendElement | undefined;
+        const element = allElements.find((candidate) => candidate.id === elementId) as TrendElement | undefined;
         const points = element ? getTrendPoints(element, allTrendRuntimeStates) : undefined;
         const retained = points ? cursors.filter((cursor) => isTrendCursorWithinSeries(points, cursor.time)) : cursors;
         if (retained.length > 0) {
@@ -469,7 +469,7 @@ export function DisplaySurface({
       }
       return changed ? next : current;
     });
-  }, [allTrendRuntimeStates, elements]);
+  }, [allElements, allTrendRuntimeStates]);
 
   useEffect(() => {
     if (selectedCursor && !(cursorsByTrend[selectedCursor.trendElementId] ?? [])
@@ -487,7 +487,7 @@ export function DisplaySurface({
       return;
     }
     const svg = svgRef.current;
-    const element = elements.find((candidate) => candidate.id === elementId) as TrendElement | undefined;
+    const element = allElements.find((candidate) => candidate.id === elementId) as TrendElement | undefined;
     const points = element ? getTrendPoints(element, allTrendRuntimeStates) : undefined;
     if (!svg || !points || points.length === 0 || cursorDrag) {
       return;
@@ -503,14 +503,14 @@ export function DisplaySurface({
     nextCursorId.current += 1;
     setCursorsByTrend((current) => {
       const next = { ...current };
-      for (const trendElement of elements.filter((candidate) => candidate.type === TREND_TYPE)) {
+      for (const trendElement of allElements.filter((candidate) => candidate.type === TREND_TYPE)) {
         next[trendElement.id] = [...(next[trendElement.id] ?? []), cursor];
       }
       return next;
     });
     setSelectedCursor({ trendElementId: elementId, cursorId: cursor.id });
     svg.focus();
-  }, [allTrendRuntimeStates, cursorDrag, editable, elements]);
+  }, [allElements, allTrendRuntimeStates, cursorDrag, editable]);
 
   const handleTrendCursorPointerDown = useCallback((
     event: React.PointerEvent<SVGLineElement>,
@@ -680,7 +680,7 @@ export function DisplaySurface({
         if (cursorDrag.pointerId !== e.pointerId) {
           return;
         }
-        const element = elements.find((candidate) => candidate.id === cursorDrag.trendElementId);
+        const element = allElements.find((candidate) => candidate.id === cursorDrag.trendElementId);
         if (!element || element.type !== TREND_TYPE) {
           return;
         }

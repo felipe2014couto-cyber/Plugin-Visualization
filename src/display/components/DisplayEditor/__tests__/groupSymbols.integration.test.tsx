@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { createDisplayDocument, createRectangle, createText, GROUP_TYPE, type DisplayDocument } from '../../../index';
+import { createDisplayDocument, createRectangle, createText, createTrend, GROUP_TYPE, groupElements, type DisplayDocument } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
 
 jest.mock('@grafana/ui', () => ({
@@ -184,5 +184,38 @@ describe('DisplayEditor - Group Symbols (Agrupar Símbolos)', () => {
 
     expect(screen.getByTestId('display-context-menu')).toBeInTheDocument();
     expect(screen.getByTestId('context-menu-ungroup')).toBeInTheDocument();
+  });
+
+  it('carrega os dados do gráfico de tendência normalmente quando agrupado', async () => {
+    const doc = createDisplayDocument({ name: 'Test Group Trend' });
+    const r1 = createRectangle({ id: 'r1', x: 50, y: 50, width: 100, height: 60 });
+    const binding = { dataSourceUid: 'ds-1', serverPath: 'pims', pointName: 'SINUSOID' };
+    const tr1 = createTrend({ binding, x: 200, y: 100, width: 400, height: 300, id: 'tr1' });
+    const grouped = groupElements({ ...doc, elements: [r1, tr1] }, ['r1', 'tr1']);
+    if (!grouped) throw new Error('Grouping failed');
+
+    const loadTrendMock = jest.fn().mockResolvedValue({
+      'ds-1\u0000pims\u0000SINUSOID': {
+        status: 'success',
+        series: {
+          points: [{ time: 1000, value: 50 }, { time: 2000, value: 75 }],
+        },
+      },
+    });
+
+    render(
+      <DisplayEditor
+        document={grouped.document}
+        loadTrend={loadTrendMock}
+      />
+    );
+
+    await waitFor(() => {
+      expect(loadTrendMock).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ pointName: 'SINUSOID' })]),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
   });
 });
