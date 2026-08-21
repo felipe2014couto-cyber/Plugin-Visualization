@@ -258,6 +258,27 @@ export function App() {
     // it's okay, we can just leave it unselected or let the user click it.
   }, [selectedSqlTable]);
 
+  const handleSqlApplyToDashboard = useCallback((config: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] }) => {
+    setDocument((prev) => {
+      let targetId = selectedSqlTable?.id;
+      
+      if (!targetId) {
+        // Se nenhum estiver selecionado, aplica à última tabela SQL criada (geralmente a que acabou de rodar)
+        const sqlTables = prev.elements.filter(e => e.type === 'sql-table');
+        if (sqlTables.length > 0) {
+          targetId = sqlTables[sqlTables.length - 1].id;
+        }
+      }
+
+      if (!targetId) return prev;
+
+      return {
+        ...prev,
+        elements: prev.elements.map((e) => e.id === targetId ? { ...e, properties: { ...e.properties, ...config } } : e)
+      };
+    });
+  }, [selectedSqlTable]);
+
   const openSaveAsDialog = useCallback(() => {
     setSaveName(document.name);
     setSaveFolderUid(selectedFolderUid);
@@ -586,7 +607,11 @@ export function App() {
                 <div id="pims-sheets-menu-slot" className={styles.sheetsMenuSlot} data-testid="pims-sheets-menu-slot" />
               </div>
               <div style={{ display: activeModule === 'sql-query' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-                <SqlQueryPanel onResultChange={handleSqlResultChange} sqlToLoad={selectedSqlTable?.properties.sql} />
+                <SqlQueryPanel 
+                  onResultChange={handleSqlResultChange} 
+                  onApplyToDashboard={handleSqlApplyToDashboard}
+                  sqlToLoad={selectedSqlTable?.properties.sql} 
+                />
               </div>
             </div>
           )}

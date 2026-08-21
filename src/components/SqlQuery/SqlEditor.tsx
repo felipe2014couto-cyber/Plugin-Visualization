@@ -1,25 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
-import { useStyles2, Icon, Button, Input, Field } from '@grafana/ui';
-import { SqlResultTable } from './SqlResultTable';
+import { useStyles2, Icon, Button, Input, Field, TabsBar, Tab } from '@grafana/ui';
+import { SqlParamsModal } from './SqlParamsModal';
+import { SqlChartSettings } from './SqlChartSettings';
 import type { OracleQueryResponse } from './oracleApi';
 
 interface SqlEditorProps {
-  onExecute: (sql: string, maxRows: number) => Promise<OracleQueryResponse | null>;
+  onExecute: (sql: string, maxRows: number, params?: Record<string, any>) => Promise<OracleQueryResponse | null>;
   onDisconnect: () => void;
   isExecuting: boolean;
   error?: string;
   lastResult: OracleQueryResponse | null;
   showResult?: boolean;
   sqlToLoad?: string;
+  onConfigChange?: (config: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] }) => void;
+  onApplyToDashboard?: (config: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] }) => void;
+  initialConfig?: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] };
 }
 
-export function SqlEditor({ onExecute, onDisconnect, isExecuting, error, lastResult, showResult = true, sqlToLoad }: SqlEditorProps) {
+export function SqlEditor({ onExecute, onDisconnect, isExecuting, error, lastResult, showResult = true, sqlToLoad, onConfigChange, onApplyToDashboard, initialConfig }: SqlEditorProps) {
   const styles = useStyles2(getStyles);
   
-  const [sql, setSql] = useState('');
+  const [sql, setSql] = useState(sqlToLoad || '');
   const [maxRows, setMaxRows] = useState(200);
+  
+  const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
+  const [detectedParams, setDetectedParams] = useState<string[]>([]);
+  
+  const [viewMode, setViewMode] = useState<'table' | 'xy' | 'timeseries'>(initialConfig?.viewMode ?? 'table');
+  const [xAxis, setXAxis] = useState<string | undefined>(initialConfig?.xAxis);
+  const [yAxes, setYAxes] = useState<string[]>(initialConfig?.yAxes ?? []);
+
+  useEffect(() => {
+    onConfigChange?.({ viewMode, xAxis, yAxes });
+  }, [viewMode, xAxis, yAxes, onConfigChange]);
 
   useEffect(() => {
     if (sqlToLoad !== undefined) {
@@ -31,7 +46,24 @@ export function SqlEditor({ onExecute, onDisconnect, isExecuting, error, lastRes
     if (!sql.trim() || isExecuting) {
       return;
     }
-    await onExecute(sql, maxRows);
+    
+    // Detect bind variables (words starting with : but not ::)
+    // Regex matches :Name but not ::Name.
+    const paramRegex = /(?<!:):([a-zA-Z_][a-zA-Z0-9_]*)/g;
+    const matches = Array.from(sql.matchAll(paramRegex));
+    const uniqueParams = Array.from(new Set(matches.map(m => m[1])));
+    
+    if (uniqueParams.length > 0) {
+      setDetectedParams(uniqueParams);
+      setIsParamsModalOpen(true);
+    } else {
+      await onExecute(sql, maxRows);
+    }
+  };
+  
+  const handleConfirmParams = async (params: Record<string, any>) => {
+    setIsParamsModalOpen(false);
+    await onExecute(sql, maxRows, params);
   };
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -102,11 +134,59 @@ export function SqlEditor({ onExecute, onDisconnect, isExecuting, error, lastRes
         )}
       </div>
       
-      {showResult && (
+      {showResult && lastResult && (
         <div className={styles.resultArea}>
-          <SqlResultTable result={lastResult} isLoading={isExecuting} />
+          <TabsBar>
+            <Tab 
+              label="Tabela" 
+              active={viewMode === 'table'} 
+              onChangeTab={() => setViewMode('table')} 
+              icon="table" 
+            />
+            <Tab 
+              label="Gráfico XY" 
+              active={viewMode === 'xy'} 
+              onChangeTab={() => setViewMode('xy')} 
+              icon="gf-interpolation-linear" 
+            />
+            <Tab 
+              label="Time Series" 
+              active={viewMode === 'timeseries'} 
+              onChangeTab={() => setViewMode('timeseries')} 
+              icon="chart-line" 
+            />
+          </TabsBar>
+          
+          {viewMode !== 'table' && (
+            <SqlChartSettings
+              columns={lastResult.rows?.[0] ? Object.keys(lastResult.rows[0]) : []}
+              xAxis={xAxis}
+              yAxes={yAxes}
+              onXAxisChange={setXAxis}
+              onYAxesChange={setYAxes}
+            />
+          )}
+
+          {/* Botão solicitado para aplicar o gráfico ao dashboard */}
+          <div style={{ marginTop: 16 }}>
+            <Button 
+              variant="primary" 
+              icon="play" 
+              onClick={() => onApplyToDashboard?.({ viewMode, xAxis, yAxes })}
+              disabled={isExecuting || (viewMode !== 'table' && (!xAxis || yAxes.length === 0))}
+            >
+              Executar
+            </Button>
+          </div>
         </div>
       )}
+      
+      <SqlParamsModal
+        isOpen={isParamsModalOpen}
+        params={detectedParams}
+        onConfirm={handleConfirmParams}
+        onDismiss={() => setIsParamsModalOpen(false)}
+      />
     </div>
   );
 }
@@ -219,9 +299,22 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-size: ${theme.typography.size.sm};
   `,
   resultArea: css`
-    flex: 1;
-    min-height: 0;
     padding: ${theme.spacing(2)};
     background: var(--surface-primary);
+    border-top: 1px solid var(--border-color);
+
+    /* Forçar a legibilidade das abas no modo escuro */
+    .grafana-tab {
+      color: ${theme.colors.text.secondary} !important;
+    }
+    .grafana-tab.active {
+      color: ${theme.colors.text.primary} !important;
+      font-weight: bold;
+    }
+    /* Caso a estrutura interna do Tab use botão ou link */
+    .grafana-tab > a, .grafana-tab > button {
+      color: inherit !important;
+    }
   `,
+
 });

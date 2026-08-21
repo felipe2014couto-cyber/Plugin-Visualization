@@ -78,10 +78,11 @@ def is_read_only_sql(sql: str) -> bool:
         return False
 
     normalized = normalize_sql(sql)
-    if ";" in normalized:
+    cleaned = strip_comments(normalized)
+
+    if ";" in cleaned:
         return False
 
-    cleaned = strip_comments(normalized)
     low = cleaned.lower()
 
     if not (low.startswith("select") or low.startswith("with")):
