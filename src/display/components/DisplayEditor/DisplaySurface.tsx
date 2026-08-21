@@ -11,6 +11,8 @@ import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
 import { TABLE_TYPE, type TableColumnConfig, type TableElement } from '../../createTable';
 import { TableElementView, getTableItemConsumerId, getTableTrendConsumerId } from '../TableElementView';
+import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
+import { SqlTableElementView } from '../SqlTableElementView';
 import { GAUGE_TYPE, getGaugeOptions, type GaugeElement } from '../../createGauge';
 import { ValueElementView } from '../ValueElementView';
 import { GaugeElementView } from '../GaugeElementView';
@@ -862,6 +864,9 @@ export function DisplaySurface({
         }
         if (element.type === TABLE_TYPE) {
           return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onColumnsChange={editable ? (columns) => onTableColumnsChange?.(element.id, columns) : undefined} />;
+        }
+        if (element.type === SQL_TABLE_TYPE) {
+          return <SqlTableElementView key={element.id} element={element as unknown as SqlTableElement} selected={selectedElementIds?.includes(element.id)} editable={editable} />;
         }
         if (element.type === TREND_TYPE) {
           const trendElement = element as unknown as TrendElement;

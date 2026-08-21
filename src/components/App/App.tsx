@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -32,7 +32,7 @@ import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
-import { SqlDashboardTable } from '../SqlQuery/SqlDashboardTable';
+import { createSqlTable, SQL_TABLE_TYPE, type SqlTableElement } from '../../display/createSqlTable';
 import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
 import { createDefaultTimeSelection } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
@@ -53,11 +53,7 @@ type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
 type ActiveModule = 'visualization' | 'sheets' | 'sql-query';
 type AssetsTab = 'assets' | 'library' | 'calculations';
 
-interface SqlDashboardTableState {
-  id: string;
-  sql: string;
-  result: OracleQueryResponse;
-}
+// Removed SqlDashboardTableState
 
 function getInitialTheme(): VisualizationTheme {
   try {
@@ -71,11 +67,11 @@ export function App() {
   const styles = useStyles2(getStyles);
   const [authenticationState, setAuthenticationState] = useState<AuthenticationState>('checking');
   const [activeModule, setActiveModule] = useState<ActiveModule>('visualization');
-  const [sqlTables, setSqlTables] = useState<SqlDashboardTableState[]>([]);
-  const [selectedSqlTableId, setSelectedSqlTableId] = useState<string | null>(null);
+  // Sql tables are now managed within DisplayDocument
   const [document, setDocument] = useState(() =>
     createDisplayDocument({ name: 'Visualization' }),
   );
+  const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
   const [piConnection, setPiConnection] = useState<PiConnectionState>({ status: 'checking' });
   const [selectedPiPoint, setSelectedPiPoint] = useState<PiPointSearchResult | null>(null);
   const [editorMode, setEditorMode] = useState<DisplayEditorMode>('edit');
@@ -97,7 +93,7 @@ export function App() {
   const [expandedFolderUids, setExpandedFolderUids] = useState<string[]>([]);
   const [saveValidationError, setSaveValidationError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const sqlTableIdRef = useRef(0);
+  // sqlTableIdRef is no longer needed
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
   if (!progressiveTrendLoaderRef.current) {
     progressiveTrendLoaderRef.current = createProgressiveTrendLoader(
@@ -226,24 +222,42 @@ export function App() {
     [progressiveTrendLoader, rangeFrom, rangeTo],
   );
   const hasPiConnection = piConnection.status === 'connected';
-  const handleSqlResultChange = useCallback((result: OracleQueryResponse, sql: string) => {
-    setSqlTables((currentTables) => {
-      if (selectedSqlTableId) {
-        const selectedExists = currentTables.some((table) => table.id === selectedSqlTableId);
-        if (selectedExists) {
-          return currentTables.map((table) => table.id === selectedSqlTableId ? { ...table, sql, result } : table);
-        }
+  const selectedSqlTable = useMemo(() => {
+    if (activeModule !== 'sql-query') return null;
+    if (selectedElementIds.length === 1) {
+      const el = document.elements.find((e) => e.id === selectedElementIds[0]);
+      if (el && el.type === SQL_TABLE_TYPE) {
+        return el as SqlTableElement;
       }
-      const id = `sql-table-${Date.now()}-${sqlTableIdRef.current++}`;
-      return [...currentTables, { id, sql, result }];
+    }
+    return null;
+  }, [document, activeModule, selectedElementIds]);
+
+  const handleSqlResultChange = useCallback((result: OracleQueryResponse, sql: string) => {
+    setDocument((prev) => {
+      const existingIds = prev.elements.map((e) => e.id);
+      if (selectedSqlTable) {
+        return {
+          ...prev,
+          elements: prev.elements.map((e) => e.id === selectedSqlTable.id ? { ...e, properties: { ...e.properties, sql, result } } : e)
+        };
+      }
+      
+      const newTable = createSqlTable({
+        sql,
+        result,
+        surface: prev.surface,
+        existingIds,
+      });
+      return {
+        ...prev,
+        elements: [...prev.elements, newTable],
+      };
     });
-  }, [selectedSqlTableId]);
-  const handleSqlTableSelect = useCallback((tableId: string) => {
-    setSelectedSqlTableId((currentId) => currentId === tableId ? null : tableId);
-    setActiveModule('sql-query');
-    setIsAssetsPanelOpen(true);
-  }, []);
-  const selectedSqlTable = sqlTables.find((table) => table.id === selectedSqlTableId);
+    // the newly created table isn't automatically selected unless DisplayEditor does it?
+    // it's okay, we can just leave it unselected or let the user click it.
+  }, [selectedSqlTable]);
+
   const openSaveAsDialog = useCallback(() => {
     setSaveName(document.name);
     setSaveFolderUid(selectedFolderUid);
@@ -477,13 +491,17 @@ export function App() {
               aria-label="Consulta SQL Oracle"
               aria-pressed={activeModule === 'sql-query'}
               data-testid="pims-vision-sql-query-tab"
-              onClick={() => { setActiveModule('sql-query'); setIsAssetsPanelOpen(true); }}
+              onClick={() => { 
+                console.log(">>> [DEBUG] SQL BUTTON CLICKED"); 
+                setActiveModule('sql-query'); 
+                setIsAssetsPanelOpen(true); 
+              }}
             ><DatabaseIcon /></button>
             <span className={styles.assetsRailItem} title="Pesquisa PI" aria-label="Pesquisa PI"><SearchIcon /></span>
           </div>
           {isAssetsPanelOpen && (
             <div className={styles.assetsBody}>
-              {activeModule === 'visualization' ? <>
+              <div style={{ display: activeModule === 'visualization' ? 'block' : 'none' }}>
                   <div className={styles.assetsHeader} role="tablist" aria-label="Módulos do painel">
                     <button
                       type="button"
@@ -563,11 +581,13 @@ export function App() {
                       />
                     </div>
                   </div>
-              </> : activeModule === 'sheets' ? (
+              </div>
+              <div style={{ display: activeModule === 'sheets' ? 'block' : 'none' }}>
                 <div id="pims-sheets-menu-slot" className={styles.sheetsMenuSlot} data-testid="pims-sheets-menu-slot" />
-              ) : (
-                <SqlQueryPanel onResultChange={handleSqlResultChange} sqlToLoad={selectedSqlTable?.sql} />
-              )}
+              </div>
+              <div style={{ display: activeModule === 'sql-query' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
+                <SqlQueryPanel onResultChange={handleSqlResultChange} sqlToLoad={selectedSqlTable?.properties.sql} />
+              </div>
             </div>
           )}
         </aside>
@@ -577,6 +597,7 @@ export function App() {
               <DisplayEditor
               document={document}
               onChange={setDocument}
+              onSelectionChange={setSelectedElementIds}
               onModeChange={setEditorMode}
               selectedPiPoint={selectedPiPoint}
               loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
@@ -601,16 +622,6 @@ export function App() {
                 setOpenCalculationId(calculationId);
               }}
               />
-              {(activeModule === 'visualization' || activeModule === 'sql-query') && sqlTables.map((table, index) => (
-                <SqlDashboardTable
-                  key={table.id}
-                  id={table.id}
-                  result={table.result}
-                  index={index}
-                  selected={table.id === selectedSqlTableId}
-                  onSelect={handleSqlTableSelect}
-                />
-              ))}
             </div>
           </div>
           <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>

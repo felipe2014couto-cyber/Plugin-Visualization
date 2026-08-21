@@ -3,13 +3,15 @@ import { css, cx } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, Icon } from '@grafana/ui';
 import type { OracleQueryResponse } from './oracleApi';
+import type { SqlTableProperties } from '../../display/createSqlTable';
 
 interface SqlResultTableProps {
   result: OracleQueryResponse | null;
   isLoading: boolean;
+  properties?: SqlTableProperties;
 }
 
-export function SqlResultTable({ result, isLoading }: SqlResultTableProps) {
+export function SqlResultTable({ result, isLoading, properties }: SqlResultTableProps) {
   const styles = useStyles2(getStyles);
 
   const columns = useMemo(() => {
@@ -46,21 +48,10 @@ export function SqlResultTable({ result, isLoading }: SqlResultTableProps) {
     );
   }
 
-  const reachedMaxRows = result.row_count >= result.max_rows;
+  const styleObj = getDynamicStyles(properties);
 
   return (
-    <div className={styles.container}>
-      <div className={styles.statusBar}>
-        <span>
-          Retornou <strong>{result.row_count}</strong> linhas.
-        </span>
-        {reachedMaxRows && (
-          <span className={styles.warningText}>
-            <Icon name="exclamation-triangle" /> Limite de {result.max_rows} linhas atingido.
-          </span>
-        )}
-      </div>
-      
+    <div className={styles.container} style={styleObj}>
       <div className={styles.tableWrapper}>
         <table className={styles.table}>
           <thead>
@@ -103,16 +94,55 @@ export function SqlResultTable({ result, isLoading }: SqlResultTableProps) {
   );
 }
 
+export function getDynamicStyles(properties?: SqlTableProperties): React.CSSProperties {
+  if (!properties) return {};
+
+  const vars: any = {};
+  
+  if (properties.fontSize) {
+    vars['--sql-font-size'] = `${properties.fontSize}px`;
+  }
+  
+  if (properties.style === 'custom') {
+    if (properties.customHeaderColor) vars['--sql-header-bg'] = properties.customHeaderColor;
+    if (properties.customRowColor) vars['--sql-row-bg'] = properties.customRowColor;
+    if (properties.customTextColor) vars['--sql-text-color'] = properties.customTextColor;
+    if (properties.customBorderColor) vars['--sql-border-color'] = properties.customBorderColor;
+  } else if (properties.style === 'light') {
+    vars['--sql-header-bg'] = '#e5e7eb';
+    vars['--sql-row-bg'] = '#ffffff';
+    vars['--sql-text-color'] = '#111827';
+    vars['--sql-border-color'] = '#d1d5db';
+    vars['--sql-row-hover'] = '#f3f4f6';
+  } else if (properties.style === 'striped') {
+    vars['--sql-header-bg'] = '#3f3f46';
+    vars['--sql-row-bg'] = '#52525b';
+    vars['--sql-row-alt-bg'] = '#3f3f46';
+    vars['--sql-text-color'] = '#f4f4f5';
+    vars['--sql-border-color'] = '#27272a';
+    vars['--sql-row-hover'] = '#71717a';
+  } else {
+    // dark (default)
+    vars['--sql-header-bg'] = '#1f2937';
+    vars['--sql-row-bg'] = '#111827';
+    vars['--sql-text-color'] = '#f3f4f6';
+    vars['--sql-border-color'] = '#374151';
+    vars['--sql-row-hover'] = '#374151';
+  }
+  
+  return vars;
+}
+
 const getStyles = (theme: GrafanaTheme2) => ({
   container: css`
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    color: var(--sql-text-color, var(--text-primary));
+    border: 1px solid var(--sql-border-color, var(--border-color));
     border-radius: ${theme.shape.borderRadius(1)};
-    background: var(--surface-primary);
+    background: var(--sql-row-bg, var(--surface-primary));
   `,
   emptyState: css`
     display: flex;
@@ -121,9 +151,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     justify-content: center;
     height: 100%;
     min-height: 200px;
-    color: var(--text-secondary);
-    background: var(--surface-primary);
-    border: 1px solid var(--border-color);
+    color: var(--sql-text-color, var(--text-secondary));
+    background: var(--sql-row-bg, var(--surface-primary));
+    border: 1px solid var(--sql-border-color, var(--border-color));
     border-radius: ${theme.shape.borderRadius(1)};
     padding: ${theme.spacing(4)};
     text-align: center;
@@ -131,22 +161,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
   emptyIcon: css`
     margin-bottom: ${theme.spacing(2)};
     opacity: 0.5;
-  `,
-  statusBar: css`
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: ${theme.spacing(1)} ${theme.spacing(2)};
-    background: var(--surface-secondary);
-    border-bottom: 1px solid var(--border-color);
-    font-size: ${theme.typography.size.sm};
-    color: var(--text-secondary);
-  `,
-  warningText: css`
-    color: var(--warning, #f59e0b);
-    display: flex;
-    align-items: center;
-    gap: ${theme.spacing(0.5)};
   `,
   tableWrapper: css`
     flex: 1;
@@ -160,13 +174,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border-collapse: separate;
     border-spacing: 0;
     font-family: ${theme.typography.fontFamilyMonospace};
-    font-size: 13px;
+    font-size: var(--sql-font-size, 13px);
     
     th, td {
       padding: ${theme.spacing(1)} ${theme.spacing(2)};
-      color: var(--text-primary);
-      border-bottom: 1px solid var(--border-color);
-      border-right: 1px solid var(--border-color);
+      color: var(--sql-text-color, var(--text-primary));
+      border-bottom: 1px solid var(--sql-border-color, var(--border-color));
+      border-right: 1px solid var(--sql-border-color, var(--border-color));
       white-space: normal;
       max-width: none;
       overflow-wrap: anywhere;
@@ -181,18 +195,24 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
     
     th {
-      background: var(--surface-secondary);
+      background: var(--sql-header-bg, var(--surface-secondary));
       position: sticky;
       top: 0;
       z-index: 1;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--sql-border-color, var(--border-color));
       text-align: left;
       font-weight: ${theme.typography.fontWeightMedium};
-      color: var(--text-primary);
+      color: var(--sql-text-color, var(--text-primary));
     }
     
+    tbody tr {
+      background: var(--sql-row-bg, transparent);
+    }
+    tbody tr:nth-child(even) {
+      background: var(--sql-row-alt-bg, var(--sql-row-bg, transparent));
+    }
     tbody tr:hover {
-      background: var(--button-hover);
+      background: var(--sql-row-hover, var(--button-hover));
     }
   `,
   rowNumHeader: css`
@@ -201,15 +221,16 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   rowNumCell: css`
     text-align: center;
-    color: var(--text-muted);
-    background: var(--surface-secondary);
+    color: var(--sql-text-color, var(--text-muted));
+    background: var(--sql-header-bg, var(--surface-secondary));
     position: sticky;
     left: 0;
     z-index: 0;
   `,
   nullCell: css`
-    color: var(--text-muted);
+    color: var(--sql-text-color, var(--text-muted));
     font-style: italic;
+    opacity: 0.6;
   `,
   numberCell: css`
     text-align: right;
