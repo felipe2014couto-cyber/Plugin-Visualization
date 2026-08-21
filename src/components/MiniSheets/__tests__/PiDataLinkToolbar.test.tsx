@@ -14,7 +14,7 @@ describe('PiDataLinkToolbar', () => {
 
     expect(screen.getByTestId('pi-datalink-ribbon')).toBeInTheDocument();
     expect(screen.getAllByRole('button')).toHaveLength(7);
-    expect(screen.getByRole('button', { name: 'Registros históricos' })).toHaveTextContent('Histórico');
+    expect(screen.getByRole('button', { name: 'Valor de Archive' })).toHaveTextContent('Valor de Archive');
     fireEvent.click(screen.getByTestId('datalink-curr-val'));
 
     expect(onOpenFunction).toHaveBeenCalledWith('PICurrVal');

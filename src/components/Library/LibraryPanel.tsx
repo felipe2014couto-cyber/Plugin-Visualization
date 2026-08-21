@@ -114,7 +114,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   card: css`display: flex; flex-direction: column; align-items: center; min-width: 0; min-height: 128px; padding: 8px 6px 7px; border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); background: linear-gradient(145deg, var(--surface-secondary), var(--surface-primary)); cursor: grab; text-align: center; &:hover { border-color: var(--accent); background: var(--selection-bg); } &:active { cursor: grabbing; }`,
   symbolPreview: css`display: flex; align-items: center; justify-content: center; width: 100%; height: 86px; margin-bottom: 4px; img { max-width: 76px; max-height: 76px; width: auto; height: auto; }`,
   coloredImage: css`filter: none;`,
-  technicalImage: css`filter: invert(1);`,
+  technicalImage: css`filter: var(--technical-image-filter, invert(1));`,
   cardName: css`max-width: 100%; overflow-wrap: anywhere; color: var(--text-primary); font-size: 12px; line-height: 1.25;`,
   emptyCategory: css`margin: 0; padding: 0 0 12px 26px; color: var(--text-muted); font-size: 11px;`,
   noResults: css`margin: 18px 0; color: var(--text-secondary); font-size: 12px; text-align: center;`,

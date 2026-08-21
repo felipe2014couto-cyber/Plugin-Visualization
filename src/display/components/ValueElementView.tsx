@@ -8,6 +8,7 @@ import {
 } from '../createValue';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
 import { getMultistateColor } from '../multistate';
+import { resolveThemeForeground } from '../themeColor';
 
 type ValueLoadState =
   | { status: 'loading' }
@@ -53,7 +54,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const currentState = runtimeState ?? state;
   const lines = getValueLines(currentState, visual, label ?? binding?.pointName ?? '');
   const runtimeVal = getRuntimeValue(runtimeState ?? state);
-  const textColor = getMultistateColor(runtimeVal, element.properties.multistate, visual.color);
+  const textColor = getMultistateColor(runtimeVal, element.properties.multistate, resolveThemeForeground(visual.color));
   const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, visual.backgroundColor || 'transparent');
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';

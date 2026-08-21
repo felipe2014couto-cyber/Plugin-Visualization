@@ -20,12 +20,21 @@ export interface CellCoord {
   col: number;
 }
 
+export type PiDataOrientation = 'column' | 'row';
+
+export interface PiDataLinkOutputOptions {
+  orientation?: PiDataOrientation;
+  filterExpression?: string;
+  markFiltered?: boolean;
+}
+
 export type ParsedFormula =
   | { type: 'literal_number'; value: number }
   | { type: 'literal_string'; value: string }
   | {
       type: 'pi_curr_val';
       tag: string;
+      timestampPosition?: 'none' | 'left' | 'above';
       referencedCells?: CellCoord[];
     }
   | {
@@ -33,6 +42,7 @@ export type ParsedFormula =
       tag: string;
       timeExpression: string;
       mode?: string;
+      timestampPosition?: 'none' | 'left' | 'above';
       referencedCells?: CellCoord[];
     }
   | {
@@ -42,6 +52,13 @@ export type ParsedFormula =
       endTime: string;
       maxCount?: number;
       showTimestamp?: boolean;
+      reverseTime?: boolean;
+      boundaryType?: string;
+      hideCount?: boolean;
+      showValueAttributes?: boolean;
+      showAnnotations?: boolean;
+      limitMode?: 'time' | 'count';
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -51,6 +68,7 @@ export type ParsedFormula =
       endTime: string;
       interval: string;
       showTimestamp?: boolean;
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -58,6 +76,7 @@ export type ParsedFormula =
       tag: string;
       timestampsRange: string;
       mode?: string;
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -67,6 +86,12 @@ export type ParsedFormula =
       endTime: string;
       calculation: string;
       interval?: string;
+      conversionFactor?: number;
+      showStartTime?: boolean;
+      showEndTime?: boolean;
+      showMinMaxTime?: boolean;
+      showPercentValid?: boolean;
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -75,6 +100,11 @@ export type ParsedFormula =
       startTime: string;
       endTime: string;
       unit: string;
+      interval?: string;
+      showStartTime?: boolean;
+      showEndTime?: boolean;
+      showPercentValid?: boolean;
+      options?: PiDataLinkOutputOptions;
       referencedCells?: CellCoord[];
     }
   | {
@@ -207,6 +237,27 @@ export function stripQuotes(value: string): string {
   return trimmed;
 }
 
+function parseBooleanArgument(value: string | undefined, fallback = false): boolean {
+  if (!value) {
+    return fallback;
+  }
+  const normalized = stripQuotes(value).trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function parseOutputOptions(
+  orientation: string | undefined,
+  filterExpression: string | undefined = undefined,
+  markFiltered: string | undefined = undefined,
+): PiDataLinkOutputOptions {
+  const normalizedOrientation = stripQuotes(orientation ?? '').toLowerCase() === 'row' ? 'row' : 'column';
+  return {
+    orientation: normalizedOrientation,
+    filterExpression: filterExpression ? stripQuotes(filterExpression) : undefined,
+    markFiltered: parseBooleanArgument(markFiltered),
+  };
+}
+
 /**
  * Resolves a parameter: if it is a cell coordinate or range, reads the first cell value;
  * otherwise strips quotes. Scalar PI parameters use the first cell when a selected range
@@ -266,6 +317,9 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
       return {
         type: 'pi_curr_val',
         tag: stripQuotes(rawArgs[0]),
+        ...(rawArgs[1]
+          ? { timestampPosition: stripQuotes(rawArgs[1]).toLowerCase() as 'none' | 'left' | 'above' }
+          : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -279,6 +333,7 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         tag: stripQuotes(rawArgs[0]),
         timeExpression: stripQuotes(rawArgs[1]),
         mode: rawArgs[2] ? stripQuotes(rawArgs[2]) : undefined,
+        ...(rawArgs[3] ? { timestampPosition: stripQuotes(rawArgs[3]).toLowerCase() as 'none' | 'left' | 'above' } : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -296,6 +351,15 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         endTime: stripQuotes(rawArgs[2]),
         maxCount: !isNaN(maxCount as number) ? maxCount : undefined,
         showTimestamp,
+        ...(rawArgs[6] ? { reverseTime: parseBooleanArgument(rawArgs[6]) } : {}),
+        ...(rawArgs[7] ? { boundaryType: stripQuotes(rawArgs[7]) } : {}),
+        ...(rawArgs[8] ? { hideCount: parseBooleanArgument(rawArgs[8]) } : {}),
+        ...(rawArgs[9] ? { showValueAttributes: parseBooleanArgument(rawArgs[9]) } : {}),
+        ...(rawArgs[10] ? { showAnnotations: parseBooleanArgument(rawArgs[10]) } : {}),
+        ...(rawArgs[13] ? { limitMode: stripQuotes(rawArgs[13]).toLowerCase() === 'count' ? 'count' as const : 'time' as const } : {}),
+        ...(rawArgs[5] || rawArgs[11] || rawArgs[12]
+          ? { options: parseOutputOptions(rawArgs[5], rawArgs[11], rawArgs[12]) }
+          : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -312,6 +376,9 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         endTime: stripQuotes(rawArgs[2]),
         interval: stripQuotes(rawArgs[3]),
         showTimestamp,
+        ...(rawArgs[5] || rawArgs[6] || rawArgs[7]
+          ? { options: parseOutputOptions(rawArgs[5], rawArgs[6], rawArgs[7]) }
+          : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -325,6 +392,7 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         tag: stripQuotes(rawArgs[0]),
         timestampsRange: stripQuotes(rawArgs[1]),
         mode: rawArgs[2] ? stripQuotes(rawArgs[2]) : undefined,
+        ...(rawArgs[3] ? { options: parseOutputOptions(rawArgs[3]) } : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -340,6 +408,14 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         endTime: stripQuotes(rawArgs[2]),
         calculation: stripQuotes(rawArgs[3]),
         interval: rawArgs[4] ? stripQuotes(rawArgs[4]) : undefined,
+        ...(rawArgs[5] ? { conversionFactor: Number(stripQuotes(rawArgs[5])) } : {}),
+        ...(rawArgs[7] ? { showStartTime: parseBooleanArgument(rawArgs[7]) } : {}),
+        ...(rawArgs[8] ? { showEndTime: parseBooleanArgument(rawArgs[8]) } : {}),
+        ...(rawArgs[9] ? { showMinMaxTime: parseBooleanArgument(rawArgs[9]) } : {}),
+        ...(rawArgs[10] ? { showPercentValid: parseBooleanArgument(rawArgs[10]) } : {}),
+        ...(rawArgs[6] || rawArgs[11] || rawArgs[12]
+          ? { options: parseOutputOptions(rawArgs[6], rawArgs[11], rawArgs[12]) }
+          : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -354,6 +430,11 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
         startTime: stripQuotes(rawArgs[1]),
         endTime: stripQuotes(rawArgs[2]),
         unit: stripQuotes(rawArgs[3]),
+        ...(rawArgs[4] ? { interval: stripQuotes(rawArgs[4]) } : {}),
+        ...(rawArgs[6] ? { showStartTime: parseBooleanArgument(rawArgs[6]) } : {}),
+        ...(rawArgs[7] ? { showEndTime: parseBooleanArgument(rawArgs[7]) } : {}),
+        ...(rawArgs[8] ? { showPercentValid: parseBooleanArgument(rawArgs[8]) } : {}),
+        ...(rawArgs[5] ? { options: parseOutputOptions(rawArgs[5]) } : {}),
         referencedCells: getRefCoords(rawArgs),
       };
     }
@@ -420,6 +501,39 @@ export function evaluateMathExpression(
   const cellRefRegex = /\b([A-Za-z]+[0-9]+)\b/g;
   let refMatch: RegExpExecArray | null;
   const matchedTokens: string[] = [];
+  const variables = new Map<string, number>();
+  let aggregateError: string | undefined;
+
+  // Aggregate calls can participate in a larger arithmetic expression, for
+  // example =SUM(A1:A10)+B1 or =AVERAGE(A1:A10)*2. Resolve them first so the
+  // arithmetic parser still receives only safe numeric tokens.
+  const aggregateRegex = /\b(SUM|AVERAGE|MIN|MAX)\s*\(\s*([A-Za-z]+\d+)\s*:\s*([A-Za-z]+\d+)\s*\)/gi;
+  let aggregateIndex = 0;
+  resolved = resolved.replace(aggregateRegex, (_match, funcName: string, start: string, end: string) => {
+    const startCoord = parseCellAddress(start);
+    const endCoord = parseCellAddress(end);
+    if (!startCoord || !endCoord) {
+      aggregateError = '#REF!';
+      return '0';
+    }
+    const aggregate = evaluateAggregate(
+      funcName.toUpperCase() as 'SUM' | 'AVERAGE' | 'MIN' | 'MAX',
+      getRangeCells(startCoord, endCoord),
+      getCellValue,
+      maxCol,
+      maxRow,
+    );
+    if (aggregate.status === 'error') {
+      aggregateError = aggregate.error;
+      return '0';
+    }
+    const variable = `__aggregate_${aggregateIndex++}`;
+    variables.set(variable, aggregate.value);
+    return variable;
+  });
+  if (aggregateError) {
+    return { status: 'error', error: aggregateError };
+  }
 
   while ((refMatch = cellRefRegex.exec(expression)) !== null) {
     matchedTokens.push(refMatch[1]);
@@ -428,7 +542,6 @@ export function evaluateMathExpression(
   // Sort longest first to avoid partial replacements
   matchedTokens.sort((a, b) => b.length - a.length);
 
-  const variables = new Map<string, number>();
   for (let i = 0; i < matchedTokens.length; i++) {
     const token = matchedTokens[i];
     const coord = parseCellAddress(token);
@@ -547,7 +660,7 @@ function parseArithmeticExpression(
       cursor++;
       return value;
     }
-    const variable = expression.slice(cursor).match(/^__cell_\d+/)?.[0];
+    const variable = expression.slice(cursor).match(/^__(?:cell|aggregate)_\d+/)?.[0];
     if (variable) {
       cursor += variable.length;
       const value = variables.get(variable);
@@ -580,7 +693,7 @@ function parseArithmeticExpression(
   };
 
   const parseMultiplicative = (): number => {
-    let value = parseUnary();
+    let value = parsePower();
     while (true) {
       skipWhitespace();
       const op = expression[cursor];
@@ -588,7 +701,7 @@ function parseArithmeticExpression(
         break;
       }
       cursor++;
-      const right = parseUnary();
+      const right = parsePower();
       if (op === '/' && right === 0) {
         throw new Error('Divisão por zero.');
       }
@@ -596,6 +709,17 @@ function parseArithmeticExpression(
     }
     return value;
   };
+
+  function parsePower(): number {
+    let value = parseUnary();
+    skipWhitespace();
+    if (expression[cursor] === '^') {
+      cursor++;
+      // Recursive parsing makes exponentiation right-associative: 2^3^2.
+      value = value ** parsePower();
+    }
+    return value;
+  }
 
   const parseAdditive = (): number => {
     let value = parseMultiplicative();

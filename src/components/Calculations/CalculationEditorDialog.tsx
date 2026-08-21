@@ -310,7 +310,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: rgba(3, 8, 15, 0.76);
+    background: var(--overlay-bg);
   `,
   dialog: css`
     display: flex;
@@ -318,7 +318,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: min(580px, 100%);
     max-height: min(720px, calc(100vh - 48px));
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--border-color);
     border-radius: 4px;
     color: var(--text-primary);
     background: var(--surface-elevated);
@@ -338,12 +338,12 @@ const getStyles = (theme: GrafanaTheme2) => ({
     width: 28px;
     height: 28px;
     border: 0;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--assets-header-muted);
     background: transparent;
     cursor: pointer;
     font-size: 25px;
     line-height: 1;
-    &:hover { color: var(--text-primary); }
+    &:hover { color: var(--assets-header-text); background: var(--assets-header-hover); }
   `,
   body: css`
     display: flex;

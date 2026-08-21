@@ -125,6 +125,9 @@ describe('miniSheetFormula', () => {
     expect(evaluateMathExpression('A1+B1', getVal)).toEqual({ status: 'success', value: 30 });
     expect(evaluateMathExpression('A1*B1 - C1', getVal)).toEqual({ status: 'success', value: 195 });
     expect(evaluateMathExpression('B1/A1', getVal)).toEqual({ status: 'success', value: 2 });
+    expect(evaluateMathExpression('2+3*4', getVal)).toEqual({ status: 'success', value: 14 });
+    expect(evaluateMathExpression('(A1+B1)*C1', getVal)).toEqual({ status: 'success', value: 150 });
+    expect(evaluateMathExpression('A1^2', getVal)).toEqual({ status: 'success', value: 100 });
   });
 
   it('evaluates aggregates correctly', () => {
@@ -146,6 +149,8 @@ describe('miniSheetFormula', () => {
     expect(evaluateAggregate('AVERAGE', rangeCells, getVal)).toEqual({ status: 'success', value: 25 });
     expect(evaluateAggregate('MIN', rangeCells, getVal)).toEqual({ status: 'success', value: 10 });
     expect(evaluateAggregate('MAX', rangeCells, getVal)).toEqual({ status: 'success', value: 40 });
+    expect(evaluateMathExpression('SUM(A1:A4)+2', getVal)).toEqual({ status: 'success', value: 102 });
+    expect(evaluateMathExpression('AVERAGE(A1:A4)*2', getVal)).toEqual({ status: 'success', value: 50 });
   });
 
   it('handles errors gracefully: #REF!, #FORMULA!, #DIV/0!', () => {

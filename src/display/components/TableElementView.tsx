@@ -88,7 +88,7 @@ export const TableElementView = React.memo(function TableElementView({ element, 
           {index < columns.length - 1 && <rect data-testid={`table-resize-${element.id}-${column.id}`} x={x + width - 5} y={element.y} width={10} height={headerHeight} fill="transparent" onPointerDown={(event) => startResize(event, column, columns[index + 1])} onPointerMove={moveInteraction} onPointerUp={finishInteraction} onPointerCancel={finishInteraction} style={{ cursor: 'col-resize' }} />}
         </g>;
       })}
-      {interaction?.kind === 'reorder' && <line x1={insertionLineX(interaction.targetIndex, columnOffsets, columns, element.x + element.width)} x2={insertionLineX(interaction.targetIndex, columnOffsets, columns, element.x + element.width)} y1={element.y + 2} y2={element.y + headerHeight - 2} stroke="#6e9fff" strokeWidth={3} pointerEvents="none" />}
+      {interaction?.kind === 'reorder' && <line x1={insertionLineX(interaction.targetIndex, columnOffsets, columns, element.x + element.width)} x2={insertionLineX(interaction.targetIndex, columnOffsets, columns, element.x + element.width)} y1={element.y + 2} y2={element.y + headerHeight - 2} stroke="var(--selection-outline, #6e9fff)" strokeWidth={3} pointerEvents="none" />}
       {element.properties.items.map((item, rowIndex) => {
         const state = runtimeStates.get(getTableItemConsumerId(element.id, rowIndex));
         return <g key={`${item.binding.dataSourceUid}-${item.binding.pointName}-${rowIndex}`}>
