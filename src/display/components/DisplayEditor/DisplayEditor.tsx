@@ -403,6 +403,8 @@ export function DisplayEditor({
     }
     commitDocument(appendDisplayElement(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
+    setOptionsElementId(element.id);
+    setOptionsTrendId(null);
   }, [commitDocument, dispatch, selectedPiPoint]);
 
   const handleInsertText = useCallback(() => {
@@ -642,6 +644,7 @@ export function DisplayEditor({
         : { enabled: true, rules: [] };
       commitDocument(updateLibrarySymbolProperties(currentDocument, targetLibrarySymbol.id, { binding, multistate }));
       dispatch({ type: 'SELECT', elementId: targetLibrarySymbol.id });
+      setOptionsElementId(targetLibrarySymbol.id);
       return;
     }
 
@@ -890,6 +893,9 @@ export function DisplayEditor({
       commitDocument(removeTrendSeries(documentRef.current, optionsTrendId, key));
     }
   }, [commitDocument, optionsTrendId]);
+  const handleTrendLegendWidthChange = useCallback((elementId: string, legendWidth: number) => {
+    commitDocument(updateTrendVisualOptions(documentRef.current, elementId, { legendWidth }));
+  }, [commitDocument]);
 
   const handleDeleteSelectedElement = useCallback(() => {
     if (mode !== 'edit') {
@@ -1201,6 +1207,7 @@ export function DisplayEditor({
             onElementContextMenu={handleElementContextMenu}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
             onTableColumnsChange={handleTableColumnsChange}
+            onTrendLegendWidthChange={handleTrendLegendWidthChange}
             zoom={surfaceZoom}
             viewCenter={surfaceViewCenter}
             minZoom={DISPLAY_ZOOM_MIN}

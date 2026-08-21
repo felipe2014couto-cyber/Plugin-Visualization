@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { createTrend } from '../../createTrend';
 import { buildTrendChart, TrendElementView } from '../TrendElementView';
 
@@ -260,5 +260,88 @@ describe('TrendElementView', () => {
     expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('SINUSOID 1');
     expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('OTHER 15');
     expect(screen.queryByTestId('trend-refresh-error-trend-1')).toBeNull();
+  });
+
+  it('exibe handle de redimensionamento da legenda com cursor col-resize', () => {
+    render(
+      <svg>
+        <TrendElementView
+          element={element}
+          runtimeState={{ status: 'success', data: { pointName: 'SINUSOID', points: [{ time: 1000, value: 5 }] } }}
+        />
+      </svg>,
+    );
+
+    const resizer = screen.getByTestId('trend-legend-resizer-trend-1');
+    expect(resizer).toBeInTheDocument();
+    expect(resizer).toHaveStyle({ cursor: 'col-resize' });
+  });
+
+  it('redimensiona a legenda via pointer events chamando onLegendWidthChange no pointerUp', () => {
+    const handleLegendWidthChange = jest.fn();
+    render(
+      <svg>
+        <TrendElementView
+          element={element}
+          onLegendWidthChange={handleLegendWidthChange}
+          runtimeState={{ status: 'success', data: { pointName: 'SINUSOID', points: [{ time: 1000, value: 5 }] } }}
+        />
+      </svg>,
+    );
+
+    const resizer = screen.getByTestId('trend-legend-resizer-trend-1');
+
+    // PointerDown
+    fireEvent.pointerDown(resizer, { clientX: 374, pointerId: 1 });
+    // PointerMove: dragging left 50px increases legend width
+    fireEvent.pointerMove(resizer, { clientX: 324, pointerId: 1 });
+    // PointerUp: commits final width
+    fireEvent.pointerUp(resizer, { clientX: 324, pointerId: 1 });
+
+    expect(handleLegendWidthChange).toHaveBeenCalledTimes(1);
+    expect(handleLegendWidthChange).toHaveBeenCalledWith('trend-1', expect.any(Number));
+  });
+
+  it('mantém nome completo quando a legenda tem largura suficiente e trunca com title quando estreita', () => {
+    const longName = 'LFS_RB2_MOTOR_PAYOFF_VIB_LA';
+    const longNameBinding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: longName };
+    const narrowTrend = createTrend({ binding: longNameBinding, id: 'trend-narrow', x: 0, y: 0, width: 400, height: 200 });
+    const wideTrend = {
+      ...narrowTrend,
+      id: 'trend-wide',
+      width: 1000,
+      properties: {
+        ...narrowTrend.properties,
+        visual: { legendWidth: 350 },
+      },
+    };
+
+    const { rerender } = render(
+      <svg>
+        <TrendElementView
+          element={{ ...narrowTrend, properties: { ...narrowTrend.properties, visual: { legendWidth: 100 } } }}
+          runtimeState={{ status: 'success', data: { pointName: longName, points: [{ time: 1000, value: 4.35 }] } }}
+        />
+      </svg>,
+    );
+
+    // Narrow legend: truncated with ellipsis
+    const narrowLabel = screen.getByTestId('trend-legend-trend-narrow-0');
+    expect(narrowLabel.textContent).toContain('...');
+    expect(screen.getByTestId('trend-legend-value-trend-narrow-0')).toHaveTextContent('4');
+
+    rerender(
+      <svg>
+        <TrendElementView
+          element={wideTrend}
+          runtimeState={{ status: 'success', data: { pointName: longName, points: [{ time: 1000, value: 4.35 }] } }}
+        />
+      </svg>,
+    );
+
+    // Wide legend: full point name visible
+    const wideLabel = screen.getByTestId('trend-legend-trend-wide-0');
+    expect(wideLabel.textContent).toBe(longName);
+    expect(screen.getByTestId('trend-legend-value-trend-wide-0')).toHaveTextContent('4');
   });
 });

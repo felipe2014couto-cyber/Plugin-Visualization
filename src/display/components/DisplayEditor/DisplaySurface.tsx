@@ -131,6 +131,7 @@ export interface DisplaySurfaceProps {
   onElementContextMenu?: (element: DisplayElement) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement) => void;
   onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
+  onTrendLegendWidthChange?: (elementId: string, legendWidth: number) => void;
   zoom?: number;
   viewCenter?: Point;
   onViewportWheelZoom?: (viewport: SurfaceViewport) => void;
@@ -189,6 +190,7 @@ export function DisplaySurface({
   onElementContextMenu,
   onLibrarySymbolContextMenu,
   onTableColumnsChange,
+  onTrendLegendWidthChange,
   zoom = 1,
   viewCenter,
   onViewportWheelZoom,
@@ -880,6 +882,7 @@ export function DisplaySurface({
               onPlotPointerDown={cursorEnabled ? handleTrendPlotPointerDown : undefined}
               onCursorPointerDown={cursorEnabled ? handleTrendCursorPointerDown : undefined}
               onCursorDoubleClick={cursorEnabled ? handleTrendCursorDoubleClick : undefined}
+              onLegendWidthChange={onTrendLegendWidthChange}
               timeRange={trendTimeRange}
               onDoubleClick={handleTrendDoubleClick}
               onContextMenu={handleTrendContextMenu}

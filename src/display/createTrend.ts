@@ -32,6 +32,7 @@ export interface TrendVisualOptions {
   scaleMode: TrendScaleMode;
   fontFamily: string;
   fontSize: number;
+  legendWidth?: number;
 }
 
 export const DEFAULT_TREND_VISUAL_OPTIONS: TrendVisualOptions = {
@@ -155,6 +156,9 @@ export function getTrendSeries(element: Pick<TrendElement, 'properties'>): Trend
 
 export function getTrendVisualOptions(element: Pick<TrendElement, 'properties'>): TrendVisualOptions {
   const visual = element.properties.visual ?? {};
+  const legendWidth = typeof visual.legendWidth === 'number' && Number.isFinite(visual.legendWidth) && visual.legendWidth >= 100
+    ? Math.round(visual.legendWidth)
+    : undefined;
   return {
     title: typeof visual.title === 'string' ? visual.title : DEFAULT_TREND_VISUAL_OPTIONS.title,
     showRegression: visual.showRegression === true,
@@ -165,6 +169,7 @@ export function getTrendVisualOptions(element: Pick<TrendElement, 'properties'>)
     scaleMode: visual.scaleMode === 'individual' || visual.scaleMode === 'configurable' ? visual.scaleMode : 'single',
     fontFamily: typeof visual.fontFamily === 'string' && visual.fontFamily.trim() ? visual.fontFamily : 'Arial',
     fontSize: typeof visual.fontSize === 'number' && Number.isFinite(visual.fontSize) ? Math.max(10, Math.min(24, visual.fontSize)) : 16,
+    ...(legendWidth !== undefined ? { legendWidth } : {}),
   };
 }
 

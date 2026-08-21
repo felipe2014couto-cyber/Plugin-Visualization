@@ -84,4 +84,26 @@ describe('TrendPopup - escalas', () => {
     fireEvent.doubleClick(screen.getByTestId('trend-popup-cursor-hit-popup-cursor-1'));
     expect(screen.queryByTestId('trend-popup-cursor-popup-cursor-1')).toBeNull();
   });
+
+  it('exibe handle de redimensionamento e permite expandir/reduzir horizontalmente a legenda no popup', () => {
+    render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
+
+    const resizer = screen.getByTestId('trend-popup-legend-resizer');
+    expect(resizer).toBeInTheDocument();
+    expect(resizer).toHaveStyle({ cursor: 'col-resize' });
+
+    const svg = screen.getByLabelText('Trend detalhada') as unknown as SVGSVGElement;
+    jest.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 2400, bottom: 800, width: 2400, height: 800, toJSON: () => ({}) });
+
+    const plot = screen.getByTestId('trend-popup-cursor-plot');
+    const initialPlotWidth = Number(plot.getAttribute('width'));
+
+    // Drag resizer to the left by 200px -> increases legend, reduces plot
+    fireEvent.pointerDown(resizer, { clientX: 2080, pointerId: 10 });
+    fireEvent.pointerMove(resizer, { clientX: 1880, pointerId: 10 });
+    fireEvent.pointerUp(resizer, { clientX: 1880, pointerId: 10 });
+
+    const newPlotWidth = Number(screen.getByTestId('trend-popup-cursor-plot').getAttribute('width'));
+    expect(newPlotWidth).toBeLessThan(initialPlotWidth);
+  });
 });

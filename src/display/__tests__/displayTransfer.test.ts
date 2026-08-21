@@ -152,4 +152,18 @@ describe('displayTransfer', () => {
     expect(xml).toContain('<stroke>&lt;white&gt;</stroke>');
     expect(xml).not.toContain('<![CDATA[');
   });
+
+  it('serializa e desserializa legendWidth em elementos Trend', () => {
+    const document = createDisplayDocument({ id: 'trend-transfer' });
+    const trend = createTrend({ id: 'trend-1', binding });
+    trend.properties.visual = { legendWidth: 320, title: 'Pressão' };
+    const docWithTrend = appendTrend(document, trend);
+
+    const serialized = serializeDisplay(docWithTrend);
+    const imported = parseImportedDisplay(serialized);
+    const importedTrend = imported.elements[0] as typeof trend;
+
+    expect(importedTrend.properties.visual?.legendWidth).toBe(320);
+    expect(importedTrend.properties.visual?.title).toBe('Pressão');
+  });
 });

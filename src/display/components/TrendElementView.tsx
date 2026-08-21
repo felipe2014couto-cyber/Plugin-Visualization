@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendSeries } from '../createTrend';
 import type { PiTrendSeries, TrendPoint, TrendStatePoint } from '../../pi/piDataSource';
 import type { TrendRuntimeState } from '../runtime/trendRuntime';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
 import type { DisplayTimeRange } from '../../time/timeRange';
+import { getEffectiveTrendLegendWidth, truncateLegendLabel } from '../trendLegendLayout';
+import { TrendLegendResizeHandle } from './TrendLegendResizeHandle';
+import { svgPointFromEvent } from './DisplayEditor/editorGeometry';
 
 export interface TrendElementViewProps {
   element: TrendElement;
@@ -28,6 +31,7 @@ export interface TrendElementViewProps {
     elementId: string,
     cursor: TrendCursor,
   ) => void;
+  onLegendWidthChange?: (elementId: string, legendWidth: number) => void;
   timeRange?: DisplayTimeRange;
   onDoubleClick?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
   onContextMenu?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
@@ -56,6 +60,7 @@ export function TrendElementView({
   onPlotPointerDown,
   onCursorPointerDown,
   onCursorDoubleClick,
+  onLegendWidthChange,
   timeRange,
   onDoubleClick,
   onContextMenu,
@@ -66,6 +71,67 @@ export function TrendElementView({
   const visual = getTrendVisualOptions(element);
   const resolvedSeriesStates = seriesStates ?? configuredSeries.slice(0, 1).map((series) => ({ series, runtimeState: state }));
   const cursorPointerDown = cursorEnabled ? onCursorPointerDown : undefined;
+
+  const [previewLegendWidth, setPreviewLegendWidth] = useState<number | null>(null);
+  const [resizing, setResizing] = useState<{
+    pointerId: number;
+    startX: number;
+    startLegendWidth: number;
+  } | null>(null);
+
+  const effectiveLegendWidth = getEffectiveTrendLegendWidth(
+    element.width,
+    previewLegendWidth ?? visual.legendWidth,
+  );
+
+  const handleLegendResizePointerDown = (event: React.PointerEvent<SVGLineElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    const svg = event.currentTarget.ownerSVGElement;
+    const pt = svg ? svgPointFromEvent(svg, event.clientX, event.clientY) : { x: event.clientX, y: event.clientY };
+    setResizing({
+      pointerId: event.pointerId,
+      startX: pt.x,
+      startLegendWidth: effectiveLegendWidth,
+    });
+  };
+
+  const handleLegendResizePointerMove = (event: React.PointerEvent<SVGLineElement>) => {
+    if (!resizing || resizing.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const svg = event.currentTarget.ownerSVGElement;
+    const pt = svg ? svgPointFromEvent(svg, event.clientX, event.clientY) : { x: event.clientX, y: event.clientY };
+    const deltaX = pt.x - resizing.startX;
+    const newWidth = resizing.startLegendWidth - deltaX;
+    const clamped = getEffectiveTrendLegendWidth(element.width, newWidth);
+    setPreviewLegendWidth(clamped);
+  };
+
+  const handleLegendResizePointerUp = (event: React.PointerEvent<SVGLineElement>) => {
+    if (!resizing || resizing.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    try {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Ignore if pointer capture already released
+    }
+    const finalWidth = previewLegendWidth ?? resizing.startLegendWidth;
+    setResizing(null);
+    setPreviewLegendWidth(null);
+    onLegendWidthChange?.(element.id, finalWidth);
+  };
+
+  const handleLegendResizePointerCancel = (event: React.PointerEvent<SVGLineElement>) => {
+    if (!resizing || resizing.pointerId !== event.pointerId) return;
+    setResizing(null);
+    setPreviewLegendWidth(null);
+  };
+
+  const dividerX = element.x + element.width - effectiveLegendWidth;
+
   const content = getTrendContent(
     element,
     resolvedSeriesStates,
@@ -76,6 +142,7 @@ export function TrendElementView({
     cursorEnabled ? onCursorDoubleClick : undefined,
     timeRange,
     visual,
+    effectiveLegendWidth,
   );
   const clipPathId = trendContentClipPathId(element.id);
 
@@ -111,6 +178,17 @@ export function TrendElementView({
       <g clipPath={`url(#${clipPathId})`} data-testid={`trend-content-${element.id}`}>
         {content}
       </g>
+      <TrendLegendResizeHandle
+        x={dividerX}
+        y={element.y}
+        height={element.height}
+        testId={`trend-legend-resizer-${element.id}`}
+        isResizing={resizing !== null}
+        onPointerDown={handleLegendResizePointerDown}
+        onPointerMove={handleLegendResizePointerMove}
+        onPointerUp={handleLegendResizePointerUp}
+        onPointerCancel={handleLegendResizePointerCancel}
+      />
     </g>
   );
 }
@@ -129,10 +207,11 @@ function getTrendContent(
   onCursorDoubleClick: TrendElementViewProps['onCursorDoubleClick'],
   timeRange: DisplayTimeRange | undefined,
   visual: ReturnType<typeof getTrendVisualOptions>,
+  effectiveLegendWidth: number,
 ): React.ReactNode {
   const formatValue = (value: number) => formatNumber(value, visual.numberFormat);
   const orderedSeriesStates = [...seriesStates].sort((a, b) => Number(b.series.primaryScale === true) - Number(a.series.primaryScale === true));
-  const legendX = element.x + element.width - trendPlotRightMargin(element.width) + 12;
+  const legendX = element.x + element.width - effectiveLegendWidth + 12;
   const dataSeries = orderedSeriesStates.flatMap(({ series, runtimeState }) => {
     const data = runtimeState.status === 'success' || runtimeState.status === 'error'
       ? runtimeState.data
@@ -165,10 +244,13 @@ function getTrendContent(
           ? formatValue(currentValue)
           : currentState !== undefined ? currentState : '--';
         const legendY = element.y + 26 + index * 54;
+        const fullName = series.legendLabel || series.binding.pointName;
+        const displayLabel = truncateLegendLabel(fullName, effectiveLegendWidth, visual.fontSize);
         return (
           <React.Fragment key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}>
+            <title>{fullName}</title>
             <tspan x={legendX} y={legendY} fill={series.color} data-testid={`trend-legend-${element.id}-${index}`}>
-              {series.legendLabel || series.binding.pointName}
+              {displayLabel}
             </tspan>
             <tspan x={legendX} y={legendY + 23} fill={series.color} data-testid={`trend-legend-value-${element.id}-${index}`}>
               {value}
@@ -180,11 +262,11 @@ function getTrendContent(
   );
 
   if (dataSeries.length > 0 && stateSeries.length > 0) {
-    return <>{visual.title && <TrendTitle element={element} visual={visual} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} individualScale={visual.scaleMode !== 'single'} /></>;
+    return <>{visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} individualScale={visual.scaleMode !== 'single'} legendWidth={effectiveLegendWidth} /></>;
   }
 
   if (dataSeries.length === 0 && stateSeries.length > 0) {
-    return <>{visual.title && <TrendTitle element={element} visual={visual} />}{title}<DigitalTrend
+    return <>{visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}<DigitalTrend
       element={element}
       series={stateSeries}
       cursors={cursors}
@@ -193,6 +275,7 @@ function getTrendContent(
       onCursorPointerDown={onCursorPointerDown}
       onCursorDoubleClick={onCursorDoubleClick}
       timeRange={timeRange}
+      legendWidth={effectiveLegendWidth}
     /></>;
   }
 
@@ -210,11 +293,11 @@ function getTrendContent(
 
   const drawableSeries = dataSeries.filter(({ data }) => data.points.length > 0);
   const primary = drawableSeries.find(({ series }) => series.primaryScale === true) ?? drawableSeries[0];
-  const timeChart = buildTrendChartForSeries(element, drawableSeries.map(({ data }) => data.points), timeRange);
+  const timeChart = buildTrendChartForSeries(element, drawableSeries.map(({ data }) => data.points), timeRange, effectiveLegendWidth);
   const individualScale = visual.scaleMode === 'individual' || visual.scaleMode === 'configurable' || visual.scaleMode === 'multiple';
   const scaleChart = !individualScale
     ? timeChart
-    : primary ? buildTrendChartForSeries(element, [primary.data.points], timeRange) : timeChart;
+    : primary ? buildTrendChartForSeries(element, [primary.data.points], timeRange, effectiveLegendWidth) : timeChart;
   const configuredMin = visual.scaleMode === 'configurable' ? primary?.series.scaleMin : undefined;
   const configuredMax = visual.scaleMode === 'configurable' ? primary?.series.scaleMax : undefined;
   const domainMin = Number.isFinite(configuredMin) ? configuredMin as number : scaleChart.domainMin;
@@ -229,7 +312,7 @@ function getTrendContent(
     }),
   };
   const seriesCharts = new Map(drawableSeries.map(({ series, data }) => {
-    const baseChart = individualScale ? buildTrendChartForSeries(element, [data.points], timeRange) : chart;
+    const baseChart = individualScale ? buildTrendChartForSeries(element, [data.points], timeRange, effectiveLegendWidth) : chart;
     if (visual.scaleMode !== 'configurable') {
       return [trendBindingKey(series.binding), baseChart] as const;
     }
@@ -249,7 +332,7 @@ function getTrendContent(
   }));
   return (
     <>
-      {visual.title && <TrendTitle element={element} visual={visual} />}{title}
+      {visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}
       <rect
         x={chart.plotX}
         y={chart.plotY}
@@ -412,8 +495,8 @@ function getTrendContent(
   );
 }
 
-function TrendTitle({ element, visual }: { element: TrendElement; visual: ReturnType<typeof getTrendVisualOptions> }) {
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - trendPlotRightMargin(element.width));
+function TrendTitle({ element, visual, legendWidth }: { element: TrendElement; visual: ReturnType<typeof getTrendVisualOptions>; legendWidth: number }) {
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth);
   return <text x={element.x + PLOT_MARGIN.left + plotWidth / 2} y={element.y + 20} textAnchor="middle" fill={TEXT_COLOR} fontSize={visual.fontSize} fontFamily={visual.fontFamily} pointerEvents="none">{visual.title}</text>;
 }
 
@@ -448,12 +531,14 @@ function MixedTrend({
   stateSeries,
   timeRange,
   individualScale,
+  legendWidth,
 }: {
   element: TrendElement;
   numericSeries: Array<{ series: TrendSeries; data: PiTrendSeries }>;
   stateSeries: Array<{ series: TrendSeries; states: TrendStatePoint[] }>;
   timeRange: DisplayTimeRange | undefined;
   individualScale: boolean;
+  legendWidth: number;
 }) {
   const allNumericPoints = numericSeries.flatMap(({ data }) => data.points);
   const primaryNumeric = numericSeries.find(({ series }) => series.primaryScale === true) ?? numericSeries[0];
@@ -462,7 +547,7 @@ function MixedTrend({
   const stateLabels = [...new Set(states.map((state) => state.value))];
   const plotX = element.x + PLOT_MARGIN.left;
   const plotY = element.y + PLOT_MARGIN.top;
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - trendPlotRightMargin(element.width));
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth);
   const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
   const allTimes = [...allNumericPoints.map((point) => point.time), ...states.map((state) => state.time)];
   const firstTime = Math.min(...allTimes);
@@ -571,6 +656,7 @@ function DigitalTrend({
   onCursorPointerDown,
   onCursorDoubleClick,
   timeRange,
+  legendWidth,
 }: {
   element: TrendElement;
   series: Array<{ series: TrendSeries; states: TrendStatePoint[] }>;
@@ -580,12 +666,13 @@ function DigitalTrend({
   onCursorPointerDown: TrendElementViewProps['onCursorPointerDown'];
   onCursorDoubleClick: TrendElementViewProps['onCursorDoubleClick'];
   timeRange: DisplayTimeRange | undefined;
+  legendWidth: number;
 }) {
   const allStates = series.flatMap((item) => item.states);
   const labels = [...new Set(allStates.map((state) => state.value))];
   const plotX = element.x + PLOT_MARGIN.left;
   const plotY = element.y + PLOT_MARGIN.top;
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - trendPlotRightMargin(element.width));
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth);
   const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
   const firstTime = Math.min(...allStates.map((state) => state.time));
   const lastTime = Math.max(...allStates.map((state) => state.time));
@@ -731,18 +818,21 @@ export function buildTrendChart(
   element: TrendElement,
   points: TrendPoint[],
   timeRange?: DisplayTimeRange,
+  explicitLegendWidth?: number,
 ): TrendChartModel {
-  return buildTrendChartForSeries(element, [points], timeRange);
+  return buildTrendChartForSeries(element, [points], timeRange, explicitLegendWidth);
 }
 
 export function buildTrendChartForSeries(
   element: TrendElement,
   seriesPoints: readonly TrendPoint[][],
   timeRange?: DisplayTimeRange,
+  explicitLegendWidth?: number,
 ): TrendChartModel {
+  const legendWidth = explicitLegendWidth ?? getEffectiveTrendLegendWidth(element.width, getTrendVisualOptions(element).legendWidth);
   const plotX = element.x + PLOT_MARGIN.left;
   const plotY = element.y + PLOT_MARGIN.top;
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - trendPlotRightMargin(element.width));
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth);
   const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
   const points = seriesPoints.flat();
   const values = points.map((point) => point.value);
@@ -795,8 +885,8 @@ export function buildTrendChartForSeries(
   };
 }
 
-function trendPlotRightMargin(width: number): number {
-  return Math.max(PLOT_MARGIN.right, width * 0.3);
+export function trendPlotRightMargin(width: number, preferredLegendWidth?: number): number {
+  return getEffectiveTrendLegendWidth(width, preferredLegendWidth);
 }
 
 function trendPathForPoints(chart: TrendChartModel, points: readonly TrendPoint[]): string {

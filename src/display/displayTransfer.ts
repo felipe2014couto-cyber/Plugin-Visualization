@@ -4,7 +4,7 @@ import { GAUGE_TYPE, normalizeGaugeOptions } from './createGauge';
 import { normalizeMultistateConfig, type MultistateConfig, type MultistateRule } from './multistate';
 import { normalizeScaleOptions } from './scaleOptions';
 import { DISPLAY_SCHEMA_VERSION } from './schemaVersion';
-import { TREND_TYPE, trendSeriesColor, type TrendSeries } from './createTrend';
+import { TREND_TYPE, trendSeriesColor, type TrendSeries, type TrendVisualOptions } from './createTrend';
 import {
   DEFAULT_VALUE_VISUAL_OPTIONS,
   normalizeValueVisualOptions,
@@ -296,7 +296,14 @@ function portableElement(input: unknown): DisplayElement {
         ...portableLink(input.properties),
       } };
     case TREND_TYPE:
-      return { ...base, type: TREND_TYPE, properties: { series: portableTrendSeries(input.properties) } };
+      return {
+        ...base,
+        type: TREND_TYPE,
+        properties: {
+          series: portableTrendSeries(input.properties),
+          ...(isRecord(input.properties.visual) ? { visual: portableTrendVisual(input.properties.visual) } : {}),
+        },
+      };
     case TABLE_TYPE:
       return { ...base, type: TABLE_TYPE, properties: portableTable(input.properties) };
     case GAUGE_TYPE:
@@ -396,6 +403,22 @@ function portableTrendSeries(properties: Record<string, unknown>): TrendSeries[]
     }
   });
   return [...unique.values()];
+}
+
+function portableTrendVisual(input: unknown): Partial<TrendVisualOptions> | undefined {
+  if (!isRecord(input)) {
+    return undefined;
+  }
+  return {
+    ...(typeof input.title === 'string' ? { title: input.title } : {}),
+    ...(input.showRegression === true ? { showRegression: true } : {}),
+    ...(input.numberFormat === 'integer' || input.numberFormat === 'oneDecimal' || input.numberFormat === 'twoDecimals' ? { numberFormat: input.numberFormat } : {}),
+    ...(input.scaleIntervals === 2 || input.scaleIntervals === 5 || input.scaleIntervals === 10 ? { scaleIntervals: input.scaleIntervals } : {}),
+    ...(input.scaleMode === 'individual' || input.scaleMode === 'configurable' ? { scaleMode: input.scaleMode } : {}),
+    ...(typeof input.fontFamily === 'string' && input.fontFamily.trim() ? { fontFamily: input.fontFamily } : {}),
+    ...(isFiniteNumber(input.fontSize) ? { fontSize: input.fontSize } : {}),
+    ...(isFiniteNumber(input.legendWidth) && input.legendWidth >= 100 ? { legendWidth: Math.round(input.legendWidth) } : {}),
+  };
 }
 
 function portableVisual(input: unknown): ValueVisualOptions {

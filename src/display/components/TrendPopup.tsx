@@ -5,6 +5,8 @@ import type { DisplayTimeRange, DisplayTimeSelection } from '../../time/timeRang
 import type { TrendSeriesViewState } from './TrendElementView';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
 import { DEFAULT_TREND_VISUAL_OPTIONS, type TrendScaleMode, type TrendVisualOptions } from '../createTrend';
+import { getEffectiveTrendLegendWidth, truncateLegendLabel, DEFAULT_POPUP_LEGEND_WIDTH } from '../trendLegendLayout';
+import { TrendLegendResizeHandle } from './TrendLegendResizeHandle';
 
 export interface TrendPopupProps {
   seriesStates: readonly TrendSeriesViewState[];
@@ -102,7 +104,14 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
       const next = { ...current };
       for (const { series, automaticScale } of configurableSeries) {
         const key = popupSeriesKey(series);
-        next[key] ??= { min: formatValue(Number.isFinite(series.scaleMin) ? series.scaleMin as number : automaticScale.min), max: formatValue(Number.isFinite(series.scaleMax) ? series.scaleMax as number : automaticScale.max) };
+        const existing = next[key];
+        const min = existing?.min && existing.min.trim() !== ''
+          ? existing.min
+          : formatValue(Number.isFinite(series.scaleMin) ? series.scaleMin as number : automaticScale.min);
+        const max = existing?.max && existing.max.trim() !== ''
+          ? existing.max
+          : formatValue(Number.isFinite(series.scaleMax) ? series.scaleMax as number : automaticScale.max);
+        next[key] = { min, max };
       }
       return next;
     });
@@ -343,8 +352,25 @@ function PopupChart({
     .filter((item): item is typeof scaledSeries[number] => item !== undefined)
     .slice(0, 4);
   const plotX = Math.max(46, 8 + axisSeries.length * 38);
-  const plot = { x: plotX, y: 20, width: POPUP_WIDTH - 132 - plotX, height: 724 };
-  const legendX = plot.x + plot.width + 14;
+
+  const [popupLegendWidth, setPopupLegendWidth] = useState<number>(() => {
+    return typeof visualOptions.legendWidth === 'number' && visualOptions.legendWidth >= 100
+      ? visualOptions.legendWidth
+      : DEFAULT_POPUP_LEGEND_WIDTH;
+  });
+  const [previewPopupLegendWidth, setPreviewPopupLegendWidth] = useState<number | null>(null);
+  const [resizingLegend, setResizingLegend] = useState<{ pointerId: number; startX: number; startLegendWidth: number } | null>(null);
+
+  const effectiveLegendWidth = getEffectiveTrendLegendWidth(
+    POPUP_WIDTH,
+    previewPopupLegendWidth ?? popupLegendWidth,
+    plotX,
+    300,
+    100,
+  );
+  const plot = { x: plotX, y: 20, width: Math.max(120, POPUP_WIDTH - effectiveLegendWidth - plotX), height: 724 };
+  const dividerX = plot.x + plot.width;
+  const legendX = dividerX + 16;
   const timeSpan = Math.max(1, domainEnd - domainStart);
   const xFor = (time: number) => plot.x + ((time - domainStart) / timeSpan) * plot.width;
   const yFor = (value: number, scale: ValueScale) => plot.y + ((scale.max - value) / (scale.max - scale.min)) * plot.height;
@@ -465,6 +491,7 @@ function PopupChart({
         const states = (data.states ?? []).filter((state) => state.time >= domainStart && state.time <= domainEnd);
         const statePath = digitalPopupPath(states, domainEnd, xFor, (value) => stateY(value, stateLabels, plot));
         const currentState = states.at(-1)?.value;
+        const displayLabel = truncateLegendLabel(name, effectiveLegendWidth, visualOptions.fontSize);
         return (
           <React.Fragment key={name}>
             {path && <path d={path} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="round" strokeLinecap="round" data-testid={`trend-popup-line-${index}`} />}
@@ -473,12 +500,60 @@ function PopupChart({
             {marker === 'circle' && points.map((point) => <circle key={point.time} cx={xFor(point.time)} cy={yFor(point.value, scale)} r={3} fill={color} />)}
             {marker === 'square' && points.map((point) => <rect key={point.time} x={xFor(point.time) - 3} y={yFor(point.value, scale) - 3} width={6} height={6} fill={color} />)}
             <text x={legendX} y={36 + index * POPUP_LEGEND_ITEM_HEIGHT} fill={color} fontSize={visualOptions.fontSize} fontFamily={visualOptions.fontFamily}>
-              <tspan x={legendX}>{name}</tspan>
+              <title>{name}</title>
+              <tspan x={legendX}>{displayLabel}</tspan>
               <tspan x={legendX} dy={POPUP_LEGEND_LINE_HEIGHT}>{currentValue !== undefined ? formatValue(currentValue, visualOptions.numberFormat) : currentState ?? '--'}</tspan>
             </text>
           </React.Fragment>
         );
       })}
+      <TrendLegendResizeHandle
+        x={dividerX}
+        y={plot.y}
+        height={plot.height}
+        testId="trend-popup-legend-resizer"
+        isResizing={resizingLegend !== null}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+          const pt = popupPointFromPointer(event);
+          setResizingLegend({
+            pointerId: event.pointerId,
+            startX: pt.x,
+            startLegendWidth: effectiveLegendWidth,
+          });
+        }}
+        onPointerMove={(event) => {
+          if (!resizingLegend || resizingLegend.pointerId !== event.pointerId) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const pt = popupPointFromPointer(event);
+          const deltaX = pt.x - resizingLegend.startX;
+          const newWidth = resizingLegend.startLegendWidth - deltaX;
+          const clamped = getEffectiveTrendLegendWidth(POPUP_WIDTH, newWidth, plotX, 300, 100);
+          setPreviewPopupLegendWidth(clamped);
+        }}
+        onPointerUp={(event) => {
+          if (!resizingLegend || resizingLegend.pointerId !== event.pointerId) return;
+          event.preventDefault();
+          event.stopPropagation();
+          try {
+            event.currentTarget.releasePointerCapture?.(event.pointerId);
+          } catch {
+            // Ignore
+          }
+          const finalWidth = previewPopupLegendWidth ?? resizingLegend.startLegendWidth;
+          setResizingLegend(null);
+          setPreviewPopupLegendWidth(null);
+          setPopupLegendWidth(finalWidth);
+        }}
+        onPointerCancel={() => {
+          if (!resizingLegend) return;
+          setResizingLegend(null);
+          setPreviewPopupLegendWidth(null);
+        }}
+      />
       <rect
         x={plot.x}
         y={plot.y}
@@ -718,11 +793,11 @@ function createNiceScale(values: number[]): ValueScale {
 }
 
 function applyCustomScale(automaticScale: ValueScale, customScale: { min: string; max: string } | undefined): ValueScale {
-  if (!customScale || customScale.min.trim() === '' || customScale.max.trim() === '') {
+  if (!customScale) {
     return automaticScale;
   }
-  const min = Number(customScale.min);
-  const max = Number(customScale.max);
+  const min = customScale.min.trim() !== '' ? Number(customScale.min) : automaticScale.min;
+  const max = customScale.max.trim() !== '' ? Number(customScale.max) : automaticScale.max;
   if (!Number.isFinite(min) || !Number.isFinite(max) || min >= max) {
     return automaticScale;
   }

@@ -5,6 +5,8 @@ import {
   appendTrend,
   createTrend,
   getTrendSeries,
+  getTrendVisualOptions,
+  updateTrendVisualOptions,
   TREND_TYPE,
 } from '../createTrend';
 
@@ -76,5 +78,16 @@ describe('TrendElement', () => {
       },
     ]);
     expect(addCalculationTrendSeries(next, trend.id, 'calculation-1', 'Eficiência')).toBe(next);
+  });
+
+  it('preserva e atualiza legendWidth nas opções visuais da Trend', () => {
+    const trend = createTrend({ binding, id: 'trend-1' });
+    const document = appendTrend(createDisplayDocument({ id: 'display-1' }), trend);
+
+    const updated = updateTrendVisualOptions(document, trend.id, { legendWidth: 280 });
+    const updatedTrend = updated.elements[0] as typeof trend;
+    const visual = getTrendVisualOptions(updatedTrend);
+
+    expect(visual.legendWidth).toBe(280);
   });
 });
