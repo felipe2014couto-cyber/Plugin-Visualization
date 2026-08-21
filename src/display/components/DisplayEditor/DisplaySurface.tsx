@@ -120,6 +120,7 @@ export interface DisplaySurfaceProps {
   selectedElementIds: string[];
   onSelect: (elementId: string | null) => void;
   onSelectMany: (elementIds: string[], additive?: boolean) => void;
+  onDoubleClick?: (elementId: string) => void;
   onStartDrag: (elementId: string, pointer: Point, selectedIds?: string[]) => void;
   onStartResize: (elementId: string, handle: ResizeHandle, pointer: Point) => void;
   onPointerMove: (pointer: Point) => void;
@@ -179,6 +180,7 @@ export function DisplaySurface({
   selectedElementIds,
   onSelect,
   onSelectMany,
+  onDoubleClick,
   onStartDrag,
   onStartResize,
   onPointerMove,
@@ -582,8 +584,9 @@ export function DisplaySurface({
     }
     e.preventDefault();
     e.stopPropagation();
+    onDoubleClick?.(rawId);
     onSelect(rawId);
-  }, [editable, onSelect]);
+  }, [editable, onDoubleClick, onSelect]);
 
   const handleElementClick = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
     if (editable) {
@@ -648,6 +651,13 @@ export function DisplaySurface({
       const target = e.target as Element;
       const rawId = target.getAttribute('data-element-id')
         ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
+
+      if (rawId && e.detail >= 2) {
+        onDoubleClick?.(rawId);
+        onSelect(rawId);
+        return;
+      }
+
       const handleAttr = target.getAttribute('data-resize-handle');
       const elementId = handleAttr ? rawId : (rawId ? (findTopLevelElementId(elements, rawId) ?? rawId) : undefined);
       const clickedEl = elementId ? getElementById(displayDocument, elementId) : undefined;
