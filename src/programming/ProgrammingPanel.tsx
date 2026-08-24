@@ -4,9 +4,35 @@ import { ProgrammingEditor } from './ProgrammingEditor';
 import { ProgrammingPreview } from './ProgrammingPreview';
 import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument } from './ProgrammingTypes';
 
-export function ProgrammingPanel() {
-  const [draft, setDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
-  const [applied, setApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
+export interface ProgrammingPanelProps {
+  variant?: 'full' | 'editor' | 'preview';
+  document?: ProgrammingDocument;
+  appliedDocument?: ProgrammingDocument;
+  onDocumentChange?: (document: ProgrammingDocument) => void;
+  onApply?: () => void;
+}
+
+export function ProgrammingPanel({
+  variant = 'full',
+  document: controlledDocument,
+  appliedDocument: controlledAppliedDocument,
+  onDocumentChange,
+  onApply: controlledOnApply,
+}: ProgrammingPanelProps) {
+  const [internalDraft, setInternalDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
+  const [internalApplied, setInternalApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
+  const draft = controlledDocument ?? internalDraft;
+  const applied = controlledAppliedDocument ?? internalApplied;
+  const setDraft = onDocumentChange ?? setInternalDraft;
+  const apply = controlledOnApply ?? (() => setInternalApplied(draft));
+
+  const editor = <ProgrammingEditor document={draft} onChange={setDraft} onApply={apply} />;
+  const preview = (
+    <div className={styles.previewSection}>
+      <h3>Preview</h3>
+      <ProgrammingPreview document={applied} />
+    </div>
+  );
 
   return (
     <section className={styles.panel} data-testid="programming-panel" aria-label="Programming">
@@ -14,11 +40,8 @@ export function ProgrammingPanel() {
         <h2>Programming</h2>
         <span>HTML Graphics</span>
       </header>
-      <ProgrammingEditor document={draft} onChange={setDraft} onApply={() => setApplied(draft)} />
-      <div className={styles.previewSection}>
-        <h3>Preview</h3>
-        <ProgrammingPreview document={applied} />
-      </div>
+      {(variant === 'full' || variant === 'editor') && editor}
+      {(variant === 'full' || variant === 'preview') && preview}
     </section>
   );
 }

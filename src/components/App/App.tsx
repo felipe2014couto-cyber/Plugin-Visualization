@@ -33,6 +33,7 @@ import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
 import { ProgrammingPanel } from '../../programming/ProgrammingModule';
+import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument } from '../../programming/ProgrammingTypes';
 import { createSqlTable, SQL_TABLE_TYPE, type SqlTableElement } from '../../display/createSqlTable';
 import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
 import { createDefaultTimeSelection, getRefreshIntervalMs, moveTimeSelectionToNow, REFRESH_INTERVAL_OPTIONS } from '../../time/timeRange';
@@ -80,6 +81,8 @@ export function App() {
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
   const [refreshInterval, setRefreshInterval] = useState<string>('');
   const [refreshCount, setRefreshCount] = useState<number>(0);
+  const [programmingDraft, setProgrammingDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
+  const [programmingApplied, setProgrammingApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
 
   const handleManualRefresh = useCallback(() => {
     setTimeSelection((current) => (current.endExpression === '*' ? moveTimeSelectionToNow(current) : current));
@@ -668,6 +671,14 @@ export function App() {
                   sqlToLoad={selectedSqlTable?.properties.sql} 
                 />
               </div>
+              <div style={{ display: activeModule === 'programming' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
+                <ProgrammingPanel
+                  variant="editor"
+                  document={programmingDraft}
+                  onDocumentChange={setProgrammingDraft}
+                  onApply={() => setProgrammingApplied(programmingDraft)}
+                />
+              </div>
             </div>
           )}
         </aside>
@@ -732,7 +743,10 @@ export function App() {
             }}
             data-testid="pims-vision-programming-workspace"
           >
-            <ProgrammingPanel />
+            <ProgrammingPanel
+              variant="preview"
+              appliedDocument={programmingApplied}
+            />
           </div>
         </main>
       </div>

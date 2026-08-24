@@ -302,7 +302,7 @@ describe('App', () => {
     fireEvent.click(programmingButton);
 
     const programmingWorkspace = screen.getByTestId('pims-vision-programming-workspace');
-    expect(programmingWorkspace).toContainElement(screen.getByTestId('programming-panel'));
+    expect(programmingWorkspace.querySelector('[data-testid="programming-panel"]')).not.toBeNull();
     expect(screen.getByTestId('programming-html-editor')).toBeInTheDocument();
   });
 });
