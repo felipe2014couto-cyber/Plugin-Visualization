@@ -668,9 +668,6 @@ export function App() {
                   sqlToLoad={selectedSqlTable?.properties.sql} 
                 />
               </div>
-              <div style={{ display: activeModule === 'programming' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
-                <ProgrammingPanel />
-              </div>
             </div>
           )}
         </aside>
@@ -724,6 +721,18 @@ export function App() {
                 });
               }}
             />
+          </div>
+          <div
+            style={{
+              display: activeModule === 'programming' ? 'flex' : 'none',
+              flex: 1,
+              minWidth: 0,
+              minHeight: 0,
+              flexDirection: 'column',
+            }}
+            data-testid="pims-vision-programming-workspace"
+          >
+            <ProgrammingPanel />
           </div>
         </main>
       </div>

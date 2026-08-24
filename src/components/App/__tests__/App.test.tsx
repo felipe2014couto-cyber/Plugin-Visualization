@@ -301,7 +301,8 @@ describe('App', () => {
     expect(programmingButton).toHaveAttribute('aria-label', 'Programming');
     fireEvent.click(programmingButton);
 
-    expect(screen.getByTestId('programming-panel')).toBeInTheDocument();
+    const programmingWorkspace = screen.getByTestId('pims-vision-programming-workspace');
+    expect(programmingWorkspace).toContainElement(screen.getByTestId('programming-panel'));
     expect(screen.getByTestId('programming-html-editor')).toBeInTheDocument();
   });
 });
