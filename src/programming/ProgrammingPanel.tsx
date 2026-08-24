@@ -12,6 +12,7 @@ export interface ProgrammingPanelProps {
   onApply?: () => void;
   beforeEditor?: ReactNode;
   piPoints?: ProgrammingPiPointContext[];
+  onAddToDisplay?: () => void;
 }
 
 export function ProgrammingPanel({
@@ -22,6 +23,7 @@ export function ProgrammingPanel({
   onApply: controlledOnApply,
   beforeEditor,
   piPoints,
+  onAddToDisplay,
 }: ProgrammingPanelProps) {
   const [internalDraft, setInternalDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
   const [internalApplied, setInternalApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
@@ -30,7 +32,7 @@ export function ProgrammingPanel({
   const setDraft = onDocumentChange ?? setInternalDraft;
   const apply = controlledOnApply ?? (() => setInternalApplied(draft));
 
-  const editor = <>{beforeEditor}<ProgrammingEditor document={draft} onChange={setDraft} onApply={apply} /></>;
+  const editor = <>{beforeEditor}<ProgrammingEditor document={draft} onChange={setDraft} onApply={apply} onAddToDisplay={onAddToDisplay} /></>;
   const preview = (
     <div className={styles.previewSection}>
       <ProgrammingPreview document={applied} piPoints={piPoints} />

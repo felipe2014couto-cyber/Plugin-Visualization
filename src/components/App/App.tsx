@@ -3,6 +3,7 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { createDisplayDocument } from '../../display';
+import { appendProgramming, createProgramming } from '../../display/createProgramming';
 import { DisplayEditor } from '../../display/components/DisplayEditor';
 import {
   DisplayEditorMode,
@@ -284,6 +285,25 @@ export function App() {
       unit: value.unit ?? point.engineeringUnit,
     }] : [];
   }), [programmingPiPoints, programmingPiValues]);
+  const handleAddProgrammingToDisplay = useCallback(() => {
+    setDocument((current) => {
+      const query = programmingPiPoints.flatMap((point) => {
+        const binding = createPiPointBinding(point);
+        return binding ? [{ name: point.name, binding, ...(point.engineeringUnit ? { unit: point.engineeringUnit } : {}) }] : [];
+      });
+      const element = createProgramming({
+        html: programmingDraft.html,
+        css: programmingDraft.css,
+        javascript: programmingDraft.javascript,
+        query,
+        surface: current.surface,
+        existingIds: current.elements.map((item) => item.id),
+      });
+      return appendProgramming(current, element);
+    });
+    setActiveModule('visualization');
+    setIsAssetsPanelOpen(true);
+  }, [programmingDraft, programmingPiPoints]);
   const selectedSqlTable = useMemo(() => {
     if (activeModule !== 'sql-query') return null;
     if (selectedElementIds.length === 1) {
@@ -715,6 +735,7 @@ export function App() {
                   document={programmingDraft}
                   onDocumentChange={setProgrammingDraft}
                   onApply={() => setProgrammingApplied(programmingDraft)}
+                  onAddToDisplay={handleAddProgrammingToDisplay}
                   beforeEditor={activeModule === 'programming' ? (
                     <div className={styles.programmingPiSearch}>
                       <button

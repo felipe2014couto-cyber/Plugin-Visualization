@@ -309,4 +309,16 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('programming-pi-system-toggle'));
     expect(screen.getByTestId('programming-pi-system-toggle')).toHaveAttribute('aria-expanded', 'false');
   });
+
+  it('adiciona o Programming pronto como elemento persistente do Display', async () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('pims-vision-programming-tab'));
+    fireEvent.click(screen.getByTestId('programming-add-to-display'));
+
+    expect(screen.getByTestId('display-editor')).toBeInTheDocument();
+    expect(document.querySelector('[data-element-type="programming"]')).not.toBeNull();
+  });
 });

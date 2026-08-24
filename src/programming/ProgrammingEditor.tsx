@@ -6,9 +6,10 @@ interface ProgrammingEditorProps {
   document: ProgrammingDocument;
   onChange: (document: ProgrammingDocument) => void;
   onApply: () => void;
+  onAddToDisplay?: () => void;
 }
 
-export function ProgrammingEditor({ document, onChange, onApply }: ProgrammingEditorProps) {
+export function ProgrammingEditor({ document, onChange, onApply, onAddToDisplay }: ProgrammingEditorProps) {
   const update = (field: keyof Pick<ProgrammingDocument, 'html' | 'css' | 'javascript'>, value: string) => {
     onChange({ ...document, [field]: value });
   };
@@ -18,7 +19,10 @@ export function ProgrammingEditor({ document, onChange, onApply }: ProgrammingEd
       <CodeField label="HTML" value={document.html} onChange={(value) => update('html', value)} testId="programming-html-editor" />
       <CodeField label="CSS" value={document.css} onChange={(value) => update('css', value)} testId="programming-css-editor" />
       <CodeField label="JavaScript" value={document.javascript} onChange={(value) => update('javascript', value)} testId="programming-javascript-editor" />
-      <button type="button" className={styles.applyButton} data-testid="programming-apply" onClick={onApply}>Aplicar</button>
+      <div className={styles.actions}>
+        <button type="button" className={styles.applyButton} data-testid="programming-apply" onClick={onApply}>Aplicar</button>
+        {onAddToDisplay && <button type="button" className={styles.addButton} data-testid="programming-add-to-display" onClick={onAddToDisplay}>Adicionar ao Data</button>}
+      </div>
     </div>
   );
 }
@@ -67,12 +71,21 @@ const styles = {
     font: '12px/1.45 Consolas, Monaco, monospace',
   }),
   applyButton: css({
-    alignSelf: 'flex-start',
     padding: '6px 14px',
     border: '1px solid var(--accent, #b4167e)',
     borderRadius: 4,
     color: '#ffffff',
     background: 'var(--accent, #b4167e)',
+    cursor: 'pointer',
+    fontWeight: 600,
+  }),
+  actions: css({ display: 'flex', flexWrap: 'wrap', gap: 8 }),
+  addButton: css({
+    padding: '6px 12px',
+    border: '1px solid var(--border-color, #2b394a)',
+    borderRadius: 4,
+    color: 'var(--text-primary, #f1f2f5)',
+    background: 'var(--button-bg, #172332)',
     cursor: 'pointer',
     fontWeight: 600,
   }),
