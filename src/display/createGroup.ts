@@ -319,8 +319,12 @@ export function updateElementInDocument(
   const updateList = (list: readonly DisplayElement[]): DisplayElement[] => {
     return list.map((item) => {
       if (item.id === elementId) {
-        changed = true;
-        return updater(item);
+        const nextItem = updater(item);
+        if (nextItem !== item) {
+          changed = true;
+          return nextItem;
+        }
+        return item;
       }
       if (item.type === GROUP_TYPE && Array.isArray((item.properties as { elements?: DisplayElement[] }).elements)) {
         const children = (item.properties as { elements: DisplayElement[] }).elements;
