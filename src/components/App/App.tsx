@@ -233,13 +233,25 @@ export function App() {
     return null;
   }, [document, activeModule, selectedElementIds]);
 
-  const handleSqlResultChange = useCallback((result: OracleQueryResponse, sql: string) => {
+  const [lastExecutedSql, setLastExecutedSql] = useState<{ sql: string; result: OracleQueryResponse } | null>(null);
+
+  const handleSqlResultChange = useCallback((result: OracleQueryResponse, sql: string, config?: Record<string, any>) => {
+    setLastExecutedSql({ sql, result });
+    const appliedConfig = config || {};
     setDocument((prev) => {
       const existingIds = prev.elements.map((e) => e.id);
       if (selectedSqlTable) {
         return {
           ...prev,
-          elements: prev.elements.map((e) => e.id === selectedSqlTable.id ? { ...e, properties: { ...e.properties, sql, result } } : e)
+          elements: prev.elements.map((e) => e.id === selectedSqlTable.id ? { 
+            ...e, 
+            properties: { 
+              ...e.properties, 
+              sql, 
+              result,
+              ...appliedConfig,
+            } 
+          } : e)
         };
       }
       
@@ -248,36 +260,49 @@ export function App() {
         result,
         surface: prev.surface,
         existingIds,
+        ...appliedConfig,
       });
       return {
         ...prev,
         elements: [...prev.elements, newTable],
       };
     });
-    // the newly created table isn't automatically selected unless DisplayEditor does it?
-    // it's okay, we can just leave it unselected or let the user click it.
   }, [selectedSqlTable]);
 
-  const handleSqlApplyToDashboard = useCallback((config: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] }) => {
+  const handleSqlApplyToDashboard = useCallback((config: Record<string, any>) => {
     setDocument((prev) => {
       let targetId = selectedSqlTable?.id;
       
       if (!targetId) {
-        // Se nenhum estiver selecionado, aplica à última tabela SQL criada (geralmente a que acabou de rodar)
-        const sqlTables = prev.elements.filter(e => e.type === 'sql-table');
+        // Se nenhum estiver selecionado, aplica à última tabela SQL criada
+        const sqlTables = prev.elements.filter((e) => e.type === 'sql-table');
         if (sqlTables.length > 0) {
           targetId = sqlTables[sqlTables.length - 1].id;
         }
       }
 
-      if (!targetId) return prev;
+      if (!targetId) {
+        // Se ainda não existir nenhuma tabela, cria uma nova com os dados e as configurações
+        const existingIds = prev.elements.map((e) => e.id);
+        const newTable = createSqlTable({
+          sql: lastExecutedSql?.sql || '',
+          result: lastExecutedSql?.result || null,
+          surface: prev.surface,
+          existingIds,
+          ...(config as any),
+        });
+        return {
+          ...prev,
+          elements: [...prev.elements, newTable],
+        };
+      }
 
       return {
         ...prev,
         elements: prev.elements.map((e) => e.id === targetId ? { ...e, properties: { ...e.properties, ...config } } : e)
       };
     });
-  }, [selectedSqlTable]);
+  }, [selectedSqlTable, lastExecutedSql]);
 
   const openSaveAsDialog = useCallback(() => {
     setSaveName(document.name);

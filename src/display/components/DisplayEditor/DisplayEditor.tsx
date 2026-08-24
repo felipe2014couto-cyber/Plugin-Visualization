@@ -83,6 +83,7 @@ import {
   resizeGroup,
   ungroupElements,
   updateGroupProperties,
+  updateElementInDocument,
   type GroupElement,
   type GroupProperties,
 } from '../../createGroup';

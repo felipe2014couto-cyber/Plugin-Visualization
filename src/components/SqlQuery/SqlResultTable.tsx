@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { css, cx } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, Icon } from '@grafana/ui';
@@ -14,13 +14,69 @@ interface SqlResultTableProps {
 
 export function SqlResultTable({ result, isLoading, properties }: SqlResultTableProps) {
   const styles = useStyles2(getStyles);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const columns = useMemo(() => {
+  const allColumns = useMemo(() => {
     if (!result || !result.rows || result.rows.length === 0) {
       return [];
     }
     return Object.keys(result.rows[0]);
   }, [result]);
+
+  // Filter columns if tableVisibleCols is set
+  const columns = useMemo(() => {
+    if (!properties?.tableVisibleCols || properties.tableVisibleCols === 'Todas') {
+      return allColumns;
+    }
+    const filtered = allColumns.filter((c) => c === properties.tableVisibleCols);
+    return filtered.length > 0 ? filtered : allColumns;
+  }, [allColumns, properties?.tableVisibleCols]);
+
+  // Sort rows
+  const sortedRows = useMemo(() => {
+    if (!result?.rows) return [];
+    let list = [...result.rows];
+
+    // Filter by search term if tableColumnFilters is enabled
+    if (properties?.tableColumnFilters && searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      list = list.filter((row) =>
+        Object.values(row).some((v) => String(v).toLowerCase().includes(term))
+      );
+    }
+
+    // Sort by column
+    const sortCol = typeof properties?.tableSortBy === 'string' ? properties.tableSortBy : undefined;
+    if (sortCol && columns.includes(sortCol)) {
+      const isAsc = properties?.tableOrder !== 'Decrescente';
+      list.sort((a, b) => {
+        const valA = (a as any)[sortCol];
+        const valB = (b as any)[sortCol];
+        if (valA === valB) return 0;
+        if (valA === null || valA === undefined) return 1;
+        if (valB === null || valB === undefined) return -1;
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return isAsc ? valA - valB : valB - valA;
+        }
+        return isAsc
+          ? String(valA).localeCompare(String(valB))
+          : String(valB).localeCompare(String(valA));
+      });
+    }
+
+    return list;
+  }, [result?.rows, properties?.tableColumnFilters, searchTerm, properties?.tableSortBy, properties?.tableOrder, columns]);
+
+  // Table pagination
+  const pageSize = Number(properties?.tableRowsPerPage) || 25;
+  const totalPages = Math.ceil(sortedRows.length / pageSize);
+
+  const paginatedRows = useMemo(() => {
+    if (totalPages <= 1) return sortedRows;
+    const start = currentPage * pageSize;
+    return sortedRows.slice(start, start + pageSize);
+  }, [sortedRows, pageSize, currentPage, totalPages]);
 
   if (isLoading) {
     return (
@@ -50,7 +106,6 @@ export function SqlResultTable({ result, isLoading, properties }: SqlResultTable
   }
 
   const styleObj = getDynamicStyles(properties);
-
   const viewMode = properties?.viewMode ?? 'table';
   const xAxis = properties?.xAxis;
   const yAxes = properties?.yAxes ?? [];
@@ -58,43 +113,88 @@ export function SqlResultTable({ result, isLoading, properties }: SqlResultTable
   return (
     <div className={styles.container} style={styleObj}>
       {viewMode === 'table' ? (
-        <div className={styles.tableWrapper}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th className={styles.rowNumHeader}>#</th>
-                {columns.map((col) => (
-                  <th key={col}>{col}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {result.rows.map((row, rowIndex) => (
-                <tr key={rowIndex}>
-                  <td className={styles.rowNumCell}>{rowIndex + 1}</td>
-                  {columns.map((col) => {
-                    const val = row[col];
-                    const displayVal = val === null ? 'NULL' : String(val);
-                    const isNull = val === null;
-                    const isNumber = typeof val === 'number';
-                    
-                    return (
-                      <td 
-                        key={col} 
-                        className={cx(
-                          isNull && styles.nullCell, 
-                          isNumber && styles.numberCell
-                        )}
-                        title={displayVal}
-                      >
-                        {displayVal}
-                      </td>
-                    );
-                  })}
+        <div className={styles.tableFlexWrapper}>
+          {properties?.tableColumnFilters && (
+            <div className={styles.filterRow}>
+              <Icon name="search" />
+              <input
+                type="text"
+                className={styles.filterInput}
+                placeholder="Filtrar dados da tabela..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(0);
+                }}
+              />
+            </div>
+          )}
+
+          <div className={styles.tableWrapper}>
+            <table className={styles.table} style={{ tableLayout: properties?.tableAdjustWidth ? 'auto' : undefined }}>
+              <thead>
+                <tr>
+                  <th className={styles.rowNumHeader}>#</th>
+                  {columns.map((col) => (
+                    <th key={col}>{col}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {paginatedRows.map((row, rowIndex) => {
+                  const globalIndex = currentPage * pageSize + rowIndex + 1;
+                  return (
+                    <tr key={rowIndex}>
+                      <td className={styles.rowNumCell}>{globalIndex}</td>
+                      {columns.map((col) => {
+                        const val = row[col];
+                        const displayVal = val === null ? 'NULL' : String(val);
+                        const isNull = val === null;
+                        const isNumber = typeof val === 'number';
+                        
+                        return (
+                          <td 
+                            key={col} 
+                            className={cx(
+                              isNull && styles.nullCell, 
+                              isNumber && styles.numberCell
+                            )}
+                            title={displayVal}
+                          >
+                            {displayVal}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {totalPages > 1 && (
+            <div className={styles.pagination}>
+              <button 
+                className={styles.pageButton} 
+                onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                disabled={currentPage === 0}
+                title="Página Anterior"
+              >
+                &#9664;
+              </button>
+              <div className={styles.pageInfo}>
+                <span>{pageSize} itens (Pág {currentPage + 1}/{totalPages})</span>
+              </div>
+              <button 
+                className={styles.pageButton} 
+                onClick={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={currentPage === totalPages - 1}
+                title="Próxima Página"
+              >
+                &#9654;
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <SqlChartRender 
@@ -136,15 +236,21 @@ export function getDynamicStyles(properties?: SqlTableProperties): React.CSSProp
     vars['--sql-text-color'] = '#f4f4f5';
     vars['--sql-border-color'] = '#27272a';
     vars['--sql-row-hover'] = '#71717a';
-  } else {
-    // dark (default)
+  } else if (properties.style === 'dark') {
     vars['--sql-header-bg'] = '#1f2937';
     vars['--sql-row-bg'] = '#111827';
     vars['--sql-text-color'] = '#f3f4f6';
     vars['--sql-border-color'] = '#374151';
-    vars['--sql-row-hover'] = '#374151';
+    vars['--sql-row-hover'] = '#1f2937';
+  } else {
+    // auto / theme-aware (default): follow the active Grafana theme variables
+    vars['--sql-header-bg'] = 'var(--panel-header-bg, var(--surface-elevated))';
+    vars['--sql-row-bg'] = 'var(--surface-primary)';
+    vars['--sql-text-color'] = 'var(--text-primary)';
+    vars['--sql-border-color'] = 'var(--border-color)';
+    vars['--sql-row-hover'] = 'var(--button-hover, var(--selection-bg))';
   }
-  
+
   return vars;
 }
 
@@ -153,11 +259,144 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     flex-direction: column;
     height: 100%;
-    min-height: 0;
+    width: 100%;
+    font-size: var(--sql-font-size, 13px);
     color: var(--sql-text-color, var(--text-primary));
-    border: 1px solid var(--sql-border-color, var(--border-color));
-    border-radius: ${theme.shape.borderRadius(1)};
     background: var(--sql-row-bg, var(--surface-primary));
+    overflow: hidden;
+  `,
+  tableFlexWrapper: css`
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  `,
+  filterRow: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--sql-header-bg, var(--surface-elevated));
+    border-bottom: 1px solid var(--sql-border-color, var(--border-color));
+    color: var(--sql-text-color, var(--text-secondary));
+  `,
+  filterInput: css`
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--sql-text-color, var(--text-primary));
+    font-size: 12px;
+    width: 100%;
+    &::placeholder {
+      color: var(--text-muted);
+    }
+  `,
+  tableWrapper: css`
+    flex: 1;
+    overflow: auto;
+  `,
+  table: css`
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--sql-header-bg, var(--surface-elevated));
+      color: var(--sql-text-color, var(--text-primary));
+      font-weight: ${theme.typography.fontWeightMedium};
+      padding: ${theme.spacing(1, 1.5)};
+      border-bottom: 2px solid var(--sql-border-color, var(--border-color));
+      white-space: nowrap;
+      text-align: left !important;
+      z-index: 1;
+    }
+    
+    td {
+      padding: ${theme.spacing(0.75, 1.5)};
+      border-bottom: 1px solid var(--sql-border-color, var(--border-color));
+      color: var(--sql-text-color, var(--text-primary));
+      white-space: nowrap;
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: left !important;
+    }
+    
+    tr:hover td {
+      background-color: var(--sql-row-hover, var(--surface-secondary));
+    }
+  `,
+  rowNumHeader: css`
+    width: 40px;
+    text-align: center;
+    color: var(--text-secondary);
+  `,
+  rowNumCell: css`
+    width: 40px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 11px;
+    user-select: none;
+  `,
+  nullCell: css`
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: left;
+  `,
+  numberCell: css`
+    font-family: ${theme.typography.fontFamilyMonospace};
+    text-align: left !important;
+  `,
+  pagination: css`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 38px;
+    flex-shrink: 0;
+    border-top: 1px solid var(--sql-border-color, var(--border-color));
+    color: var(--sql-text-color, var(--text-primary));
+    padding-top: 4px;
+    background: var(--sql-header-bg, var(--surface-elevated));
+  `,
+  pageButton: css`
+    background: var(--button-bg, var(--surface-secondary));
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--sql-text-color, var(--text-primary));
+    width: 36px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+    
+    &:hover:not(:disabled) {
+      background: var(--button-hover, var(--selection-bg));
+      border-color: var(--accent);
+    }
+    
+    &:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+  `,
+  pageInfo: css`
+    background: transparent;
+    border: 1px solid var(--sql-border-color, var(--border-color));
+    border-radius: 6px;
+    color: var(--sql-text-color, var(--text-primary));
+    padding: 0 10px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
   `,
   emptyState: css`
     display: flex;
@@ -166,88 +405,12 @@ const getStyles = (theme: GrafanaTheme2) => ({
     justify-content: center;
     height: 100%;
     min-height: 200px;
-    color: var(--sql-text-color, var(--text-secondary));
-    background: var(--sql-row-bg, var(--surface-primary));
-    border: 1px solid var(--sql-border-color, var(--border-color));
-    border-radius: ${theme.shape.borderRadius(1)};
     padding: ${theme.spacing(4)};
+    color: var(--text-secondary);
     text-align: center;
+    gap: ${theme.spacing(2)};
   `,
   emptyIcon: css`
-    margin-bottom: ${theme.spacing(2)};
-    opacity: 0.5;
-  `,
-  tableWrapper: css`
-    flex: 1;
-    overflow: auto;
-    min-height: 0;
-  `,
-  table: css`
-    width: 100%;
-    min-width: 100%;
-    table-layout: fixed;
-    border-collapse: separate;
-    border-spacing: 0;
-    font-family: ${theme.typography.fontFamilyMonospace};
-    font-size: var(--sql-font-size, 13px);
-    
-    th, td {
-      padding: ${theme.spacing(1)} ${theme.spacing(2)};
-      color: var(--sql-text-color, var(--text-primary));
-      border-bottom: 1px solid var(--sql-border-color, var(--border-color));
-      border-right: 1px solid var(--sql-border-color, var(--border-color));
-      white-space: normal;
-      max-width: none;
-      overflow-wrap: anywhere;
-      word-break: break-word;
-      vertical-align: top;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      
-      &:last-child {
-        border-right: none;
-      }
-    }
-    
-    th {
-      background: var(--sql-header-bg, var(--surface-secondary));
-      position: sticky;
-      top: 0;
-      z-index: 1;
-      border-bottom: 1px solid var(--sql-border-color, var(--border-color));
-      text-align: left;
-      font-weight: ${theme.typography.fontWeightMedium};
-      color: var(--sql-text-color, var(--text-primary));
-    }
-    
-    tbody tr {
-      background: var(--sql-row-bg, transparent);
-    }
-    tbody tr:nth-child(even) {
-      background: var(--sql-row-alt-bg, var(--sql-row-bg, transparent));
-    }
-    tbody tr:hover {
-      background: var(--sql-row-hover, var(--button-hover));
-    }
-  `,
-  rowNumHeader: css`
-    width: 40px;
-    text-align: center !important;
-  `,
-  rowNumCell: css`
-    text-align: center;
-    color: var(--sql-text-color, var(--text-muted));
-    background: var(--sql-header-bg, var(--surface-secondary));
-    position: sticky;
-    left: 0;
-    z-index: 0;
-  `,
-  nullCell: css`
-    color: var(--sql-text-color, var(--text-muted));
-    font-style: italic;
-    opacity: 0.6;
-  `,
-  numberCell: css`
-    text-align: right;
+    color: var(--text-muted);
   `,
 });

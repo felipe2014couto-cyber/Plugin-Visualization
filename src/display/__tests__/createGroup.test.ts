@@ -8,9 +8,7 @@ import {
   GROUP_TYPE,
   groupElements,
   resizeGroup,
-  scaleGroupChildren,
   ungroupElements,
-  updateGroupProperties,
 } from '../createGroup';
 
 describe('createGroup and grouping utilities', () => {

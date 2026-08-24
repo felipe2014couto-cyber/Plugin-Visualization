@@ -3,7 +3,7 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { SqlConnectionForm } from './SqlConnectionForm';
-import { SqlEditor } from './SqlEditor';
+import { SqlEditor, type SqlConfig } from './SqlEditor';
 import { 
   createOracleSession, 
   closeOracleSession, 
@@ -13,11 +13,11 @@ import {
 } from './oracleApi';
 
 interface SqlQueryPanelProps {
-  onResultChange?: (result: OracleQueryResponse, sql: string) => void;
-  onApplyToDashboard?: (config: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] }) => void;
-  onConfigChange?: (config: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] }) => void;
+  onResultChange?: (result: OracleQueryResponse, sql: string, config?: SqlConfig) => void;
+  onApplyToDashboard?: (config: SqlConfig) => void;
+  onConfigChange?: (config: SqlConfig) => void;
   sqlToLoad?: string;
-  initialConfig?: { viewMode?: 'table' | 'xy' | 'timeseries', xAxis?: string, yAxes?: string[] };
+  initialConfig?: SqlConfig;
 }
 
 export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChange, sqlToLoad, initialConfig }: SqlQueryPanelProps) {
@@ -30,6 +30,12 @@ export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChan
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionError, setExecutionError] = useState<string>();
   const [lastResult, setLastResult] = useState<OracleQueryResponse | null>(null);
+  const [currentConfig, setCurrentConfig] = useState<SqlConfig | undefined>(initialConfig);
+
+  const handleConfigChange = (cfg: SqlConfig) => {
+    setCurrentConfig(cfg);
+    onConfigChange?.(cfg);
+  };
 
   // Cleanup session on unmount
   useEffect(() => {
@@ -77,7 +83,36 @@ export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChan
         params
       });
       setLastResult(result);
-      onResultChange?.(result, sql);
+
+      // Auto-resolve axes from result columns immediately
+      let autoX = currentConfig?.xAxis;
+      let autoY = currentConfig?.yAxes?.[0];
+      if (result.rows && result.rows.length > 0) {
+        const cols = Object.keys(result.rows[0]);
+        if (cols.length > 0) {
+          const timeCandidate = cols.find((c) => {
+            const lower = c.toLowerCase();
+            return lower === 'ts' || lower === 'time' || lower === 'data' || lower.includes('date') || lower.includes('dth') || lower.includes('hora') || lower.includes('tempo');
+          }) || cols[0];
+
+          const valueCandidate = cols.find((c) => {
+            const lower = c.toLowerCase();
+            return lower === 'pi_value' || lower === 'valor' || lower === 'val' || lower === 'value' || lower === 'y' || lower.includes('medida') || lower.includes('total') || lower.includes('qtde');
+          }) || cols.find((c) => c !== timeCandidate && typeof result.rows[0][c] === 'number') || (cols.length > 1 ? cols[1] : cols[0]);
+
+          autoX = (!autoX || !cols.includes(autoX)) ? timeCandidate : autoX;
+          autoY = (!autoY || !cols.includes(autoY)) ? valueCandidate : autoY;
+        }
+      }
+
+      const effectiveConfig: SqlConfig = {
+        viewMode: currentConfig?.viewMode ?? 'xy',
+        ...(currentConfig || {}),
+        xAxis: autoX,
+        yAxes: autoY ? [autoY] : [],
+      };
+
+      onResultChange?.(result, sql, effectiveConfig);
       return result;
     } catch (err: any) {
       setExecutionError(err.message || 'Falha ao executar consulta');
@@ -99,7 +134,7 @@ export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChan
         <SqlEditor 
           onExecute={handleExecute}
           onDisconnect={handleDisconnect}
-          onConfigChange={onConfigChange}
+          onConfigChange={handleConfigChange}
           onApplyToDashboard={onApplyToDashboard}
           isExecuting={isExecuting}
           error={executionError}
