@@ -29,17 +29,18 @@ export function ProgrammingPanel({
   const editor = <ProgrammingEditor document={draft} onChange={setDraft} onApply={apply} />;
   const preview = (
     <div className={styles.previewSection}>
-      <h3>Preview</h3>
       <ProgrammingPreview document={applied} />
     </div>
   );
 
   return (
     <section className={styles.panel} data-testid="programming-panel" aria-label="Programming">
-      <header className={styles.header}>
-        <h2>Programming</h2>
-        <span>HTML Graphics</span>
-      </header>
+      {variant !== 'preview' && (
+        <header className={styles.header}>
+          <h2>Programming</h2>
+          <span>HTML Graphics</span>
+        </header>
+      )}
       {(variant === 'full' || variant === 'editor') && editor}
       {(variant === 'full' || variant === 'preview') && preview}
     </section>

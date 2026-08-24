@@ -567,7 +567,6 @@ export function App() {
                 setIsAssetsPanelOpen(true); 
               }}
             ><DatabaseIcon /></button>
-            <span className={styles.assetsRailItem} title="Pesquisa PI" aria-label="Pesquisa PI"><SearchIcon /></span>
             <button
               type="button"
               className={activeModule === 'programming' ? styles.assetsRailActive : styles.assetsRailButton}
@@ -1640,13 +1639,6 @@ function DatabaseIcon() {
     <ellipse cx="12" cy="5" rx="7" ry="3" />
     <path d="M5 5v7c0 1.7 3.1 3 7 3s7-1.3 7-3V5" />
     <path d="M5 12v7c0 1.7 3.1 3 7 3s7-1.3 7-3v-7" />
-  </svg>;
-}
-
-function SearchIcon() {
-  return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-    <circle cx="10.5" cy="10.5" r="6.5" />
-    <path d="m16 16 5 5" />
   </svg>;
 }
 
