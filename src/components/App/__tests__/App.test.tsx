@@ -304,5 +304,9 @@ describe('App', () => {
     const programmingWorkspace = screen.getByTestId('pims-vision-programming-workspace');
     expect(programmingWorkspace.querySelector('[data-testid="programming-panel"]')).not.toBeNull();
     expect(screen.getByTestId('programming-html-editor')).toBeInTheDocument();
+    expect(screen.getByTestId('programming-pi-system-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(screen.getByTestId('programming-pi-system-toggle'));
+    expect(screen.getByTestId('programming-pi-system-toggle')).toHaveAttribute('aria-expanded', 'false');
   });
 });

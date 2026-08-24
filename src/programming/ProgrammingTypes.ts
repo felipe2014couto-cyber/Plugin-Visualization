@@ -7,6 +7,14 @@ export interface ProgrammingDocument {
   javascript: string;
 }
 
+/** Dados enviados pela aplicação ao iframe, sem conceder acesso ao Grafana. */
+export interface ProgrammingPiPointContext {
+  name: string;
+  value: unknown;
+  timestamp?: string;
+  unit?: string;
+}
+
 export const DEFAULT_PROGRAMMING_DOCUMENT: ProgrammingDocument = {
   type: PROGRAMMING_TYPE,
   html: '<div class="box">Motor ligado</div>',

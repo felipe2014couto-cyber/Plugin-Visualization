@@ -22,10 +22,11 @@ import {
   createProgressiveTrendLoader,
   type PiConnectionState,
   type PiPointSearchResult,
+  type PiPointValue,
   type ProgressiveTrendLoader,
 } from '../../pi';
 import { PiPointSearch } from '../../pi/PiPointSearch';
-import { isStatePiPointBinding } from '../../pi/piPointBinding';
+import { createPiPointBinding, isStatePiPointBinding } from '../../pi/piPointBinding';
 import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
 import { LibraryPanel } from '../Library/LibraryPanel';
@@ -33,7 +34,7 @@ import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
 import { ProgrammingPanel } from '../../programming/ProgrammingModule';
-import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument } from '../../programming/ProgrammingTypes';
+import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument, type ProgrammingPiPointContext } from '../../programming/ProgrammingTypes';
 import { createSqlTable, SQL_TABLE_TYPE, type SqlTableElement } from '../../display/createSqlTable';
 import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
 import { createDefaultTimeSelection, getRefreshIntervalMs, moveTimeSelectionToNow, REFRESH_INTERVAL_OPTIONS } from '../../time/timeRange';
@@ -83,6 +84,9 @@ export function App() {
   const [refreshCount, setRefreshCount] = useState<number>(0);
   const [programmingDraft, setProgrammingDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
   const [programmingApplied, setProgrammingApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
+  const [programmingPiPoint, setProgrammingPiPoint] = useState<PiPointSearchResult | null>(null);
+  const [programmingPiValue, setProgrammingPiValue] = useState<PiPointValue | null>(null);
+  const [isProgrammingPiSearchOpen, setIsProgrammingPiSearchOpen] = useState(true);
 
   const handleManualRefresh = useCallback(() => {
     setTimeSelection((current) => (current.endExpression === '*' ? moveTimeSelectionToNow(current) : current));
@@ -245,6 +249,29 @@ export function App() {
     [progressiveTrendLoader, rangeFrom, rangeTo],
   );
   const hasPiConnection = piConnection.status === 'connected';
+
+  useEffect(() => {
+    const binding = programmingPiPoint ? createPiPointBinding(programmingPiPoint) : undefined;
+    if (!binding || !hasPiConnection) {
+      setProgrammingPiValue(null);
+      return;
+    }
+    let active = true;
+    getPiPointCurrentValue(binding)
+      .then((value) => { if (active) setProgrammingPiValue(value); })
+      .catch(() => { if (active) setProgrammingPiValue(null); });
+    return () => { active = false; };
+  }, [hasPiConnection, programmingPiPoint, refreshCount]);
+
+  const programmingPiContext = useMemo<ProgrammingPiPointContext | undefined>(() => {
+    if (!programmingPiPoint || !programmingPiValue) return undefined;
+    return {
+      name: programmingPiPoint.name,
+      value: programmingPiValue.value,
+      timestamp: programmingPiValue.timestamp,
+      unit: programmingPiValue.unit ?? programmingPiPoint.engineeringUnit,
+    };
+  }, [programmingPiPoint, programmingPiValue]);
   const selectedSqlTable = useMemo(() => {
     if (activeModule !== 'sql-query') return null;
     if (selectedElementIds.length === 1) {
@@ -676,6 +703,34 @@ export function App() {
                   document={programmingDraft}
                   onDocumentChange={setProgrammingDraft}
                   onApply={() => setProgrammingApplied(programmingDraft)}
+                  beforeEditor={activeModule === 'programming' ? (
+                    <div className={styles.programmingPiSearch}>
+                      <button
+                        type="button"
+                        className={styles.sectionCollapseButton}
+                        aria-expanded={isProgrammingPiSearchOpen}
+                        aria-controls="programming-pi-system-search"
+                        data-testid="programming-pi-system-toggle"
+                        onClick={() => setIsProgrammingPiSearchOpen((open) => !open)}
+                      >
+                        <span className={styles.assetsSectionLabel}>PI System</span>
+                        <ChevronIcon expanded={isProgrammingPiSearchOpen} />
+                      </button>
+                      {isProgrammingPiSearchOpen && (
+                        <div id="programming-pi-system-search" className={styles.piSearchContent}>
+                          <PiPointSearch
+                            enabled={hasPiConnection}
+                            onSelect={setProgrammingPiPoint}
+                          />
+                        </div>
+                      )}
+                      <p className={styles.programmingPiHint}>
+                        {programmingPiPoint
+                          ? `Use window.pimsVision.piPoint para ler ${programmingPiPoint.name}.`
+                          : 'Selecione uma tag para disponibilizá-la no preview.'}
+                      </p>
+                    </div>
+                  ) : null}
                 />
               </div>
             </div>
@@ -745,6 +800,7 @@ export function App() {
             <ProgrammingPanel
               variant="preview"
               appliedDocument={programmingApplied}
+              piPoint={programmingPiContext}
             />
           </div>
         </main>
@@ -1441,6 +1497,20 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+  `,
+  programmingPiSearch: css`
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: ${theme.spacing(0.5)};
+    padding: ${theme.spacing(0.75, 1, 0.25)};
+    border-bottom: 1px solid var(--border-color);
+  `,
+  programmingPiHint: css`
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.4;
   `,
   piSearchContent: css`
     display: flex;

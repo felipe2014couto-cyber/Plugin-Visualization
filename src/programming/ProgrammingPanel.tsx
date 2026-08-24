@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { type ReactNode, useState } from 'react';
 import { css } from '@emotion/css';
 import { ProgrammingEditor } from './ProgrammingEditor';
 import { ProgrammingPreview } from './ProgrammingPreview';
-import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument } from './ProgrammingTypes';
+import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument, type ProgrammingPiPointContext } from './ProgrammingTypes';
 
 export interface ProgrammingPanelProps {
   variant?: 'full' | 'editor' | 'preview';
@@ -10,6 +10,8 @@ export interface ProgrammingPanelProps {
   appliedDocument?: ProgrammingDocument;
   onDocumentChange?: (document: ProgrammingDocument) => void;
   onApply?: () => void;
+  beforeEditor?: ReactNode;
+  piPoint?: ProgrammingPiPointContext;
 }
 
 export function ProgrammingPanel({
@@ -18,6 +20,8 @@ export function ProgrammingPanel({
   appliedDocument: controlledAppliedDocument,
   onDocumentChange,
   onApply: controlledOnApply,
+  beforeEditor,
+  piPoint,
 }: ProgrammingPanelProps) {
   const [internalDraft, setInternalDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
   const [internalApplied, setInternalApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
@@ -26,10 +30,10 @@ export function ProgrammingPanel({
   const setDraft = onDocumentChange ?? setInternalDraft;
   const apply = controlledOnApply ?? (() => setInternalApplied(draft));
 
-  const editor = <ProgrammingEditor document={draft} onChange={setDraft} onApply={apply} />;
+  const editor = <>{beforeEditor}<ProgrammingEditor document={draft} onChange={setDraft} onApply={apply} /></>;
   const preview = (
     <div className={styles.previewSection}>
-      <ProgrammingPreview document={applied} />
+      <ProgrammingPreview document={applied} piPoint={piPoint} />
     </div>
   );
 

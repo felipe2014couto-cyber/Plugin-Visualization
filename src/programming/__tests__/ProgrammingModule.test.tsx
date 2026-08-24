@@ -33,4 +33,15 @@ describe('ProgrammingModule', () => {
     expect(srcDoc).toContain('document.body.dataset.ready');
     expect(srcDoc).not.toContain('allow-same-origin');
   });
+
+  it('fornece ao script somente o valor da PI Point selecionada', () => {
+    const srcDoc = buildProgrammingSrcDoc(
+      { type: 'programming', html: '<div />', css: '', javascript: 'void window.pimsVision.piPoint.value;' },
+      { name: 'MOTOR_01', value: 42.5, timestamp: '2026-08-24T12:00:00Z', unit: '°C' },
+    );
+
+    expect(srcDoc).toContain('window.pimsVision = Object.freeze');
+    expect(srcDoc).toContain('"name":"MOTOR_01"');
+    expect(srcDoc).toContain('"value":42.5');
+  });
 });
