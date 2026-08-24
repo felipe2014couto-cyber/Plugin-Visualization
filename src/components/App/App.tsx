@@ -66,6 +66,10 @@ function getInitialTheme(): VisualizationTheme {
   }
 }
 
+function getProgrammingPiPointKey(point: PiPointSearchResult): string {
+  return point.webId ?? `${point.dataSourceUid ?? ''}\u0000${point.path ?? ''}\u0000${point.name}`;
+}
+
 export function App() {
   const styles = useStyles2(getStyles);
   const [authenticationState, setAuthenticationState] = useState<AuthenticationState>('checking');
@@ -84,8 +88,8 @@ export function App() {
   const [refreshCount, setRefreshCount] = useState<number>(0);
   const [programmingDraft, setProgrammingDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
   const [programmingApplied, setProgrammingApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
-  const [programmingPiPoint, setProgrammingPiPoint] = useState<PiPointSearchResult | null>(null);
-  const [programmingPiValue, setProgrammingPiValue] = useState<PiPointValue | null>(null);
+  const [programmingPiPoints, setProgrammingPiPoints] = useState<PiPointSearchResult[]>([]);
+  const [programmingPiValues, setProgrammingPiValues] = useState<Record<string, PiPointValue>>({});
   const [isProgrammingPiSearchOpen, setIsProgrammingPiSearchOpen] = useState(true);
 
   const handleManualRefresh = useCallback(() => {
@@ -251,27 +255,35 @@ export function App() {
   const hasPiConnection = piConnection.status === 'connected';
 
   useEffect(() => {
-    const binding = programmingPiPoint ? createPiPointBinding(programmingPiPoint) : undefined;
-    if (!binding || !hasPiConnection) {
-      setProgrammingPiValue(null);
+    if (!hasPiConnection || programmingPiPoints.length === 0) {
+      setProgrammingPiValues({});
       return;
     }
     let active = true;
-    getPiPointCurrentValue(binding)
-      .then((value) => { if (active) setProgrammingPiValue(value); })
-      .catch(() => { if (active) setProgrammingPiValue(null); });
+    Promise.all(programmingPiPoints.map(async (point) => {
+      const binding = createPiPointBinding(point);
+      if (!binding) return [getProgrammingPiPointKey(point), undefined] as const;
+      try {
+        return [getProgrammingPiPointKey(point), await getPiPointCurrentValue(binding)] as const;
+      } catch {
+        return [getProgrammingPiPointKey(point), undefined] as const;
+      }
+    })).then((entries) => {
+      if (!active) return;
+      setProgrammingPiValues(Object.fromEntries(entries.filter((entry): entry is [string, PiPointValue] => Boolean(entry[1]))));
+    });
     return () => { active = false; };
-  }, [hasPiConnection, programmingPiPoint, refreshCount]);
+  }, [hasPiConnection, programmingPiPoints, refreshCount]);
 
-  const programmingPiContext = useMemo<ProgrammingPiPointContext | undefined>(() => {
-    if (!programmingPiPoint || !programmingPiValue) return undefined;
-    return {
-      name: programmingPiPoint.name,
-      value: programmingPiValue.value,
-      timestamp: programmingPiValue.timestamp,
-      unit: programmingPiValue.unit ?? programmingPiPoint.engineeringUnit,
-    };
-  }, [programmingPiPoint, programmingPiValue]);
+  const programmingPiContexts = useMemo<ProgrammingPiPointContext[]>(() => programmingPiPoints.flatMap((point) => {
+    const value = programmingPiValues[getProgrammingPiPointKey(point)];
+    return value ? [{
+      name: point.name,
+      value: value.value,
+      timestamp: value.timestamp,
+      unit: value.unit ?? point.engineeringUnit,
+    }] : [];
+  }), [programmingPiPoints, programmingPiValues]);
   const selectedSqlTable = useMemo(() => {
     if (activeModule !== 'sql-query') return null;
     if (selectedElementIds.length === 1) {
@@ -720,14 +732,39 @@ export function App() {
                         <div id="programming-pi-system-search" className={styles.piSearchContent}>
                           <PiPointSearch
                             enabled={hasPiConnection}
-                            onSelect={setProgrammingPiPoint}
+                            onSelect={(point) => setProgrammingPiPoints((current) => (
+                              current.some((candidate) => getProgrammingPiPointKey(candidate) === getProgrammingPiPointKey(point))
+                                ? current
+                                : [...current, point]
+                            ))}
                           />
                         </div>
                       )}
+                      <div className={styles.programmingQuery} data-testid="programming-pi-query">
+                        <span className={styles.programmingQueryTitle}>Query ({programmingPiPoints.length})</span>
+                        {programmingPiPoints.length === 0 ? (
+                          <span className={styles.programmingQueryEmpty}>Selecione tags na pesquisa para adicioná-las à consulta.</span>
+                        ) : (
+                          <ul className={styles.programmingQueryList}>
+                            {programmingPiPoints.map((point) => (
+                              <li key={getProgrammingPiPointKey(point)}>
+                                <span title={point.name}>{point.name}</span>
+                                <button
+                                  type="button"
+                                  aria-label={`Remover ${point.name} da consulta`}
+                                  onClick={() => setProgrammingPiPoints((current) => current.filter(
+                                    (candidate) => getProgrammingPiPointKey(candidate) !== getProgrammingPiPointKey(point),
+                                  ))}
+                                >×</button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
                       <p className={styles.programmingPiHint}>
-                        {programmingPiPoint
-                          ? `Use window.pimsVision.piPoint para ler ${programmingPiPoint.name}.`
-                          : 'Selecione uma tag para disponibilizá-la no preview.'}
+                        {programmingPiPoints.length > 0
+                          ? 'Use window.pimsVision.piPoints ou window.pimsVision.piPointsByName no JavaScript.'
+                          : 'Selecione tags para disponibilizá-las no preview.'}
                       </p>
                     </div>
                   ) : null}
@@ -800,7 +837,7 @@ export function App() {
             <ProgrammingPanel
               variant="preview"
               appliedDocument={programmingApplied}
-              piPoint={programmingPiContext}
+              piPoints={programmingPiContexts}
             />
           </div>
         </main>
@@ -1511,6 +1548,61 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--text-secondary);
     font-size: 11px;
     line-height: 1.4;
+  `,
+  programmingQuery: css`
+    display: flex;
+    flex-direction: column;
+    gap: ${theme.spacing(0.5)};
+    padding: ${theme.spacing(0.75)};
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--surface-secondary);
+  `,
+  programmingQueryTitle: css`
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: ${theme.typography.fontWeightMedium};
+  `,
+  programmingQueryEmpty: css`
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.35;
+  `,
+  programmingQueryList: css`
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 116px;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+
+    li {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      padding: ${theme.spacing(0.25, 0.5)};
+      border-radius: 3px;
+      color: var(--text-primary);
+      background: var(--button-bg);
+      font-size: 11px;
+    }
+    span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    button {
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: 0;
+      border-radius: 3px;
+      color: var(--text-secondary);
+      background: transparent;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      &:hover { color: var(--text-primary); background: var(--button-hover); }
+    }
   `,
   piSearchContent: css`
     display: flex;
