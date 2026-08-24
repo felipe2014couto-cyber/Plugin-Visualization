@@ -49,11 +49,13 @@ export {
   createGroup,
   extractAllGroupBindingsAndElements,
   findTopLevelElementId,
+  getElementAbsoluteGeometry,
   GROUP_TYPE,
   groupElements,
   resizeGroup,
   scaleGroupChildren,
   ungroupElements,
+  updateElementInDocument,
   updateGroupProperties,
 } from './createGroup';
 export type { CreateGroupOptions, GroupElement, GroupProperties } from './createGroup';

@@ -82,6 +82,7 @@ import {
   groupElements,
   resizeGroup,
   ungroupElements,
+  updateElementInDocument,
   updateGroupProperties,
   type GroupElement,
   type GroupProperties,
@@ -327,6 +328,11 @@ export function DisplayEditor({
       dispatch({ type: 'SELECT', elementId });
       setOptionsElementId(elementId);
       const element = elementId ? getElementById(documentRef.current, elementId) : undefined;
+      if (element?.type === TREND_TYPE) {
+        setOptionsTrendId(elementId);
+      } else {
+        setOptionsTrendId(null);
+      }
       const calculationId = element && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
         ? (element.properties as { calculationId: string }).calculationId
         : element?.type === 'calculation' && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
@@ -1166,7 +1172,7 @@ export function DisplayEditor({
     return items;
   }, [contextMenu, handleGroupSelected, handleToggleLock, handleUngroupSelected]);
   const optionsTrend = optionsTrendId
-    ? displayDocument.elements.find((element) => element.id === optionsTrendId && element.type === TREND_TYPE) as TrendElement | undefined
+    ? (getElementById(displayDocument, optionsTrendId) as TrendElement | undefined)
     : undefined;
   const handleTrendVisualChange = useCallback((patch: Parameters<typeof updateTrendVisualOptions>[2]) => {
     if (optionsTrendId) {
