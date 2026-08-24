@@ -325,6 +325,7 @@ export function DisplayEditor({
   const handleSelect = useCallback(
     (elementId: string | null) => {
       dispatch({ type: 'SELECT', elementId });
+      setOptionsElementId(elementId);
       const element = elementId ? getElementById(documentRef.current, elementId) : undefined;
       const calculationId = element && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
         ? (element.properties as { calculationId: string }).calculationId
@@ -337,16 +338,20 @@ export function DisplayEditor({
   );
   const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
     dispatch({ type: 'SELECT_MANY', elementIds, additive });
+    if (!additive && elementIds.length === 1) {
+      setOptionsElementId(elementIds[0]);
+    } else if (!additive) {
+      setOptionsElementId(null);
+    }
   }, [dispatch]);
 
   const handleDoubleClick = useCallback((elementId: string) => {
     dispatch({ type: 'SELECT', elementId });
+    setOptionsElementId(elementId);
     const el = getElementById(documentRef.current, elementId);
     if (el?.type === TREND_TYPE) {
       setOptionsTrendId(elementId);
-      setOptionsElementId(null);
     } else {
-      setOptionsElementId(elementId);
       setOptionsTrendId(null);
     }
   }, [dispatch]);
@@ -482,7 +487,7 @@ export function DisplayEditor({
     }
     commitDocument(appendDisplayElement(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-    setOptionsElementId(null);
+    setOptionsElementId(element.id);
     setOptionsTrendId(null);
   }, [commitDocument, dispatch]);
 
@@ -497,7 +502,7 @@ export function DisplayEditor({
     }
     commitDocument(appendText(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-    setOptionsElementId(null);
+    setOptionsElementId(element.id);
     setOptionsTrendId(null);
   }, [commitDocument, dispatch]);
 
@@ -872,7 +877,7 @@ export function DisplayEditor({
     }
   }, [dispatch, publishDocument]);
 
-  const propertiesOpen = mode === 'edit' && Boolean(optionsElementId && state.selectedElementId === optionsElementId);
+  const propertiesOpen = mode === 'edit' && Boolean(state.selectedElementId);
   const selectedElement = propertiesOpen && state.selectedElementId
     ? getElementById(displayDocument, state.selectedElementId)
     : undefined;
