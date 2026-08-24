@@ -7,6 +7,7 @@ import {
   appendText,
   appendValue,
   createBar,
+  createBarChart,
   createDisplayDocument,
   createGauge,
   createRectangle,
@@ -202,5 +203,32 @@ describe('displayTransfer', () => {
     expect(importedText.properties.multistate?.rules[0].color).toBe('#ff0000');
     expect(importedText.properties.backgroundMultistate?.enabled).toBe(true);
     expect(importedText.properties.backgroundMultistate?.rules[0].color).toBe('#ffff00');
+  });
+
+  it('serializa e desserializa BarChart preservando itens e visual options', () => {
+    const document = createDisplayDocument({ id: 'barchart-transfer' });
+    const barChart = createBarChart({
+      id: 'barchart-1',
+      binding,
+      visual: {
+        orientation: 'horizontal',
+        gridMode: 'bands',
+        numberFormat: 'scientific',
+        decimals: 3,
+        showTitle: true,
+        title: 'Painel Geral',
+      },
+    });
+    barChart.properties.items.push({
+      binding: { dataSourceUid: 'datasource-uid', serverPath: 'pims', pointName: 'CDT158' },
+      label: 'Temp',
+      customName: 'Custom Temp',
+      nameMode: 'custom',
+    });
+    document.elements = [barChart];
+
+    const serialized = serializeDisplay(document);
+    const imported = parseImportedDisplay(serialized);
+    expect(imported).toEqual(document);
   });
 });

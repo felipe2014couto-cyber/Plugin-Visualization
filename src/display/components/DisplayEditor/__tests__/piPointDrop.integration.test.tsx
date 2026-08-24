@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { createDisplayDocument, createRectangle, createTrend, createValue, type DisplayDocument } from '../../../index';
+import { createBarChart, createDisplayDocument, createRectangle, createTrend, createValue, type DisplayDocument } from '../../../index';
 import { PI_POINT_DRAG_MIME, serializePiPointDragData } from '../../../../pi/piPointDrag';
 import { PiPointSearch } from '../../../../pi/PiPointSearch';
 import { searchPiPointsWithStatus, type PiPointSearchResult } from '../../../../pi/piDataSource';
@@ -31,6 +31,7 @@ function Harness({
   withExistingValue = false,
   withExistingTrend = false,
   withExistingShape = false,
+  withExistingBarChart = false,
 }: {
   type: PiPointDropSymbolType;
   loadValues?: LoadCurrentValues;
@@ -38,6 +39,7 @@ function Harness({
   withExistingValue?: boolean;
   withExistingTrend?: boolean;
   withExistingShape?: boolean;
+  withExistingBarChart?: boolean;
 }) {
   const [document, setDocument] = useState<DisplayDocument>(() => {
     const initial = createDisplayDocument({ name: 'Drop' });
@@ -47,6 +49,17 @@ function Harness({
       initial.elements = [createValue({
         id: 'existing-value',
         binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'EXISTING' },
+      })];
+    }
+    if (withExistingBarChart) {
+      initial.elements = [createBarChart({
+        id: 'existing-bar-chart',
+        binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'EXISTING' },
+        surface: initial.surface,
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 200,
       })];
     }
     if (withExistingTrend) {
@@ -336,7 +349,7 @@ describe('DisplayEditor - drop de PI Point', () => {
     fireDragEvent(trendBackground, 'drop', dataTransfer, 899, 649);
 
     await waitFor(() => expect(readDocument().elements).toHaveLength(1));
-    expect(readDocument().elements[0].properties.series.map((series: { binding: { pointName: string } }) => series.binding.pointName))
+    expect(readDocument().elements[0].properties.series!.map((series: { binding: { pointName: string } }) => series.binding.pointName))
       .toEqual(['EXISTING', 'SINUSOID']);
     expect(screen.queryByTestId('pi-point-drag-preview')).toBeNull();
   });
@@ -352,16 +365,47 @@ describe('DisplayEditor - drop de PI Point', () => {
 
     await waitFor(() => expect(readDocument().elements[0].properties.series).toHaveLength(2));
     expect(readDocument().elements).toHaveLength(1);
-    expect(readDocument().elements[0].properties.series.map((series: { binding: { dataSourceUid: string } }) => (
+    expect(readDocument().elements[0].properties.series!.map((series: { binding: { dataSourceUid: string } }) => (
       series.binding.dataSourceUid
     ))).toEqual(['ds', 'other-ds']);
+  });
+
+  it('cria novo Gráfico de Barras ao soltar no canvas com type bar-chart', async () => {
+    render(<Harness type="bar-chart" />);
+    mockSurfaceBounds();
+    const wrapper = screen.getByTestId('display-editor-surface-wrapper');
+
+    fireDragEvent(wrapper, 'drop', createDataTransfer());
+
+    await waitFor(() => expect(readDocument().elements).toHaveLength(1));
+    expect(readDocument().elements[0].type).toBe('bar-chart');
+    expect((readDocument().elements[0].properties as any).items[0].binding.pointName).toBe('SINUSOID');
+  });
+
+  it('anexa barra ao soltar sobre Gráfico de Barras existente', async () => {
+    render(<Harness type="bar-chart" withExistingBarChart />);
+    mockSurfaceBounds();
+
+    const barChartBackground = screen.getByTestId('bar-chart-background-existing-bar-chart');
+    fireDragEvent(barChartBackground, 'dragover', createDataTransfer(), 899, 649);
+    fireDragEvent(barChartBackground, 'drop', createDataTransfer(), 899, 649);
+
+    await waitFor(() => expect(readDocument().elements).toHaveLength(1));
+    expect((readDocument().elements[0].properties as any).items.map((item: any) => item.binding.pointName))
+      .toEqual(['EXISTING', 'SINUSOID']);
   });
 });
 
 function readDocument(): {
   elements: Array<{
-    properties: { series: Array<{ binding: { dataSourceUid: string; pointName: string } }> };
+    type?: string;
+    properties: {
+      series?: Array<{ binding: { dataSourceUid: string; pointName: string } }>;
+      items?: Array<{ binding: { dataSourceUid: string; pointName: string } }>;
+      [key: string]: unknown;
+    };
   }>;
 } {
   return JSON.parse(screen.getByTestId('display-document-json').textContent ?? '{}');
 }
+

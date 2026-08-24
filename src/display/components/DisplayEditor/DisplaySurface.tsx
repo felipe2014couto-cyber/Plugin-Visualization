@@ -9,6 +9,7 @@ import { CalculationElementView } from '../CalculationElementView';
 import { evaluateCalculation, type CalculationDefinition } from '../../../calculations/calculationEngine';
 import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
+import { BAR_CHART_TYPE, getBarChartVisualOptions, getBarChartItemConsumerId, type BarChartElement } from '../../createBarChart';
 import { TABLE_TYPE, type TableColumnConfig, type TableElement } from '../../createTable';
 import { TableElementView, getTableItemConsumerId, getTableTrendConsumerId } from '../TableElementView';
 import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
@@ -17,6 +18,7 @@ import { GAUGE_TYPE, getGaugeOptions, type GaugeElement } from '../../createGaug
 import { ValueElementView } from '../ValueElementView';
 import { GaugeElementView } from '../GaugeElementView';
 import { BarElementView } from '../BarElementView';
+import { BarChartElementView } from '../BarChartElementView';
 import {
   TrendElementView,
   buildTrendChartForSeries,
@@ -228,17 +230,31 @@ export function DisplaySurface({
     if (!loadPiPointDatabaseLimits) {
       return;
     }
-    const databaseElements = allElements.filter((element): element is BarElement | GaugeElement => {
+    const databaseElements = allElements.flatMap((element): Array<{ id: string; binding: PiPointBinding }> => {
       if (element.type === BAR_TYPE) {
-        return getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
+        return getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding)
+          ? [{ id: element.id, binding: element.properties.binding as PiPointBinding }]
+          : [];
       }
       if (element.type === GAUGE_TYPE) {
-        return getGaugeOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
+        return getGaugeOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding)
+          ? [{ id: element.id, binding: element.properties.binding as PiPointBinding }]
+          : [];
       }
-      return false;
+      if (element.type === BAR_CHART_TYPE) {
+        const barChart = element as BarChartElement;
+        const visual = getBarChartVisualOptions(barChart);
+        return visual.scaleMode === 'database'
+          ? (barChart.properties.items ?? []).map((item) => ({
+              id: getBarChartItemConsumerId(barChart.id, item.binding),
+              binding: item.binding,
+            }))
+          : [];
+      }
+      return [];
     });
     void Promise.all(databaseElements.map(async (item) => {
-      try { return [item.id, await loadPiPointDatabaseLimits(item.properties.binding as PiPointBinding)] as const; } catch { return null; }
+      try { return [item.id, await loadPiPointDatabaseLimits(item.binding)] as const; } catch { return null; }
     })).then((results) => setDatabaseScales(Object.fromEntries(results.filter((item): item is readonly [string, PiPointDatabaseLimits] => item !== null))));
   }, [allElements, loadPiPointDatabaseLimits]);
   const [selectionBox, setSelectionBoxState] = useState<{ start: Point; current: Point } | null>(null);
@@ -275,9 +291,18 @@ export function DisplaySurface({
       && isPiPointBinding(element.properties.binding)
       ? [{ elementId: element.id, binding: element.properties.binding }]
       : [];
-  }).concat(allElements.flatMap((element) => element.type === TABLE_TYPE
-    ? (element as TableElement).properties.items.map((item, index) => ({ elementId: getTableItemConsumerId(element.id, index), binding: item.binding }))
-    : []));
+  }).concat(allElements.flatMap((element) => {
+    if (element.type === TABLE_TYPE) {
+      return (element as TableElement).properties.items.map((item, index) => ({ elementId: getTableItemConsumerId(element.id, index), binding: item.binding }));
+    }
+    if (element.type === BAR_CHART_TYPE) {
+      return (element as BarChartElement).properties.items.map((item) => ({
+        elementId: getBarChartItemConsumerId(element.id, item.binding),
+        binding: item.binding,
+      }));
+    }
+    return [];
+  }));
   const fallbackLoader = useCallback<LoadCurrentValues>(async (bindings) => {
     if (!loadValue) {
       return Object.fromEntries(bindings.map((binding) => [
@@ -960,6 +985,16 @@ export function DisplaySurface({
                   : runtimeStates.get(element.id)}
                 databaseScale={databaseScales[element.id]}
                 label={calculation?.name}
+              />
+            );
+          }
+          if (element.type === BAR_CHART_TYPE) {
+            return (
+              <BarChartElementView
+                key={element.id}
+                element={element as unknown as BarChartElement}
+                runtimeStates={runtimeStates}
+                databaseScales={databaseScales}
               />
             );
           }

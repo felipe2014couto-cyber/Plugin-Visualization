@@ -1,4 +1,5 @@
 import { BAR_TYPE } from './createBar';
+import { BAR_CHART_TYPE, normalizeBarChartVisualOptions, type BarChartItem, type BarChartVisualOptions } from './createBarChart';
 import { DEFAULT_RECTANGLE_PROPERTIES, RECTANGLE_TYPE } from './createRectangle';
 import { GAUGE_TYPE, normalizeGaugeOptions } from './createGauge';
 import { normalizeMultistateConfig, type MultistateConfig, type MultistateRule } from './multistate';
@@ -351,6 +352,16 @@ function portableElement(input: unknown): DisplayElement {
         ...portableLocked(input.properties),
         ...portableLink(input.properties),
       } };
+    case BAR_CHART_TYPE:
+      return {
+        ...base,
+        type: BAR_CHART_TYPE,
+        properties: {
+          items: portableBarChartItems(input.properties),
+          ...(isRecord(input.properties.visual) ? { visual: portableBarChartVisual(input.properties.visual) } : {}),
+          ...portableLocked(input.properties),
+        },
+      };
     case GROUP_TYPE: {
       if (!Array.isArray(input.properties?.elements)) {
         throw new DisplayImportError('Grupo de Display inválido.');
@@ -570,3 +581,28 @@ function isNonEmptyString(value: unknown): value is string {
 function portableLocked(properties: unknown): { locked?: boolean } {
   return isRecord(properties) && properties.locked === true ? { locked: true } : {};
 }
+
+function portableBarChartItems(properties: unknown): BarChartItem[] {
+  if (!isRecord(properties) || !Array.isArray(properties.items) || properties.items.length === 0) {
+    throw new DisplayImportError('Gráfico de Barras requer ao menos uma tag válida.');
+  }
+  return properties.items.map((item) => {
+    if (!isRecord(item) || !isRecord(item.binding)) {
+      throw new DisplayImportError('Arquivo de Display inválido.');
+    }
+    const binding = portableBinding(item.binding);
+    return {
+      binding,
+      ...(typeof item.label === 'string' ? { label: item.label } : {}),
+      ...(typeof item.description === 'string' ? { description: item.description } : {}),
+      ...(typeof item.engineeringUnit === 'string' ? { engineeringUnit: item.engineeringUnit } : {}),
+      ...(item.nameMode === 'custom' || item.nameMode === 'default' ? { nameMode: item.nameMode } : {}),
+      ...(typeof item.customName === 'string' ? { customName: item.customName } : {}),
+    };
+  });
+}
+
+function portableBarChartVisual(visual: unknown): Partial<BarChartVisualOptions> {
+  return normalizeBarChartVisualOptions(isRecord(visual) ? visual as Partial<BarChartVisualOptions> : undefined);
+}
+

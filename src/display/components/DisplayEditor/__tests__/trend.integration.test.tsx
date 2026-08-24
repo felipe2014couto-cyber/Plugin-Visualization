@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
 import { appendTrend, createDisplayDocument, createTrend, type DisplayDocument } from '../../../index';
-import { DisplayEditor } from '../DisplayEditor';
+import { DisplayEditor, type PiPointDropSymbolType } from '../DisplayEditor';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
 import type { LoadTrendSeries } from '../../../runtime/trendRuntime';
 
@@ -44,7 +44,7 @@ function Harness({
   onDocumentChange?: (document: DisplayDocument) => void;
 }) {
   const [document, setDocument] = useState<DisplayDocument>(() => initial ?? createDisplayDocument({ name: 'Trend Display' }));
-  const [dropSymbolType, setDropSymbolType] = useState<'value' | 'gauge' | 'bar' | 'trend' | 'table'>('value');
+  const [dropSymbolType, setDropSymbolType] = useState<PiPointDropSymbolType>('value');
   return (
     <DisplayEditor
       document={document}
