@@ -290,4 +290,18 @@ describe('App', () => {
     expect(refreshBtn).toBeInTheDocument();
     fireEvent.click(refreshBtn);
   });
+
+  it('exibe o módulo Programming na barra lateral e abre seu painel', async () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    const programmingButton = screen.getByTestId('pims-vision-programming-tab');
+    expect(programmingButton).toHaveAttribute('aria-label', 'Programming');
+    fireEvent.click(programmingButton);
+
+    expect(screen.getByTestId('programming-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('programming-html-editor')).toBeInTheDocument();
+  });
 });

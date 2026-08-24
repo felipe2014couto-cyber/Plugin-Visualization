@@ -32,6 +32,7 @@ import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
+import { ProgrammingPanel } from '../../programming/ProgrammingModule';
 import { createSqlTable, SQL_TABLE_TYPE, type SqlTableElement } from '../../display/createSqlTable';
 import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
 import { createDefaultTimeSelection, getRefreshIntervalMs, moveTimeSelectionToNow, REFRESH_INTERVAL_OPTIONS } from '../../time/timeRange';
@@ -50,7 +51,7 @@ export type VisualizationTheme = 'dark' | 'light';
 export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
 
 type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
-type ActiveModule = 'visualization' | 'sheets' | 'sql-query';
+type ActiveModule = 'visualization' | 'sheets' | 'sql-query' | 'programming';
 type AssetsTab = 'assets' | 'library' | 'calculations';
 
 // Removed SqlDashboardTableState
@@ -564,6 +565,15 @@ export function App() {
               }}
             ><DatabaseIcon /></button>
             <span className={styles.assetsRailItem} title="Pesquisa PI" aria-label="Pesquisa PI"><SearchIcon /></span>
+            <button
+              type="button"
+              className={activeModule === 'programming' ? styles.assetsRailActive : styles.assetsRailButton}
+              title="Programming"
+              aria-label="Programming"
+              aria-pressed={activeModule === 'programming'}
+              data-testid="pims-vision-programming-tab"
+              onClick={() => { setActiveModule('programming'); setIsAssetsPanelOpen(true); }}
+            ><ProgrammingIcon /></button>
           </div>
           {isAssetsPanelOpen && (
             <div className={styles.assetsBody}>
@@ -657,6 +667,9 @@ export function App() {
                   onApplyToDashboard={handleSqlApplyToDashboard}
                   sqlToLoad={selectedSqlTable?.properties.sql} 
                 />
+              </div>
+              <div style={{ display: activeModule === 'programming' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
+                <ProgrammingPanel />
               </div>
             </div>
           )}
@@ -1650,6 +1663,14 @@ function SheetsIcon() {
   </svg>;
 }
 
+function ProgrammingIcon() {
+  return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m8 7-5 5 5 5" />
+    <path d="m16 7 5 5-5 5" />
+    <path d="m14 4-4 16" />
+  </svg>;
+}
+
 function ChevronIcon({ expanded }: { expanded: boolean }) {
   return <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
     <path d={expanded ? 'm6 9 6 6 6-6' : 'm9 6 6 6-6 6'} />
@@ -1672,4 +1693,3 @@ function getConnectionLabel(connection: PiConnectionState): string {
 function RefreshIcon() {
   return <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M19 7v5h-5" /><path d="M18 12a7 7 0 1 1-2-5" /></svg>;
 }
-
