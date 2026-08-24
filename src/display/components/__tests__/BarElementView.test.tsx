@@ -33,4 +33,20 @@ describe('BarElementView', () => {
     expect(screen.getByTestId('bar-fill-bar-multistate')).toHaveAttribute('fill', '#0000ff');
     expect(Number(screen.getByTestId('bar-fill-bar-multistate').getAttribute('height'))).toBe(0);
   });
+
+  it('centraliza o rótulo e o valor exibido em relação à barra', () => {
+    const element = createBar({ id: 'bar-centered', binding });
+    render(<svg><BarElementView element={element} runtimeState={{ status: 'success', result: { value: 100 } }} /></svg>);
+
+    const track = screen.getByTestId('bar-track-bar-centered');
+    const trackX = Number(track.getAttribute('x'));
+    const trackWidth = Number(track.getAttribute('width'));
+    const expectedCenterX = trackX + trackWidth / 2;
+
+    const valueEl = screen.getByTestId('bar-value-bar-centered');
+    expect(Number(valueEl.getAttribute('x'))).toBeCloseTo(expectedCenterX, 1);
+
+    const tagEl = screen.getByText('SINUSOID');
+    expect(Number(tagEl.getAttribute('x'))).toBeCloseTo(expectedCenterX, 1);
+  });
 });

@@ -43,6 +43,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
     ? barOptions.customTagName
     : label ?? (binding && isPiPointBinding(binding) ? binding.pointName : '');
+  const barCenterX = plotX + plotWidth / 2;
 
   return (
     <g
@@ -65,13 +66,13 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         pointerEvents="all"
       />
       {tagLabel && options.showTagName && (
-        <text x={element.x + element.width / 2} y={element.y + (horizontal ? 16 : 22)} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
+        <text x={barCenterX} y={element.y + (horizontal ? 16 : 22)} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
           {tagLabel}
         </text>
       )}
       {horizontal && (
-        <text x={element.x + element.width / 2} y={element.y + 42} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
-          {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={element.x + element.width / 2} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
+        <text x={barCenterX} y={element.y + 42} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
+          {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={barCenterX} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
         </text>
       )}
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill={barOptions.backgroundColor} data-testid={`bar-track-${element.id}`} pointerEvents="none" />
@@ -99,11 +100,11 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         />
       )}
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill="none" stroke={resolveThemeForeground(barOptions.borderColor)} strokeWidth={barOptions.borderWidth} vectorEffect="non-scaling-stroke" data-testid={`bar-border-${element.id}`} pointerEvents="none" />
-      <text x={element.x + element.width / 2} y={element.y + element.height - 12} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
-        {!horizontal && detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={element.x + element.width / 2} dy={index === 0 ? 0 : -16}>{line}</tspan>)}
+      <text x={barCenterX} y={element.y + element.height - 12} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
+        {!horizontal && detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={barCenterX} dy={index === 0 ? 0 : -16}>{line}</tspan>)}
       </text>
       {!isValidScale(minimum, maximum) && (
-        <text x={element.x + element.width / 2} y={element.y + element.height / 2} textAnchor="middle" fill="#f2cc0c" fontSize={10} data-testid={`bar-invalid-scale-${element.id}`} pointerEvents="none">
+        <text x={barCenterX} y={element.y + element.height / 2} textAnchor="middle" fill="#f2cc0c" fontSize={10} data-testid={`bar-invalid-scale-${element.id}`} pointerEvents="none">
           Escala inválida
         </text>
       )}
