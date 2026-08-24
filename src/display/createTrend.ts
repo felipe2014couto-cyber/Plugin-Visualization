@@ -299,3 +299,109 @@ function updateTrendElement(document: DisplayDocument, elementId: string, update
     return update(element as TrendElement);
   });
 }
+
+export function createTrendElementForElement(element: DisplayElement): TrendElement | null {
+  if (element.type === TREND_TYPE) {
+    return element as TrendElement;
+  }
+
+  if (element.type === 'bar-chart') {
+    const items = ((element.properties as { items?: unknown[] })?.items ?? []) as Array<{
+      binding?: unknown;
+      label?: string;
+      customName?: string;
+      description?: string;
+    }>;
+    const validItems = items.filter((item) => isPiPointBinding(item.binding));
+    if (validItems.length === 0) return null;
+    const series: TrendSeries[] = validItems.map((item, idx) => ({
+      binding: item.binding as PiPointBinding,
+      color: TREND_SERIES_COLORS[idx % TREND_SERIES_COLORS.length],
+      legendLabel: item.customName || item.label || item.description || (item.binding as PiPointBinding).pointName,
+    }));
+    const visual = (element.properties as { visual?: { title?: string } })?.visual;
+    return {
+      id: element.id,
+      type: TREND_TYPE,
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+      properties: {
+        series,
+        visual: {
+          title: visual?.title || '',
+        },
+      },
+    };
+  }
+
+  if (element.type === 'table') {
+    const items = ((element.properties as { items?: unknown[] })?.items ?? []) as Array<{
+      binding?: unknown;
+      label?: string;
+    }>;
+    const validItems = items.filter((item) => isPiPointBinding(item.binding));
+    if (validItems.length === 0) return null;
+    const series: TrendSeries[] = validItems.map((item, idx) => ({
+      binding: item.binding as PiPointBinding,
+      color: TREND_SERIES_COLORS[idx % TREND_SERIES_COLORS.length],
+      legendLabel: item.label || (item.binding as PiPointBinding).pointName,
+    }));
+    return {
+      id: element.id,
+      type: TREND_TYPE,
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+      properties: {
+        series,
+        visual: {
+          title: (element.properties as { title?: string })?.title || '',
+        },
+      },
+    };
+  }
+
+  const props = element.properties as Record<string, unknown> | undefined;
+  const directBinding = props?.binding;
+  const multistateBinding = (props?.multistate as { binding?: unknown } | undefined)?.binding;
+  const binding = isPiPointBinding(directBinding)
+    ? directBinding
+    : isPiPointBinding(multistateBinding)
+      ? multistateBinding
+      : undefined;
+
+  if (!binding) {
+    return null;
+  }
+
+  const customLabel = (typeof props?.customTagName === 'string' && props.customTagName.trim())
+    || (typeof props?.customLabel === 'string' && props.customLabel.trim())
+    || (typeof props?.label === 'string' && props.label.trim())
+    || binding.pointName;
+
+  const title = (typeof props?.title === 'string' && props.title.trim()) || customLabel;
+
+  return {
+    id: element.id,
+    type: TREND_TYPE,
+    x: element.x,
+    y: element.y,
+    width: element.width,
+    height: element.height,
+    properties: {
+      series: [
+        {
+          binding,
+          color: '#5794f2',
+          legendLabel: customLabel,
+        },
+      ],
+      visual: {
+        title,
+      },
+    },
+  };
+}

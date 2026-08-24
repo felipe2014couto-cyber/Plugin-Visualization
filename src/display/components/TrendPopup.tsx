@@ -133,11 +133,6 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
           role="img"
           aria-label="Aperam Visualization"
         />
-        <div className={styles.topActions}>
-          <button type="button" className={styles.newDisplayButton}><span>+</span> Novo display</button>
-          <button type="button" className={styles.headerIconButton} aria-label="Mais opções">⋮</button>
-          <button type="button" className={styles.headerIconButton} aria-label="Ajuda">?</button>
-        </div>
       </header>
       <div className={styles.titleBar}>
         <span className={styles.title}>Pop-up de tendência</span>
@@ -501,8 +496,8 @@ function PopupChart({
       ))}
       <line x1={plot.x} y1={plot.y} x2={plot.x} y2={plot.y + plot.height} stroke="var(--text-secondary)" />
       <line x1={plot.x} y1={plot.y + plot.height} x2={plot.x + plot.width} y2={plot.y + plot.height} stroke="var(--text-secondary)" />
-      {xTicks.map((time) => (
-        <g key={time}>
+      {xTicks.map((time, tickIndex) => (
+        <g key={`xtick-${time}-${tickIndex}`}>
           <line x1={xFor(time)} y1={plot.y + plot.height} x2={xFor(time)} y2={plot.y + plot.height - 6} stroke="var(--text-secondary)" />
           <text x={xFor(time)} y={plot.y + plot.height + 20} textAnchor="middle" fill="var(--text-primary)" fontSize={POPUP_AXIS_FONT_SIZE}>{formatAxisTime(time, timeSpan)}</text>
         </g>
@@ -526,8 +521,8 @@ function PopupChart({
             {path && <path d={path} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="round" strokeLinecap="round" data-testid={`trend-popup-line-${index}`} />}
             {visualOptions.showRegression && points.length > 1 && <path d={popupRegressionPath(points, xFor, (value) => yFor(value, scale))} fill="none" stroke={color} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} />}
             {statePath && <path d={statePath} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="miter" data-testid={`trend-popup-state-line-${index}`} />}
-            {marker === 'circle' && points.map((point) => <circle key={point.time} cx={xFor(point.time)} cy={yFor(point.value, scale)} r={3} fill={color} />)}
-            {marker === 'square' && points.map((point) => <rect key={point.time} x={xFor(point.time) - 3} y={yFor(point.value, scale) - 3} width={6} height={6} fill={color} />)}
+            {marker === 'circle' && points.map((point, pIdx) => <circle key={`c-${point.time}-${pIdx}`} cx={xFor(point.time)} cy={yFor(point.value, scale)} r={3} fill={color} />)}
+            {marker === 'square' && points.map((point, pIdx) => <rect key={`sq-${point.time}-${pIdx}`} x={xFor(point.time) - 3} y={yFor(point.value, scale) - 3} width={6} height={6} fill={color} />)}
           </g>
         );
       })}
@@ -996,38 +991,7 @@ const styles = {
     background-position: center;
     background-size: contain;
   `,
-  topActions: css`
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    font-weight: 600;
-  `,
-  newDisplayButton: css`
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    height: 44px;
-    padding: 0 16px;
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    color: var(--text-primary);
-    background: var(--surface-primary);
-    cursor: pointer;
-    font-weight: 600;
 
-    span { color: var(--accent); font-size: 24px; font-weight: 300; }
-  `,
-  headerIconButton: css`
-    width: 44px;
-    height: 44px;
-    border: 1px solid var(--border-color);
-    border-radius: 50%;
-    color: var(--text-primary);
-    background: var(--surface-primary);
-    cursor: pointer;
-    font-size: 18px;
-  `,
   chartPanel: css`
     display: flex;
     flex: 1 1 auto;

@@ -7,7 +7,7 @@ import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { CALCULATION_TYPE, type CalculationElement } from '../../createCalculation';
 import { CalculationElementView } from '../CalculationElementView';
 import { evaluateCalculation, type CalculationDefinition } from '../../../calculations/calculationEngine';
-import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
+import { createTrendElementForElement, getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
 import { BAR_CHART_TYPE, getBarChartVisualOptions, getBarChartItemConsumerId, type BarChartElement } from '../../createBarChart';
 import { TABLE_TYPE, type TableColumnConfig, type TableElement } from '../../createTable';
@@ -409,8 +409,13 @@ export function DisplaySurface({
     if (editable) {
       return;
     }
-    const element = allElements.find((candidate) => candidate.id === elementId);
-    if (!element || element.type !== TREND_TYPE) {
+    const element = allElements.find((candidate) => candidate.id === elementId)
+      ?? elements.find((candidate) => candidate.id === elementId);
+    if (!element) {
+      return;
+    }
+    const trendElement = createTrendElementForElement(element);
+    if (!trendElement) {
       return;
     }
     event.preventDefault();
@@ -418,8 +423,8 @@ export function DisplaySurface({
     if (!onTrendOpen) {
       return;
     }
-    onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, allTrendRuntimeStates), cursorsByTrend[element.id] ?? []);
-  }, [allElements, allTrendRuntimeStates, cursorsByTrend, editable, onTrendOpen]);
+    onTrendOpen(trendElement, getTrendSeriesStates(trendElement, allTrendRuntimeStates), cursorsByTrend[element.id] ?? []);
+  }, [allElements, allTrendRuntimeStates, cursorsByTrend, editable, elements, onTrendOpen]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
     if (!editable) {
       return;
@@ -598,20 +603,41 @@ export function DisplaySurface({
     : null;
 
   const handleSvgDoubleClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (!editable) {
-      return;
-    }
     const target = e.target as Element;
     const rawId = target.getAttribute('data-element-id')
       ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
     if (!rawId) {
       return;
     }
+    if (editable) {
+      e.preventDefault();
+      e.stopPropagation();
+      onDoubleClick?.(rawId);
+      onSelect(rawId);
+      return;
+    }
+
+    // View mode: open trend popup for any element that has a tag
+    const element = allElements.find((candidate) => candidate.id === rawId)
+      ?? elements.find((candidate) => candidate.id === rawId);
+    if (!element) {
+      return;
+    }
+    const trendElement = createTrendElementForElement(element);
+    if (!trendElement) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
-    onDoubleClick?.(rawId);
-    onSelect(rawId);
-  }, [editable, onDoubleClick, onSelect]);
+    if (!onTrendOpen) {
+      return;
+    }
+    onTrendOpen(
+      trendElement,
+      getTrendSeriesStates(trendElement, allTrendRuntimeStates),
+      cursorsByTrend[element.id] ?? [],
+    );
+  }, [allElements, allTrendRuntimeStates, cursorsByTrend, editable, elements, onDoubleClick, onSelect, onTrendOpen]);
 
   const handleElementClick = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
     if (editable) {

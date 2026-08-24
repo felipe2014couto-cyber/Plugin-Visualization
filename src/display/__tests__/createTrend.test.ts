@@ -4,6 +4,7 @@ import {
   addTrendSeries,
   appendTrend,
   createTrend,
+  createTrendElementForElement,
   getTrendSeries,
   getTrendVisualOptions,
   updateTrendVisualOptions,
@@ -90,5 +91,93 @@ describe('TrendElement', () => {
 
     expect(visual.legendWidth).toBe(280);
     expect(visual.hideLegend).toBe(true);
+  });
+
+  describe('createTrendElementForElement', () => {
+    it('retorna o próprio elemento se já for Trend', () => {
+      const trend = createTrend({ binding, id: 'trend-1' });
+      expect(createTrendElementForElement(trend)).toBe(trend);
+    });
+
+    it('cria TrendElement a partir de um elemento Value ou Bar com binding', () => {
+      const valueElement: any = {
+        id: 'val-1',
+        type: 'value',
+        x: 100,
+        y: 100,
+        width: 120,
+        height: 60,
+        properties: {
+          binding,
+          customTagName: 'Minha Tag',
+        },
+      };
+
+      const trend = createTrendElementForElement(valueElement);
+      expect(trend).not.toBeNull();
+      expect(trend?.type).toBe(TREND_TYPE);
+      expect(trend?.properties.series).toHaveLength(1);
+      expect(trend?.properties.series?.[0].binding).toEqual(binding);
+      expect(trend?.properties.series?.[0].legendLabel).toBe('Minha Tag');
+    });
+
+    it('cria TrendElement a partir de um BarChart com múltiplos itens', () => {
+      const barChartElement: any = {
+        id: 'bc-1',
+        type: 'bar-chart',
+        x: 50,
+        y: 50,
+        width: 400,
+        height: 300,
+        properties: {
+          items: [
+            { binding, label: 'Tag 1' },
+            { binding: { ...binding, pointName: 'CDT158' }, label: 'Tag 2' },
+          ],
+          visual: { title: 'Produção' },
+        },
+      };
+
+      const trend = createTrendElementForElement(barChartElement);
+      expect(trend).not.toBeNull();
+      expect(trend?.properties.series).toHaveLength(2);
+      expect(trend?.properties.series?.[0].legendLabel).toBe('Tag 1');
+      expect(trend?.properties.series?.[1].legendLabel).toBe('Tag 2');
+      expect(trend?.properties.visual?.title).toBe('Produção');
+    });
+
+    it('cria TrendElement a partir de um Table com múltiplos itens', () => {
+      const tableElement: any = {
+        id: 'tbl-1',
+        type: 'table',
+        x: 50,
+        y: 50,
+        width: 400,
+        height: 300,
+        properties: {
+          items: [
+            { binding, label: 'Item 1' },
+          ],
+        },
+      };
+
+      const trend = createTrendElementForElement(tableElement);
+      expect(trend).not.toBeNull();
+      expect(trend?.properties.series).toHaveLength(1);
+    });
+
+    it('retorna null se o elemento não tiver binding', () => {
+      const textElement: any = {
+        id: 'txt-1',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 50,
+        properties: { text: 'Olá' },
+      };
+
+      expect(createTrendElementForElement(textElement)).toBeNull();
+    });
   });
 });

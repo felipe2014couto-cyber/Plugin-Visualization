@@ -145,6 +145,7 @@ export {
   addTrendSeries,
   appendTrend,
   createTrend,
+  createTrendElementForElement,
   getTrendSeries,
   getTrendVisualOptions,
   updateTrendVisualOptions,
