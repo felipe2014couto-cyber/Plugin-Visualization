@@ -1,10 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendSeries } from '../createTrend';
 import type { PiTrendSeries, TrendPoint, TrendStatePoint } from '../../pi/piDataSource';
 import type { TrendRuntimeState } from '../runtime/trendRuntime';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
 import type { DisplayTimeRange } from '../../time/timeRange';
-import { getEffectiveTrendLegendWidth, truncateLegendLabel } from '../trendLegendLayout';
+import {
+  getEffectiveTrendLegendWidth,
+  truncateLegendLabel,
+  getTrendSeriesOpacity,
+  updateTrendSeriesSelection,
+  pruneTrendSeriesSelection,
+} from '../trendLegendLayout';
 import { TrendLegendResizeHandle } from './TrendLegendResizeHandle';
 import { svgPointFromEvent } from './DisplayEditor/editorGeometry';
 
@@ -72,12 +78,25 @@ export function TrendElementView({
   const resolvedSeriesStates = seriesStates ?? configuredSeries.slice(0, 1).map((series) => ({ series, runtimeState: state }));
   const cursorPointerDown = cursorEnabled ? onCursorPointerDown : undefined;
 
+  const [selectedSeriesKeys, setSelectedSeriesKeys] = useState<Set<string>>(() => new Set());
   const [previewLegendWidth, setPreviewLegendWidth] = useState<number | null>(null);
   const [resizing, setResizing] = useState<{
     pointerId: number;
     startX: number;
     startLegendWidth: number;
   } | null>(null);
+
+  useEffect(() => {
+    const validKeys = new Set(resolvedSeriesStates.map(({ series }) => trendBindingKey(series.binding)));
+    setSelectedSeriesKeys((current) => {
+      const pruned = pruneTrendSeriesSelection(current, validKeys);
+      return pruned.size === current.size ? current : pruned;
+    });
+  }, [resolvedSeriesStates]);
+
+  const handleToggleSeriesSelection = (key: string, ctrlPressed: boolean) => {
+    setSelectedSeriesKeys((current) => updateTrendSeriesSelection(current, key, ctrlPressed));
+  };
 
   const isLegendVisible = !visual.hideLegend;
   const effectiveLegendWidth = isLegendVisible
@@ -146,6 +165,8 @@ export function TrendElementView({
     timeRange,
     visual,
     effectiveLegendWidth,
+    selectedSeriesKeys,
+    handleToggleSeriesSelection,
   );
   const clipPathId = trendContentClipPathId(element.id);
 
@@ -213,6 +234,8 @@ function getTrendContent(
   timeRange: DisplayTimeRange | undefined,
   visual: ReturnType<typeof getTrendVisualOptions>,
   effectiveLegendWidth: number,
+  selectedSeriesKeys: ReadonlySet<string>,
+  onToggleSeriesSelection: (key: string, ctrlPressed: boolean) => void,
 ): React.ReactNode {
   const formatValue = (value: number) => formatNumber(value, visual.numberFormat);
   const orderedSeriesStates = [...seriesStates].sort((a, b) => Number(b.series.primaryScale === true) - Number(a.series.primaryScale === true));
@@ -231,16 +254,9 @@ function getTrendContent(
   });
   const isLegendVisible = !visual.hideLegend;
   const title = isLegendVisible ? (
-    <text
-      x={legendX}
-      y={element.y + 18}
-      fill={TEXT_COLOR}
-      fontSize={visual.fontSize}
-      fontFamily={visual.fontFamily}
-      data-testid={`trend-title-${element.id}`}
-      pointerEvents="none"
-    >
+    <g data-testid={`trend-title-${element.id}`}>
       {orderedSeriesStates.map(({ series, runtimeState }, index) => {
+        const key = trendBindingKey(series.binding);
         const data = runtimeState.status === 'success' || runtimeState.status === 'error'
           ? runtimeState.data
           : undefined;
@@ -252,23 +268,64 @@ function getTrendContent(
         const legendY = element.y + 26 + index * 54;
         const fullName = series.legendLabel || series.binding.pointName;
         const displayLabel = truncateLegendLabel(fullName, effectiveLegendWidth, visual.fontSize);
+        const seriesOpacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
+        const isSelected = selectedSeriesKeys.has(key);
         return (
-          <React.Fragment key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}>
+          <g
+            key={key}
+            data-testid={`trend-legend-item-${element.id}-${index}`}
+            role="button"
+            tabIndex={0}
+            aria-pressed={isSelected}
+            style={{ cursor: 'pointer' }}
+            opacity={seriesOpacity}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onToggleSeriesSelection(key, event.ctrlKey || event.metaKey);
+            }}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                onToggleSeriesSelection(key, event.ctrlKey || event.metaKey);
+              }
+            }}
+          >
+            <rect
+              x={legendX - 4}
+              y={legendY - 14}
+              width={Math.max(20, effectiveLegendWidth - 8)}
+              height={48}
+              fill="transparent"
+              pointerEvents="all"
+            />
             <title>{fullName}</title>
-            <tspan x={legendX} y={legendY} fill={series.color} data-testid={`trend-legend-${element.id}-${index}`}>
-              {displayLabel}
-            </tspan>
-            <tspan x={legendX} y={legendY + 23} fill={series.color} data-testid={`trend-legend-value-${element.id}-${index}`}>
-              {value}
-            </tspan>
-          </React.Fragment>
+            <text
+              x={legendX}
+              y={legendY}
+              fill={series.color}
+              fontSize={visual.fontSize}
+              fontFamily={visual.fontFamily}
+              pointerEvents="none"
+            >
+              <tspan x={legendX} y={legendY} fill={series.color} data-testid={`trend-legend-${element.id}-${index}`}>
+                {displayLabel}
+              </tspan>
+              <tspan x={legendX} y={legendY + 23} fill={series.color} data-testid={`trend-legend-value-${element.id}-${index}`}>
+                {value}
+              </tspan>
+            </text>
+          </g>
         );
       })}
-    </text>
+    </g>
   ) : null;
-
   if (dataSeries.length > 0 && stateSeries.length > 0) {
-    return <>{visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} individualScale={visual.scaleMode !== 'single'} legendWidth={effectiveLegendWidth} /></>;
+    return <>{visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} individualScale={visual.scaleMode !== 'single'} legendWidth={effectiveLegendWidth} selectedSeriesKeys={selectedSeriesKeys} /></>;
   }
 
   if (dataSeries.length === 0 && stateSeries.length > 0) {
@@ -282,6 +339,7 @@ function getTrendContent(
       onCursorDoubleClick={onCursorDoubleClick}
       timeRange={timeRange}
       legendWidth={effectiveLegendWidth}
+      selectedSeriesKeys={selectedSeriesKeys}
     /></>;
   }
 
@@ -367,9 +425,11 @@ function getTrendContent(
       {visual.scaleMode === 'configurable' && drawableSeries
         .filter(({ series }) => series !== primary?.series && (Number.isFinite(series.scaleMin) || Number.isFinite(series.scaleMax)))
         .map(({ series }, index) => {
+          const key = trendBindingKey(series.binding);
           const labelX = chart.plotX + 8 + index * 48;
+          const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
           return (
-            <g key={`configured-scale-${trendBindingKey(series.binding)}`} fill={series.color} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
+            <g key={`configured-scale-${key}`} fill={series.color} fontSize={AXIS_FONT_SIZE} pointerEvents="none" opacity={opacity}>
               {Number.isFinite(series.scaleMax) && <text x={labelX} y={chart.plotY + 14} textAnchor="start">{formatValue(series.scaleMax as number)}</text>}
               {Number.isFinite(series.scaleMin) && <text x={labelX} y={chart.plotY + chart.plotHeight - 6} textAnchor="start">{formatValue(series.scaleMin as number)}</text>}
             </g>
@@ -409,11 +469,13 @@ function getTrendContent(
         </text>
       ))}
       {drawableSeries.map(({ series, data }, index) => {
-        const seriesChart = seriesCharts.get(trendBindingKey(series.binding)) ?? chart;
+        const key = trendBindingKey(series.binding);
+        const seriesChart = seriesCharts.get(key) ?? chart;
         const path = trendPathForPoints(seriesChart, data.points);
         const singlePoint = data.points.length === 1 ? trendPointForValue(seriesChart, data.points[0]) : undefined;
+        const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
         return (
-          <React.Fragment key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}>
+          <g key={key} opacity={opacity}>
             <path
               d={path}
               fill="none"
@@ -438,7 +500,7 @@ function getTrendContent(
                 pointerEvents="none"
               />
             )}
-          </React.Fragment>
+          </g>
         );
       })}
       {cursors.map((cursor) => {
@@ -538,6 +600,7 @@ function MixedTrend({
   timeRange,
   individualScale,
   legendWidth,
+  selectedSeriesKeys = new Set(),
 }: {
   element: TrendElement;
   numericSeries: Array<{ series: TrendSeries; data: PiTrendSeries }>;
@@ -545,6 +608,7 @@ function MixedTrend({
   timeRange: DisplayTimeRange | undefined;
   individualScale: boolean;
   legendWidth: number;
+  selectedSeriesKeys?: ReadonlySet<string>;
 }) {
   const allNumericPoints = numericSeries.flatMap(({ data }) => data.points);
   const primaryNumeric = numericSeries.find(({ series }) => series.primaryScale === true) ?? numericSeries[0];
@@ -617,36 +681,43 @@ function MixedTrend({
           {formatAxisTime(time, domainEnd - domainStart)}
         </text>
       ))}
-      {stateSeries.map(({ series, states: points }, index) => (
-        <React.Fragment key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}>
-          <path
-            d={digitalTrendPath(points, domainEnd, xFor, stateY)}
-            fill="none"
-            stroke={series.color || LINE_COLOR}
-            strokeWidth={series.lineWidth ?? 2}
-            strokeDasharray={series.lineStyle === 'dashed' ? '8 5' : series.lineStyle === 'dotted' ? '2 4' : undefined}
-            strokeLinejoin="round"
-            data-testid={index === 0 ? `trend-state-line-${element.id}` : `trend-state-line-${element.id}-${index}`}
-            pointerEvents="none"
-          />
-          {series.marker === 'circle' && points.map((state, markerIndex) => <circle key={`${state.time}-${markerIndex}`} cx={xFor(state.time)} cy={stateY(state.value)} r={3} fill={series.color || LINE_COLOR} pointerEvents="none" />)}
-          {series.marker === 'square' && points.map((state, markerIndex) => <rect key={`${state.time}-${markerIndex}`} x={xFor(state.time) - 3} y={stateY(state.value) - 3} width={6} height={6} fill={series.color || LINE_COLOR} pointerEvents="none" />)}
-        </React.Fragment>
-      ))}
+      {stateSeries.map(({ series, states: points }, index) => {
+        const key = trendBindingKey(series.binding);
+        const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
+        return (
+          <g key={key} opacity={opacity}>
+            <path
+              d={digitalTrendPath(points, domainEnd, xFor, stateY)}
+              fill="none"
+              stroke={series.color || LINE_COLOR}
+              strokeWidth={series.lineWidth ?? 2}
+              strokeDasharray={series.lineStyle === 'dashed' ? '8 5' : series.lineStyle === 'dotted' ? '2 4' : undefined}
+              strokeLinejoin="round"
+              data-testid={index === 0 ? `trend-state-line-${element.id}` : `trend-state-line-${element.id}-${index}`}
+              pointerEvents="none"
+            />
+            {series.marker === 'circle' && points.map((state, markerIndex) => <circle key={`${state.time}-${markerIndex}`} cx={xFor(state.time)} cy={stateY(state.value)} r={3} fill={series.color || LINE_COLOR} pointerEvents="none" />)}
+            {series.marker === 'square' && points.map((state, markerIndex) => <rect key={`${state.time}-${markerIndex}`} x={xFor(state.time) - 3} y={stateY(state.value) - 3} width={6} height={6} fill={series.color || LINE_COLOR} pointerEvents="none" />)}
+          </g>
+        );
+      })}
       {numericSeries.map(({ series, data }, index) => {
+        const key = trendBindingKey(series.binding);
+        const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
         const seriesScale = numericScaleFor({ data });
         return (
-        <path
-          key={`${series.binding.dataSourceUid}:${series.binding.serverPath}:${series.binding.pointName}`}
-          d={data.points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${numericY(point.value, seriesScale)}`).join(' ')}
-          fill="none"
-          stroke={series.color || LINE_COLOR}
-          strokeWidth={2}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          data-testid={index === 0 ? `trend-line-${element.id}` : `trend-line-${element.id}-${index}`}
-          pointerEvents="none"
-        />
+          <g key={key} opacity={opacity}>
+            <path
+              d={data.points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${numericY(point.value, seriesScale)}`).join(' ')}
+              fill="none"
+              stroke={series.color || LINE_COLOR}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              data-testid={index === 0 ? `trend-line-${element.id}` : `trend-line-${element.id}-${index}`}
+              pointerEvents="none"
+            />
+          </g>
         );
       })}
     </>
@@ -663,6 +734,7 @@ function DigitalTrend({
   onCursorDoubleClick,
   timeRange,
   legendWidth,
+  selectedSeriesKeys = new Set(),
 }: {
   element: TrendElement;
   series: Array<{ series: TrendSeries; states: TrendStatePoint[] }>;
@@ -673,6 +745,7 @@ function DigitalTrend({
   onCursorDoubleClick: TrendElementViewProps['onCursorDoubleClick'];
   timeRange: DisplayTimeRange | undefined;
   legendWidth: number;
+  selectedSeriesKeys?: ReadonlySet<string>;
 }) {
   const allStates = series.flatMap((item) => item.states);
   const labels = [...new Set(allStates.map((state) => state.value))];
@@ -739,22 +812,26 @@ function DigitalTrend({
           {formatAxisTime(time, domainEnd - domainStart)}
         </text>
       ))}
-      {series.map(({ series: trendSeries, states }, index) => (
-        <React.Fragment key={`${trendSeries.binding.dataSourceUid}:${trendSeries.binding.serverPath}:${trendSeries.binding.pointName}`}>
-          <path
-            d={digitalTrendPath(states, domainEnd, xFor, yFor)}
-            fill="none"
-            stroke={trendSeries.color || LINE_COLOR}
-            strokeWidth={trendSeries.lineWidth ?? 2}
-            strokeDasharray={trendSeries.lineStyle === 'dashed' ? '8 5' : trendSeries.lineStyle === 'dotted' ? '2 4' : undefined}
-            strokeLinejoin="round"
-            data-testid={index === 0 ? `trend-state-line-${element.id}` : `trend-state-line-${element.id}-${index}`}
-            pointerEvents="none"
-          />
-          {trendSeries.marker === 'circle' && states.map((state, markerIndex) => <circle key={`${state.time}-${markerIndex}`} cx={xFor(state.time)} cy={yFor(state.value)} r={3} fill={trendSeries.color || LINE_COLOR} pointerEvents="none" />)}
-          {trendSeries.marker === 'square' && states.map((state, markerIndex) => <rect key={`${state.time}-${markerIndex}`} x={xFor(state.time) - 3} y={yFor(state.value) - 3} width={6} height={6} fill={trendSeries.color || LINE_COLOR} pointerEvents="none" />)}
-        </React.Fragment>
-      ))}
+      {series.map(({ series: trendSeries, states }, index) => {
+        const key = trendBindingKey(trendSeries.binding);
+        const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
+        return (
+          <g key={key} opacity={opacity}>
+            <path
+              d={digitalTrendPath(states, domainEnd, xFor, yFor)}
+              fill="none"
+              stroke={trendSeries.color || LINE_COLOR}
+              strokeWidth={trendSeries.lineWidth ?? 2}
+              strokeDasharray={trendSeries.lineStyle === 'dashed' ? '8 5' : trendSeries.lineStyle === 'dotted' ? '2 4' : undefined}
+              strokeLinejoin="round"
+              data-testid={index === 0 ? `trend-state-line-${element.id}` : `trend-state-line-${element.id}-${index}`}
+              pointerEvents="none"
+            />
+            {trendSeries.marker === 'circle' && states.map((state, markerIndex) => <circle key={`${state.time}-${markerIndex}`} cx={xFor(state.time)} cy={yFor(state.value)} r={3} fill={trendSeries.color || LINE_COLOR} pointerEvents="none" />)}
+            {trendSeries.marker === 'square' && states.map((state, markerIndex) => <rect key={`${state.time}-${markerIndex}`} x={xFor(state.time) - 3} y={yFor(state.value) - 3} width={6} height={6} fill={trendSeries.color || LINE_COLOR} pointerEvents="none" />)}
+          </g>
+        );
+      })}
       {cursors.map((cursor) => {
         const x = xFor(cursor.time);
         const selected = cursor.id === selectedCursorId;

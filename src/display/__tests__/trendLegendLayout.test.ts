@@ -1,8 +1,11 @@
 import {
   getEffectiveTrendLegendWidth,
+  getTrendSeriesOpacity,
   MIN_TREND_LEGEND_WIDTH,
   MIN_TREND_PLOT_WIDTH,
+  pruneTrendSeriesSelection,
   truncateLegendLabel,
+  updateTrendSeriesSelection,
 } from '../trendLegendLayout';
 
 describe('trendLegendLayout', () => {
@@ -63,4 +66,77 @@ describe('trendLegendLayout', () => {
       expect(truncateLegendLabel('', 200)).toBe('');
     });
   });
+
+  describe('updateTrendSeriesSelection', () => {
+    it('seleciona série em clique simples quando nada selecionado: {} + click A -> {A}', () => {
+      const result = updateTrendSeriesSelection(new Set(), 'A', false);
+      expect(Array.from(result)).toEqual(['A']);
+    });
+
+    it('desmarca tudo ao clicar sem Ctrl em série já selecionada: {A} + click A -> {}', () => {
+      const result = updateTrendSeriesSelection(new Set(['A']), 'A', false);
+      expect(result.size).toBe(0);
+    });
+
+    it('limpa toda a seleção ao clicar sem Ctrl em série selecionada em multi-seleção: {A, B} + click A -> {}', () => {
+      const result = updateTrendSeriesSelection(new Set(['A', 'B']), 'A', false);
+      expect(result.size).toBe(0);
+    });
+
+    it('substitui seleção ao clicar sem Ctrl em terceira série não selecionada: {A, B} + click C -> {C}', () => {
+      const result = updateTrendSeriesSelection(new Set(['A', 'B']), 'C', false);
+      expect(Array.from(result)).toEqual(['C']);
+    });
+
+    it('adiciona série à seleção com Ctrl: {A} + Ctrl click B -> {A, B}', () => {
+      const result = updateTrendSeriesSelection(new Set(['A']), 'B', true);
+      expect(Array.from(result).sort()).toEqual(['A', 'B']);
+    });
+
+    it('adiciona terceira série à seleção com Ctrl: {A, B} + Ctrl click C -> {A, B, C}', () => {
+      const result = updateTrendSeriesSelection(new Set(['A', 'B']), 'C', true);
+      expect(Array.from(result).sort()).toEqual(['A', 'B', 'C']);
+    });
+
+    it('remove apenas a série clicada com Ctrl: {A, B} + Ctrl click A -> {B}', () => {
+      const result = updateTrendSeriesSelection(new Set(['A', 'B']), 'A', true);
+      expect(Array.from(result)).toEqual(['B']);
+    });
+
+    it('remove última série com Ctrl: {A} + Ctrl click A -> {}', () => {
+      const result = updateTrendSeriesSelection(new Set(['A']), 'A', true);
+      expect(result.size).toBe(0);
+    });
+  });
+
+  describe('getTrendSeriesOpacity', () => {
+    it('retorna 1 quando nenhuma série está selecionada', () => {
+      expect(getTrendSeriesOpacity('A', new Set())).toBe(1);
+      expect(getTrendSeriesOpacity('B', new Set())).toBe(1);
+    });
+
+    it('retorna 1 para série selecionada e 0.2 para série não selecionada', () => {
+      const selected = new Set(['A']);
+      expect(getTrendSeriesOpacity('A', selected)).toBe(1);
+      expect(getTrendSeriesOpacity('B', selected)).toBe(0.2);
+    });
+
+    it('retorna 1 para múltiplas séries selecionadas e 0.2 para as restantes', () => {
+      const selected = new Set(['A', 'C']);
+      expect(getTrendSeriesOpacity('A', selected)).toBe(1);
+      expect(getTrendSeriesOpacity('C', selected)).toBe(1);
+      expect(getTrendSeriesOpacity('B', selected)).toBe(0.2);
+      expect(getTrendSeriesOpacity('D', selected)).toBe(0.2);
+    });
+  });
+
+  describe('pruneTrendSeriesSelection', () => {
+    it('preserva apenas keys existentes', () => {
+      const current = new Set(['A', 'B', 'C']);
+      const available = ['A', 'C', 'D'];
+      const result = pruneTrendSeriesSelection(current, available);
+      expect(Array.from(result).sort()).toEqual(['A', 'C']);
+    });
+  });
 });
+

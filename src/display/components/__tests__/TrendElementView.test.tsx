@@ -368,4 +368,183 @@ describe('TrendElementView', () => {
     expect(screen.queryByTestId('trend-legend-resizer-trend-1')).toBeNull();
     expect(screen.getByTestId('trend-plot-trend-1')).toBeInTheDocument();
   });
+
+  describe('seleção e foco de séries pela legenda', () => {
+    const seriesA = { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID' }, color: '#6e9fff' };
+    const seriesB = { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'CDTI58' }, color: '#ff9830' };
+    const seriesC = { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'TAG_3' }, color: '#3274d9' };
+    const multiTrend = {
+      ...element,
+      id: 'trend-multi',
+      properties: {
+        ...element.properties,
+        series: [seriesA, seriesB, seriesC],
+      },
+    };
+    const multiStates = [
+      { series: seriesA, runtimeState: { status: 'success' as const, data: { pointName: 'SINUSOID', points: [{ time: 1000, value: 10 }, { time: 2000, value: 20 }] } } },
+      { series: seriesB, runtimeState: { status: 'success' as const, data: { pointName: 'CDTI58', points: [{ time: 1000, value: 30 }, { time: 2000, value: 40 }] } } },
+      { series: seriesC, runtimeState: { status: 'success' as const, data: { pointName: 'TAG_3', points: [{ time: 1000, value: 50 }, { time: 2000, value: 60 }] } } },
+    ];
+
+    it('inicia com todas as séries em opacity 1 e aplica dimming ao selecionar série A', () => {
+      render(
+        <svg>
+          <TrendElementView element={multiTrend} seriesStates={multiStates} />
+        </svg>,
+      );
+
+      const itemA = screen.getByTestId('trend-legend-item-trend-multi-0');
+      const itemB = screen.getByTestId('trend-legend-item-trend-multi-1');
+      const itemC = screen.getByTestId('trend-legend-item-trend-multi-2');
+      const lineA = screen.getByTestId('trend-line-trend-multi');
+      const lineB = screen.getByTestId('trend-line-trend-multi-1');
+      const lineC = screen.getByTestId('trend-line-trend-multi-2');
+
+      // Estado inicial: tudo normal (opacity 1)
+      expect(itemA).toHaveAttribute('opacity', '1');
+      expect(itemB).toHaveAttribute('opacity', '1');
+      expect(itemC).toHaveAttribute('opacity', '1');
+      expect(lineA.parentElement).toHaveAttribute('opacity', '1');
+      expect(lineB.parentElement).toHaveAttribute('opacity', '1');
+      expect(lineC.parentElement).toHaveAttribute('opacity', '1');
+
+      // Clique simples em SINUSOID (série A)
+      fireEvent.click(itemA);
+
+      expect(itemA).toHaveAttribute('opacity', '1');
+      expect(itemA).toHaveAttribute('aria-pressed', 'true');
+      expect(itemB).toHaveAttribute('opacity', '0.2');
+      expect(itemC).toHaveAttribute('opacity', '0.2');
+      expect(lineA.parentElement).toHaveAttribute('opacity', '1');
+      expect(lineB.parentElement).toHaveAttribute('opacity', '0.2');
+      expect(lineC.parentElement).toHaveAttribute('opacity', '0.2');
+    });
+
+    it('limpa a seleção ao clicar novamente sem Ctrl na série selecionada', () => {
+      render(
+        <svg>
+          <TrendElementView element={multiTrend} seriesStates={multiStates} />
+        </svg>,
+      );
+
+      const itemA = screen.getByTestId('trend-legend-item-trend-multi-0');
+      const itemB = screen.getByTestId('trend-legend-item-trend-multi-1');
+
+      fireEvent.click(itemA);
+      expect(itemB).toHaveAttribute('opacity', '0.2');
+
+      // Clique simples novamente em A -> limpa seleção
+      fireEvent.click(itemA);
+      expect(itemA).toHaveAttribute('opacity', '1');
+      expect(itemB).toHaveAttribute('opacity', '1');
+      expect(itemA).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('suporta multi-seleção com Ctrl+clique e desmarcação com Ctrl+clique', () => {
+      render(
+        <svg>
+          <TrendElementView element={multiTrend} seriesStates={multiStates} />
+        </svg>,
+      );
+
+      const itemA = screen.getByTestId('trend-legend-item-trend-multi-0');
+      const itemB = screen.getByTestId('trend-legend-item-trend-multi-1');
+      const itemC = screen.getByTestId('trend-legend-item-trend-multi-2');
+
+      // Clique em A, depois Ctrl+clique em B
+      fireEvent.click(itemA);
+      fireEvent.click(itemB, { ctrlKey: true });
+
+      expect(itemA).toHaveAttribute('opacity', '1');
+      expect(itemB).toHaveAttribute('opacity', '1');
+      expect(itemC).toHaveAttribute('opacity', '0.2');
+
+      // Ctrl+clique em A -> desmarca A, B continua selecionada
+      fireEvent.click(itemA, { ctrlKey: true });
+      expect(itemA).toHaveAttribute('opacity', '0.2');
+      expect(itemB).toHaveAttribute('opacity', '1');
+      expect(itemC).toHaveAttribute('opacity', '0.2');
+    });
+
+    it('limpa toda a seleção ao clicar sem Ctrl em uma série que estava no conjunto selecionado', () => {
+      render(
+        <svg>
+          <TrendElementView element={multiTrend} seriesStates={multiStates} />
+        </svg>,
+      );
+
+      const itemA = screen.getByTestId('trend-legend-item-trend-multi-0');
+      const itemB = screen.getByTestId('trend-legend-item-trend-multi-1');
+      const itemC = screen.getByTestId('trend-legend-item-trend-multi-2');
+
+      // Seleciona A e B
+      fireEvent.click(itemA);
+      fireEvent.click(itemB, { ctrlKey: true });
+      expect(itemC).toHaveAttribute('opacity', '0.2');
+
+      // Clique sem Ctrl em A -> deve limpar TUDO (voltando todas a 1)
+      fireEvent.click(itemA);
+      expect(itemA).toHaveAttribute('opacity', '1');
+      expect(itemB).toHaveAttribute('opacity', '1');
+      expect(itemC).toHaveAttribute('opacity', '1');
+    });
+
+    it('substitui a seleção existente ao clicar sem Ctrl em uma terceira série', () => {
+      render(
+        <svg>
+          <TrendElementView element={multiTrend} seriesStates={multiStates} />
+        </svg>,
+      );
+
+      const itemA = screen.getByTestId('trend-legend-item-trend-multi-0');
+      const itemB = screen.getByTestId('trend-legend-item-trend-multi-1');
+      const itemC = screen.getByTestId('trend-legend-item-trend-multi-2');
+
+      // Seleciona A e B
+      fireEvent.click(itemA);
+      fireEvent.click(itemB, { ctrlKey: true });
+
+      // Clique sem Ctrl em C -> seleção vira apenas { C }
+      fireEvent.click(itemC);
+      expect(itemA).toHaveAttribute('opacity', '0.2');
+      expect(itemB).toHaveAttribute('opacity', '0.2');
+      expect(itemC).toHaveAttribute('opacity', '1');
+    });
+
+    it('funciona para Trend mista (numérica + digital)', () => {
+      const digitalBinding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'MOTOR_STATUS' };
+      const mixedTrend = {
+        ...element,
+        id: 'trend-mixed-sel',
+        properties: {
+          ...element.properties,
+          series: [seriesA, { binding: digitalBinding, color: '#ff9830' }],
+        },
+      };
+      const mixedStates = [
+        { series: seriesA, runtimeState: { status: 'success' as const, data: { pointName: 'SINUSOID', points: [{ time: 1000, value: 10 }] } } },
+        { series: { binding: digitalBinding, color: '#ff9830' }, runtimeState: { status: 'success' as const, data: { pointName: 'MOTOR_STATUS', points: [], states: [{ time: 1000, value: 'RUN' }] } } },
+      ];
+
+      render(
+        <svg>
+          <TrendElementView element={mixedTrend} seriesStates={mixedStates} />
+        </svg>,
+      );
+
+      const itemNumeric = screen.getByTestId('trend-legend-item-trend-mixed-sel-0');
+      const itemDigital = screen.getByTestId('trend-legend-item-trend-mixed-sel-1');
+      const lineNumeric = screen.getByTestId('trend-line-trend-mixed-sel');
+      const lineDigital = screen.getByTestId('trend-state-line-trend-mixed-sel');
+
+      // Seleciona a série digital
+      fireEvent.click(itemDigital);
+      expect(itemDigital).toHaveAttribute('opacity', '1');
+      expect(itemNumeric).toHaveAttribute('opacity', '0.2');
+      expect(lineDigital.parentElement).toHaveAttribute('opacity', '1');
+      expect(lineNumeric.parentElement).toHaveAttribute('opacity', '0.2');
+    });
+  });
 });
+

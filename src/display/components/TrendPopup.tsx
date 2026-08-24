@@ -5,7 +5,14 @@ import type { DisplayTimeRange, DisplayTimeSelection } from '../../time/timeRang
 import type { TrendSeriesViewState } from './TrendElementView';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
 import { DEFAULT_TREND_VISUAL_OPTIONS, type TrendScaleMode, type TrendVisualOptions } from '../createTrend';
-import { getEffectiveTrendLegendWidth, truncateLegendLabel, DEFAULT_POPUP_LEGEND_WIDTH } from '../trendLegendLayout';
+import {
+  getEffectiveTrendLegendWidth,
+  truncateLegendLabel,
+  DEFAULT_POPUP_LEGEND_WIDTH,
+  getTrendSeriesOpacity,
+  updateTrendSeriesSelection,
+  pruneTrendSeriesSelection,
+} from '../trendLegendLayout';
 import { TrendLegendResizeHandle } from './TrendLegendResizeHandle';
 
 export interface TrendPopupProps {
@@ -330,6 +337,7 @@ function PopupChart({
   onRemoveCursor,
 }: PopupChartProps) {
   const [zoomDrag, setZoomDrag] = useState<{ pointerId: number; start: { x: number; y: number }; current: { x: number; y: number } } | null>(null);
+  const [selectedSeriesKeys, setSelectedSeriesKeys] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     if (!zoomEnabled) {
       setZoomDrag(null);
@@ -339,6 +347,13 @@ function PopupChart({
     const data = runtimeState.status === 'success' || runtimeState.status === 'error' ? runtimeState.data : undefined;
     return data ? [{ key: popupSeriesKey(configured), name: configured.legendLabel || configured.binding.pointName, color: configured.color, primaryScale: configured.primaryScale === true, scaleMin: configured.scaleMin, scaleMax: configured.scaleMax, lineWidth: configured.lineWidth ?? 2, lineStyle: configured.lineStyle ?? 'solid', marker: configured.marker ?? 'none', data }] : [];
   });
+  useEffect(() => {
+    const validKeys = new Set(series.map((item) => item.key));
+    setSelectedSeriesKeys((current) => {
+      const pruned = pruneTrendSeriesSelection(current, validKeys);
+      return pruned.size === current.size ? current : pruned;
+    });
+  }, [series]);
   const allTimes = series.flatMap(({ data }) => [
     ...data.points.map((point) => point.time),
     ...(data.states ?? []).map((point) => point.time),
@@ -495,34 +510,81 @@ function PopupChart({
       {visualOptions.scaleMode === 'configurable' && scaledSeries
         .filter(({ primaryScale, data }) => !primaryScale && data.points.length > 0)
         .map(({ key, color, scaleMin, scaleMax }, index) => (
-          <g key={`configured-popup-scale-${key}`} fill={color} fontSize={POPUP_AXIS_FONT_SIZE} pointerEvents="none">
+          <g key={`configured-popup-scale-${key}`} fill={color} fontSize={POPUP_AXIS_FONT_SIZE} pointerEvents="none" opacity={getTrendSeriesOpacity(key, selectedSeriesKeys)}>
             {Number.isFinite(scaleMax) && <text x={plot.x + 8 + index * 64} y={plot.y + 18}>{formatValue(scaleMax as number, visualOptions.numberFormat)}</text>}
             {Number.isFinite(scaleMin) && <text x={plot.x + 8 + index * 64} y={plot.y + plot.height - 8}>{formatValue(scaleMin as number, visualOptions.numberFormat)}</text>}
           </g>
         ))}
-      {scaledSeries.map(({ name, color, lineWidth, lineStyle, marker, data, scale, stateLabels }, index) => {
+      {scaledSeries.map(({ key, name, color, lineWidth, lineStyle, marker, data, scale, stateLabels }, index) => {
         const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
         const path = points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${yFor(point.value, scale)}`).join(' ');
-        const currentValue = points.at(-1)?.value;
         const states = (data.states ?? []).filter((state) => state.time >= domainStart && state.time <= domainEnd);
         const statePath = digitalPopupPath(states, domainEnd, xFor, (value) => stateY(value, stateLabels, plot));
-        const currentState = states.at(-1)?.value;
-        const displayLabel = truncateLegendLabel(name, effectiveLegendWidth, visualOptions.fontSize);
+        const seriesOpacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
         return (
-          <React.Fragment key={name}>
+          <g key={key} opacity={seriesOpacity}>
             {path && <path d={path} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="round" strokeLinecap="round" data-testid={`trend-popup-line-${index}`} />}
             {visualOptions.showRegression && points.length > 1 && <path d={popupRegressionPath(points, xFor, (value) => yFor(value, scale))} fill="none" stroke={color} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} />}
             {statePath && <path d={statePath} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="miter" data-testid={`trend-popup-state-line-${index}`} />}
             {marker === 'circle' && points.map((point) => <circle key={point.time} cx={xFor(point.time)} cy={yFor(point.value, scale)} r={3} fill={color} />)}
             {marker === 'square' && points.map((point) => <rect key={point.time} x={xFor(point.time) - 3} y={yFor(point.value, scale) - 3} width={6} height={6} fill={color} />)}
-            {isLegendVisible && (
-              <text x={legendX} y={36 + index * POPUP_LEGEND_ITEM_HEIGHT} fill={color} fontSize={visualOptions.fontSize} fontFamily={visualOptions.fontFamily}>
-                <title>{name}</title>
-                <tspan x={legendX}>{displayLabel}</tspan>
-                <tspan x={legendX} dy={POPUP_LEGEND_LINE_HEIGHT}>{currentValue !== undefined ? formatValue(currentValue, visualOptions.numberFormat) : currentState ?? '--'}</tspan>
-              </text>
-            )}
-          </React.Fragment>
+          </g>
+        );
+      })}
+      {isLegendVisible && scaledSeries.map(({ key, name, color, data, stateLabels }, index) => {
+        const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
+        const currentValue = points.at(-1)?.value;
+        const states = (data.states ?? []).filter((state) => state.time >= domainStart && state.time <= domainEnd);
+        const currentState = states.at(-1)?.value;
+        const displayLabel = truncateLegendLabel(name, effectiveLegendWidth, visualOptions.fontSize);
+        const seriesOpacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
+        const isSelected = selectedSeriesKeys.has(key);
+        return (
+          <g
+            key={`legend-${key}`}
+            data-testid={`trend-popup-legend-item-${index}`}
+            role="button"
+            tabIndex={0}
+            aria-pressed={isSelected}
+            style={{ cursor: 'pointer' }}
+            opacity={seriesOpacity}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setSelectedSeriesKeys((current) => updateTrendSeriesSelection(current, key, event.ctrlKey || event.metaKey));
+            }}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                event.stopPropagation();
+                setSelectedSeriesKeys((current) => updateTrendSeriesSelection(current, key, event.ctrlKey || event.metaKey));
+              }
+            }}
+          >
+            <rect
+              x={legendX - 4}
+              y={20 + index * POPUP_LEGEND_ITEM_HEIGHT}
+              width={Math.max(20, effectiveLegendWidth - 8)}
+              height={POPUP_LEGEND_ITEM_HEIGHT - 4}
+              fill="transparent"
+              pointerEvents="all"
+            />
+            <text
+              x={legendX}
+              y={36 + index * POPUP_LEGEND_ITEM_HEIGHT}
+              fill={color}
+              fontSize={visualOptions.fontSize}
+              fontFamily={visualOptions.fontFamily}
+              pointerEvents="none"
+            >
+              <title>{name}</title>
+              <tspan x={legendX}>{displayLabel}</tspan>
+              <tspan x={legendX} dy={POPUP_LEGEND_LINE_HEIGHT}>{currentValue !== undefined ? formatValue(currentValue, visualOptions.numberFormat) : currentState ?? '--'}</tspan>
+            </text>
+          </g>
         );
       })}
       {isLegendVisible && (
