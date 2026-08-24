@@ -272,4 +272,22 @@ describe('App', () => {
     expect(globalThis.location.search).toBe('?dashboardUid=new-dashboard-uid');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('exibe e altera opções de atualização automática no cabeçalho superior', async () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    const select = screen.getByTestId('header-auto-refresh-select') as HTMLSelectElement;
+    expect(select).toBeInTheDocument();
+    expect(select.value).toBe('');
+
+    fireEvent.change(select, { target: { value: '10s' } });
+    expect(select.value).toBe('10s');
+
+    const refreshBtn = screen.getByTestId('header-refresh-now');
+    expect(refreshBtn).toBeInTheDocument();
+    fireEvent.click(refreshBtn);
+  });
 });

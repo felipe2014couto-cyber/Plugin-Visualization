@@ -34,7 +34,7 @@ import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
 import { createSqlTable, SQL_TABLE_TYPE, type SqlTableElement } from '../../display/createSqlTable';
 import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
-import { createDefaultTimeSelection } from '../../time/timeRange';
+import { createDefaultTimeSelection, getRefreshIntervalMs, moveTimeSelectionToNow, REFRESH_INTERVAL_OPTIONS } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
   hasDashboardTitleConflict,
@@ -77,6 +77,25 @@ export function App() {
   const [editorMode, setEditorMode] = useState<DisplayEditorMode>('edit');
   const [dropSymbolType, setDropSymbolType] = useState<PiPointDropSymbolType>('trend');
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
+  const [refreshInterval, setRefreshInterval] = useState<string>('');
+  const [refreshCount, setRefreshCount] = useState<number>(0);
+
+  const handleManualRefresh = useCallback(() => {
+    setTimeSelection((current) => (current.endExpression === '*' ? moveTimeSelectionToNow(current) : current));
+    setRefreshCount((count) => count + 1);
+  }, []);
+
+  useEffect(() => {
+    const ms = getRefreshIntervalMs(refreshInterval);
+    if (ms <= 0) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setTimeSelection((current) => (current.endExpression === '*' ? moveTimeSelectionToNow(current) : current));
+      setRefreshCount((count) => count + 1);
+    }, ms);
+    return () => clearInterval(timer);
+  }, [refreshInterval]);
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
   const [assetsTab, setAssetsTab] = useState<AssetsTab>('assets');
   const [openCalculationId, setOpenCalculationId] = useState<string>();
@@ -385,6 +404,32 @@ export function App() {
             </div>
           </div>
           <div className={styles.headerSaveRow}>
+            <div className={styles.headerAutoRefresh}>
+              <button
+                type="button"
+                className={styles.headerRefreshButton}
+                data-testid="header-refresh-now"
+                title="Atualizar agora"
+                aria-label="Atualizar agora"
+                onClick={handleManualRefresh}
+              >
+                <RefreshIcon />
+              </button>
+              <span className={styles.headerRefreshLabel}>Atualização automática:</span>
+              <select
+                className={styles.headerRefreshSelect}
+                value={refreshInterval}
+                data-testid="header-auto-refresh-select"
+                aria-label="Intervalo de atualização automática"
+                onChange={(e) => setRefreshInterval(e.target.value)}
+              >
+                {REFRESH_INTERVAL_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
               type="button"
               className={styles.saveButton}
@@ -522,7 +567,7 @@ export function App() {
           </div>
           {isAssetsPanelOpen && (
             <div className={styles.assetsBody}>
-              <div style={{ display: activeModule === 'visualization' ? 'block' : 'none' }}>
+              <div style={{ display: activeModule === 'visualization' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
                   <div className={styles.assetsHeader} role="tablist" aria-label="Módulos do painel">
                     <button
                       type="button"
@@ -603,7 +648,7 @@ export function App() {
                     </div>
                   </div>
               </div>
-              <div style={{ display: activeModule === 'sheets' ? 'block' : 'none' }}>
+              <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
                 <div id="pims-sheets-menu-slot" className={styles.sheetsMenuSlot} data-testid="pims-sheets-menu-slot" />
               </div>
               <div style={{ display: activeModule === 'sql-query' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
@@ -637,7 +682,7 @@ export function App() {
               symbolModeOnly={assetsTab === 'calculations'}
               dropSymbolType={dropSymbolType}
               onDropSymbolTypeChange={setDropSymbolType}
-              trendRefreshKey={`${rangeFrom}:${rangeTo}`}
+              trendRefreshKey={`${rangeFrom}:${rangeTo}:${refreshCount}`}
               trendTimeRange={{ from: rangeFrom, to: rangeTo }}
               timeSelection={timeSelection}
               onTimeSelectionChange={setTimeSelection}
@@ -669,7 +714,10 @@ export function App() {
           </div>
         </main>
       </div>
-      <TimeRangeBar selection={timeSelection} onChange={setTimeSelection} />
+      <TimeRangeBar
+        selection={timeSelection}
+        onChange={setTimeSelection}
+      />
     </div>
   );
 }
@@ -967,6 +1015,55 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     align-items: center;
     gap: 6px;
+  `,
+  headerAutoRefresh: css`
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 6px;
+  `,
+  headerRefreshButton: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--button-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--accent);
+      background: var(--button-hover);
+      border-color: var(--accent);
+    }
+  `,
+  headerRefreshLabel: css`
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  `,
+  headerRefreshSelect: css`
+    min-width: 95px;
+    height: 30px;
+    padding: 2px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    outline: none;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+
+    &:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--focus-ring);
+    }
   `,
   saveButton: css`
     height: 30px;
@@ -1291,6 +1388,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     flex: 1;
     min-height: 0;
+    height: 100%;
     flex-direction: column;
     overflow: hidden;
   `,
@@ -1570,3 +1668,8 @@ function getConnectionLabel(connection: PiConnectionState): string {
       return 'PI System: Data Source não configurada';
   }
 }
+
+function RefreshIcon() {
+  return <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M19 7v5h-5" /><path d="M18 12a7 7 0 1 1-2-5" /></svg>;
+}
+

@@ -24,7 +24,11 @@ const QUICK_RANGES = [
   { label: '1 mo', expression: '1mo' },
 ] as const;
 
-export function TimeRangeBar({ selection, onChange, compact = false }: TimeRangeBarProps) {
+export function TimeRangeBar({
+  selection,
+  onChange,
+  compact = false,
+}: TimeRangeBarProps) {
   const styles = useStyles2(getStyles);
   const [startExpression, setStartExpression] = useState(selection.startExpression);
   const [endExpression, setEndExpression] = useState(selection.endExpression);
