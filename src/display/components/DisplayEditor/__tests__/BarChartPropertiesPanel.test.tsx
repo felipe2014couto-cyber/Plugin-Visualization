@@ -23,7 +23,6 @@ describe('BarChartPropertiesPanel', () => {
     const onVisualChange = jest.fn();
     const onRemoveItem = jest.fn();
     const onMoveItem = jest.fn();
-    const onClose = jest.fn();
 
     const view = render(
       <BarChartPropertiesPanel
@@ -32,7 +31,6 @@ describe('BarChartPropertiesPanel', () => {
         onVisualChange={onVisualChange}
         onRemoveItem={onRemoveItem}
         onMoveItem={onMoveItem}
-        onClose={onClose}
       />
     );
 
@@ -42,7 +40,6 @@ describe('BarChartPropertiesPanel', () => {
       onVisualChange,
       onRemoveItem,
       onMoveItem,
-      onClose,
       ...view,
     };
   }

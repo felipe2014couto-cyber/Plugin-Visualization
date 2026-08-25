@@ -1715,7 +1715,6 @@ export function DisplayEditor({
             onVisualChange={handleBarChartVisualChange}
             onRemoveItem={(index) => commitDocument(removeBarChartItem(documentRef.current, selectedBarChart.id, index))}
             onMoveItem={(index, offset) => commitDocument(moveBarChartItem(documentRef.current, selectedBarChart.id, index, offset))}
-            onClose={() => setOptionsElementId(null)}
           />
         )}
         {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} />}
@@ -1763,7 +1762,7 @@ export function DisplayEditor({
           />
         )}
         {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedBarChart && !selectedTable && !selectedSqlTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !selectedProgramming && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
-        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
+        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} />}
       </div>
       {trendPopup && (
         <TrendPopup

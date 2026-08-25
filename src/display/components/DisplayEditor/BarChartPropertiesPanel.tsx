@@ -21,7 +21,6 @@ export interface BarChartPropertiesPanelProps {
   onVisualChange: (patch: Partial<BarChartVisualOptions>) => void;
   onRemoveItem: (index: number) => void;
   onMoveItem: (index: number, offset: -1 | 1) => void;
-  onClose: () => void;
 }
 
 export function BarChartPropertiesPanel({
@@ -30,7 +29,6 @@ export function BarChartPropertiesPanel({
   onVisualChange,
   onRemoveItem,
   onMoveItem,
-  onClose,
 }: BarChartPropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const items = getBarChartItems(element);
@@ -54,9 +52,6 @@ export function BarChartPropertiesPanel({
       {/* Header */}
       <div className={styles.heading}>
         <strong>Gráfico de Barras</strong>
-        <button type="button" onClick={onClose} aria-label="Fechar opções do Gráfico de Barras" title="Fechar">
-          ×
-        </button>
       </div>
 
       {/* Título */}

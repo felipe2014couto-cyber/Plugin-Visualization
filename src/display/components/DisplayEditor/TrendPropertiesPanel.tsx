@@ -5,12 +5,11 @@ import { useStyles2 } from '@grafana/ui';
 import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendLineStyle, type TrendMarker, type TrendNumberFormat, type TrendScaleMode } from '../../createTrend';
 import { ColorControl } from './ColorControl';
 
-export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onSeriesRemove, onClose }: {
+export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, onSeriesRemove }: {
   element: TrendElement;
   onVisualChange: (patch: Partial<ReturnType<typeof getTrendVisualOptions>>) => void;
   onSeriesChange: (key: string, patch: { color?: string; legendLabel?: string; lineWidth?: number; lineStyle?: TrendLineStyle; marker?: TrendMarker; primaryScale?: boolean; scaleMin?: number; scaleMax?: number }) => void;
   onSeriesRemove: (key: string) => void;
-  onClose: () => void;
 }) {
   const styles = useStyles2(getStyles);
   const series = getTrendSeries(element);
@@ -36,7 +35,7 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
   }
   const selectedKey = trendBindingKey(selected.binding);
   return <aside className={styles.panel} data-testid="trend-properties-panel" aria-label="Opções da Trend">
-    <div className={styles.heading}><strong>Opções de traço</strong><button type="button" onClick={onClose} aria-label="Fechar opções da Trend" title="Fechar">×</button></div>
+    <div className={styles.heading}><strong>Opções de traço</strong></div>
     <label>Série<select value={selectedKey} onChange={(e) => setKey(e.currentTarget.value)}>{series.map((item) => <option key={trendBindingKey(item.binding)} value={trendBindingKey(item.binding)}>{item.binding.pointName}</option>)}</select></label>
     <label>Título<input value={visual.title} onChange={(e) => onVisualChange({ title: e.currentTarget.value })} placeholder="Título do gráfico" /></label>
     <strong className={styles.sectionHeading}>Traços</strong>
@@ -83,7 +82,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   panel: css`
   width: 280px; flex: 0 0 280px; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; scrollbar-gutter:stable; display:flex; flex-direction:column; gap:10px; padding:12px; box-sizing:border-box; color:var(--text-primary); background:var(--surface-primary); border-left:1px solid var(--border-color); font-size:11px;
   label { display:flex; flex-direction:column; gap:3px; margin:0; color:var(--text-secondary); } input, select { height:27px; min-height:27px; box-sizing:border-box; color:var(--text-primary); background:var(--input-bg); border:1px solid var(--border-color); } input[type='color'] { padding:2px; } input[type='range'] { accent-color:var(--accent); }`,
-  heading: css`display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; strong { font-size:14px; } button { width:24px; height:24px; border:1px solid var(--border-color); border-radius:4px; color:var(--text-secondary); background:var(--button-bg); font-size:20px; line-height:18px; cursor:pointer; } button:hover { color:var(--text-primary); background:var(--button-hover); }`,
+  heading: css`display:flex; align-items:center; margin-bottom:6px; strong { font-size:14px; }`,
   removeButton: css`width:100%; min-height:28px; margin:0; border:1px solid var(--border-color); border-radius:3px; color:var(--text-primary); background:var(--button-bg); cursor:pointer; &:disabled { opacity:0.5; cursor:not-allowed; }`,
   rangeValue: css`float:right; color:var(--text-primary); font-weight:600;`,
   fontHeading: css`display:block; margin:7px 0 3px; font-size:13px;`,
