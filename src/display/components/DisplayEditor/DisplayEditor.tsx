@@ -65,6 +65,7 @@ import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDra
 import { CALCULATION_DRAG_MIME, parseCalculationDragData } from '../../../calculations/calculationDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
 import { DisplaySurface } from './DisplaySurface';
+import { PROGRAMMING_TYPE, type ProgrammingElement } from '../../createProgramming';
 import { TrendPopup } from '../TrendPopup';
 import type { TrendSeriesViewState } from '../TrendElementView';
 import { ValuePropertiesPanel } from './ValuePropertiesPanel';
@@ -149,6 +150,7 @@ export interface DisplayEditorProps {
   timeSelection?: DisplayTimeSelection;
   onTimeSelectionChange?: (selection: DisplayTimeSelection) => void;
   onCalculationOpen?: (calculationId: string) => void;
+  onProgrammingEdit?: (elementId: string) => void;
   symbolModeOnly?: boolean;
   showToolbar?: boolean;
   loadRecordedData?: DisplayDataLoader;
@@ -205,6 +207,7 @@ export function DisplayEditor({
   timeSelection,
   onTimeSelectionChange,
   onCalculationOpen,
+  onProgrammingEdit,
   symbolModeOnly = false,
   showToolbar = true,
   loadRecordedData,
@@ -237,6 +240,7 @@ export function DisplayEditor({
     showGroup?: boolean;
     showUngroup?: boolean;
     isLocked?: boolean;
+    showProgrammingEdit?: boolean;
   } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -1000,6 +1004,9 @@ export function DisplayEditor({
   const selectedSqlTable = selectedElement && selectedElement.type === SQL_TABLE_TYPE
     ? selectedElement as SqlTableElement
     : undefined;
+  const selectedProgramming = selectedElement && selectedElement.type === PROGRAMMING_TYPE
+    ? selectedElement as ProgrammingElement
+    : undefined;
   const selectedRectangle = selectedElement && selectedElement.type === RECTANGLE_TYPE
     ? selectedElement as RectangleElement
     : undefined;
@@ -1213,6 +1220,7 @@ export function DisplayEditor({
       showGroup: false,
       showUngroup: false,
       isLocked: isElementLocked(element),
+      showProgrammingEdit: element.type === PROGRAMMING_TYPE,
     });
     setOptionsElementId(element.id);
     setOptionsTrendId(null);
@@ -1242,6 +1250,17 @@ export function DisplayEditor({
     const targets = contextMenu.elementIds && contextMenu.elementIds.length > 0
       ? contextMenu.elementIds
       : (contextMenu.elementId ? [contextMenu.elementId] : []);
+    if (contextMenu.showProgrammingEdit && targets.length === 1 && onProgrammingEdit) {
+      items.push({
+        id: 'edit-programming',
+        label: 'Editar Programming',
+        testId: 'context-menu-edit-programming',
+        onClick: () => {
+          onProgrammingEdit(targets[0]);
+          setContextMenu(null);
+        },
+      });
+    }
     if (targets.length > 0) {
       const isLocked = Boolean(contextMenu.isLocked);
       items.push({
@@ -1252,7 +1271,7 @@ export function DisplayEditor({
       });
     }
     return items;
-  }, [contextMenu, handleGroupSelected, handleToggleLock, handleUngroupSelected]);
+  }, [contextMenu, handleGroupSelected, handleToggleLock, handleUngroupSelected, onProgrammingEdit]);
   const optionsTrend = optionsTrendId
     ? (getElementById(displayDocument, optionsTrendId) as TrendElement | undefined)
     : undefined;
@@ -1714,7 +1733,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedBarChart && !selectedTable && !selectedSqlTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
+        {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedBarChart && !selectedTable && !selectedSqlTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !selectedProgramming && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
       </div>
       {trendPopup && (

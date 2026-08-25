@@ -3,7 +3,7 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { createDisplayDocument } from '../../display';
-import { appendProgramming, createProgramming } from '../../display/createProgramming';
+import { appendProgramming, createProgramming, PROGRAMMING_TYPE, type ProgrammingElement } from '../../display/createProgramming';
 import { DisplayEditor } from '../../display/components/DisplayEditor';
 import {
   DisplayEditorMode,
@@ -108,11 +108,56 @@ export function App() {
   const [programmingPiPoints, setProgrammingPiPoints] = useState<PiPointSearchResult[]>([]);
   const [programmingPiValues, setProgrammingPiValues] = useState<Record<string, PiPointValue>>({});
   const [isProgrammingPiSearchOpen, setIsProgrammingPiSearchOpen] = useState(true);
+  const [editingProgrammingElementId, setEditingProgrammingElementId] = useState<string | null>(null);
 
   const commitProgrammingDraft = useCallback((next: ProgrammingDocument) => {
     setProgrammingDraft(next);
-    setDocument((current) => ({ ...current, programming: next }));
-  }, []);
+    setDocument((current) => editingProgrammingElementId
+      ? current
+      : { ...current, programming: next });
+  }, [editingProgrammingElementId]);
+
+  const handleProgrammingEdit = useCallback((elementId: string) => {
+    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === PROGRAMMING_TYPE) as ProgrammingElement | undefined;
+    if (!element) return;
+    const next: ProgrammingDocument = {
+      type: 'programming',
+      html: element.properties.html,
+      css: element.properties.css,
+      javascript: element.properties.javascript,
+      query: element.properties.query.map((item) => ({
+        name: item.name,
+        binding: { ...item.binding },
+        ...(item.unit ? { unit: item.unit } : {}),
+      })),
+    };
+    setEditingProgrammingElementId(elementId);
+    setProgrammingDraft(next);
+    setProgrammingApplied(next);
+    setProgrammingPiPoints(next.query?.map(queryReferenceToPiPoint) ?? []);
+    setActiveModule('programming');
+    setIsAssetsPanelOpen(true);
+  }, [document.elements]);
+
+  const handleProgrammingApply = useCallback(() => {
+    setProgrammingApplied(programmingDraft);
+    if (!editingProgrammingElementId) return;
+    setDocument((current) => ({
+      ...current,
+      elements: current.elements.map((element) => element.id === editingProgrammingElementId && element.type === PROGRAMMING_TYPE
+        ? {
+          ...element,
+          properties: {
+            ...element.properties,
+            html: programmingDraft.html,
+            css: programmingDraft.css,
+            javascript: programmingDraft.javascript,
+            query: (programmingDraft.query ?? []).map((item) => ({ ...item, binding: { ...item.binding } })),
+          },
+        }
+        : element),
+    }));
+  }, [editingProgrammingElementId, programmingDraft]);
 
   const updateProgrammingQuery = useCallback((points: PiPointSearchResult[]) => {
     const query = points.flatMap((point) => {
@@ -343,6 +388,7 @@ export function App() {
     });
     setActiveModule('visualization');
     setIsAssetsPanelOpen(true);
+    setEditingProgrammingElementId(null);
   }, [programmingDraft, programmingPiPoints]);
   const selectedSqlTable = useMemo(() => {
     if (activeModule !== 'sql-query') return null;
@@ -774,8 +820,8 @@ export function App() {
                   variant="editor"
                   document={programmingDraft}
                   onDocumentChange={commitProgrammingDraft}
-                  onApply={() => setProgrammingApplied(programmingDraft)}
-                  onAddToDisplay={handleAddProgrammingToDisplay}
+                  onApply={handleProgrammingApply}
+                  onAddToDisplay={editingProgrammingElementId ? undefined : handleAddProgrammingToDisplay}
                   beforeEditor={activeModule === 'programming' ? (
                     <div className={styles.programmingPiSearch}>
                       <button
@@ -865,6 +911,7 @@ export function App() {
                 setIsAssetsPanelOpen(true);
                 setOpenCalculationId(calculationId);
               }}
+              onProgrammingEdit={handleProgrammingEdit}
               />
             </div>
           </div>
