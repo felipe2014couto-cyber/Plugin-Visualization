@@ -6,14 +6,17 @@ import type { OracleQueryResponse } from '../components/SqlQuery/oracleApi';
 
 export const SQL_TABLE_TYPE = 'sql-table' as const;
 
+export type SqlViewMode = 'table' | 'xy' | 'timeseries' | 'bar' | 'gauge' | 'scatter';
+
 export interface SqlTableProperties extends Record<string, unknown> {
   sql: string;
   result?: OracleQueryResponse | null;
-  style?: 'dark' | 'light' | 'striped' | 'custom';
-  viewMode?: 'table' | 'xy' | 'timeseries';
+  style?: 'dark' | 'light' | 'striped' | 'custom' | 'auto';
+  viewMode?: SqlViewMode;
   xAxis?: string;
   yAxes?: string[];
   fontSize?: number;
+  barColor?: string;
   customHeaderColor?: string;
   customRowColor?: string;
   customTextColor?: string;
@@ -33,11 +36,12 @@ export type SqlTableElement = DisplayElement<typeof SQL_TABLE_TYPE, SqlTableProp
 export interface CreateSqlTableOptions {
   sql: string;
   result?: OracleQueryResponse | null;
-  style?: 'dark' | 'light' | 'striped' | 'custom';
-  viewMode?: 'table' | 'xy' | 'timeseries';
+  style?: 'dark' | 'light' | 'striped' | 'custom' | 'auto';
+  viewMode?: SqlViewMode;
   xAxis?: string;
   yAxes?: string[];
   fontSize?: number;
+  barColor?: string;
   customHeaderColor?: string;
   customRowColor?: string;
   customTextColor?: string;
@@ -84,11 +88,12 @@ export function createSqlTable(options: CreateSqlTableOptions): SqlTableElement 
     properties: {
       sql: options.sql,
       result: options.result,
-      style: options.style ?? 'dark',
+      style: options.style,
       viewMode: options.viewMode ?? 'table',
       xAxis: options.xAxis,
       yAxes: options.yAxes,
-      fontSize: options.fontSize ?? 20,
+      fontSize: options.fontSize ?? 14,
+      barColor: options.barColor,
       customHeaderColor: options.customHeaderColor,
       customRowColor: options.customRowColor,
       customTextColor: options.customTextColor,
@@ -97,7 +102,7 @@ export function createSqlTable(options: CreateSqlTableOptions): SqlTableElement 
       title: options.title,
       titleTransparent: options.titleTransparent ?? false,
       titleAlign: options.titleAlign ?? 'left',
-      titleFontSize: options.titleFontSize ?? 20,
+      titleFontSize: options.titleFontSize ?? 18,
       dotSize: options.dotSize ?? 3,
       showTrendMarker: options.showTrendMarker ?? false,
       paginationSize: options.paginationSize,

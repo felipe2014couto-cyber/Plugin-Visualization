@@ -420,7 +420,7 @@ export function DisplayEditor({
   const handleSelect = useCallback(
     (elementId: string | null) => {
       dispatch({ type: 'SELECT', elementId });
-      setPropertiesPanelOpen(false);
+      setPropertiesPanelOpen(Boolean(elementId));
       setOptionsElementId(null);
       setOptionsTrendId(null);
       const element = elementId ? getElementById(documentRef.current, elementId) : undefined;
@@ -435,14 +435,14 @@ export function DisplayEditor({
   );
   const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
     dispatch({ type: 'SELECT_MANY', elementIds, additive });
-    setPropertiesPanelOpen(false);
+    setPropertiesPanelOpen(elementIds.length === 1);
     setOptionsElementId(null);
     setOptionsTrendId(null);
   }, [dispatch]);
 
   const handleDoubleClick = useCallback((elementId: string) => {
     dispatch({ type: 'SELECT', elementId });
-    setPropertiesPanelOpen(false);
+    setPropertiesPanelOpen(true);
     setOptionsElementId(null);
     setOptionsTrendId(null);
   }, [dispatch]);
@@ -579,7 +579,7 @@ export function DisplayEditor({
     }
     commitDocument(appendDisplayElement(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-    setPropertiesPanelOpen(false);
+    setPropertiesPanelOpen(true);
     setOptionsElementId(null);
     setOptionsTrendId(null);
     setShapeMenuOpen(false);
@@ -596,6 +596,7 @@ export function DisplayEditor({
     }
     commitDocument(appendText(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
+    setPropertiesPanelOpen(true);
     setOptionsElementId(element.id);
     setOptionsTrendId(null);
   }, [commitDocument, dispatch]);
@@ -665,6 +666,8 @@ export function DisplayEditor({
       const targetTrend = dropSymbolType === 'trend'
         ? resolveTrendDropTarget(documentRef.current, event.target, event.clientX, event.clientY, point)
         : undefined;
+      const targetLibrarySymbol = resolveLibrarySymbolDropTarget(documentRef.current, event.target, point);
+      const targetShape = resolveGeometricDropTarget(documentRef.current, event.target, point);
       const preview = svg
         ? createCalculationDragPreview(
           svg,
@@ -674,6 +677,8 @@ export function DisplayEditor({
           documentRef.current,
           dropSymbolType,
           targetTrend,
+          targetLibrarySymbol,
+          targetShape,
         )
         : undefined;
       event.dataTransfer.dropEffect = preview?.valid ? 'copy' : 'none';
@@ -774,6 +779,36 @@ export function DisplayEditor({
       if (dropSymbolType === 'table') {
         return;
       }
+      const targetText = resolveTextDropTarget(currentDocument, event.target, point);
+      if (targetText) {
+        commitDocument(updateTextProperties(currentDocument, targetText.id, { calculationId, binding: undefined }));
+        dispatch({ type: 'SELECT', elementId: targetText.id });
+        setPropertiesPanelOpen(true);
+        setOptionsElementId(null);
+        return;
+      }
+      const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
+      if (targetLibrarySymbol) {
+        const multistate = targetLibrarySymbol.properties.multistate
+          ? { ...targetLibrarySymbol.properties.multistate, enabled: true }
+          : { enabled: true, rules: [] };
+        commitDocument(updateLibrarySymbolProperties(currentDocument, targetLibrarySymbol.id, { calculationId, binding: undefined, multistate }));
+        dispatch({ type: 'SELECT', elementId: targetLibrarySymbol.id });
+        setPropertiesPanelOpen(true);
+        setOptionsElementId(null);
+        return;
+      }
+      const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
+      if (targetShape) {
+        const multistate = targetShape.properties.multistate
+          ? { ...targetShape.properties.multistate, enabled: true }
+          : { enabled: true, rules: [] };
+        commitDocument(updateRectangleProperties(currentDocument, targetShape.id, { calculationId, binding: undefined, multistate }));
+        dispatch({ type: 'SELECT', elementId: targetShape.id });
+        setPropertiesPanelOpen(true);
+        setOptionsElementId(null);
+        return;
+      }
       const targetTrend = dropSymbolType === 'trend'
         ? resolveTrendDropTarget(currentDocument, event.target, event.clientX, event.clientY, point)
         : undefined;
@@ -793,6 +828,7 @@ export function DisplayEditor({
             : appendBar(currentDocument, positioned as BarElement);
       commitDocument(nextDocument);
       dispatch({ type: 'SELECT', elementId: positioned.id });
+      setPropertiesPanelOpen(true);
       return;
     }
     const librarySymbolId = parseLibrarySymbolDragData(event.dataTransfer.getData(LIBRARY_SYMBOL_DRAG_MIME));
@@ -813,6 +849,7 @@ export function DisplayEditor({
       const positioned = positionElementAt(symbol, point, currentDocument);
       commitDocument(appendLibrarySymbol(currentDocument, positioned));
       dispatch({ type: 'SELECT', elementId: positioned.id });
+      setPropertiesPanelOpen(true);
       return;
     }
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
@@ -851,6 +888,7 @@ export function DisplayEditor({
     if (targetText) {
       commitDocument(updateTextProperties(currentDocument, targetText.id, { binding }));
       dispatch({ type: 'SELECT', elementId: targetText.id });
+      setPropertiesPanelOpen(true);
       setOptionsElementId(null);
       return;
     }
@@ -861,6 +899,7 @@ export function DisplayEditor({
         : { enabled: true, rules: [] };
       commitDocument(updateLibrarySymbolProperties(currentDocument, targetLibrarySymbol.id, { binding, multistate }));
       dispatch({ type: 'SELECT', elementId: targetLibrarySymbol.id });
+      setPropertiesPanelOpen(true);
       setOptionsElementId(null);
       return;
     }
@@ -1835,6 +1874,8 @@ export function DisplayEditor({
             shape={selectedRectangle.properties.shape ?? 'rectangle'}
             rotation={selectedRectangle.properties.rotation}
             pointName={isPiPointBinding(selectedRectangle.properties.binding) ? selectedRectangle.properties.binding.pointName : undefined}
+            calculationName={displayDocument.calculations?.find((c) => c.id === selectedRectangle.properties.calculationId)?.name}
+            calculationId={selectedRectangle.properties.calculationId}
             binding={isPiPointBinding(selectedRectangle.properties.binding) ? selectedRectangle.properties.binding : undefined}
             loadDigitalStates={loadDigitalStates}
             linkUrl={typeof selectedRectangle.properties.linkUrl === 'string' ? selectedRectangle.properties.linkUrl : undefined}
@@ -1851,6 +1892,7 @@ export function DisplayEditor({
             properties={selectedText.properties}
             selectedPiPoint={selectedPiPoint}
             pointName={isPiPointBinding(selectedText.properties.binding) ? selectedText.properties.binding.pointName : undefined}
+            calculationName={displayDocument.calculations?.find((c) => c.id === selectedText.properties.calculationId)?.name}
             binding={isPiPointBinding(selectedText.properties.binding) ? selectedText.properties.binding : undefined}
             loadDigitalStates={loadDigitalStates}
             onChange={handleTextChange}
@@ -1865,6 +1907,7 @@ export function DisplayEditor({
           <LibrarySymbolPropertiesPanel
             properties={selectedLibrarySymbol.properties}
             selectedPiPoint={selectedPiPoint}
+            calculationName={displayDocument.calculations?.find((c) => c.id === selectedLibrarySymbol.properties.calculationId)?.name}
             loadDigitalStates={loadDigitalStates}
             onChange={handleLibrarySymbolChange}
             onMultistateChange={handleMultistateChange}
@@ -1936,12 +1979,14 @@ function getDropPoint(
   clientY: number,
   document: DisplayDocument,
 ): Point | undefined {
-  const bounds = svg.getBoundingClientRect();
-  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)
-    || bounds.width <= 0 || bounds.height <= 0
-    || clientX < bounds.left || clientX > bounds.right
-    || clientY < bounds.top || clientY > bounds.bottom) {
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
     return undefined;
+  }
+  const bounds = svg.getBoundingClientRect();
+  if (bounds.width > 0 && bounds.height > 0) {
+    if (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) {
+      return undefined;
+    }
   }
   return svgPointFromEvent(svg, clientX, clientY);
 }
@@ -2076,10 +2121,40 @@ function createCalculationDragPreview(
   document: DisplayDocument,
   symbolType: PiPointDropSymbolType,
   targetTrend?: TrendElement,
+  targetLibrarySymbol?: LibrarySymbolElement,
+  targetShape?: RectangleElement,
 ): PiPointDragPreview | undefined {
   const point = getDropPoint(svg, clientX, clientY, document);
   if (!point) {
     return undefined;
+  }
+  if (targetLibrarySymbol) {
+    const wrapperBounds = wrapper.getBoundingClientRect();
+    const viewport = getSvgViewport(svg);
+    return {
+      left: viewport.left - wrapperBounds.left + targetLibrarySymbol.x * viewport.scale,
+      top: viewport.top - wrapperBounds.top + targetLibrarySymbol.y * viewport.scale,
+      width: targetLibrarySymbol.width * viewport.scale,
+      height: targetLibrarySymbol.height * viewport.scale,
+      valid: true,
+      label: 'Vincular ao símbolo',
+      symbolType,
+      targetTrend: false,
+    };
+  }
+  if (targetShape) {
+    const wrapperBounds = wrapper.getBoundingClientRect();
+    const viewport = getSvgViewport(svg);
+    return {
+      left: viewport.left - wrapperBounds.left + targetShape.x * viewport.scale,
+      top: viewport.top - wrapperBounds.top + targetShape.y * viewport.scale,
+      width: targetShape.width * viewport.scale,
+      height: targetShape.height * viewport.scale,
+      valid: true,
+      label: 'Vincular à forma',
+      symbolType,
+      targetTrend: false,
+    };
   }
   if (symbolType === 'trend' && targetTrend) {
     const wrapperBounds = wrapper.getBoundingClientRect();

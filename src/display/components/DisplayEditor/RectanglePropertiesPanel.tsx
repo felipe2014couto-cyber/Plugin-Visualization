@@ -17,6 +17,8 @@ export interface RectanglePropertiesPanelProps {
   shape: RectangleProperties['shape'];
   rotation?: number;
   pointName?: string;
+  calculationName?: string;
+  calculationId?: string;
   binding?: PiPointBinding;
   loadDigitalStates?: (binding: PiPointBinding) => Promise<PiDigitalStatesResult>;
   linkUrl?: string;
@@ -28,8 +30,27 @@ export interface RectanglePropertiesPanelProps {
   onMultistateChange: (config: MultistateConfig) => void;
 }
 
-export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, pointName, binding, loadDigitalStates, linkUrl, openInNewTab = true, onLinkChange, onOpenInNewTabChange, onChange, multistate, onMultistateChange }: RectanglePropertiesPanelProps) {
+export function RectanglePropertiesPanel({
+  fill,
+  stroke,
+  shape,
+  rotation = 0,
+  pointName,
+  calculationName,
+  calculationId,
+  binding,
+  loadDigitalStates,
+  linkUrl,
+  openInNewTab = true,
+  onLinkChange,
+  onOpenInNewTabChange,
+  onChange,
+  multistate,
+  onMultistateChange,
+}: RectanglePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
+  const isBound = Boolean(pointName || calculationId);
+
   return (
     <aside className={styles.panel} data-testid="rectangle-properties-panel" aria-label="Configuração do Rectangle">
       <div className={styles.header}>
@@ -47,16 +68,26 @@ export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, po
             <option value="triangle">Triângulo</option>
           </select>
         </label>
-        {pointName && <div className={styles.binding}>PI Point: {pointName}</div>}
+        {pointName ? (
+          <div className={styles.bindingRow}>
+            <span className={styles.binding}>PI Point: {pointName}</span>
+            <button type="button" className={styles.unbindButton} onClick={() => onChange({ binding: undefined, calculationId: undefined })}>Desvincular</button>
+          </div>
+        ) : calculationId ? (
+          <div className={styles.bindingRow}>
+            <span className={styles.binding}>Cálculo: {calculationName || calculationId}</span>
+            <button type="button" className={styles.unbindButton} onClick={() => onChange({ binding: undefined, calculationId: undefined })}>Desvincular</button>
+          </div>
+        ) : null}
         {shape !== 'line' && shape !== 'arc' && <ColorControl label="Preenchimento" color={fill} onChange={(value) => onChange({ fill: value })} testId="rectangle-fill" />}
         <ColorControl label="Contorno" color={stroke} onChange={(value) => onChange({ stroke: value })} testId="rectangle-stroke" />
         <RotationControl value={rotation} onChange={(value) => onChange({ rotation: value })} testId="rectangle-rotation" />
         {onLinkChange && <LinkField value={linkUrl} openInNewTab={openInNewTab} onChange={onLinkChange} onOpenInNewTabChange={onOpenInNewTabChange} testId="rectangle-link-url" />}
       </div>
-      {pointName ? (
+      {isBound ? (
         <MultistatePropertiesPanel config={multistate} binding={binding} loadDigitalStates={loadDigitalStates} onChange={onMultistateChange} />
       ) : (
-        <div className={styles.hint}>Selecione um PI Point antes de inserir a forma para habilitar o Multistate.</div>
+        <div className={styles.hint}>Arraste uma Tag PI ou de Cálculo sobre a forma para habilitar o Multistate.</div>
       )}
     </aside>
   );
@@ -107,14 +138,39 @@ const getStyles = (theme: GrafanaTheme2) => ({
       border-radius: 0;
       background: var(--input-bg);
       color: var(--text-primary);
-      color-scheme: inherit;
-    }
-
-    select option {
-      background: var(--input-bg);
-      color: var(--text-primary);
+      box-sizing: border-box;
     }
   `,
-  binding: css`color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere;`,
-  hint: css`border-top: 1px solid var(--border-color); padding: 10px 12px; color: var(--text-secondary); font-size: 9px; line-height: 1.4;`,
+  bindingRow: css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  `,
+  binding: css`
+    color: var(--text-secondary);
+    font-size: 10px;
+    overflow-wrap: anywhere;
+    flex: 1;
+  `,
+  unbindButton: css`
+    padding: 2px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 9px;
+    cursor: pointer;
+    &:hover {
+      color: #ff5555;
+      border-color: #ff5555;
+    }
+  `,
+  hint: css`
+    border-top: 1px solid var(--border-color);
+    padding: 10px 12px;
+    color: var(--text-secondary);
+    font-size: 9px;
+    line-height: 1.4;
+  `,
 });

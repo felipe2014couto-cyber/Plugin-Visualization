@@ -77,7 +77,8 @@ export function areMiniSheetsDocsEqual(
       fmtA.textColor !== fmtB.textColor ||
       fmtA.backgroundColor !== fmtB.backgroundColor ||
       fmtA.horizontalAlign !== fmtB.horizontalAlign ||
-      fmtA.decimalPlaces !== fmtB.decimalPlaces
+      fmtA.decimalPlaces !== fmtB.decimalPlaces ||
+      fmtA.scientific !== fmtB.scientific
     ) {
       return false;
     }

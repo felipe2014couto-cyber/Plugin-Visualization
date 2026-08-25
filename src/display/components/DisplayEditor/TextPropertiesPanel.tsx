@@ -17,6 +17,7 @@ export interface TextPropertiesPanelProps {
   onChange: (patch: Partial<TextProperties>) => void;
   selectedPiPoint?: PiPointSearchResult | null;
   pointName?: string;
+  calculationName?: string;
   binding?: PiPointBinding;
   loadDigitalStates?: (binding: PiPointBinding) => Promise<PiDigitalStatesResult>;
   multistate?: MultistateConfig;
@@ -30,6 +31,7 @@ export function TextPropertiesPanel({
   onChange,
   selectedPiPoint,
   pointName,
+  calculationName,
   binding: propBinding,
   loadDigitalStates,
   multistate,
@@ -41,12 +43,17 @@ export function TextPropertiesPanel({
   const binding = isPiPointBinding(properties.binding) ? properties.binding : (propBinding ?? undefined);
   const effectivePointName = pointName ?? binding?.pointName;
   const selectedBinding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+  const isBound = Boolean(binding || properties.calculationId);
 
   return (
     <aside className={styles.panel} data-testid="text-properties-panel" aria-label="Configuração do Texto">
       <div className={styles.header}>
         <span className={styles.title}>Texto</span>
-        {effectivePointName && <span className={styles.pointName}>{effectivePointName}</span>}
+        {effectivePointName ? (
+          <span className={styles.pointName}>{effectivePointName}</span>
+        ) : properties.calculationId ? (
+          <span className={styles.pointName}>Cálculo: {calculationName || properties.calculationId}</span>
+        ) : null}
       </div>
       <div className={styles.fields}>
         <label className={styles.field}>
@@ -67,7 +74,19 @@ export function TextPropertiesPanel({
               type="button"
               className={styles.unbindButton}
               data-testid="text-unbind-point"
-              onClick={() => onChange({ binding: undefined })}
+              onClick={() => onChange({ binding: undefined, calculationId: undefined })}
+            >
+              Desvincular
+            </button>
+          </div>
+        ) : properties.calculationId ? (
+          <div className={styles.bindingRow}>
+            <span className={styles.binding}>Cálculo: {calculationName || properties.calculationId}</span>
+            <button
+              type="button"
+              className={styles.unbindButton}
+              data-testid="text-unbind-calc"
+              onClick={() => onChange({ binding: undefined, calculationId: undefined })}
             >
               Desvincular
             </button>
@@ -114,7 +133,7 @@ export function TextPropertiesPanel({
         </label>
         <RotationControl value={properties.rotation} onChange={(rotation) => onChange({ rotation })} testId="text-rotation" />
       </div>
-      {binding ? (
+      {isBound ? (
         <>
           <MultistatePropertiesPanel
             title="Multistate (Texto)"

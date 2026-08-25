@@ -9,9 +9,13 @@ import { createPiPointBinding } from '../../../../pi/piPointBinding';
 import { PI_POINT_DRAG_MIME, serializePiPointDragData } from '../../../../pi/piPointDrag';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 function Harness() {
   const [document, setDocument] = useState<DisplayDocument>(() => {

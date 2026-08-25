@@ -216,6 +216,22 @@ export function svgPointFromEvent(
     getScreenCTM?: () => DOMMatrix | null;
   }).getScreenCTM;
   if (typeof ctmFn !== 'function') {
+    const bounds = svg.getBoundingClientRect?.();
+    if (bounds && bounds.width > 0 && bounds.height > 0) {
+      const viewBox = svg.viewBox?.baseVal;
+      if (viewBox && viewBox.width > 0 && viewBox.height > 0) {
+        const scaleX = viewBox.width / bounds.width;
+        const scaleY = viewBox.height / bounds.height;
+        return {
+          x: viewBox.x + (clientX - bounds.left) * scaleX,
+          y: viewBox.y + (clientY - bounds.top) * scaleY,
+        };
+      }
+      return {
+        x: clientX - bounds.left,
+        y: clientY - bounds.top,
+      };
+    }
     return { x: clientX, y: clientY };
   }
   const ctm = ctmFn.call(svg);

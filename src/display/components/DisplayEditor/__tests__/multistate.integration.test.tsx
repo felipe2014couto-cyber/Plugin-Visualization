@@ -6,9 +6,13 @@ import { DisplayEditor } from '../DisplayEditor';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
 import { createPiPointBinding } from '../../../../pi/piPointBinding';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 beforeAll(() => {
   const w = window as unknown as {

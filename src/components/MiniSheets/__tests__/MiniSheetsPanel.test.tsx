@@ -9,9 +9,13 @@ import {
   getPiTrendsPreviewForRange,
 } from '../../../pi/piDataSource';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 jest.mock('../../../pi/piDataSource', () => ({
   searchPiPointsWithStatus: jest.fn(),
@@ -251,6 +255,57 @@ describe('MiniSheetsPanel', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('65.2');
+    });
+  });
+
+  it('evaluates =PIArcVal(A1, "25/08/2026 09:00", "Interpolated", "left") with timestamp spill', async () => {
+    searchMock.mockResolvedValue({
+      results: [
+        {
+          name: 'sinusoid',
+          path: '\\\\PISERVER\\sinusoid',
+          dataSourceUid: 'pi-uid',
+        },
+      ],
+      hasMore: false,
+    });
+
+    const targetTimestamp = new Date(2026, 7, 25, 9, 0, 0).getTime();
+    recordedMock.mockResolvedValue({
+      'pi-uid\u0000PISERVER\u0000sinusoid': {
+        status: 'success',
+        series: {
+          pointName: 'sinusoid',
+          points: [
+            { time: targetTimestamp - 60000, value: 5.0 },
+            { time: targetTimestamp + 60000, value: 6.0 },
+          ],
+        },
+      },
+    });
+
+    const initialDoc = {
+      version: 1 as const,
+      columnCount: 20,
+      rowCount: 50,
+      cells: {
+        A1: { rawValue: 'sinusoid' },
+      },
+    };
+
+    render(<MiniSheetsPanel initialDocument={initialDoc} />);
+    const cellB6 = screen.getByTestId('mini-sheets-cell-B6');
+    fireEvent.click(cellB6);
+
+    const input = screen.getByTestId('mini-sheets-formula-input');
+    fireEvent.change(input, { target: { value: '=PIArcVal(A1, "25/08/2026 09:00", "Interpolated", "left")' } });
+    fireEvent.submit(input.closest('form')!);
+
+    await waitFor(() => {
+      // Célula B6 recebe o timestamp formatado
+      expect(screen.getByTestId('mini-sheets-cell-B6')).toHaveTextContent('25/08/2026 09:00:00');
+      // Célula C6 recebe o valor interpolado 5.5
+      expect(screen.getByTestId('mini-sheets-cell-C6')).toHaveTextContent('5.5');
     });
   });
 
@@ -826,6 +881,193 @@ describe('MiniSheetsPanel', () => {
         expect(handleChange).toHaveBeenCalled();
         const lastCallArg = handleChange.mock.calls[handleChange.mock.calls.length - 1][0];
         expect(lastCallArg.cells['A1'].rawValue).toBe('Novo Motor');
+      });
+    });
+
+    it('abre automaticamente a janela de configuração com dados pré-preenchidos ao clicar em célula com cálculo', async () => {
+      const initialDoc = {
+        version: 1 as const,
+        columnCount: 20,
+        rowCount: 50,
+        cells: {
+          A1: { rawValue: 'sinusoid' },
+          B1: { rawValue: '=PICurrVal(A1, "left")' },
+        },
+      };
+
+      currValMock.mockResolvedValueOnce({
+        value: 12.34,
+        timestamp: '2026-08-25T10:00:00Z',
+      });
+
+      render(<MiniSheetsPanel initialDocument={initialDoc} />);
+
+      const cellB1 = screen.getByTestId('mini-sheets-cell-B1');
+      fireEvent.click(cellB1);
+
+      await waitFor(() => {
+        expect(screen.getByText('Valor atual (PICurrVal)')).toBeInTheDocument();
+      });
+
+      const tagInput = screen.getByLabelText('Item de dados (PI Point ou Célula)') as HTMLInputElement;
+      expect(tagInput.value).toBe('A1');
+
+      const leftRadio = screen.getByLabelText('Time stamp à esquerda') as HTMLInputElement;
+      expect(leftRadio.checked).toBe(true);
+
+      const targetInput = screen.getByLabelText('Célula de saída') as HTMLInputElement;
+      expect(targetInput.value).toBe('B1');
+
+      expect(screen.getByTestId('datalink-dialog-insert')).toHaveTextContent('Aplicar');
+    });
+
+    it('abre a configuração da fórmula de origem ao clicar em célula gerada por spill', async () => {
+      const initialDoc = {
+        version: 1 as const,
+        columnCount: 20,
+        rowCount: 50,
+        cells: {
+          A1: { rawValue: 'sinusoid' },
+          B1: { rawValue: '=PICurrVal(A1, "left")' },
+        },
+      };
+
+      currValMock.mockResolvedValue({
+        value: 12.34,
+        timestamp: '2026-08-25T10:00:00Z',
+      });
+
+      render(<MiniSheetsPanel initialDocument={initialDoc} />);
+
+      // Aguarda cálculo do spill para C1 (onde o valor fica no caso de timestamp left)
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-cell-C1')).toHaveTextContent('12.34');
+      });
+
+      // Clica na célula de spill C1
+      const cellC1 = screen.getByTestId('mini-sheets-cell-C1');
+      fireEvent.click(cellC1);
+
+      await waitFor(() => {
+        expect(screen.getByText('Valor atual (PICurrVal)')).toBeInTheDocument();
+      });
+
+      const tagInput = screen.getByLabelText('Item de dados (PI Point ou Célula)') as HTMLInputElement;
+      expect(tagInput.value).toBe('A1');
+
+      const targetInput = screen.getByLabelText('Célula de saída') as HTMLInputElement;
+      expect(targetInput.value).toBe('B1');
+    });
+
+    it('permite copiar e colar em campos de input do diálogo sem afetar as células da grade', async () => {
+      render(<MiniSheetsPanel />);
+
+      fireEvent.click(screen.getByTestId('datalink-curr-val'));
+
+      const tagInput = screen.getByLabelText('Item de dados (PI Point ou Célula)') as HTMLInputElement;
+      fireEvent.focus(tagInput);
+
+      // Simula evento de paste no input de texto
+      const pasteEvent = new Event('paste', { bubbles: true, cancelable: true });
+      Object.defineProperty(pasteEvent, 'clipboardData', {
+        value: {
+          getData: (type: string) => (type === 'text/plain' ? 'TAG_COLADA' : ''),
+        },
+      });
+      fireEvent(tagInput, pasteEvent);
+
+      // O evento de paste no input não deve ser prevenido pelo manipulador da planilha
+      expect(pasteEvent.defaultPrevented).toBe(false);
+
+      // A célula A1 não deve ter sido alterada pelo paste do formulário
+      expect(screen.getByTestId('mini-sheets-cell-A1')).not.toHaveTextContent('TAG_COLADA');
+    });
+
+    it('aplica e desativa formato exponencial/científico com o botão EXP', async () => {
+      const initialDoc = {
+        version: 1 as const,
+        columnCount: 20,
+        rowCount: 50,
+        cells: {
+          A1: { rawValue: '0.00009519308', displayValue: '0.00009519308' },
+        },
+      };
+
+      render(<MiniSheetsPanel initialDocument={initialDoc} />);
+
+      // Inicialmente exibe número normal
+      expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('0.00009519308');
+
+      // Seleciona A1 e clica no botão EXP
+      fireEvent.click(screen.getByTestId('mini-sheets-cell-A1'));
+      const expBtn = screen.getByTestId('mini-sheets-format-scientific');
+      fireEvent.click(expBtn);
+
+      // Agora deve exibir notação científica / exponencial
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent(/9\.519308E-5/i);
+      });
+
+      // Clica novamente para desativar
+      fireEvent.click(expBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('0.00009519308');
+      });
+    });
+
+    it('auto-ajusta a largura da coluna no duplo clique na borda de redimensionamento', async () => {
+      const initialDoc = {
+        version: 1 as const,
+        columnCount: 20,
+        rowCount: 50,
+        cells: {
+          A1: { rawValue: 'Texto Muito Longo Para Teste De Auto Ajuste De Coluna No MiniSheets' },
+        },
+      };
+
+      render(<MiniSheetsPanel initialDocument={initialDoc} />);
+
+      const colHeaderA = screen.getByTestId('mini-sheets-col-header-A');
+      const initialWidth = parseInt(colHeaderA.style.width, 10);
+
+      // Duplo clique no resizer da coluna A
+      const resizerA = screen.getByTestId('mini-sheets-col-resizer-A');
+      fireEvent.doubleClick(resizerA);
+
+      await waitFor(() => {
+        const newWidth = parseInt(colHeaderA.style.width, 10);
+        expect(newWidth).toBeGreaterThan(initialWidth);
+      });
+    });
+
+    it('mantém o diálogo de configuração aberto após clicar em Aplicar/Inserir e fecha apenas no X ou Cancelar', async () => {
+      currValMock.mockResolvedValue({
+        value: 12.34,
+        timestamp: '2026-08-25T10:00:00Z',
+      });
+
+      render(<MiniSheetsPanel />);
+
+      // Abre ferramenta Último valor
+      fireEvent.click(screen.getByTestId('datalink-curr-val'));
+
+      const tagInput = screen.getByLabelText('Item de dados (PI Point ou Célula)');
+      fireEvent.change(tagInput, { target: { value: 'sinusoid' } });
+
+      const submitBtn = screen.getByTestId('datalink-dialog-insert');
+      fireEvent.click(submitBtn);
+
+      // O diálogo ainda deve estar visível após clicar em Aplicar/Inserir
+      await waitFor(() => {
+        expect(screen.getByText('Valor atual (PICurrVal)')).toBeInTheDocument();
+      });
+
+      // Fecha o diálogo com o botão Fechar (X)
+      const closeBtn = screen.getByLabelText('Fechar');
+      fireEvent.click(closeBtn);
+
+      await waitFor(() => {
+        expect(screen.queryByText('Valor atual (PICurrVal)')).not.toBeInTheDocument();
       });
     });
   });

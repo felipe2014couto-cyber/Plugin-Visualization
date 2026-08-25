@@ -5,9 +5,13 @@ import { PiPointSearchDialog } from '../PiPointSearchDialog';
 import { searchPiPointsWithStatus } from '../piDataSource';
 import { PI_POINT_DRAG_MIME } from '../piPointDrag';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 jest.mock('../piDataSource', () => ({
   searchPiPointsWithStatus: jest.fn(),

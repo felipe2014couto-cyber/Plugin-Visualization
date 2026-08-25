@@ -4,9 +4,13 @@ import { createTheme } from '@grafana/data';
 import { createDefaultTimeSelection, type DisplayTimeSelection } from '../../../time/timeRange';
 import { TimeRangeBar } from '../TimeRangeBar';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 function Harness({ initial }: { initial: DisplayTimeSelection }) {
   const [selection, setSelection] = useState(initial);

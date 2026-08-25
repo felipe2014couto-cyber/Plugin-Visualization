@@ -4,9 +4,13 @@ import { createTheme } from '@grafana/data';
 import { createTrend } from '../../../createTrend';
 import { TrendPropertiesPanel } from '../TrendPropertiesPanel';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 describe('TrendPropertiesPanel', () => {
   const binding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID' };

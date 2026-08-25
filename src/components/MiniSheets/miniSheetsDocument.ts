@@ -70,6 +70,7 @@ export function serializeMiniSheets(
           cell.format.textColor ||
           cell.format.backgroundColor ||
           cell.format.horizontalAlign ||
+          cell.format.scientific ||
           (cell.format.decimalPlaces !== undefined && cell.format.decimalPlaces !== 'auto'))
     );
 
@@ -176,6 +177,7 @@ export function deserializeMiniSheets(rawDoc?: unknown): DeserializedMiniSheets 
         if (typeof cell.format.italic === 'boolean') cleanFormat.italic = cell.format.italic;
         if (typeof cell.format.textColor === 'string') cleanFormat.textColor = cell.format.textColor;
         if (typeof cell.format.backgroundColor === 'string') cleanFormat.backgroundColor = cell.format.backgroundColor;
+        if (typeof cell.format.scientific === 'boolean') cleanFormat.scientific = cell.format.scientific;
         if (['left', 'center', 'right'].includes(cell.format.horizontalAlign as string)) {
           cleanFormat.horizontalAlign = cell.format.horizontalAlign;
         }

@@ -108,14 +108,64 @@ export interface MiniSheetsPanelProps {
   dataSourceSrv?: any;
   initialDocument?: MiniSheetsDocument;
   onChange?: (document: MiniSheetsDocument) => void;
+  onOpenFunctionDialog?: (type: PiDataLinkFunctionType, formula: string, targetCell: string) => void;
   dataLinkMenuHostId?: string;
   dataLinkMenuActive?: boolean;
+}
+
+function getPiDataLinkInfoForCell(
+  cellCoord: CellCoord,
+  cellsMap: Map<string, CellData>
+): { functionType: PiDataLinkFunctionType; formula: string; targetCell: string; originCoord: CellCoord } | null {
+  const cell = cellsMap.get(`${cellCoord.col},${cellCoord.row}`);
+  if (!cell) {
+    return null;
+  }
+  let originCoord = cellCoord;
+  let originCell = cell;
+  if (cell.spilledFrom) {
+    const parsedSpill = parseCellAddress(cell.spilledFrom);
+    if (parsedSpill) {
+      const parent = cellsMap.get(`${parsedSpill.col},${parsedSpill.row}`);
+      if (parent) {
+        originCoord = parsedSpill;
+        originCell = parent;
+      }
+    }
+  }
+  const raw = originCell.rawValue?.trim() ?? '';
+  if (!raw.startsWith('=')) {
+    return null;
+  }
+  const parsed = parseFormula(raw);
+  if (typeof parsed !== 'object' || !('type' in parsed) || parsed.type === 'error') {
+    return null;
+  }
+  let functionType: PiDataLinkFunctionType | null = null;
+  if (parsed.type === 'pi_curr_val') functionType = 'PICurrVal';
+  else if (parsed.type === 'pi_arc_val') functionType = 'PIArcVal';
+  else if (parsed.type === 'pi_comp_dat') functionType = 'PICompDat';
+  else if (parsed.type === 'pi_samp_dat') functionType = 'PISampDat';
+  else if (parsed.type === 'pi_time_dat') functionType = 'PITimeDat';
+  else if (parsed.type === 'pi_adv_calc_val') functionType = 'PIAdvCalcVal';
+  else if (parsed.type === 'pi_time_filter') functionType = 'PITimeFilter';
+
+  if (!functionType) {
+    return null;
+  }
+  return {
+    functionType,
+    formula: raw,
+    targetCell: formatCellAddress(originCoord),
+    originCoord,
+  };
 }
 
 export function MiniSheetsPanel({
   dataSourceSrv,
   initialDocument,
   onChange,
+  onOpenFunctionDialog,
   dataLinkMenuHostId,
   dataLinkMenuActive = false,
 }: MiniSheetsPanelProps) {
@@ -157,7 +207,26 @@ export function MiniSheetsPanel({
   const inlineFormulaInputRef = useRef<HTMLInputElement>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [activeDataLinkDialog, setActiveDataLinkDialog] = useState<PiDataLinkFunctionType | null>(null);
+  const [dataLinkInitialFormula, setDataLinkInitialFormula] = useState<string | undefined>(undefined);
+  const [dataLinkTargetCell, setDataLinkTargetCell] = useState<string | undefined>(undefined);
+  const lastAutoOpenedOriginKeyRef = useRef<string | null>(null);
   const [dataLinkMenuHost, setDataLinkMenuHost] = useState<HTMLElement | null>(null);
+
+  // Auto-open or sync PiDataLink configuration dialog when selecting a cell with calculation/spill
+  useEffect(() => {
+    const piInfo = getPiDataLinkInfoForCell(activeCell, cells);
+    if (piInfo) {
+      const originKey = `${piInfo.originCoord.col},${piInfo.originCoord.row}`;
+      if (lastAutoOpenedOriginKeyRef.current !== originKey) {
+        lastAutoOpenedOriginKeyRef.current = originKey;
+        setActiveDataLinkDialog(piInfo.functionType);
+        setDataLinkInitialFormula(piInfo.formula);
+        setDataLinkTargetCell(piInfo.targetCell);
+      }
+    } else {
+      lastAutoOpenedOriginKeyRef.current = null;
+    }
+  }, [activeCell, cells]);
 
   useEffect(() => {
     setDataLinkMenuHost(dataLinkMenuActive && dataLinkMenuHostId
@@ -571,20 +640,82 @@ export function MiniSheetsPanel({
             return;
           }
 
-          // Use recorded history in a small window around target time or range up to target time
-          const range = { from: targetTime - 60_000, to: targetTime + 1000 };
-          const results = await getPiTrendsRecordedHistoryForRange([binding], range, dataSourceSrv);
+          // Use recorded history in a window around target time
           const bindingKey = `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
-          const result = results[bindingKey];
+          let results = await getPiTrendsRecordedHistoryForRange(
+            [binding],
+            { from: targetTime - 3600_000, to: targetTime + 3600_000 },
+            dataSourceSrv
+          );
+          let result = results[bindingKey];
+
+          if (!result || result.status !== 'success' || !result.series || result.series.points.length === 0) {
+            results = await getPiTrendsRecordedHistoryForRange(
+              [binding],
+              { from: targetTime - 24 * 3600_000, to: targetTime + 60_000 },
+              dataSourceSrv
+            );
+            result = results[bindingKey];
+          }
 
           let display = '#PI!';
-          let resultTimestamp: number | undefined;
+          let resultTimestamp: number | undefined = targetTime;
+          const recoveryMode = (parsed.mode ?? 'interpolated').toLowerCase();
+
           if (result && result.status === 'success' && result.series && result.series.points.length > 0) {
-            const points = result.series.points;
-            const lastPt = points[points.length - 1];
-            if (lastPt && lastPt.value !== undefined && lastPt.value !== null) {
-              display = String(lastPt.value);
-              resultTimestamp = lastPt.time;
+            const points = [...result.series.points].sort((a, b) => a.time - b.time);
+
+            if (recoveryMode === 'exact') {
+              const exactPt = points.find((p) => Math.abs(p.time - targetTime) < 1000);
+              if (exactPt && exactPt.value !== undefined && exactPt.value !== null) {
+                display = String(exactPt.value);
+                resultTimestamp = exactPt.time;
+              }
+            } else if (recoveryMode === 'at or before') {
+              const beforePts = points.filter((p) => p.time <= targetTime);
+              const lastBefore = beforePts.length > 0 ? beforePts[beforePts.length - 1] : points[0];
+              if (lastBefore && lastBefore.value !== undefined && lastBefore.value !== null) {
+                display = String(lastBefore.value);
+                resultTimestamp = lastBefore.time;
+              }
+            } else if (recoveryMode === 'at or after') {
+              const afterPts = points.filter((p) => p.time >= targetTime);
+              const firstAfter = afterPts.length > 0 ? afterPts[0] : points[points.length - 1];
+              if (firstAfter && firstAfter.value !== undefined && firstAfter.value !== null) {
+                display = String(firstAfter.value);
+                resultTimestamp = firstAfter.time;
+              }
+            } else {
+              // Interpolated (default)
+              const exactPt = points.find((p) => p.time === targetTime);
+              if (exactPt && exactPt.value !== undefined && exactPt.value !== null) {
+                display = String(exactPt.value);
+                resultTimestamp = targetTime;
+              } else {
+                let pBefore: { time: number; value: number } | undefined;
+                let pAfter: { time: number; value: number } | undefined;
+                for (const p of points) {
+                  if (p.time <= targetTime) {
+                    pBefore = p;
+                  }
+                  if (p.time >= targetTime && !pAfter) {
+                    pAfter = p;
+                  }
+                }
+
+                if (pBefore && pAfter && pBefore.time !== pAfter.time) {
+                  const fraction = (targetTime - pBefore.time) / (pAfter.time - pBefore.time);
+                  const interpolatedVal = pBefore.value + (pAfter.value - pBefore.value) * fraction;
+                  display = String(interpolatedVal);
+                } else if (pBefore) {
+                  display = String(pBefore.value);
+                } else if (pAfter) {
+                  display = String(pAfter.value);
+                } else {
+                  display = String(points[points.length - 1].value);
+                }
+                resultTimestamp = targetTime;
+              }
             }
           }
 
@@ -1543,6 +1674,11 @@ export function MiniSheetsPanel({
   }, [internalClipboard, pasteMatrix]);
 
   const handleExternalPaste = useCallback((e: React.ClipboardEvent) => {
+    const target = e.target as HTMLElement | null;
+    const targetTag = target?.tagName?.toLowerCase();
+    if (targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select' || target?.isContentEditable) {
+      return;
+    }
     if (editingCellCoord) {
       return;
     }
@@ -1587,6 +1723,40 @@ export function MiniSheetsPanel({
     setCells(finalMap);
     commitStateToHistory(finalMap);
   }, [commitStateToHistory, evaluateStaticFormulas, ranges]);
+
+  /**
+   * COLUMN AUTO-FIT: Auto-sizes the column width on double click based on its widest cell content.
+   */
+  const handleColAutoFit = useCallback((colIndex: number, e?: React.MouseEvent | React.SyntheticEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    const colHeaderLetter = colIndexToLetter(colIndex);
+    let maxContentWidth = colHeaderLetter.length * 12 + 36;
+
+    for (let r = 0; r < TOTAL_ROWS; r++) {
+      const cell = cellsRef.current.get(`${colIndex},${r}`);
+      if (cell) {
+        const text = formatDisplayNumber(cell.displayValue ?? cell.rawValue ?? '', cell.format?.decimalPlaces, cell.format?.scientific).trim();
+        if (text) {
+          const charWidth = cell.format?.bold ? 9.5 : 8.0;
+          const estimatedWidth = Math.ceil(text.length * charWidth + 28);
+          if (estimatedWidth > maxContentWidth) {
+            maxContentWidth = estimatedWidth;
+          }
+        }
+      }
+    }
+
+    const autoWidth = Math.max(MIN_COL_WIDTH, Math.min(600, maxContentWidth));
+    const nextWidths = new Map(colWidthsRef.current);
+    nextWidths.set(colIndex, autoWidth);
+    setColWidths(nextWidths);
+    colWidthsRef.current = nextWidths;
+    commitStateToHistory(cellsRef.current, nextWidths);
+    notifyDocumentChange();
+  }, [commitStateToHistory, notifyDocumentChange]);
 
   // Pointer event handlers for Cell Selection & Dragging
   const handleCellPointerDown = (col: number, row: number, e: React.PointerEvent) => {
@@ -2139,31 +2309,68 @@ export function MiniSheetsPanel({
 
   // Primary Range bounds for Fill Handle
   const primaryRange = ranges.length > 0 ? normalizeRange(ranges[ranges.length - 1]) : null;
-  const dataLinkMenu = <>
-    <PiDataLinkToolbar activeFunction={activeDataLinkDialog} onOpenFunction={setActiveDataLinkDialog} />
-    {activeDataLinkDialog && (
-      <PiDataLinkFunctionDialog
-        embedded
-        functionType={activeDataLinkDialog}
-        initialTargetCell={formatCellAddress(activeCell)}
-        currentSelectionAddress={ranges.length > 0 ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS) : undefined}
-        onInsert={(formula, targetAddress) => {
-          const targetRange = parseRangeAddresses(targetAddress);
-          const coord = targetRange[0] ?? parseCellAddress(targetAddress) ?? activeCell;
-          setActiveCell(coord);
-          setRanges([
-            targetRange.length > 1
-              ? rangeFromCells(targetRange[0], targetRange[targetRange.length - 1])
-              : rangeFromCells(coord, coord),
-          ]);
-          computeCell(coord, formula);
-          setFormulaBarText(formula);
-          setActiveDataLinkDialog(null);
+  const dataLinkMenu = (
+    <div
+      onKeyDown={(e) => e.stopPropagation()}
+      onPaste={(e) => e.stopPropagation()}
+      onCopy={(e) => e.stopPropagation()}
+      onCut={(e) => e.stopPropagation()}
+      style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}
+    >
+      <PiDataLinkToolbar
+        activeFunction={activeDataLinkDialog}
+        onOpenFunction={(type) => {
+          if (activeDataLinkDialog === type) {
+            setActiveDataLinkDialog(null);
+            setDataLinkInitialFormula(undefined);
+            setDataLinkTargetCell(undefined);
+            return;
+          }
+          const piInfo = getPiDataLinkInfoForCell(activeCell, cells);
+          if (piInfo && piInfo.functionType === type) {
+            setActiveDataLinkDialog(type);
+            setDataLinkInitialFormula(piInfo.formula);
+            setDataLinkTargetCell(piInfo.targetCell);
+            lastAutoOpenedOriginKeyRef.current = `${piInfo.originCoord.col},${piInfo.originCoord.row}`;
+          } else {
+            setActiveDataLinkDialog(type);
+            setDataLinkInitialFormula(undefined);
+            setDataLinkTargetCell(formatCellAddress(activeCell));
+          }
         }}
-        onClose={() => setActiveDataLinkDialog(null)}
       />
-    )}
-  </>;
+      {activeDataLinkDialog && (
+        <PiDataLinkFunctionDialog
+          embedded
+          functionType={activeDataLinkDialog}
+          initialFormula={dataLinkInitialFormula}
+          initialTargetCell={dataLinkTargetCell || formatCellAddress(activeCell)}
+          currentSelectionAddress={ranges.length > 0 ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS) : undefined}
+          onInsert={(formula, targetAddress) => {
+            const targetRange = parseRangeAddresses(targetAddress);
+            const coord = targetRange[0] ?? parseCellAddress(targetAddress) ?? activeCell;
+            setActiveCell(coord);
+            setRanges([
+              targetRange.length > 1
+                ? rangeFromCells(targetRange[0], targetRange[targetRange.length - 1])
+                : rangeFromCells(coord, coord),
+            ]);
+            computeCell(coord, formula);
+            setFormulaBarText(formula);
+            setDataLinkInitialFormula(formula);
+            setDataLinkTargetCell(formatCellAddress(coord));
+            lastAutoOpenedOriginKeyRef.current = `${coord.col},${coord.row}`;
+          }}
+          onClose={() => {
+            setActiveDataLinkDialog(null);
+            setDataLinkInitialFormula(undefined);
+            setDataLinkTargetCell(undefined);
+            lastAutoOpenedOriginKeyRef.current = null;
+          }}
+        />
+      )}
+    </div>
+  );
 
   return (
     <section
@@ -2311,6 +2518,18 @@ export function MiniSheetsPanel({
             <option value="3">.3</option>
             <option value="4">.4</option>
           </select>
+
+          {/* Notação Científica / Exponencial */}
+          <button
+            type="button"
+            className={`${styles.formatButton} ${activeFormat.scientific ? styles.formatButtonActive : ''}`}
+            data-testid="mini-sheets-format-scientific"
+            title={activeFormat.scientific ? 'Desativar notação exponencial / científica' : 'Ativar notação exponencial / científica (ex: 9.52E-05)'}
+            onClick={() => handleApplyFormat({ scientific: !activeFormat.scientific })}
+            style={{ fontWeight: 600, fontSize: '11px', minWidth: '34px', letterSpacing: '0.5px' }}
+          >
+            <span>EXP</span>
+          </button>
         </div>
 
         <button
@@ -2425,11 +2644,12 @@ export function MiniSheetsPanel({
                       data-testid={`mini-sheets-col-resizer-${colIndexToLetter(cIndex)}`}
                       onPointerDown={(e) => handleColResizePointerDown(cIndex, e)}
                       onMouseDown={(e) => handleColResizePointerDown(cIndex, e as any)}
+                      onDoubleClick={(e) => handleColAutoFit(cIndex, e)}
                       onClick={(e) => {
                         e.stopPropagation();
                         e.preventDefault();
                       }}
-                      title="Arrastar para redimensionar coluna"
+                      title="Duplo clique para auto-ajustar ou arrastar para redimensionar"
                     />
                   </th>
                 );
@@ -2467,7 +2687,7 @@ export function MiniSheetsPanel({
                     const colWidth = getColWidth(cIndex);
 
                     const formattedDisplay = cell?.displayValue
-                      ? formatDisplayNumber(cell.displayValue, cell.format?.decimalPlaces)
+                      ? formatDisplayNumber(cell.displayValue, cell.format?.decimalPlaces, cell.format?.scientific)
                       : '';
 
                     // Inline style override for custom cell formatting + width

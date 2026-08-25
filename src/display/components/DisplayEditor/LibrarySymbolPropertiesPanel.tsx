@@ -15,15 +15,24 @@ import type { PiDigitalStatesResult } from '../../../pi/piDataSource';
 export interface LibrarySymbolPropertiesPanelProps {
   properties: LibrarySymbolProperties;
   selectedPiPoint?: PiPointSearchResult | null;
+  calculationName?: string;
   loadDigitalStates?: (binding: import('../../../pi/piPointBinding').PiPointBinding) => Promise<PiDigitalStatesResult>;
   onChange: (patch: Partial<LibrarySymbolProperties>) => void;
   onMultistateChange: (config: MultistateConfig) => void;
 }
 
-export function LibrarySymbolPropertiesPanel({ properties, selectedPiPoint, loadDigitalStates, onChange, onMultistateChange }: LibrarySymbolPropertiesPanelProps) {
+export function LibrarySymbolPropertiesPanel({
+  properties,
+  selectedPiPoint,
+  calculationName,
+  loadDigitalStates,
+  onChange,
+  onMultistateChange,
+}: LibrarySymbolPropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const binding = isPiPointBinding(properties.binding) ? properties.binding : undefined;
   const selectedBinding = selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined;
+  const isBound = Boolean(binding || properties.calculationId);
 
   return (
     <aside className={styles.panel} data-testid="library-symbol-properties-panel" aria-label="Configuração do símbolo">
@@ -39,19 +48,41 @@ export function LibrarySymbolPropertiesPanel({ properties, selectedPiPoint, load
           <TransparentColorPicker color={properties.color} fallbackColor={DEFAULT_LIBRARY_SYMBOL_COLOR} testId="library-symbol-color" onChange={(color) => onChange({ color })} />
         </label>
         {binding ? (
-          <div className={styles.binding}>PI Point: {binding.pointName}</div>
+          <div className={styles.bindingRow}>
+            <span className={styles.binding}>PI Point: {binding.pointName}</span>
+            <button
+              type="button"
+              className={styles.unbindButton}
+              data-testid="library-symbol-unbind-point"
+              onClick={() => onChange({ binding: undefined, calculationId: undefined })}
+            >
+              Desvincular
+            </button>
+          </div>
+        ) : properties.calculationId ? (
+          <div className={styles.bindingRow}>
+            <span className={styles.binding}>Cálculo: {calculationName || properties.calculationId}</span>
+            <button
+              type="button"
+              className={styles.unbindButton}
+              data-testid="library-symbol-unbind-calc"
+              onClick={() => onChange({ binding: undefined, calculationId: undefined })}
+            >
+              Desvincular
+            </button>
+          </div>
         ) : selectedBinding ? (
           <button type="button" className={styles.bindButton} data-testid="library-symbol-bind-point" onClick={() => onChange({ binding: selectedBinding })}>
             Vincular PI Point selecionado
           </button>
         ) : (
-          <div className={styles.hint}>Selecione um PI Point para habilitar o Multistate.</div>
+          <div className={styles.hint}>Arraste uma Tag PI ou de Cálculo sobre o símbolo para habilitar o Multistate.</div>
         )}
       </div>
-      {binding ? (
+      {isBound ? (
         <MultistatePropertiesPanel config={properties.multistate} binding={binding} loadDigitalStates={loadDigitalStates} onChange={onMultistateChange} />
       ) : (
-        <div className={styles.hint}>Depois de vincular um PI Point, você poderá criar regras de cor.</div>
+        <div className={styles.hint}>Depois de vincular um PI Point ou Cálculo, você poderá criar regras de cor.</div>
       )}
     </aside>
   );
@@ -91,7 +122,26 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-size: 10px;
     input[type='color'] { width: 100%; height: 27px; padding: 2px; border: 1px solid var(--border-color); border-radius: 0; background: var(--input-bg); }
   `,
-  binding: css`color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere;`,
-  bindButton: css`width: 100%; min-height: 27px; padding: 3px 6px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-primary); font-size: 10px;`,
+  bindingRow: css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  `,
+  binding: css`color: var(--text-secondary); font-size: 10px; overflow-wrap: anywhere; flex: 1;`,
+  bindButton: css`width: 100%; min-height: 27px; padding: 3px 6px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-primary); font-size: 10px; cursor: pointer;`,
+  unbindButton: css`
+    padding: 2px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 9px;
+    cursor: pointer;
+    &:hover {
+      color: #ff5555;
+      border-color: #ff5555;
+    }
+  `,
   hint: css`border-top: 1px solid var(--border-color); padding: 10px 12px; color: var(--text-secondary); font-size: 9px; line-height: 1.4;`,
 });

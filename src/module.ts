@@ -1,3 +1,4 @@
+import './polyfills';
 import { AppPlugin } from '@grafana/data';
 import { App } from './components/App';
 

@@ -288,7 +288,7 @@ export function DisplaySurface({
     const calculationId = typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
       ? (element.properties as { calculationId: string }).calculationId
       : undefined;
-    if (calculationId && (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE)) {
+    if (calculationId && (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE || element.type === TEXT_TYPE)) {
       const calculation = calculations.find((item) => item.id === calculationId);
       return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
     }
@@ -1072,11 +1072,23 @@ export function DisplaySurface({
             );
           }
           if (element.type === RECTANGLE_TYPE) {
-            return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
+            const shape = element as RectangleElement;
+            const calculation = typeof shape.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === shape.properties.calculationId)
+              : undefined;
+            const runtimeState = calculation
+              ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+              : runtimeStates.get(element.id);
+            return renderGeometricShape(shape, runtimeState);
           }
           if (element.type === TEXT_TYPE) {
             const textElement = element as TextElement;
-            const runtimeState = runtimeStates.get(element.id);
+            const calculation = typeof textElement.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === textElement.properties.calculationId)
+              : undefined;
+            const runtimeState = calculation
+              ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+              : runtimeStates.get(element.id);
             const runtimeVal = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
             const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
             const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
@@ -1155,7 +1167,12 @@ export function DisplaySurface({
           if (element.type === LIBRARY_SYMBOL_TYPE) {
             const symbol = element as LibrarySymbolElement;
             const source = getLibrarySymbolSource(symbol);
-            const runtimeState = runtimeStates.get(element.id);
+            const calculation = typeof symbol.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === symbol.properties.calculationId)
+              : undefined;
+            const runtimeState = calculation
+              ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+              : runtimeStates.get(element.id);
             const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
             const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
             return (
