@@ -1810,7 +1810,7 @@ export function DisplayEditor({
             onOpenInNewTabChange={handleLinkOpenInNewTabChange}
           />
         )}
-        {mode === 'view' && trendPointInfo && <PiPointInfoPanel {...trendPointInfo} />}
+        {mode === 'view' && trendPointInfo && <PiPointInfoPanel {...trendPointInfo} onClose={() => setTrendPointInfo(null)} />}
         {selectedGauge && (
           <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} binding={selectedGauge.properties.binding} loadDigitalStates={loadDigitalStates} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
@@ -1882,7 +1882,7 @@ export function DisplayEditor({
           timeSelection={timeSelection}
           onTimeSelectionChange={onTimeSelectionChange}
           loading={trendPopup.loading}
-          pointInfo={trendPointInfo ?? undefined}
+          pointInfo={trendPointInfo ? { ...trendPointInfo, onClose: () => setTrendPointInfo(null) } : undefined}
           onSeriesContextMenu={handleTrendLegendInfo}
           onClose={handleTrendPopupClose}
         />
