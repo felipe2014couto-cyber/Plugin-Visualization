@@ -363,12 +363,12 @@ export function App() {
 
   const programmingPiContexts = useMemo<ProgrammingPiPointContext[]>(() => programmingPiPoints.flatMap((point) => {
     const value = programmingPiValues[getProgrammingPiPointKey(point)];
-    return value ? [{
+    return [{
       name: point.name,
-      value: value.value,
-      timestamp: value.timestamp,
-      unit: value.unit ?? point.engineeringUnit,
-    }] : [];
+      value: value?.value ?? null,
+      ...(value?.timestamp ? { timestamp: value.timestamp } : {}),
+      unit: value?.unit ?? point.engineeringUnit,
+    }];
   }), [programmingPiPoints, programmingPiValues]);
   const handleAddProgrammingToDisplay = useCallback(() => {
     setDocument((current) => {
