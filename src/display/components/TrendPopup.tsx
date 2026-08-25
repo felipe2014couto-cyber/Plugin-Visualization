@@ -4,7 +4,7 @@ import { TimeRangeBar } from '../../components/TimeRangeBar';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../time/timeRange';
 import type { TrendSeriesViewState } from './TrendElementView';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
-import { DEFAULT_TREND_VISUAL_OPTIONS, type TrendScaleMode, type TrendVisualOptions } from '../createTrend';
+import { DEFAULT_TREND_VISUAL_OPTIONS, type TrendScaleMode, type TrendSeries, type TrendVisualOptions } from '../createTrend';
 import {
   getEffectiveTrendLegendWidth,
   truncateLegendLabel,
@@ -14,6 +14,7 @@ import {
   pruneTrendSeriesSelection,
 } from '../trendLegendLayout';
 import { TrendLegendResizeHandle } from './TrendLegendResizeHandle';
+import { PiPointInfoPanel, type PiPointInfoPanelProps } from './DisplayEditor/PiPointInfoPanel';
 
 export interface TrendPopupProps {
   seriesStates: readonly TrendSeriesViewState[];
@@ -23,6 +24,8 @@ export interface TrendPopupProps {
   loading?: boolean;
   visualOptions?: TrendVisualOptions;
   initialCursors?: readonly TrendCursor[];
+  pointInfo?: PiPointInfoPanelProps;
+  onSeriesContextMenu?: (series: TrendSeries, value: string | number | undefined) => void;
   onClose: () => void;
 }
 
@@ -43,7 +46,7 @@ interface PopupZoom {
   bottomRatio: number;
 }
 
-export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelectionChange, loading = false, visualOptions = DEFAULT_TREND_VISUAL_OPTIONS, initialCursors = EMPTY_TREND_CURSORS, onClose }: TrendPopupProps) {
+export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelectionChange, loading = false, visualOptions = DEFAULT_TREND_VISUAL_OPTIONS, initialCursors = EMPTY_TREND_CURSORS, pointInfo, onSeriesContextMenu, onClose }: TrendPopupProps) {
   const [scaleMode, setScaleMode] = useState<PopupScaleMode>(visualOptions.scaleMode === 'configurable' ? 'configurable' : 'individual');
   const [customScales, setCustomScales] = useState<PopupCustomScales>(() => getInitialCustomScales(seriesStates));
   const [cursorMode, setCursorMode] = useState(true);
@@ -226,8 +229,9 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
             }) : <span className={styles.noConfigurableSeries}>Nenhuma série numérica disponível.</span>}
           </div>
         )}
-        <div className={styles.chartArea}>
-          <svg
+        <div className={styles.chartBody}>
+          <div className={styles.chartArea}>
+            <svg
             className={styles.chart}
             width="100%"
             height="100%"
@@ -270,9 +274,12 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
                 setSelectedCursorId((current) => current === id ? null : current);
                 setCursorDrag((current) => current?.id === id ? null : current);
               }}
+              onSeriesContextMenu={onSeriesContextMenu}
             />
-          </svg>
-          {loading && <span className={styles.loading} data-testid="trend-popup-loading">Carregando tendência...</span>}
+            </svg>
+            {loading && <span className={styles.loading} data-testid="trend-popup-loading">Carregando tendência...</span>}
+          </div>
+          {pointInfo && <PiPointInfoPanel {...pointInfo} />}
         </div>
       </div>
       {timeSelection && onTimeSelectionChange && (
@@ -309,6 +316,7 @@ interface PopupChartProps extends Pick<TrendPopupProps, 'seriesStates' | 'timeRa
   onMoveCursor: (id: string, time: number) => void;
   onEndCursorDrag: () => void;
   onRemoveCursor: (id: string) => void;
+  onSeriesContextMenu?: (series: TrendSeries, value: string | number | undefined) => void;
 }
 
 function PopupChart({
@@ -330,6 +338,7 @@ function PopupChart({
   onMoveCursor,
   onEndCursorDrag,
   onRemoveCursor,
+  onSeriesContextMenu,
 }: PopupChartProps) {
   const [zoomDrag, setZoomDrag] = useState<{ pointerId: number; start: { x: number; y: number }; current: { x: number; y: number } } | null>(null);
   const [selectedSeriesKeys, setSelectedSeriesKeys] = useState<Set<string>>(() => new Set());
@@ -340,7 +349,7 @@ function PopupChart({
   }, [zoomEnabled]);
   const series = seriesStates.flatMap(({ series: configured, runtimeState }) => {
     const data = runtimeState.status === 'success' || runtimeState.status === 'error' ? runtimeState.data : undefined;
-    return data ? [{ key: popupSeriesKey(configured), name: configured.legendLabel || configured.binding.pointName, color: configured.color, primaryScale: configured.primaryScale === true, scaleMin: configured.scaleMin, scaleMax: configured.scaleMax, lineWidth: configured.lineWidth ?? 2, lineStyle: configured.lineStyle ?? 'solid', marker: configured.marker ?? 'none', data }] : [];
+    return data ? [{ configured, key: popupSeriesKey(configured), name: configured.legendLabel || configured.binding.pointName, color: configured.color, primaryScale: configured.primaryScale === true, scaleMin: configured.scaleMin, scaleMax: configured.scaleMax, lineWidth: configured.lineWidth ?? 2, lineStyle: configured.lineStyle ?? 'solid', marker: configured.marker ?? 'none', data }] : [];
   });
   useEffect(() => {
     const validKeys = new Set(series.map((item) => item.key));
@@ -534,7 +543,7 @@ function PopupChart({
           </g>
         );
       })}
-      {isLegendVisible && scaledSeries.map(({ key, name, color, data, stateLabels }, index) => {
+      {isLegendVisible && scaledSeries.map(({ configured, key, name, color, data, stateLabels }, index) => {
         const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
         const currentValue = points.at(-1)?.value;
         const states = (data.states ?? []).filter((state) => state.time >= domainStart && state.time <= domainEnd);
@@ -558,6 +567,12 @@ function PopupChart({
             }}
             onPointerDown={(event) => {
               event.stopPropagation();
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setSelectedSeriesKeys(new Set([key]));
+              onSeriesContextMenu?.(configured, currentValue ?? currentState);
             }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
@@ -1146,6 +1161,12 @@ const styles = {
     flex: 1 1 auto;
     min-height: 0;
     background: transparent;
+  `,
+  chartBody: css`
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
   `,
   chart: css`
     display: block;

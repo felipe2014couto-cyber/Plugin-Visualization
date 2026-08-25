@@ -1882,6 +1882,8 @@ export function DisplayEditor({
           timeSelection={timeSelection}
           onTimeSelectionChange={onTimeSelectionChange}
           loading={trendPopup.loading}
+          pointInfo={trendPointInfo ?? undefined}
+          onSeriesContextMenu={handleTrendLegendInfo}
           onClose={handleTrendPopupClose}
         />
       )}

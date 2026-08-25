@@ -132,6 +132,22 @@ describe('TrendPopup - escalas', () => {
     expect(screen.getByTestId('trend-popup-legend-resizer')).toBeInTheDocument();
   });
 
+  it('abre as informações da série com clique direito na legenda', () => {
+    const onSeriesContextMenu = jest.fn();
+    render(<TrendPopup
+      seriesStates={seriesStates}
+      timeRange={{ from: 1_000, to: 2_000 }}
+      pointInfo={{ pointName: 'A', value: 10, metadata: { name: 'A', description: 'Tag A' } }}
+      onSeriesContextMenu={onSeriesContextMenu}
+      onClose={jest.fn()}
+    />);
+
+    fireEvent.contextMenu(screen.getByTestId('trend-popup-legend-item-0'));
+
+    expect(onSeriesContextMenu).toHaveBeenCalledWith(seriesStates[0].series, 10);
+    expect(screen.getByTestId('trend-point-info-panel')).toHaveTextContent('Tag A');
+  });
+
   describe('seleção de séries pela legenda no popup', () => {
     it('permite selecionar série, desselecionar e usar Ctrl+clique para multi-seleção no popup', () => {
       render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
@@ -171,4 +187,3 @@ describe('TrendPopup - escalas', () => {
     });
   });
 });
-

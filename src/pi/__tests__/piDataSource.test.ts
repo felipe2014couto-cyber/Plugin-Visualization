@@ -1,5 +1,5 @@
 import type { DataSourceSrv } from '@grafana/runtime';
-import { checkPiConnection, getPiPointDatabaseLimits, getPiPointDigitalStates, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
+import { checkPiConnection, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
 
 function makeDataSource(overrides: Partial<{ uid: string; name: string; isDefault: boolean }> = {}) {
   return {
@@ -40,6 +40,26 @@ describe('PI data source integration', () => {
     await expect(getPiPointDatabaseLimits({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG', webId: 'point-webid' }, dataSourceSrv))
       .resolves.toEqual({ zero: -50, span: 100 });
     expect(getResource).toHaveBeenCalledWith('/points/point-webid');
+  });
+
+  it('combina os atributos completos usados no painel de informações da tag', async () => {
+    const getResource = jest.fn(async (path: string) => {
+      if (path.startsWith('/points/meta-point/attributes')) {
+        return { Items: [
+          { Name: 'descriptor', Value: { Value: 'Motor principal' } },
+          { Name: 'instrumenttag', Value: { Value: 'MTR-101' } },
+          { Name: 'compdev', Value: { Value: 0 } },
+          { Name: 'excdev', Value: { Value: 0.5 } },
+          { Name: 'engunits', Value: { Value: 'Hz' } },
+        ] };
+      }
+      if (path.startsWith('/points/meta-point')) return { Name: 'MOTOR_HZ', PointType: 'Float32', Zero: 0, Span: 100 };
+      return {};
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+
+    await expect(getPiPointMetadata({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'MOTOR_HZ', webId: 'meta-point' }, dataSourceSrv))
+      .resolves.toEqual({ name: 'MOTOR_HZ', description: 'Motor principal', instrumentTag: 'MTR-101', pointType: 'Float32', zero: 0, span: 100, compDev: 0, excDev: 0.5, engineeringUnit: 'Hz' });
   });
 
   it('consulta o State Set real de uma PI Point Digital e reutiliza o cache', async () => {

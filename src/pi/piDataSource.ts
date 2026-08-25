@@ -60,6 +60,7 @@ export const PI_POINT_SEARCH_MAX_RESULTS = 1000;
 const PI_POINT_SEARCH_DEFAULT_LIMIT = PI_POINT_SEARCH_MAX_RESULTS;
 const PI_POINT_METADATA_CONCURRENCY = 8;
 const piPointMetadataCache = new Map<string, PiPointSearchResult>();
+const piPointDetailsMetadataCache = new Map<string, Promise<PiPointMetadata>>();
 
 export interface PiPointValue {
   value: unknown;
@@ -608,11 +609,30 @@ export async function getPiPointMetadata(
   binding: PiPointBinding,
   dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
 ): Promise<PiPointMetadata> {
+  const cacheKey = `${binding.dataSourceUid}:${binding.webId ?? `${binding.serverPath}\\${binding.pointName}`}`;
+  const cached = piPointDetailsMetadataCache.get(cacheKey);
+  if (cached) return cached;
+  const request = loadPiPointMetadata(binding, dataSourceSrv).catch((error) => {
+    piPointDetailsMetadataCache.delete(cacheKey);
+    throw error;
+  });
+  piPointDetailsMetadataCache.set(cacheKey, request);
+  return request;
+}
+
+async function loadPiPointMetadata(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'>,
+): Promise<PiPointMetadata> {
   const dataSource = resolvePiDataSource(dataSourceSrv);
   if (!dataSource) throw new Error('PI Data Source não configurada');
   const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
-  const metadata = await getPiPointMetadataForBinding(binding, instance, instance as PiDataSourceResourceApi, true);
-  const fields = metadata ?? {};
+  const resourceApi = instance as PiDataSourceResourceApi;
+  const metadata = await getPiPointMetadataForBinding(binding, instance, resourceApi, true);
+  const attributes = binding.webId && typeof resourceApi.getResource === 'function'
+    ? await getPiPointAttributes(resourceApi, binding.webId)
+    : {};
+  const fields = { ...(metadata ?? {}), ...attributes };
   const description = getMetadataString(fields, 'Description', 'Descriptor');
   const instrumentTag = getMetadataString(fields, 'InstrumentTag', 'SourceTag', 'PointSource');
   const pointType = getMetadataString(fields, 'PointType') ?? binding.pointType;
@@ -632,6 +652,47 @@ export async function getPiPointMetadata(
     ...(excDev !== undefined ? { excDev } : {}),
     ...(engineeringUnit ? { engineeringUnit } : {}),
   };
+}
+
+async function getPiPointAttributes(resourceApi: PiDataSourceResourceApi, webId: string): Promise<Record<string, unknown>> {
+  const pointPath = `/points/${encodeURIComponent(webId)}/attributes`;
+  for (const path of [`${pointPath}?selectedFields=Items.Name;Items.Value`, pointPath]) {
+    try {
+      const values = normalizePiPointAttributes(await resourceApi.getResource(path));
+      if (Object.keys(values).length > 0) return values;
+    } catch {
+      // Try the next representation supported by this PI Web API version.
+    }
+  }
+  const names = ['descriptor', 'instrumenttag', 'sourcetag', 'pointsource', 'compdev', 'excdev', 'engunits'];
+  const responses = await Promise.all(names.map(async (name) => {
+    try {
+      const response = await resourceApi.getResource(`${pointPath}/${encodeURIComponent(name)}`);
+      return [name, unwrapPiAttributeValue(response)] as const;
+    } catch {
+      return [name, undefined] as const;
+    }
+  }));
+  return Object.fromEntries(responses.filter((entry): entry is readonly [string, unknown] => entry[1] !== undefined));
+}
+
+function normalizePiPointAttributes(response: unknown): Record<string, unknown> {
+  const entries = getResourceItems(response).flatMap((item): Array<[string, unknown]> => {
+    if (!item || typeof item !== 'object') return [];
+    const fields = item as Record<string, unknown>;
+    const name = getUnknownString(fields.Name) ?? getUnknownString(fields.name);
+    const value = unwrapPiAttributeValue(fields.Value ?? fields.value);
+    return name && value !== undefined ? [[name, value]] : [];
+  });
+  return Object.fromEntries(entries);
+}
+
+function unwrapPiAttributeValue(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  const fields = value as Record<string, unknown>;
+  if ('Value' in fields) return unwrapPiAttributeValue(fields.Value);
+  if ('value' in fields) return unwrapPiAttributeValue(fields.value);
+  return undefined;
 }
 
 /**
