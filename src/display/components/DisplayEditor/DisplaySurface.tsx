@@ -895,6 +895,7 @@ export function DisplaySurface({
       width={surface.width}
       height={surface.height}
       viewBox={`${viewportX} ${viewportY} ${viewportWidth} ${viewportHeight}`}
+      style={{ minWidth: surface.width, minHeight: surface.height }}
       xmlns="http://www.w3.org/2000/svg"
       className={css`
         display: block;

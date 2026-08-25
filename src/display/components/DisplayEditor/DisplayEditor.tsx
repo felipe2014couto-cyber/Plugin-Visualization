@@ -2589,12 +2589,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
   surfaceWrapper: css`
     display: flex;
     position: relative;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-start;
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
-    overflow: hidden;
+    /* Keep the full display reachable when its surface is larger than the
+       available editor area. The SVG supplies the intrinsic minimum size;
+       these scrollbars only appear when they are actually needed. */
+    overflow: auto;
     padding: 0;
     background-color: var(--canvas-bg);
     background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
@@ -2606,6 +2609,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
       height: 100%;
       max-width: none;
       max-height: none;
+      margin: auto;
     }
 
     @media (max-width: 760px) {
