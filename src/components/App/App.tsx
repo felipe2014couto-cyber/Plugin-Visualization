@@ -3,6 +3,7 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { createDisplayDocument } from '../../display';
+import type { DisplayDocument } from '../../display/displayDocument';
 import { appendProgramming, createProgramming, PROGRAMMING_TYPE, type ProgrammingElement } from '../../display/createProgramming';
 import { DisplayEditor } from '../../display/components/DisplayEditor';
 import {
@@ -85,6 +86,27 @@ function queryReferenceToPiPoint(reference: ProgrammingQueryReference): PiPointS
 function piPointToQueryReference(point: PiPointSearchResult): ProgrammingQueryReference | undefined {
   const binding = createPiPointBinding(point);
   return binding ? { name: point.name, binding, ...(point.engineeringUnit ? { unit: point.engineeringUnit } : {}) } : undefined;
+}
+
+function getDocumentWithProgrammingDraft(document: DisplayDocument, editingElementId: string | null, draft: ProgrammingDocument): DisplayDocument {
+  if (!editingElementId) {
+    return document;
+  }
+  return {
+    ...document,
+    elements: document.elements.map((element) => element.id === editingElementId && element.type === PROGRAMMING_TYPE
+      ? {
+        ...element,
+        properties: {
+          ...element.properties,
+          html: draft.html,
+          css: draft.css,
+          javascript: draft.javascript,
+          query: (draft.query ?? []).map((item) => ({ ...item, binding: { ...item.binding } })),
+        },
+      }
+      : element),
+  };
 }
 
 export function App() {
@@ -470,13 +492,15 @@ export function App() {
 
     setSaveState('saving');
     try {
-      const saved = await savePimsVisionDashboard(document, dashboardUid, selectedFolderUid);
+      const documentToSave = getDocumentWithProgrammingDraft(document, editingProgrammingElementId, programmingDraft);
+      const saved = await savePimsVisionDashboard(documentToSave, dashboardUid, selectedFolderUid);
+      setDocument(documentToSave);
       setDashboardUid(saved.uid);
       setSaveState('saved');
     } catch {
       setSaveState('error');
     }
-  }, [dashboardUid, document, openSaveAsDialog, selectedFolderUid]);
+  }, [dashboardUid, document, editingProgrammingElementId, openSaveAsDialog, programmingDraft, selectedFolderUid]);
 
   const handleSaveAsDashboard = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -494,7 +518,7 @@ export function App() {
         return;
       }
 
-      const documentToSave = { ...document, name: title };
+      const documentToSave = { ...getDocumentWithProgrammingDraft(document, editingProgrammingElementId, programmingDraft), name: title };
       setDocument(documentToSave);
       const saved = await savePimsVisionDashboard(documentToSave, undefined, saveFolderUid);
       setDashboardUid(saved.uid);
@@ -506,7 +530,7 @@ export function App() {
     } catch {
       setSaveState('error');
     }
-  }, [document, saveFolderUid, saveName, updateDashboardUrl]);
+  }, [document, editingProgrammingElementId, programmingDraft, saveFolderUid, saveName, updateDashboardUrl]);
 
   if (authenticationState !== 'authenticated') {
     const loginUrl = `/login?redirect=${encodeURIComponent(globalThis.location?.href ?? '')}`;
