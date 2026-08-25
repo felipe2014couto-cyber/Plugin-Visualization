@@ -307,7 +307,11 @@ function portableElement(input: unknown): DisplayElement {
         properties: {
           fill: typeof input.properties.fill === 'string' ? input.properties.fill : DEFAULT_RECTANGLE_PROPERTIES.fill,
           stroke: typeof input.properties.stroke === 'string' ? input.properties.stroke : DEFAULT_RECTANGLE_PROPERTIES.stroke,
-          shape: input.properties.shape === 'ellipse' || input.properties.shape === 'triangle'
+          shape: input.properties.shape === 'ellipse'
+            || input.properties.shape === 'line'
+            || input.properties.shape === 'arc'
+            || input.properties.shape === 'pentagon'
+            || input.properties.shape === 'triangle'
             ? input.properties.shape
             : 'rectangle',
           rotation: normalizeRotation(input.properties.rotation),

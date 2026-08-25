@@ -1337,24 +1337,36 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
     'data-element-id': parentElementId ?? element.id,
     'data-element-type': element.type,
     'data-shape': element.properties.shape ?? 'rectangle',
-    x: element.x,
-    y: element.y,
-    width: element.width,
-    height: element.height,
     style: { cursor: 'move' },
     transform: `rotate(${Number(element.properties.rotation) || 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
-    fill,
     stroke: getElementStroke(element),
     strokeWidth: 1,
     pointerEvents: 'all' as const,
   };
   if (element.properties.shape === 'ellipse') {
-    return <ellipse {...common} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} />;
+    return <ellipse {...common} fill={fill} cx={element.x + element.width / 2} cy={element.y + element.height / 2} rx={element.width / 2} ry={element.height / 2} />;
   }
   if (element.properties.shape === 'triangle') {
-    return <polygon {...common} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} />;
+    return <polygon {...common} fill={fill} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} />;
   }
-  return <rect {...common} />;
+  if (element.properties.shape === 'line') {
+    return <line {...common} fill="none" x1={element.x} y1={element.y + element.height / 2} x2={element.x + element.width} y2={element.y + element.height / 2} />;
+  }
+  if (element.properties.shape === 'arc') {
+    const startX = element.x + element.width * 0.1;
+    const startY = element.y + element.height * 0.12;
+    const endX = element.x + element.width * 0.88;
+    const endY = element.y + element.height * 0.9;
+    return <path {...common} fill="none" d={`M ${startX} ${startY} A ${element.width * 0.9} ${element.height * 0.9} 0 0 1 ${endX} ${endY}`} />;
+  }
+  if (element.properties.shape === 'pentagon') {
+    const x = element.x;
+    const y = element.y;
+    const w = element.width;
+    const h = element.height;
+    return <polygon {...common} fill={fill} points={`${x + w / 2},${y} ${x + w},${y + h * 0.38} ${x + w * 0.8},${y + h} ${x + w * 0.2},${y + h} ${x},${y + h * 0.38}`} />;
+  }
+  return <rect {...common} fill={fill} x={element.x} y={element.y} width={element.width} height={element.height} />;
 }
 
 function normalizeSelectionBox(start: Point, current: Point) {

@@ -7,7 +7,8 @@ import type { MultistateConfig } from './multistate';
 
 export const RECTANGLE_TYPE = 'rectangle' as const;
 
-export type GeometricShape = 'rectangle' | 'ellipse' | 'triangle';
+/** Geometric primitives compatible with the PI Vision shape picker. */
+export type GeometricShape = 'rectangle' | 'ellipse' | 'line' | 'arc' | 'pentagon' | 'triangle';
 
 export type RectangleProperties = Record<string, unknown> & {
   fill: string;

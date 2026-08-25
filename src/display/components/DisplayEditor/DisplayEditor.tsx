@@ -58,6 +58,7 @@ import {
   RECTANGLE_TYPE,
   updateRectangleProperties,
   type RectangleElement,
+  type GeometricShape,
 } from '../../createRectangle';
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { PiDigitalStatesResult, PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
@@ -245,6 +246,7 @@ export function DisplayEditor({
     showProgrammingEdit?: boolean;
   } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [editingDisplayName, setEditingDisplayName] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState(displayDocument.name);
@@ -514,19 +516,22 @@ export function DisplayEditor({
     dispatch({ type: 'END_INTERACTION' });
   }, [commitDocument, dispatch]);
 
-  const handleInsertRectangle = useCallback(() => {
+  const handleInsertRectangle = useCallback((shape: GeometricShape = 'rectangle') => {
     const currentDocument = documentRef.current;
     const element = createRectangle({
       surface: currentDocument.surface,
       existingIds: currentDocument.elements.map(({ id }) => id),
+      properties: { shape },
     });
     if (!onChangeRef.current) {
       return;
     }
     commitDocument(appendDisplayElement(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-    setOptionsElementId(element.id);
+    setPropertiesPanelOpen(false);
+    setOptionsElementId(null);
     setOptionsTrendId(null);
+    setShapeMenuOpen(false);
   }, [commitDocument, dispatch]);
 
   const handleInsertText = useCallback(() => {
@@ -1565,7 +1570,18 @@ export function DisplayEditor({
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Inserir elementos">
-                <button type="button" title="Inserir forma geométrica" aria-label="Inserir forma geométrica" className={styles.iconButton} data-testid="display-insert-rectangle" onClick={handleInsertRectangle}><RectangleIcon /></button>
+                <div className={styles.shapeControl}>
+                  <button type="button" title="Inserir retângulo" aria-label="Inserir retângulo" className={styles.shapeMainButton} data-testid="display-insert-rectangle" onClick={() => handleInsertRectangle('rectangle')}><ShapeIcon shape="rectangle" /></button>
+                  <button type="button" title="Mais formas geométricas" aria-label="Mais formas geométricas" aria-haspopup="menu" aria-expanded={shapeMenuOpen} className={styles.shapeMenuButton} data-testid="display-shape-menu-toggle" onClick={() => setShapeMenuOpen((open) => !open)}><ChevronDownIcon /></button>
+                  {shapeMenuOpen && <div className={styles.shapeMenu} role="menu" aria-label="Formas geométricas">
+                    <ShapeMenuItem shape="rectangle" label="Retângulo" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="ellipse" label="Elipse" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="line" label="Linha" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="arc" label="Arco" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="pentagon" label="Pentágono" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="triangle" label="Triângulo" onClick={handleInsertRectangle} />
+                  </div>}
+                </div>
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
                 <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
                 <input ref={imageInputRef} type="file" accept="image/*" data-testid="display-image-input" className={styles.fileInput} onChange={handleImageFile} />
@@ -2424,6 +2440,32 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: 3px;
     flex: 0 0 auto;
   `,
+  shapeControl: css`
+    position: relative;
+    display: inline-flex;
+    height: 42px;
+  `,
+  shapeMainButton: css`
+    display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 42px; padding: 0;
+    border: 1px solid var(--border-color); border-right: 0; border-radius: 8px 0 0 8px;
+    background: var(--button-bg); color: var(--text-secondary); cursor: pointer;
+    &:hover { color: var(--text-primary); background: var(--button-hover); }
+  `,
+  shapeMenuButton: css`
+    display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 42px; padding: 0;
+    border: 1px solid var(--border-color); border-radius: 0 8px 8px 0;
+    background: var(--button-bg); color: var(--text-secondary); cursor: pointer;
+    &:hover { color: var(--text-primary); background: var(--button-hover); }
+  `,
+  shapeMenu: css`
+    position: absolute; z-index: 30; top: calc(100% + 5px); left: 0;
+    display: flex; flex-direction: column; min-width: 142px; padding: 5px;
+    border: 1px solid var(--border-color); border-radius: 5px; background: var(--panel-bg);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .28);
+    button { display:flex; align-items:center; gap:9px; min-height:30px; padding:4px 7px; border:0; border-radius:3px; background:transparent; color:var(--text-primary); cursor:pointer; font-size:11px; text-align:left; }
+    button:hover { background:var(--button-hover); }
+    svg { width:21px; height:21px; color:var(--text-secondary); }
+  `,
   addTrendSeriesButton: css`
     display: inline-flex;
     align-items: center;
@@ -2729,8 +2771,22 @@ function ValueIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M8 9h8M8 12h8M8 15h5" /></svg>;
 }
 
-function RectangleIcon() {
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="6" width="16" height="12" /></svg>;
+function ShapeMenuItem({ shape, label, onClick }: { shape: GeometricShape; label: string; onClick: (shape: GeometricShape) => void }) {
+  return <button type="button" role="menuitem" data-testid={`display-insert-shape-${shape}`} onClick={() => onClick(shape)}><ShapeIcon shape={shape} /><span>{label}</span></button>;
+}
+
+function ShapeIcon({ shape }: { shape: GeometricShape }) {
+  const props = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, 'aria-hidden': true as const };
+  if (shape === 'ellipse') return <svg viewBox="0 0 24 24" {...props}><ellipse cx="12" cy="12" rx="8" ry="5.5" /></svg>;
+  if (shape === 'line') return <svg viewBox="0 0 24 24" {...props}><path d="m5 5 14 14" /></svg>;
+  if (shape === 'arc') return <svg viewBox="0 0 24 24" {...props}><path d="M5 5a14 14 0 0 1 14 14" /></svg>;
+  if (shape === 'pentagon') return <svg viewBox="0 0 24 24" {...props}><path d="m12 3 8 5.8-3 9.2H7L4 8.8z" /></svg>;
+  if (shape === 'triangle') return <svg viewBox="0 0 24 24" {...props}><path d="m12 4 8 15H4z" /></svg>;
+  return <svg viewBox="0 0 24 24" {...props}><rect x="4" y="6" width="16" height="12" /></svg>;
+}
+
+function ChevronDownIcon() {
+  return <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg>;
 }
 
 function TextIcon() {

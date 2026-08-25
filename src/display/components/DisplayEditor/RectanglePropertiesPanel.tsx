@@ -41,11 +41,14 @@ export function RectanglePropertiesPanel({ fill, stroke, shape, rotation = 0, po
           <select value={shape} data-testid="geometric-shape-type" onChange={(event) => onChange({ shape: event.target.value as RectangleProperties['shape'] })}>
             <option value="rectangle">Retângulo</option>
             <option value="ellipse">Elipse</option>
+            <option value="line">Linha</option>
+            <option value="arc">Arco</option>
+            <option value="pentagon">Pentágono</option>
             <option value="triangle">Triângulo</option>
           </select>
         </label>
         {pointName && <div className={styles.binding}>PI Point: {pointName}</div>}
-        <ColorControl label="Preenchimento" color={fill} onChange={(value) => onChange({ fill: value })} testId="rectangle-fill" />
+        {shape !== 'line' && shape !== 'arc' && <ColorControl label="Preenchimento" color={fill} onChange={(value) => onChange({ fill: value })} testId="rectangle-fill" />}
         <ColorControl label="Contorno" color={stroke} onChange={(value) => onChange({ stroke: value })} testId="rectangle-stroke" />
         <RotationControl value={rotation} onChange={(value) => onChange({ rotation: value })} testId="rectangle-rotation" />
         {onLinkChange && <LinkField value={linkUrl} openInNewTab={openInNewTab} onChange={onLinkChange} onOpenInNewTabChange={onOpenInNewTabChange} testId="rectangle-link-url" />}
