@@ -16,6 +16,7 @@ export interface LibrarySymbolProperties extends Record<string, unknown> {
   color: string;
   rotation: number;
   binding?: PiPointBinding;
+  calculationId?: string;
   multistate?: MultistateConfig;
 }
 
@@ -30,6 +31,7 @@ export interface CreateLibrarySymbolOptions {
   height?: number;
   color?: string;
   binding?: PiPointBinding;
+  calculationId?: string;
   multistate?: MultistateConfig;
   surface?: DisplaySurface;
   existingIds?: readonly string[];
@@ -67,6 +69,7 @@ export function createLibrarySymbol(options: CreateLibrarySymbolOptions): Librar
       color: normalizeLibrarySymbolColor(options.color),
       rotation: 0,
       ...(options.binding ? { binding: { ...options.binding } } : {}),
+      ...(options.calculationId ? { calculationId: options.calculationId } : {}),
       ...(options.multistate ? { multistate: options.multistate } : {}),
     },
   };

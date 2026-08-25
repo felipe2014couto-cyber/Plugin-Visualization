@@ -1,8 +1,18 @@
 import React, { useState } from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { appendTrend, createDisplayDocument, createTrend, type DisplayDocument } from '../../../index';
-import { DisplayEditor } from '../DisplayEditor';
+import {
+  addBarChartItem,
+  appendBarChart,
+  appendTrend,
+  appendValue,
+  createBarChart,
+  createDisplayDocument,
+  createTrend,
+  createValue,
+  type DisplayDocument,
+} from '../../../index';
+import { DisplayEditor, type PiPointDropSymbolType } from '../DisplayEditor';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
 import type { LoadTrendSeries } from '../../../runtime/trendRuntime';
 
@@ -44,7 +54,7 @@ function Harness({
   onDocumentChange?: (document: DisplayDocument) => void;
 }) {
   const [document, setDocument] = useState<DisplayDocument>(() => initial ?? createDisplayDocument({ name: 'Trend Display' }));
-  const [dropSymbolType, setDropSymbolType] = useState<'value' | 'gauge' | 'bar' | 'trend' | 'table'>('value');
+  const [dropSymbolType, setDropSymbolType] = useState<PiPointDropSymbolType>('value');
   return (
     <DisplayEditor
       document={document}
@@ -204,5 +214,71 @@ describe('DisplayEditor - Trend', () => {
     expect(screen.queryByTestId('trend-popup-cursor-popup-cursor-1')).toBeNull();
     fireEvent.click(screen.getByTestId('trend-popup-close'));
     expect(screen.queryByTestId('trend-popup')).toBeNull();
+  });
+
+  it('abre o pop-up de tendência no duplo clique em elemento Value no modo Visualizar', async () => {
+    const resultKey = 'resolved-datasource\u0000pims\u0000SINUSOID';
+    const loadRecordedTrend = jest.fn(async () => ({
+      [resultKey]: {
+        status: 'success' as const,
+        series: {
+          pointName: 'SINUSOID',
+          points: [{ time: 1, value: 42 }],
+        },
+      },
+    }));
+    const initial = appendValue(createDisplayDocument(), createValue({
+      id: 'val-1',
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' },
+    }));
+    render(<Harness initial={initial} loadTrend={jest.fn(async () => ({}))} loadRecordedTrend={loadRecordedTrend} />);
+
+    // Mudar para modo visualização
+    fireEvent.click(screen.getByTestId('display-mode-view'));
+
+    const valElement = screen.getByTestId('display-element-val-1');
+    fireEvent.doubleClick(valElement);
+
+    await waitFor(() => expect(screen.getByTestId('trend-popup')).toBeInTheDocument());
+    expect(loadRecordedTrend).toHaveBeenCalledWith([{
+      dataSourceUid: 'resolved-datasource',
+      serverPath: 'pims',
+      pointName: 'SINUSOID',
+      webId: 'point-webid',
+    }], expect.any(Function), { maxDataPoints: 500 });
+  });
+
+  it('abre o pop-up de tendência com múltiplas séries ao dar duplo clique no Gráfico de Barras no modo Visualizar', async () => {
+    const loadRecordedTrend = jest.fn(async () => ({
+      'resolved-datasource\u0000pims\u0000TAG1': {
+        status: 'success' as const,
+        series: { pointName: 'TAG1', points: [{ time: 1, value: 10 }] },
+      },
+      'resolved-datasource\u0000pims\u0000TAG2': {
+        status: 'success' as const,
+        series: { pointName: 'TAG2', points: [{ time: 1, value: 20 }] },
+      },
+    }));
+    const barChart = createBarChart({
+      id: 'bc-1',
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'TAG1', webId: 'w1' },
+    });
+    const docWithChart = appendBarChart(createDisplayDocument(), barChart);
+    const initial = addBarChartItem(docWithChart, 'bc-1', {
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'TAG2', webId: 'w2' },
+      label: 'Item 2',
+    });
+    render(<Harness initial={initial} loadTrend={jest.fn(async () => ({}))} loadRecordedTrend={loadRecordedTrend} />);
+
+    fireEvent.click(screen.getByTestId('display-mode-view'));
+
+    const bcElement = screen.getByTestId('display-element-bc-1');
+    fireEvent.doubleClick(bcElement);
+
+    await waitFor(() => expect(screen.getByTestId('trend-popup')).toBeInTheDocument());
+    expect(loadRecordedTrend).toHaveBeenCalledWith([
+      { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'TAG1', webId: 'w1' },
+      { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'TAG2', webId: 'w2' },
+    ], expect.any(Function), { maxDataPoints: 500 });
   });
 });

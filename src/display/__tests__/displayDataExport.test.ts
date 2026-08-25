@@ -1,4 +1,4 @@
-import { createBar, createDisplayDocument, createRectangle, createTable, createTrend } from '../index';
+import { createBar, createBarChart, createDisplayDocument, createRectangle, createTable, createTrend } from '../index';
 import { collectDisplayDataBindings, DISPLAY_DATA_EXPORT_MAX_POINTS, serializePiDataCsv, serializePiDataXml } from '../displayDataExport';
 
 const first = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'TAG_A' };
@@ -19,6 +19,14 @@ describe('displayDataExport', () => {
     const table = createTable({ id: 'table', item: { binding: first } });
     table.properties.items.push({ binding: second });
     document.elements = [table];
+    expect(collectDisplayDataBindings(document)).toEqual([first, second]);
+  });
+
+  it('inclui os PI Points do Gráfico de Barras na exportação de dados', () => {
+    const document = createDisplayDocument({ id: 'display', name: 'Dados' });
+    const barChart = createBarChart({ id: 'barchart', binding: first });
+    barChart.properties.items.push({ binding: second });
+    document.elements = [barChart];
     expect(collectDisplayDataBindings(document)).toEqual([first, second]);
   });
 

@@ -7,6 +7,7 @@ import { isPiPointBinding } from '../pi/piPointBinding';
 import { extractAllGroupBindingsAndElements } from './createGroup';
 import { getTrendSeries, TREND_TYPE } from './createTrend';
 import { TABLE_TYPE, type TableElement } from './createTable';
+import { BAR_CHART_TYPE, type BarChartElement } from './createBarChart';
 
 export const DISPLAY_DATA_EXPORT_MAX_POINTS = 3600;
 export type DisplayDataLoader = (bindings: readonly PiPointBinding[], range: DisplayTimeRange, options: { maxDataPoints: number }) => Promise<Record<string, PiTrendSeriesResult>>;
@@ -22,6 +23,7 @@ export function collectDisplayDataBindings(document: DisplayDocument): PiPointBi
   extractAllGroupBindingsAndElements(document.elements).forEach((element) => {
     if (element.type === TREND_TYPE) getTrendSeries(element).forEach((series) => add(series.binding));
     else if (element.type === TABLE_TYPE) (element as TableElement).properties.items.forEach((item) => add(item.binding));
+    else if (element.type === BAR_CHART_TYPE) (element as BarChartElement).properties.items.forEach((item) => add(item.binding));
     else add(element.properties.binding);
   });
   return output;

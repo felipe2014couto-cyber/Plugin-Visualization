@@ -17,6 +17,7 @@ export interface TextProperties extends Record<string, unknown> {
   linkUrl?: string;
   openInNewTab?: boolean;
   binding?: PiPointBinding;
+  calculationId?: string;
   multistate?: MultistateConfig;
   backgroundMultistate?: MultistateConfig;
 }
@@ -40,6 +41,7 @@ export interface CreateTextOptions {
   existingIds?: readonly string[];
   generateId?: () => string;
   binding?: PiPointBinding;
+  calculationId?: string;
 }
 
 export function createText(options: CreateTextOptions = {}): TextElement {
@@ -55,14 +57,16 @@ export function createText(options: CreateTextOptions = {}): TextElement {
   return {
     id,
     type: TEXT_TYPE,
-    x: options.x ?? Math.max(0, ((surface?.width ?? width) - width) / 2),
-    y: options.y ?? Math.max(0, ((surface?.height ?? height) - height) / 2),
+    x: options.x ?? 0,
+    y: options.y ?? 0,
     width: Math.max(1, width),
     height: Math.max(1, height),
     properties: {
       ...DEFAULT_TEXT_PROPERTIES,
-      ...(options.binding ? { binding: options.binding } : {}),
       ...options.properties,
+      rotation: typeof options.properties?.rotation === 'number' && Number.isFinite(options.properties.rotation) ? options.properties.rotation % 360 : 0,
+      ...(options.binding ? { binding: { ...options.binding } } : {}),
+      ...(options.calculationId ? { calculationId: options.calculationId } : {}),
     },
   };
 }

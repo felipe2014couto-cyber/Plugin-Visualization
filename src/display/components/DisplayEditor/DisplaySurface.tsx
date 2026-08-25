@@ -7,8 +7,9 @@ import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { CALCULATION_TYPE, type CalculationElement } from '../../createCalculation';
 import { CalculationElementView } from '../CalculationElementView';
 import { evaluateCalculation, type CalculationDefinition } from '../../../calculations/calculationEngine';
-import { getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
+import { createTrendElementForElement, getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
+import { BAR_CHART_TYPE, getBarChartVisualOptions, getBarChartItemConsumerId, type BarChartElement } from '../../createBarChart';
 import { TABLE_TYPE, type TableColumnConfig, type TableElement } from '../../createTable';
 import { TableElementView, getTableItemConsumerId, getTableTrendConsumerId } from '../TableElementView';
 import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
@@ -17,6 +18,7 @@ import { GAUGE_TYPE, getGaugeOptions, type GaugeElement } from '../../createGaug
 import { ValueElementView } from '../ValueElementView';
 import { GaugeElementView } from '../GaugeElementView';
 import { BarElementView } from '../BarElementView';
+import { BarChartElementView } from '../BarChartElementView';
 import {
   TrendElementView,
   buildTrendChartForSeries,
@@ -228,17 +230,31 @@ export function DisplaySurface({
     if (!loadPiPointDatabaseLimits) {
       return;
     }
-    const databaseElements = allElements.filter((element): element is BarElement | GaugeElement => {
+    const databaseElements = allElements.flatMap((element): Array<{ id: string; binding: PiPointBinding }> => {
       if (element.type === BAR_TYPE) {
-        return getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
+        return getBarOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding)
+          ? [{ id: element.id, binding: element.properties.binding as PiPointBinding }]
+          : [];
       }
       if (element.type === GAUGE_TYPE) {
-        return getGaugeOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding);
+        return getGaugeOptions(element.properties).scaleMode === 'database' && isPiPointBinding(element.properties.binding)
+          ? [{ id: element.id, binding: element.properties.binding as PiPointBinding }]
+          : [];
       }
-      return false;
+      if (element.type === BAR_CHART_TYPE) {
+        const barChart = element as BarChartElement;
+        const visual = getBarChartVisualOptions(barChart);
+        return visual.scaleMode === 'database'
+          ? (barChart.properties.items ?? []).map((item) => ({
+              id: getBarChartItemConsumerId(barChart.id, item.binding),
+              binding: item.binding,
+            }))
+          : [];
+      }
+      return [];
     });
     void Promise.all(databaseElements.map(async (item) => {
-      try { return [item.id, await loadPiPointDatabaseLimits(item.properties.binding as PiPointBinding)] as const; } catch { return null; }
+      try { return [item.id, await loadPiPointDatabaseLimits(item.binding)] as const; } catch { return null; }
     })).then((results) => setDatabaseScales(Object.fromEntries(results.filter((item): item is readonly [string, PiPointDatabaseLimits] => item !== null))));
   }, [allElements, loadPiPointDatabaseLimits]);
   const [selectionBox, setSelectionBoxState] = useState<{ start: Point; current: Point } | null>(null);
@@ -267,7 +283,7 @@ export function DisplaySurface({
     const calculationId = typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
       ? (element.properties as { calculationId: string }).calculationId
       : undefined;
-    if (calculationId && (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE)) {
+    if (calculationId && (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE || element.type === TEXT_TYPE)) {
       const calculation = calculations.find((item) => item.id === calculationId);
       return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
     }
@@ -275,9 +291,18 @@ export function DisplaySurface({
       && isPiPointBinding(element.properties.binding)
       ? [{ elementId: element.id, binding: element.properties.binding }]
       : [];
-  }).concat(allElements.flatMap((element) => element.type === TABLE_TYPE
-    ? (element as TableElement).properties.items.map((item, index) => ({ elementId: getTableItemConsumerId(element.id, index), binding: item.binding }))
-    : []));
+  }).concat(allElements.flatMap((element) => {
+    if (element.type === TABLE_TYPE) {
+      return (element as TableElement).properties.items.map((item, index) => ({ elementId: getTableItemConsumerId(element.id, index), binding: item.binding }));
+    }
+    if (element.type === BAR_CHART_TYPE) {
+      return (element as BarChartElement).properties.items.map((item) => ({
+        elementId: getBarChartItemConsumerId(element.id, item.binding),
+        binding: item.binding,
+      }));
+    }
+    return [];
+  }));
   const fallbackLoader = useCallback<LoadCurrentValues>(async (bindings) => {
     if (!loadValue) {
       return Object.fromEntries(bindings.map((binding) => [
@@ -384,8 +409,13 @@ export function DisplaySurface({
     if (editable) {
       return;
     }
-    const element = allElements.find((candidate) => candidate.id === elementId);
-    if (!element || element.type !== TREND_TYPE) {
+    const element = allElements.find((candidate) => candidate.id === elementId)
+      ?? elements.find((candidate) => candidate.id === elementId);
+    if (!element) {
+      return;
+    }
+    const trendElement = createTrendElementForElement(element);
+    if (!trendElement) {
       return;
     }
     event.preventDefault();
@@ -393,8 +423,8 @@ export function DisplaySurface({
     if (!onTrendOpen) {
       return;
     }
-    onTrendOpen(element as TrendElement, getTrendSeriesStates(element as TrendElement, allTrendRuntimeStates), cursorsByTrend[element.id] ?? []);
-  }, [allElements, allTrendRuntimeStates, cursorsByTrend, editable, onTrendOpen]);
+    onTrendOpen(trendElement, getTrendSeriesStates(trendElement, allTrendRuntimeStates), cursorsByTrend[element.id] ?? []);
+  }, [allElements, allTrendRuntimeStates, cursorsByTrend, editable, elements, onTrendOpen]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
     if (!editable) {
       return;
@@ -573,20 +603,41 @@ export function DisplaySurface({
     : null;
 
   const handleSvgDoubleClick = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (!editable) {
-      return;
-    }
     const target = e.target as Element;
     const rawId = target.getAttribute('data-element-id')
       ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
     if (!rawId) {
       return;
     }
+    if (editable) {
+      e.preventDefault();
+      e.stopPropagation();
+      onDoubleClick?.(rawId);
+      onSelect(rawId);
+      return;
+    }
+
+    // View mode: open trend popup for any element that has a tag
+    const element = allElements.find((candidate) => candidate.id === rawId)
+      ?? elements.find((candidate) => candidate.id === rawId);
+    if (!element) {
+      return;
+    }
+    const trendElement = createTrendElementForElement(element);
+    if (!trendElement) {
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
-    onDoubleClick?.(rawId);
-    onSelect(rawId);
-  }, [editable, onDoubleClick, onSelect]);
+    if (!onTrendOpen) {
+      return;
+    }
+    onTrendOpen(
+      trendElement,
+      getTrendSeriesStates(trendElement, allTrendRuntimeStates),
+      cursorsByTrend[element.id] ?? [],
+    );
+  }, [allElements, allTrendRuntimeStates, cursorsByTrend, editable, elements, onDoubleClick, onSelect, onTrendOpen]);
 
   const handleElementClick = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
     if (editable) {
@@ -963,6 +1014,16 @@ export function DisplaySurface({
               />
             );
           }
+          if (element.type === BAR_CHART_TYPE) {
+            return (
+              <BarChartElementView
+                key={element.id}
+                element={element as unknown as BarChartElement}
+                runtimeStates={runtimeStates}
+                databaseScales={databaseScales}
+              />
+            );
+          }
           if (element.type === TABLE_TYPE) {
             return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onColumnsChange={editable ? (columns) => onTableColumnsChange?.(element.id, columns) : undefined} />;
           }
@@ -994,11 +1055,23 @@ export function DisplaySurface({
             );
           }
           if (element.type === RECTANGLE_TYPE) {
-            return renderGeometricShape(element as RectangleElement, runtimeStates.get(element.id));
+            const shape = element as RectangleElement;
+            const calculation = typeof shape.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === shape.properties.calculationId)
+              : undefined;
+            const runtimeState = calculation
+              ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+              : runtimeStates.get(element.id);
+            return renderGeometricShape(shape, runtimeState);
           }
           if (element.type === TEXT_TYPE) {
             const textElement = element as TextElement;
-            const runtimeState = runtimeStates.get(element.id);
+            const calculation = typeof textElement.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === textElement.properties.calculationId)
+              : undefined;
+            const runtimeState = calculation
+              ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+              : runtimeStates.get(element.id);
             const runtimeVal = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
             const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
             const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
@@ -1069,7 +1142,12 @@ export function DisplaySurface({
           if (element.type === LIBRARY_SYMBOL_TYPE) {
             const symbol = element as LibrarySymbolElement;
             const source = getLibrarySymbolSource(symbol);
-            const runtimeState = runtimeStates.get(element.id);
+            const calculation = typeof symbol.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === symbol.properties.calculationId)
+              : undefined;
+            const runtimeState = calculation
+              ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
+              : runtimeStates.get(element.id);
             const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
             const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
             return (

@@ -15,6 +15,7 @@ export type RectangleProperties = Record<string, unknown> & {
   shape: GeometricShape;
   rotation: number;
   binding?: PiPointBinding;
+  calculationId?: string;
   multistate?: MultistateConfig;
 };
 
@@ -38,6 +39,7 @@ export interface CreateRectangleOptions {
   height?: number;
   properties?: Partial<RectangleProperties>;
   binding?: PiPointBinding;
+  calculationId?: string;
   multistate?: MultistateConfig;
   surface?: DisplaySurface;
   existingIds?: readonly string[];
@@ -72,6 +74,7 @@ export function createRectangle(options: CreateRectangleOptions = {}): Rectangle
       ...options.properties,
       rotation: normalizeRotation(options.properties?.rotation),
       ...(options.binding ? { binding: { ...options.binding } } : {}),
+      ...(options.calculationId ? { calculationId: options.calculationId } : {}),
       ...(options.multistate ? { multistate: options.multistate } : {}),
     },
   };

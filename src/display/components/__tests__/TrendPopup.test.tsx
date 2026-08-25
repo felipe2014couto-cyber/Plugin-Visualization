@@ -131,4 +131,44 @@ describe('TrendPopup - escalas', () => {
     expect(toggleButton).toHaveTextContent('Ocultar legenda');
     expect(screen.getByTestId('trend-popup-legend-resizer')).toBeInTheDocument();
   });
+
+  describe('seleção de séries pela legenda no popup', () => {
+    it('permite selecionar série, desselecionar e usar Ctrl+clique para multi-seleção no popup', () => {
+      render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
+
+      const legend0 = screen.getByTestId('trend-popup-legend-item-0');
+      const legend1 = screen.getByTestId('trend-popup-legend-item-1');
+      const line0 = screen.getByTestId('trend-popup-line-0');
+      const line1 = screen.getByTestId('trend-popup-line-1');
+
+      // Estado inicial: tudo normal
+      expect(legend0).toHaveAttribute('opacity', '1');
+      expect(legend1).toHaveAttribute('opacity', '1');
+      expect(line0.parentElement).toHaveAttribute('opacity', '1');
+      expect(line1.parentElement).toHaveAttribute('opacity', '1');
+
+      // Clique em SINUSOID (índice 0)
+      fireEvent.click(legend0);
+      expect(legend0).toHaveAttribute('opacity', '1');
+      expect(legend0).toHaveAttribute('aria-pressed', 'true');
+      expect(legend1).toHaveAttribute('opacity', '0.2');
+      expect(line0.parentElement).toHaveAttribute('opacity', '1');
+      expect(line1.parentElement).toHaveAttribute('opacity', '0.2');
+
+      // Ctrl+clique em CDTI58 (índice 1) -> ambas selecionadas
+      fireEvent.click(legend1, { ctrlKey: true });
+      expect(legend0).toHaveAttribute('opacity', '1');
+      expect(legend1).toHaveAttribute('opacity', '1');
+      expect(line0.parentElement).toHaveAttribute('opacity', '1');
+      expect(line1.parentElement).toHaveAttribute('opacity', '1');
+
+      // Clique simples em SINUSOID -> limpa seleção (todas voltam a 1)
+      fireEvent.click(legend0);
+      expect(legend0).toHaveAttribute('opacity', '1');
+      expect(legend1).toHaveAttribute('opacity', '1');
+      expect(line0.parentElement).toHaveAttribute('opacity', '1');
+      expect(line1.parentElement).toHaveAttribute('opacity', '1');
+    });
+  });
 });
+

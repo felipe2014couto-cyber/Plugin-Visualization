@@ -49,11 +49,13 @@ export {
   createGroup,
   extractAllGroupBindingsAndElements,
   findTopLevelElementId,
+  getElementAbsoluteGeometry,
   GROUP_TYPE,
   groupElements,
   resizeGroup,
   scaleGroupChildren,
   ungroupElements,
+  updateElementInDocument,
   updateGroupProperties,
 } from './createGroup';
 export type { CreateGroupOptions, GroupElement, GroupProperties } from './createGroup';
@@ -86,6 +88,40 @@ export {
 } from './createBar';
 export type { BarElement, BarProperties, CreateBarOptions } from './createBar';
 
+export {
+  BAR_CHART_TYPE,
+  DEFAULT_BAR_CHART_VISUAL_OPTIONS,
+  DEFAULT_BAR_CHART_WIDTH,
+  DEFAULT_BAR_CHART_HEIGHT,
+  createBarChart,
+  appendBarChart,
+  addBarChartItem,
+  removeBarChartItem,
+  moveBarChartItem,
+  getBarChartItems,
+  getBarChartVisualOptions,
+  updateBarChartVisualOptions,
+  updateBarChartProperties,
+  normalizeBarChartVisualOptions,
+  barChartBindingKey,
+  getBarChartItemConsumerId,
+} from './createBarChart';
+export type {
+  BarChartElement,
+  BarChartProperties,
+  BarChartItem,
+  BarChartVisualOptions,
+  BarChartOrientation,
+  BarChartGridMode,
+  BarChartNumberFormat,
+  BarChartLabelMode,
+  BarChartScaleMode,
+  BarChartStartMode,
+  CreateBarChartOptions,
+} from './createBarChart';
+export { BarChartElementView } from './components/BarChartElementView';
+export type { BarChartElementViewProps } from './components/BarChartElementView';
+
 export { addTableItem, appendTable, createTable, defaultTableColumns, removeTableItem, moveTableItem, TABLE_COLUMNS, TABLE_COLUMN_LABELS, TABLE_TYPE, updateTableProperties } from './createTable';
 export type { CreateTableOptions, TableColumnAlign, TableColumnConfig, TableColumnId, TableDataItem, TableElement, TableProperties, TableStyle } from './createTable';
 
@@ -109,6 +145,7 @@ export {
   addTrendSeries,
   appendTrend,
   createTrend,
+  createTrendElementForElement,
   getTrendSeries,
   getTrendVisualOptions,
   updateTrendVisualOptions,
