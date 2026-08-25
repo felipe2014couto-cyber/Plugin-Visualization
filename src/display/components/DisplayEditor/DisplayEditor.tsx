@@ -1,4 +1,5 @@
 import React, { useReducer, useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -247,6 +248,7 @@ export function DisplayEditor({
   } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+  const [shapeMenuPosition, setShapeMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [editingDisplayName, setEditingDisplayName] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState(displayDocument.name);
@@ -1572,15 +1574,19 @@ export function DisplayEditor({
               <div className={styles.toolbarGroup} aria-label="Inserir elementos">
                 <div className={styles.shapeControl}>
                   <button type="button" title="Inserir retângulo" aria-label="Inserir retângulo" className={styles.shapeMainButton} data-testid="display-insert-rectangle" onClick={() => handleInsertRectangle('rectangle')}><ShapeIcon shape="rectangle" /></button>
-                  <button type="button" title="Mais formas geométricas" aria-label="Mais formas geométricas" aria-haspopup="menu" aria-expanded={shapeMenuOpen} className={styles.shapeMenuButton} data-testid="display-shape-menu-toggle" onClick={() => setShapeMenuOpen((open) => !open)}><ChevronDownIcon /></button>
-                  {shapeMenuOpen && <div className={styles.shapeMenu} role="menu" aria-label="Formas geométricas">
+                  <button type="button" title="Mais formas geométricas" aria-label="Mais formas geométricas" aria-haspopup="menu" aria-expanded={shapeMenuOpen} className={styles.shapeMenuButton} data-testid="display-shape-menu-toggle" onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setShapeMenuPosition({ left: rect.left, top: rect.bottom + 5 });
+                    setShapeMenuOpen((open) => !open);
+                  }}><ChevronDownIcon /></button>
+                  {shapeMenuOpen && shapeMenuPosition && createPortal(<div className={styles.shapeMenu} style={shapeMenuPosition} role="menu" aria-label="Formas geométricas">
                     <ShapeMenuItem shape="rectangle" label="Retângulo" onClick={handleInsertRectangle} />
                     <ShapeMenuItem shape="ellipse" label="Elipse" onClick={handleInsertRectangle} />
                     <ShapeMenuItem shape="line" label="Linha" onClick={handleInsertRectangle} />
                     <ShapeMenuItem shape="arc" label="Arco" onClick={handleInsertRectangle} />
                     <ShapeMenuItem shape="pentagon" label="Pentágono" onClick={handleInsertRectangle} />
                     <ShapeMenuItem shape="triangle" label="Triângulo" onClick={handleInsertRectangle} />
-                  </div>}
+                  </div>, document.body)}
                 </div>
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
                 <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
@@ -2458,7 +2464,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     &:hover { color: var(--text-primary); background: var(--button-hover); }
   `,
   shapeMenu: css`
-    position: absolute; z-index: 30; top: calc(100% + 5px); left: 0;
+    position: fixed; z-index: 1000;
     display: flex; flex-direction: column; min-width: 142px; padding: 5px;
     border: 1px solid var(--border-color); border-radius: 5px; background: var(--panel-bg);
     box-shadow: 0 8px 20px rgba(0, 0, 0, .28);
