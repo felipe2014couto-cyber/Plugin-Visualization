@@ -681,9 +681,8 @@ export function DisplayEditor({
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
     const svg = event.currentTarget.querySelector('svg');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
-    // Soltar uma PI Point sobre uma Trend só acrescenta uma série quando o
-    // modo de criação selecionado também for Trend. Nos demais modos, o drop
-    // mantém o comportamento de criar o novo símbolo escolhido.
+    // Trend keeps its explicit insertion mode. Bar Chart and Table, however,
+    // always accept a dropped PI Point as another item.
     const targetTrend = dropSymbolType === 'trend'
       ? resolveTrendDropTarget(
         documentRef.current,
@@ -693,15 +692,13 @@ export function DisplayEditor({
         point,
       )
       : undefined;
-    const targetBarChart = dropSymbolType === 'bar-chart'
-      ? resolveBarChartDropTarget(
-        documentRef.current,
-        event.target,
-        event.clientX,
-        event.clientY,
-        point,
-      )
-      : undefined;
+    const targetBarChart = resolveBarChartDropTarget(
+      documentRef.current,
+      event.target,
+      event.clientX,
+      event.clientY,
+      point,
+    );
     const preview = svg && pointResult
       ? createPiPointDragPreview(
         svg,
@@ -715,7 +712,7 @@ export function DisplayEditor({
         targetTrend,
         dropSymbolType === 'trend',
         targetBarChart,
-        dropSymbolType === 'bar-chart',
+        true,
       )
       : undefined;
     event.dataTransfer.dropEffect = preview?.valid ? 'copy' : 'none';
@@ -811,6 +808,9 @@ export function DisplayEditor({
     const svg = event.currentTarget.querySelector('svg');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
     const currentDocument = documentRef.current;
+    // A Table and Bar Chart always receive a dropped PI Point as a new item,
+    // independently of the selected toolbar tool. Trend keeps its dedicated
+    // insertion mode to avoid changing the existing drop behavior.
     const targetTrend = dropSymbolType === 'trend'
       ? resolveTrendDropTarget(
         currentDocument,
@@ -820,17 +820,15 @@ export function DisplayEditor({
         point,
       )
       : undefined;
-    const targetBarChart = dropSymbolType === 'bar-chart'
-      ? resolveBarChartDropTarget(
-        currentDocument,
-        event.target,
-        event.clientX,
-        event.clientY,
-        point,
-      )
-      : undefined;
+    const targetBarChart = resolveBarChartDropTarget(
+      currentDocument,
+      event.target,
+      event.clientX,
+      event.clientY,
+      point,
+    );
     const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
-    const targetTable = dropSymbolType === 'table' ? resolveTableDropTarget(currentDocument, event.target, point) : undefined;
+    const targetTable = resolveTableDropTarget(currentDocument, event.target, point);
     const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
     const targetText = resolveTextDropTarget(currentDocument, event.target, point);
     if (!binding || (!point && !targetTrend && !targetBarChart && !targetShape && !targetLibrarySymbol && !targetTable && !targetText)) {
@@ -1898,15 +1896,19 @@ function getDropPoint(
 
 function getSvgViewport(svg: SVGSVGElement) {
   const bounds = svg.getBoundingClientRect();
-  const viewBox = svg.viewBox.baseVal;
-  const scale = viewBox.width > 0 && viewBox.height > 0
-    ? Math.min(bounds.width / viewBox.width, bounds.height / viewBox.height)
+  const viewBoxValues = (svg.getAttribute('viewBox') ?? '')
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  const [viewBoxX = 0, viewBoxY = 0, viewBoxWidth = Number(svg.getAttribute('width')) || bounds.width, viewBoxHeight = Number(svg.getAttribute('height')) || bounds.height] = viewBoxValues;
+  const scale = viewBoxWidth > 0 && viewBoxHeight > 0
+    ? Math.min(bounds.width / viewBoxWidth, bounds.height / viewBoxHeight)
     : 1;
-  const width = viewBox.width * scale;
-  const height = viewBox.height * scale;
+  const width = viewBoxWidth * scale;
+  const height = viewBoxHeight * scale;
   return {
-    left: bounds.left + (bounds.width - width) / 2 - viewBox.x * scale,
-    top: bounds.top + (bounds.height - height) / 2 - viewBox.y * scale,
+    left: bounds.left + (bounds.width - width) / 2 - viewBoxX * scale,
+    top: bounds.top + (bounds.height - height) / 2 - viewBoxY * scale,
     width,
     height,
     scale,
