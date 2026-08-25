@@ -1586,7 +1586,7 @@ export function DisplayEditor({
                     <ShapeMenuItem shape="arc" label="Arco" onClick={handleInsertRectangle} />
                     <ShapeMenuItem shape="pentagon" label="Pentágono" onClick={handleInsertRectangle} />
                     <ShapeMenuItem shape="triangle" label="Triângulo" onClick={handleInsertRectangle} />
-                  </div>, document.body)}
+                  </div>, document.querySelector('[data-testid="pims-vision-home"]') ?? document.body)}
                 </div>
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
                 <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
@@ -2466,11 +2466,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
   shapeMenu: css`
     position: fixed; z-index: 1000;
     display: flex; flex-direction: column; min-width: 142px; padding: 5px;
-    border: 1px solid var(--border-color); border-radius: 5px; background: var(--panel-bg);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, .28);
-    button { display:flex; align-items:center; gap:9px; min-height:30px; padding:4px 7px; border:0; border-radius:3px; background:transparent; color:var(--text-primary); cursor:pointer; font-size:11px; text-align:left; }
-    button:hover { background:var(--button-hover); }
-    svg { width:21px; height:21px; color:var(--text-secondary); }
+    border: 1px solid var(--border-color, #607086); border-radius: 5px; background: var(--panel-bg, #111923);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .42);
+    button { display:flex; align-items:center; gap:9px; min-height:30px; padding:4px 7px; border:0; border-radius:3px; background:transparent; color:var(--text-primary, #f1f2f5); cursor:pointer; font-size:11px; text-align:left; }
+    button:hover { background:var(--button-hover, #223146); }
+    svg { width:21px; height:21px; color:var(--text-secondary, #aeb3bf); }
   `,
   addTrendSeriesButton: css`
     display: inline-flex;
