@@ -425,8 +425,8 @@ function HorizontalBarIcon() {
 
 const getStyles = (theme: GrafanaTheme2) => ({
   panel: css`
-    width: 290px;
-    flex: 0 0 290px;
+    width: 300px;
+    flex: 0 0 300px;
     min-height: 0;
     max-height: 100%;
     overflow-x: hidden;
@@ -434,8 +434,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     scrollbar-gutter: stable;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px;
+    gap: 12px;
+    padding: 14px;
     box-sizing: border-box;
     color: var(--text-primary);
     background: var(--surface-primary);

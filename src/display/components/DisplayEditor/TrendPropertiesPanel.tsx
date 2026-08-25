@@ -80,7 +80,7 @@ function TrendChoiceButton({ label, active, onClick, children }: { label: string
 }
 const getStyles = (theme: GrafanaTheme2) => ({
   panel: css`
-  width: 280px; flex: 0 0 280px; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; scrollbar-gutter:stable; display:flex; flex-direction:column; gap:10px; padding:12px; box-sizing:border-box; color:var(--text-primary); background:var(--surface-primary); border-left:1px solid var(--border-color); font-size:11px;
+  width: 300px; flex: 0 0 300px; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; scrollbar-gutter:stable; display:flex; flex-direction:column; gap:12px; padding:14px; box-sizing:border-box; color:var(--text-primary); background:var(--surface-primary); border-left:1px solid var(--border-color); font-size:11px;
   label { display:flex; flex-direction:column; gap:3px; margin:0; color:var(--text-secondary); } input, select { height:27px; min-height:27px; box-sizing:border-box; color:var(--text-primary); background:var(--input-bg); border:1px solid var(--border-color); } input[type='color'] { padding:2px; } input[type='range'] { accent-color:var(--accent); }`,
   heading: css`display:flex; align-items:center; margin-bottom:6px; strong { font-size:14px; }`,
   removeButton: css`width:100%; min-height:28px; margin:0; border:1px solid var(--border-color); border-radius:3px; color:var(--text-primary); background:var(--button-bg); cursor:pointer; &:disabled { opacity:0.5; cursor:not-allowed; }`,

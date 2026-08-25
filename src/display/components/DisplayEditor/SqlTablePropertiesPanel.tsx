@@ -98,16 +98,21 @@ export function SqlTablePropertiesPanel({ properties, onChange }: SqlTableProper
 function getStyles() { 
   return { 
     panel: css`
-      flex: 0 0 310px;
-      width: 310px;
+      flex: 0 0 300px;
+      width: 300px;
       min-width: 0;
-      overflow: auto;
+      min-height: 0;
+      max-height: 100%;
+      box-sizing: border-box;
+      overflow-x: hidden;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
       border-left: 1px solid var(--border-color);
       background: var(--panel-bg);
       color: var(--text-primary);
     `, 
     header: css`
-      padding: 12px;
+      padding: 12px 14px;
       border-bottom: 1px solid var(--border-color);
       font-weight: 600;
       display: flex;
@@ -117,7 +122,7 @@ function getStyles() {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      padding: 12px;
+      padding: 12px 14px;
       border-bottom: 1px solid var(--border-color);
       font-size: 12px; 
       label {

@@ -10,4 +10,4 @@ export function LinkPropertiesPanel({ value, openInNewTab = true, onChange, onOp
   </section>;
 }
 
-const styles = { panel: css`box-sizing:border-box; width:280px; flex:0 0 280px; min-width:0; overflow-x:hidden; border-top:1px solid var(--border-color); padding:12px; background:var(--panel-bg);`, title: css`margin-bottom:8px; color:var(--text-primary); font-size:11px; font-weight:600;`, clear: css`margin-top:8px; min-height:24px; border:1px solid var(--border-color); background:var(--button-bg); color:var(--text-primary); font-size:10px;` };
+const styles = { panel: css`box-sizing:border-box; width:300px; flex:0 0 300px; min-width:0; min-height:0; max-height:100%; overflow-x:hidden; overflow-y:auto; scrollbar-gutter:stable; border-top:1px solid var(--border-color); border-left:1px solid var(--border-color); padding:14px; background:var(--panel-bg);`, title: css`margin-bottom:10px; color:var(--text-primary); font-size:12px; font-weight:600;`, clear: css`margin-top:10px; min-height:28px; border:1px solid var(--border-color); background:var(--button-bg); color:var(--text-primary); font-size:10px;` };

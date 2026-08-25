@@ -142,20 +142,24 @@ export function TextPropertiesPanel({
 
 const getStyles = (theme: GrafanaTheme2) => ({
   panel: css`
-    width: 280px;
-    flex: 0 0 280px;
+    width: 300px;
+    flex: 0 0 300px;
     min-width: 0;
+    min-height: 0;
+    max-height: 100%;
+    box-sizing: border-box;
     border-left: 1px solid var(--border-color);
     background: var(--panel-bg);
     color: var(--text-primary);
     overflow-x: hidden;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   `,
   header: css`
     display: flex;
     flex-direction: column;
     gap: 3px;
-    padding: 10px 12px;
+    padding: 12px 14px;
     border-bottom: 1px solid var(--border-color);
     background: var(--panel-header-bg);
   `,
@@ -172,7 +176,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 12px;
+    padding: 14px;
     min-width: 0;
   `,
   field: css`
