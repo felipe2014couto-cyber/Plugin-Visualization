@@ -222,6 +222,17 @@ export function App() {
   const [expandedFolderUids, setExpandedFolderUids] = useState<string[]>([]);
   const [saveValidationError, setSaveValidationError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  // Every module uses the same toggle behavior: clicking the active module
+  // hides/shows its sidebar, while switching modules opens the new sidebar.
+  const handleModuleToggle = useCallback((module: ActiveModule) => {
+    if (activeModule === module) {
+      setIsAssetsPanelOpen((open) => !open);
+      return;
+    }
+    setActiveModule(module);
+    setIsAssetsPanelOpen(true);
+  }, [activeModule]);
   // sqlTableIdRef is no longer needed
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
   if (!progressiveTrendLoaderRef.current) {
@@ -705,14 +716,7 @@ export function App() {
               aria-label={isAssetsPanelOpen ? 'Ocultar barra de ferramentas' : 'Mostrar barra de ferramentas'}
               aria-pressed={isAssetsPanelOpen}
               data-testid="pims-vision-toggle-assets-panel"
-              onClick={() => {
-                if (activeModule !== 'visualization') {
-                  setActiveModule('visualization');
-                  setIsAssetsPanelOpen(true);
-                } else {
-                  setIsAssetsPanelOpen((prev) => !prev);
-                }
-              }}
+              onClick={() => handleModuleToggle('visualization')}
             ><CubeIcon /></button>
             <button
               type="button"
@@ -721,7 +725,7 @@ export function App() {
               aria-label="Mini-Sheets"
               aria-pressed={activeModule === 'sheets'}
               data-testid="pims-vision-sheets-tab"
-              onClick={() => { setActiveModule('sheets'); setIsAssetsPanelOpen(true); }}
+              onClick={() => handleModuleToggle('sheets')}
             ><SheetsIcon /></button>
             <button
               type="button"
@@ -730,11 +734,7 @@ export function App() {
               aria-label="Consulta SQL Oracle"
               aria-pressed={activeModule === 'sql-query'}
               data-testid="pims-vision-sql-query-tab"
-              onClick={() => { 
-                console.log(">>> [DEBUG] SQL BUTTON CLICKED"); 
-                setActiveModule('sql-query'); 
-                setIsAssetsPanelOpen(true); 
-              }}
+              onClick={() => handleModuleToggle('sql-query')}
             ><DatabaseIcon /></button>
             <button
               type="button"
@@ -743,7 +743,7 @@ export function App() {
               aria-label="Programming"
               aria-pressed={activeModule === 'programming'}
               data-testid="pims-vision-programming-tab"
-              onClick={() => { setActiveModule('programming'); setIsAssetsPanelOpen(true); }}
+              onClick={() => handleModuleToggle('programming')}
             ><ProgrammingIcon /></button>
           </div>
           {isAssetsPanelOpen && (
