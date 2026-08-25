@@ -5,9 +5,13 @@ import { createDisplayDocument, createGauge, createBar, appendGauge, appendBar, 
 import { DisplayEditor } from '../DisplayEditor';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 const selectedPiPoint: PiPointSearchResult = {
   name: 'SINUSOID',

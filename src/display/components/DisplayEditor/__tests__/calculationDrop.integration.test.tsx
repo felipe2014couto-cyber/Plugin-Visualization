@@ -13,9 +13,13 @@ import {
 import { CALCULATION_DRAG_MIME, serializeCalculationDragData } from '../../../../calculations/calculationDrag';
 import { DisplayEditor } from '../DisplayEditor';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 function Harness({
   type = 'value',

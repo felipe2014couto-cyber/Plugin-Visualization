@@ -3,9 +3,13 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
 import { LibraryPanel } from '../LibraryPanel';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 describe('LibraryPanel', () => {
   it('exibe pesquisa, categorias recolhíveis e os SVGs locais disponíveis', () => {

@@ -5,9 +5,13 @@ import { TextPropertiesPanel } from '../TextPropertiesPanel';
 import { DEFAULT_TEXT_PROPERTIES, type TextProperties } from '../../../createText';
 import type { MultistateConfig } from '../../../multistate';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 describe('TextPropertiesPanel', () => {
   test('renders text content and embedded link controls', () => {

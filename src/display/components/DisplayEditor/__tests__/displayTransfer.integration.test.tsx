@@ -4,9 +4,13 @@ import { createTheme } from '@grafana/data';
 import { appendDisplayElement, createDisplayDocument, createRectangle, serializeDisplay, type DisplayDocument } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 class MockFileReader {
   result: string | null = null;

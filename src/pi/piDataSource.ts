@@ -68,6 +68,19 @@ export interface PiPointValue {
   quality?: Record<string, unknown>;
 }
 
+/** Basic PI Point attributes used by the Trend information panel. */
+export interface PiPointMetadata {
+  name: string;
+  description?: string;
+  instrumentTag?: string;
+  pointType?: string;
+  zero?: number;
+  span?: number;
+  compDev?: number;
+  excDev?: number;
+  engineeringUnit?: string;
+}
+
 /** A compact representation of a state configured in a PI Digital State Set. */
 export interface PiDigitalState {
   name: string;
@@ -587,6 +600,41 @@ export async function getPiPointDatabaseLimits(
 }
 
 /**
+ * Reads the PI Point attributes through the datasource already configured in
+ * Grafana.  It deliberately uses the same resource/metricFind fallbacks used
+ * by the existing database-limit and digital-state integrations.
+ */
+export async function getPiPointMetadata(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
+): Promise<PiPointMetadata> {
+  const dataSource = resolvePiDataSource(dataSourceSrv);
+  if (!dataSource) throw new Error('PI Data Source não configurada');
+  const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
+  const metadata = await getPiPointMetadataForBinding(binding, instance, instance as PiDataSourceResourceApi, true);
+  const fields = metadata ?? {};
+  const description = getMetadataString(fields, 'Description', 'Descriptor');
+  const instrumentTag = getMetadataString(fields, 'InstrumentTag', 'SourceTag', 'PointSource');
+  const pointType = getMetadataString(fields, 'PointType') ?? binding.pointType;
+  const engineeringUnit = getMetadataString(fields, 'EngineeringUnits', 'EngUnits');
+  const zero = getMetadataNumber(fields, 'Zero');
+  const span = getMetadataNumber(fields, 'Span');
+  const compDev = getMetadataNumber(fields, 'CompDev', 'CompressionDeviation');
+  const excDev = getMetadataNumber(fields, 'ExcDev', 'ExceptionDeviation');
+  return {
+    name: getMetadataString(fields, 'Name', 'text') ?? binding.pointName,
+    ...(description ? { description } : {}),
+    ...(instrumentTag ? { instrumentTag } : {}),
+    ...(pointType ? { pointType } : {}),
+    ...(zero !== undefined ? { zero } : {}),
+    ...(span !== undefined ? { span } : {}),
+    ...(compDev !== undefined ? { compDev } : {}),
+    ...(excDev !== undefined ? { excDev } : {}),
+    ...(engineeringUnit ? { engineeringUnit } : {}),
+  };
+}
+
+/**
  * Gets the actual Digital State Set assigned to a PI Point using the existing
  * Grafana PI datasource proxy.  No direct PI Web API connection is created.
  */
@@ -742,27 +790,33 @@ async function getPiPointMetadataForBinding(
   binding: PiPointBinding,
   instance: PiDataSourceApi,
   resourceApi: PiDataSourceResourceApi,
+  includeCompleteMetadata = false,
 ): Promise<Record<string, unknown> | undefined> {
   if (binding.webId && typeof resourceApi.getResource === 'function') {
     const pointPath = `/points/${encodeURIComponent(binding.webId)}`;
     const paths = [
-      `${pointPath}?selectedFields=WebId;Name;Path;PointType;DigitalSetName;Links`,
+      `${pointPath}?selectedFields=WebId;Name;Path;Description;Descriptor;InstrumentTag;SourceTag;PointSource;PointType;Zero;Span;CompDev;ExcDev;EngineeringUnits;EngUnits;DigitalSetName;Links`,
       pointPath,
     ];
+    let merged: Record<string, unknown> | undefined;
     for (const path of paths) {
       try {
         const response = await resourceApi.getResource(path);
-        if (hasPiPointMetadata(response)) return response as Record<string, unknown>;
+        if (hasPiPointMetadata(response)) {
+          if (!includeCompleteMetadata) return response as Record<string, unknown>;
+          merged = { ...merged, ...(response as Record<string, unknown>) };
+        }
       } catch {
         // Try the next form supported by this PI Web API version.
       }
     }
+    if (merged) return merged;
   }
   const serverWebId = await getPiDataServerWebId(instance);
   if (serverWebId && typeof resourceApi.getResource === 'function') {
     try {
       const response = await resourceApi.getResource(
-        `/dataservers/${encodeURIComponent(serverWebId)}/points?nameFilter=${encodeURIComponent(binding.pointName)}&selectedFields=Items.WebId;Items.Name;Items.Path;Items.PointType;Items.DigitalSetName;Items.Links`,
+        `/dataservers/${encodeURIComponent(serverWebId)}/points?nameFilter=${encodeURIComponent(binding.pointName)}&selectedFields=Items.WebId;Items.Name;Items.Path;Items.Description;Items.Descriptor;Items.InstrumentTag;Items.SourceTag;Items.PointSource;Items.PointType;Items.Zero;Items.Span;Items.CompDev;Items.ExcDev;Items.EngineeringUnits;Items.EngUnits;Items.DigitalSetName;Items.Links`,
       );
       const point = getResourceItems(response).find((item) => (
         getUnknownString((item as Record<string, unknown>)?.Name)?.toLocaleLowerCase() === binding.pointName.toLocaleLowerCase()
@@ -1524,6 +1578,28 @@ function getResourceNumber(value: unknown, field: string): number | undefined {
   const candidate = (value as Record<string, unknown>)[field];
   const number = typeof candidate === 'number' ? candidate : typeof candidate === 'string' ? Number(candidate) : NaN;
   return Number.isFinite(number) ? number : undefined;
+}
+
+function getMetadataString(value: Record<string, unknown>, ...fields: string[]): string | undefined {
+  for (const field of fields) {
+    const exact = getUnknownString(value[field]);
+    if (exact) return exact;
+    const actualField = Object.keys(value).find((key) => key.toLocaleLowerCase() === field.toLocaleLowerCase());
+    const candidate = actualField ? getUnknownString(value[actualField]) : undefined;
+    if (candidate) return candidate;
+  }
+  return undefined;
+}
+
+function getMetadataNumber(value: Record<string, unknown>, ...fields: string[]): number | undefined {
+  for (const field of fields) {
+    const exact = getResourceNumber(value, field);
+    if (exact !== undefined) return exact;
+    const actualField = Object.keys(value).find((key) => key.toLocaleLowerCase() === field.toLocaleLowerCase());
+    const candidate = actualField ? getResourceNumber(value, actualField) : undefined;
+    if (candidate !== undefined) return candidate;
+  }
+  return undefined;
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {

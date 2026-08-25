@@ -32,6 +32,7 @@ import {
   removeTrendSeries,
   TREND_TYPE,
   type TrendElement,
+  type TrendSeries,
   updateTrendSeriesOptions,
   updateTrendVisualOptions,
 } from '../../createTrend';
@@ -62,7 +63,7 @@ import {
   type GeometricShape,
 } from '../../createRectangle';
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
-import type { PiDigitalStatesResult, PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
+import { getPiPointMetadata, type PiDigitalStatesResult, type PiPointMetadata, type PiPointSearchResult, type PiPointValue } from '../../../pi/piDataSource';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 import { CALCULATION_DRAG_MIME, parseCalculationDragData } from '../../../calculations/calculationDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
@@ -94,6 +95,7 @@ import { isElementLocked, updateElementLocked } from '../../createLocked';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import { TablePropertiesPanel } from './TablePropertiesPanel';
+import { PiPointInfoPanel } from './PiPointInfoPanel';
 import { SqlTablePropertiesPanel } from './SqlTablePropertiesPanel';
 import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
 import {
@@ -118,6 +120,7 @@ import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeR
 import { updateMultistateConfig, updateBackgroundMultistateConfig, type MultistateConfig } from '../../multistate';
 import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay, serializeDisplayCsv, serializeDisplayXml, type DisplayExportFileFormat } from '../../displayTransfer';
 import { collectDisplayDataBindings, DISPLAY_DATA_EXPORT_MAX_POINTS, serializePiDataCsv, serializePiDataXml, type DisplayDataLoader } from '../../displayDataExport';
+import { serializeTableData, type TableDataExportFormat } from '../../tableDataExport';
 import { editorReducer, initialEditorState, type EditorAction, type EditorState } from './editorState';
 import {
   computeDragGeometry,
@@ -188,6 +191,14 @@ interface TrendPopupState {
   cursors: readonly TrendCursor[];
 }
 
+interface TrendPointInfoState {
+  pointName: string;
+  value: string | number | undefined;
+  metadata?: PiPointMetadata;
+  loading: boolean;
+  error?: string;
+}
+
 const TREND_POPUP_MAX_DATA_POINTS = 500;
 const DISPLAY_ZOOM_MIN = 0.1;
 const DISPLAY_ZOOM_MAX = 5;
@@ -234,6 +245,7 @@ export function DisplayEditor({
   const [importError, setImportError] = useState<string | null>(null);
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
+  const [trendPointInfo, setTrendPointInfo] = useState<TrendPointInfoState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
   const [optionsElementId, setOptionsElementId] = useState<string | null>(null);
   // Sidebars are opened explicitly with the element context menu.
@@ -686,9 +698,8 @@ export function DisplayEditor({
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
     const svg = event.currentTarget.querySelector('svg');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
-    // Soltar uma PI Point sobre uma Trend só acrescenta uma série quando o
-    // modo de criação selecionado também for Trend. Nos demais modos, o drop
-    // mantém o comportamento de criar o novo símbolo escolhido.
+    // Trend keeps its explicit insertion mode. Bar Chart and Table, however,
+    // always accept a dropped PI Point as another item.
     const targetTrend = dropSymbolType === 'trend'
       ? resolveTrendDropTarget(
         documentRef.current,
@@ -698,15 +709,13 @@ export function DisplayEditor({
         point,
       )
       : undefined;
-    const targetBarChart = dropSymbolType === 'bar-chart'
-      ? resolveBarChartDropTarget(
-        documentRef.current,
-        event.target,
-        event.clientX,
-        event.clientY,
-        point,
-      )
-      : undefined;
+    const targetBarChart = resolveBarChartDropTarget(
+      documentRef.current,
+      event.target,
+      event.clientX,
+      event.clientY,
+      point,
+    );
     const preview = svg && pointResult
       ? createPiPointDragPreview(
         svg,
@@ -720,7 +729,7 @@ export function DisplayEditor({
         targetTrend,
         dropSymbolType === 'trend',
         targetBarChart,
-        dropSymbolType === 'bar-chart',
+        true,
       )
       : undefined;
     event.dataTransfer.dropEffect = preview?.valid ? 'copy' : 'none';
@@ -848,6 +857,9 @@ export function DisplayEditor({
     const svg = event.currentTarget.querySelector('svg');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
     const currentDocument = documentRef.current;
+    // A Table and Bar Chart always receive a dropped PI Point as a new item,
+    // independently of the selected toolbar tool. Trend keeps its dedicated
+    // insertion mode to avoid changing the existing drop behavior.
     const targetTrend = dropSymbolType === 'trend'
       ? resolveTrendDropTarget(
         currentDocument,
@@ -857,17 +869,15 @@ export function DisplayEditor({
         point,
       )
       : undefined;
-    const targetBarChart = dropSymbolType === 'bar-chart'
-      ? resolveBarChartDropTarget(
-        currentDocument,
-        event.target,
-        event.clientX,
-        event.clientY,
-        point,
-      )
-      : undefined;
+    const targetBarChart = resolveBarChartDropTarget(
+      currentDocument,
+      event.target,
+      event.clientX,
+      event.clientY,
+      point,
+    );
     const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
-    const targetTable = dropSymbolType === 'table' ? resolveTableDropTarget(currentDocument, event.target, point) : undefined;
+    const targetTable = resolveTableDropTarget(currentDocument, event.target, point);
     const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
     const targetText = resolveTextDropTarget(currentDocument, event.target, point);
     if (!binding || (!point && !targetTrend && !targetBarChart && !targetShape && !targetLibrarySymbol && !targetTable && !targetText)) {
@@ -990,9 +1000,19 @@ export function DisplayEditor({
         setOptionsTrendId(null);
         setOptionsElementId(null);
       }
+      if (nextMode === 'edit') setTrendPointInfo(null);
     },
     [dispatch, onModeChange],
   );
+
+  const handleTrendLegendInfo = useCallback((series: TrendSeries, value: string | number | undefined) => {
+    const binding = series.binding;
+    setTrendPointInfo({ pointName: binding.pointName, value, loading: true });
+    void getPiPointMetadata(binding).then(
+      (metadata) => setTrendPointInfo((current) => current && current.pointName === binding.pointName ? { ...current, metadata, loading: false } : current),
+      () => setTrendPointInfo((current) => current && current.pointName === binding.pointName ? { ...current, loading: false, error: 'Não foi possível carregar todos os atributos da PI Point.' } : current),
+    );
+  }, []);
 
   const handleExport = useCallback(async (exportFormat: DisplayExportFileFormat) => {
     if (exporting) return;
@@ -1029,6 +1049,32 @@ export function DisplayEditor({
     downloadExport(serializers[exportFormat](), exportFormat, documentRef.current.name, mimeTypes[exportFormat]);
     setExportMenuOpen(false);
   }, [exporting, loadInterpolatedData, loadRecordedData, trendTimeRange]);
+
+  const handleTableExport = useCallback(async (table: TableElement, exportFormat: TableDataExportFormat) => {
+    if (exporting) {
+      return;
+    }
+    if (!trendTimeRange || !loadRecordedData) {
+      setImportError('Consulta histórica PI indisponível para exportar a Tabela.');
+      return;
+    }
+    const bindings = table.properties.items.map((item) => item.binding);
+    if (bindings.length === 0) {
+      setImportError('A Tabela não possui PI Points para exportar.');
+      return;
+    }
+    setExporting(true);
+    setImportError(null);
+    try {
+      const recorded = await loadRecordedData(bindings, trendTimeRange, { maxDataPoints: DISPLAY_DATA_EXPORT_MAX_POINTS });
+      const content = serializeTableData(table.properties, recorded, exportFormat);
+      downloadExport(content, exportFormat, `${documentRef.current.name}-tabela`);
+    } catch {
+      setImportError('Não foi possível exportar os dados históricos da Tabela.');
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, loadRecordedData, trendTimeRange]);
 
   const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
@@ -1742,6 +1788,7 @@ export function DisplayEditor({
             trendTimeRange={trendTimeRange}
             onTrendOpen={handleTrendOpen}
             onTrendContextMenu={handleTrendContextMenu}
+            onTrendLegendContextMenu={handleTrendLegendInfo}
             onElementContextMenu={handleElementContextMenu}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
             onTableColumnsChange={handleTableColumnsChange}
@@ -1802,6 +1849,7 @@ export function DisplayEditor({
             onOpenInNewTabChange={handleLinkOpenInNewTabChange}
           />
         )}
+        {mode === 'view' && trendPointInfo && <PiPointInfoPanel {...trendPointInfo} />}
         {selectedGauge && (
           <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} binding={selectedGauge.properties.binding} loadDigitalStates={loadDigitalStates} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
@@ -1817,7 +1865,7 @@ export function DisplayEditor({
             onMoveItem={(index, offset) => commitDocument(moveBarChartItem(documentRef.current, selectedBarChart.id, index, offset))}
           />
         )}
-        {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} />}
+        {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} onExport={(format) => void handleTableExport(selectedTable, format)} exporting={exporting} />}
         {selectedSqlTable && <SqlTablePropertiesPanel properties={selectedSqlTable.properties} onChange={handleSqlTableChange} />}
         {selectedRectangle && (
           <RectanglePropertiesPanel
@@ -1943,17 +1991,19 @@ function getDropPoint(
 
 function getSvgViewport(svg: SVGSVGElement) {
   const bounds = svg.getBoundingClientRect();
-  const viewBox = svg.viewBox?.baseVal;
-  const scale = viewBox && viewBox.width > 0 && viewBox.height > 0
-    ? Math.min(bounds.width / viewBox.width, bounds.height / viewBox.height)
+  const viewBoxValues = (svg.getAttribute('viewBox') ?? '')
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  const [viewBoxX = 0, viewBoxY = 0, viewBoxWidth = Number(svg.getAttribute('width')) || bounds.width, viewBoxHeight = Number(svg.getAttribute('height')) || bounds.height] = viewBoxValues;
+  const scale = viewBoxWidth > 0 && viewBoxHeight > 0
+    ? Math.min(bounds.width / viewBoxWidth, bounds.height / viewBoxHeight)
     : 1;
-  const width = viewBox && viewBox.width > 0 ? viewBox.width * scale : bounds.width;
-  const height = viewBox && viewBox.height > 0 ? viewBox.height * scale : bounds.height;
-  const vx = viewBox?.x ?? 0;
-  const vy = viewBox?.y ?? 0;
+  const width = viewBoxWidth * scale;
+  const height = viewBoxHeight * scale;
   return {
-    left: bounds.left + (bounds.width - width) / 2 - vx * scale,
-    top: bounds.top + (bounds.height - height) / 2 - vy * scale,
+    left: bounds.left + (bounds.width - width) / 2 - viewBoxX * scale,
+    top: bounds.top + (bounds.height - height) / 2 - viewBoxY * scale,
     width,
     height,
     scale,

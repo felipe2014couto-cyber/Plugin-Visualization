@@ -68,8 +68,10 @@ export interface TrendProperties extends Record<string, unknown> {
 
 export type TrendElement = DisplayElement<typeof TREND_TYPE, TrendProperties>;
 
-const DEFAULT_TREND_WIDTH = 1100;
-const DEFAULT_TREND_HEIGHT = 460;
+// A new Trend must leave a comfortable working margin around itself.  Users
+// can still resize it freely after insertion.
+const DEFAULT_TREND_WIDTH = 800;
+const DEFAULT_TREND_HEIGHT = 320;
 export const TREND_SERIES_COLORS = [
   '#6e9fff',
   '#ff9830',

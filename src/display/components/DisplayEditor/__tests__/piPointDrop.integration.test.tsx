@@ -9,9 +9,13 @@ import { DisplayEditor, type PiPointDropSymbolType } from '../DisplayEditor';
 import type { LoadCurrentValues } from '../../../runtime/valueRuntime';
 import type { LoadTrendSeries } from '../../../runtime/trendRuntime';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 jest.mock('../../../../pi/piDataSource', () => ({
   searchPiPointsWithStatus: jest.fn(),

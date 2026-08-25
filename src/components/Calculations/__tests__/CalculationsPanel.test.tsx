@@ -4,9 +4,13 @@ import { createTheme } from '@grafana/data';
 import { CalculationsPanel } from '../CalculationsPanel';
 import { CALCULATION_DRAG_MIME } from '../../../calculations/calculationDrag';
 
-jest.mock('@grafana/ui', () => ({
-  useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
-}));
+jest.mock('@grafana/ui', () => {
+  const actual = jest.requireActual('@grafana/ui');
+  return {
+    ...actual,
+    useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()),
+  };
+});
 
 describe('CalculationsPanel', () => {
   it('abre o editor de cálculo sem a área auxiliar de PI Point', async () => {
