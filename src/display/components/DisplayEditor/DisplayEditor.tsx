@@ -244,6 +244,8 @@ export function DisplayEditor({
   } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [editingDisplayName, setEditingDisplayName] = useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = useState(displayDocument.name);
   const [surfaceZoom, setSurfaceZoom] = useState(1);
   const [surfaceViewCenter, setSurfaceViewCenter] = useState({
     x: displayDocument.surface.width / 2,
@@ -321,6 +323,22 @@ export function DisplayEditor({
     reconcileSelection(nextDocument);
     return true;
   }, [publishDocument, reconcileSelection]);
+
+  useEffect(() => {
+    if (!editingDisplayName) {
+      setDisplayNameDraft(displayDocument.name);
+    }
+  }, [displayDocument.name, editingDisplayName]);
+
+  const commitDisplayName = useCallback(() => {
+    const nextName = displayNameDraft.trim();
+    if (nextName) {
+      commitDocument({ ...documentRef.current, name: nextName });
+    } else {
+      setDisplayNameDraft(documentRef.current.name);
+    }
+    setEditingDisplayName(false);
+  }, [commitDocument, displayNameDraft]);
 
   const handleUndo = useCallback(() => {
     const nextHistory = undoDisplayEdit(historyRef.current);
@@ -1484,9 +1502,38 @@ export function DisplayEditor({
         <div className={styles.headerPrimary}>
           <div className={styles.displayLabel}>
             <span className={styles.displayLabelPrefix}>Display:</span>
-            <span className={styles.title} data-testid="display-editor-name">
-              {displayDocument.name}
-            </span>
+            {editingDisplayName && mode === 'edit' ? (
+              <input
+                className={styles.displayNameInput}
+                value={displayNameDraft}
+                autoFocus
+                aria-label="Nome do Display"
+                data-testid="display-editor-name-input"
+                onChange={(event) => setDisplayNameDraft(event.target.value)}
+                onBlur={commitDisplayName}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') commitDisplayName();
+                  if (event.key === 'Escape') {
+                    setDisplayNameDraft(documentRef.current.name);
+                    setEditingDisplayName(false);
+                  }
+                }}
+              />
+            ) : (
+              <span
+                className={styles.title}
+                data-testid="display-editor-name"
+                onDoubleClick={() => {
+                  if (mode === 'edit') {
+                    setDisplayNameDraft(displayDocument.name);
+                    setEditingDisplayName(true);
+                  }
+                }}
+                title={mode === 'edit' ? 'Clique duas vezes para renomear' : undefined}
+              >
+                {displayDocument.name}
+              </span>
+            )}
           </div>
           <div className={styles.modeControls} role="group" aria-label="Modo do display">
             <button
@@ -2309,6 +2356,17 @@ const getStyles = (theme: GrafanaTheme2) => ({
   displayLabelPrefix: css`
     color: var(--text-secondary);
     font-size: 12px;
+  `,
+  displayNameInput: css`
+    min-width: 120px;
+    max-width: 360px;
+    padding: 4px 7px;
+    border: 1px solid var(--accent, #d6339a);
+    border-radius: 4px;
+    outline: none;
+    color: var(--text-primary);
+    background: var(--input-bg, #0d1622);
+    font: inherit;
   `,
   modeControls: css`
     display: flex;
