@@ -75,6 +75,7 @@ export function TrendElementView({
   const state = runtimeState ?? { status: 'loading' as const };
   const configuredSeries = getTrendSeries(element);
   const visual = getTrendVisualOptions(element);
+  const backgroundColor = visual.backgroundColor || 'var(--element-bg, rgba(255, 255, 255, 0.06))';
   const resolvedSeriesStates = seriesStates ?? configuredSeries.slice(0, 1).map((series) => ({ series, runtimeState: state }));
   const cursorPointerDown = cursorEnabled ? onCursorPointerDown : undefined;
 
@@ -191,7 +192,7 @@ export function TrendElementView({
           width={element.width}
           height={element.height}
           rx={14}
-          fill="var(--element-bg, rgba(255, 255, 255, 0.06))"
+          fill={backgroundColor}
           stroke="var(--element-border, rgba(255, 255, 255, 0.35))"
           strokeWidth={1}
           data-testid={`trend-background-${element.id}`}
@@ -238,6 +239,12 @@ function getTrendContent(
   onToggleSeriesSelection: (key: string, ctrlPressed: boolean) => void,
 ): React.ReactNode {
   const formatValue = (value: number) => formatNumber(value, visual.numberFormat);
+  const foreground = visual.foregroundColor || TEXT_COLOR;
+  const axisColor = visual.foregroundColor || AXIS_COLOR;
+  const gridColor = visual.foregroundColor || GRID_COLOR;
+  const plotBackground = visual.backgroundColor || 'rgba(0, 0, 0, 0.12)';
+  const showHorizontalGrid = visual.gridMode !== 'none';
+  const showVerticalGrid = visual.gridMode === 'both';
   const orderedSeriesStates = [...seriesStates].sort((a, b) => Number(b.series.primaryScale === true) - Number(a.series.primaryScale === true));
   const legendX = element.x + element.width - effectiveLegendWidth + 12;
   const dataSeries = orderedSeriesStates.flatMap(({ series, runtimeState }) => {
@@ -402,22 +409,22 @@ function getTrendContent(
         y={chart.plotY}
         width={chart.plotWidth}
         height={chart.plotHeight}
-        fill="rgba(0, 0, 0, 0.12)"
+        fill={plotBackground}
         data-testid={`trend-plot-${element.id}`}
         pointerEvents="all"
         onPointerDown={onPlotPointerDown ? (event) => onPlotPointerDown(event, element.id, chart) : undefined}
       />
       {chart.yTicks.map((tick) => (
         <g key={`y-${tick.value}`} pointerEvents="none">
-          <line
+          {showHorizontalGrid && <line
             x1={chart.plotX}
             y1={tick.y}
             x2={chart.plotX + chart.plotWidth}
             y2={tick.y}
-            stroke={GRID_COLOR}
+            stroke={gridColor}
             strokeWidth={1}
-          />
-          <text x={chart.plotX - 6} y={tick.y + 4} textAnchor="end" fill={TEXT_COLOR} fontSize={AXIS_FONT_SIZE}>
+          />}
+          <text x={chart.plotX - 6} y={tick.y + 4} textAnchor="end" fill={foreground} fontSize={AXIS_FONT_SIZE}>
             {formatValue(tick.value)}
           </text>
         </g>
@@ -440,7 +447,7 @@ function getTrendContent(
         y1={chart.plotY}
         x2={chart.plotX}
         y2={chart.plotY + chart.plotHeight}
-        stroke={AXIS_COLOR}
+        stroke={axisColor}
         strokeWidth={1}
         data-testid={`trend-y-axis-${element.id}`}
         pointerEvents="none"
@@ -450,23 +457,25 @@ function getTrendContent(
         y1={chart.plotY + chart.plotHeight}
         x2={chart.plotX + chart.plotWidth}
         y2={chart.plotY + chart.plotHeight}
-        stroke={AXIS_COLOR}
+        stroke={axisColor}
         strokeWidth={1}
         data-testid={`trend-x-axis-${element.id}`}
         pointerEvents="none"
       />
       {chart.xTicks.map((tick) => (
-        <text
-          key={`x-${tick.time}`}
-          x={tick.x}
-          y={chart.plotY + chart.plotHeight + 18}
-          textAnchor="middle"
-          fill={TEXT_COLOR}
-          fontSize={AXIS_FONT_SIZE}
-          pointerEvents="none"
-        >
-          {formatAxisTime(tick.time, chart.domainEnd - chart.domainStart)}
-        </text>
+        <g key={`x-${tick.time}`}>
+          {showVerticalGrid && <line x1={tick.x} y1={chart.plotY} x2={tick.x} y2={chart.plotY + chart.plotHeight} stroke={gridColor} strokeWidth={1} pointerEvents="none" />}
+          <text
+            x={tick.x}
+            y={chart.plotY + chart.plotHeight + 18}
+            textAnchor="middle"
+            fill={foreground}
+            fontSize={AXIS_FONT_SIZE}
+            pointerEvents="none"
+          >
+            {formatAxisTime(tick.time, chart.domainEnd - chart.domainStart)}
+          </text>
+        </g>
       ))}
       {drawableSeries.map(({ series, data }, index) => {
         const key = trendBindingKey(series.binding);
@@ -476,7 +485,7 @@ function getTrendContent(
         const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
         return (
           <g key={key} opacity={opacity}>
-            <path
+            {visual.traceMode !== 'markers' && <path
               d={path}
               fill="none"
               stroke={series.color || LINE_COLOR}
@@ -486,10 +495,10 @@ function getTrendContent(
               strokeLinecap="round"
               data-testid={index === 0 ? `trend-line-${element.id}` : `trend-line-${element.id}-${index}`}
               pointerEvents="none"
-            />
+            />}
             {visual.showRegression && data.points.length > 1 && <path d={trendRegressionPath(seriesChart, data.points)} fill="none" stroke={series.color || LINE_COLOR} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} pointerEvents="none" />}
-            {series.marker === 'circle' && data.points.map((point) => { const position = trendPointForValue(seriesChart, point); return <circle key={point.time} cx={position.x} cy={position.y} r={3} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
-            {series.marker === 'square' && data.points.map((point) => { const position = trendPointForValue(seriesChart, point); return <rect key={point.time} x={position.x - 3} y={position.y - 3} width={6} height={6} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
+            {(visual.traceMode === 'line-markers' || visual.traceMode === 'markers' || series.marker === 'circle') && data.points.map((point) => { const position = trendPointForValue(seriesChart, point); return <circle key={point.time} cx={position.x} cy={position.y} r={3} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
+            {visual.traceMode === 'line' && series.marker === 'square' && data.points.map((point) => { const position = trendPointForValue(seriesChart, point); return <rect key={point.time} x={position.x - 3} y={position.y - 3} width={6} height={6} fill={series.color || LINE_COLOR} pointerEvents="none" />; })}
             {singlePoint && (
               <circle
                 cx={singlePoint.x}
@@ -565,7 +574,7 @@ function getTrendContent(
 
 function TrendTitle({ element, visual, legendWidth }: { element: TrendElement; visual: ReturnType<typeof getTrendVisualOptions>; legendWidth: number }) {
   const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth);
-  return <text x={element.x + PLOT_MARGIN.left + plotWidth / 2} y={element.y + 20} textAnchor="middle" fill={TEXT_COLOR} fontSize={visual.fontSize} fontFamily={visual.fontFamily} pointerEvents="none">{visual.title}</text>;
+  return <text x={element.x + PLOT_MARGIN.left + plotWidth / 2} y={element.y + 20} textAnchor="middle" fill={visual.foregroundColor || TEXT_COLOR} fontSize={visual.fontSize} fontFamily={visual.fontFamily} pointerEvents="none">{visual.title}</text>;
 }
 
 function TrendMessage({

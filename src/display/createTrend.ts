@@ -23,6 +23,8 @@ export type TrendLineStyle = 'solid' | 'dashed' | 'dotted';
 export type TrendMarker = 'none' | 'circle' | 'square';
 export type TrendNumberFormat = 'automatic' | 'integer' | 'oneDecimal' | 'twoDecimals';
 export type TrendScaleMode = 'single' | 'individual' | 'multiple' | 'configurable';
+export type TrendTraceMode = 'line' | 'line-markers' | 'markers';
+export type TrendGridMode = 'horizontal' | 'both' | 'none';
 
 export interface TrendVisualOptions {
   title: string;
@@ -34,6 +36,12 @@ export interface TrendVisualOptions {
   fontFamily: string;
   fontSize: number;
   legendWidth?: number;
+  traceMode: TrendTraceMode;
+  gridMode: TrendGridMode;
+  /** Empty keeps the current theme color. */
+  foregroundColor: string;
+  /** Empty keeps the current theme background. */
+  backgroundColor: string;
 }
 
 export const DEFAULT_TREND_VISUAL_OPTIONS: TrendVisualOptions = {
@@ -45,6 +53,10 @@ export const DEFAULT_TREND_VISUAL_OPTIONS: TrendVisualOptions = {
   scaleMode: 'single',
   fontFamily: 'Arial',
   fontSize: 16,
+  traceMode: 'line',
+  gridMode: 'horizontal',
+  foregroundColor: '',
+  backgroundColor: '',
 };
 
 export interface TrendProperties extends Record<string, unknown> {
@@ -172,6 +184,10 @@ export function getTrendVisualOptions(element: Pick<TrendElement, 'properties'>)
     scaleMode: visual.scaleMode === 'individual' || visual.scaleMode === 'configurable' ? visual.scaleMode : 'single',
     fontFamily: typeof visual.fontFamily === 'string' && visual.fontFamily.trim() ? visual.fontFamily : 'Arial',
     fontSize: typeof visual.fontSize === 'number' && Number.isFinite(visual.fontSize) ? Math.max(10, Math.min(24, visual.fontSize)) : 16,
+    traceMode: visual.traceMode === 'line-markers' || visual.traceMode === 'markers' ? visual.traceMode : 'line',
+    gridMode: visual.gridMode === 'both' || visual.gridMode === 'none' ? visual.gridMode : 'horizontal',
+    foregroundColor: typeof visual.foregroundColor === 'string' ? visual.foregroundColor : '',
+    backgroundColor: typeof visual.backgroundColor === 'string' ? visual.backgroundColor : '',
     ...(legendWidth !== undefined ? { legendWidth } : {}),
   };
 }
