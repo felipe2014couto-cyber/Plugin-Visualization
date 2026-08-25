@@ -72,7 +72,7 @@ function Harness({
 }
 
 describe('DisplayEditor - Trend', () => {
-  it('adiciona a tag selecionada à Trend selecionada pelo botão dedicado', () => {
+  it('não exibe botão adicional ao selecionar uma Trend', () => {
     const initial = createDisplayDocument({ name: 'Trend com séries' });
     initial.elements = [createTrend({
       id: 'existing-trend',
@@ -81,29 +81,14 @@ describe('DisplayEditor - Trend', () => {
       x: 100,
       y: 100,
     })];
-    const onDocumentChange = jest.fn();
     const secondPoint = { ...selectedPiPoint, name: 'SECOND', path: '\\pims\\SECOND' };
-    render(<Harness loadTrend={jest.fn(async () => ({}))} initial={initial} point={secondPoint} onDocumentChange={onDocumentChange} />);
+    render(<Harness loadTrend={jest.fn(async () => ({}))} initial={initial} point={secondPoint} />);
 
     const trend = screen.getByTestId('display-element-existing-trend');
     fireEvent.pointerDown(trend, { clientX: 200, clientY: 200, pointerId: 1, button: 0 });
     fireEvent.pointerUp(screen.getByTestId('display-surface'), { clientX: 200, clientY: 200, pointerId: 1 });
 
-    const addButton = screen.getByTestId('display-add-tag-to-selected-trend');
-    expect(addButton).not.toBeDisabled();
-    fireEvent.click(addButton);
-
-    expect(onDocumentChange).toHaveBeenCalledWith(expect.objectContaining({
-      elements: [expect.objectContaining({
-        id: 'existing-trend',
-        properties: expect.objectContaining({
-          series: expect.arrayContaining([
-            expect.objectContaining({ binding: expect.objectContaining({ pointName: 'EXISTING' }) }),
-            expect.objectContaining({ binding: expect.objectContaining({ pointName: 'SECOND' }) }),
-          ]),
-        }),
-      })],
-    }));
+    expect(screen.queryByTestId('display-add-tag-to-selected-trend')).not.toBeInTheDocument();
     expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(1);
   });
 

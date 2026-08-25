@@ -1052,12 +1052,6 @@ export function DisplayEditor({
   const selectedTrend = mode === 'edit' && state.selectedElementId
     ? (selectedElement && selectedElement.type === TREND_TYPE ? selectedElement as TrendElement : undefined)
     : undefined;
-  const handleAddPiPointToSelectedTrend = useCallback(() => {
-    if (!selectedTrend || !selectedPiPoint) return;
-    const binding = createPiPointBinding(selectedPiPoint);
-    if (!binding) return;
-    commitDocument(addTrendSeries(documentRef.current, selectedTrend.id, binding));
-  }, [commitDocument, selectedPiPoint, selectedTrend]);
   const handleGaugeChange = useCallback((patch: Parameters<typeof updateGaugeOptions>[2]) => {
     commitDocument(updateGaugeOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
@@ -1536,20 +1530,6 @@ export function DisplayEditor({
                 <button type="button" title="Arrastar como Gráfico de Barras" aria-label="Arrastar como Gráfico de Barras" className={dropSymbolType === 'bar-chart' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar-chart" aria-pressed={dropSymbolType === 'bar-chart'} onClick={() => onDropSymbolTypeChange?.('bar-chart')}><BarChartIcon /></button>
                 <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => onDropSymbolTypeChange?.('trend')}><TrendIcon /></button>
                 <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => onDropSymbolTypeChange?.('table')}>▦</button>
-                {selectedTrend && (
-                  <button
-                    type="button"
-                    title="Adicionar tag à Trend selecionada"
-                    aria-label="Adicionar tag à Trend selecionada"
-                    className={styles.addTrendSeriesButton}
-                    data-testid="display-add-tag-to-selected-trend"
-                    disabled={!selectedTrend || !createPiPointBinding(selectedPiPoint ?? {})}
-                    onClick={handleAddPiPointToSelectedTrend}
-                  >
-                    <AddTagIcon />
-                    <span>Adicionar tag</span>
-                  </button>
-                )}
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
@@ -2764,8 +2744,4 @@ function ExportIcon() {
 
 function ImportIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M12 15V4m-4 7 4 4 4-4" /><path d="M5 13v6h14v-6" /></svg>;
-}
-
-function AddTagIcon() {
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 12.4 11.4 4H20v8.6L11.6 21 3 12.4Z" /><circle cx="16" cy="8" r="1" fill="currentColor" stroke="none" /><path d="M18 15v6M15 18h6" /></svg>;
 }
