@@ -232,6 +232,8 @@ export function DisplayEditor({
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
   const [optionsElementId, setOptionsElementId] = useState<string | null>(null);
+  // Sidebars are opened explicitly with the element context menu.
+  const [propertiesPanelOpen, setPropertiesPanelOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -365,13 +367,10 @@ export function DisplayEditor({
   const handleSelect = useCallback(
     (elementId: string | null) => {
       dispatch({ type: 'SELECT', elementId });
-      setOptionsElementId(elementId);
+      setPropertiesPanelOpen(false);
+      setOptionsElementId(null);
+      setOptionsTrendId(null);
       const element = elementId ? getElementById(documentRef.current, elementId) : undefined;
-      if (element?.type === TREND_TYPE) {
-        setOptionsTrendId(elementId);
-      } else {
-        setOptionsTrendId(null);
-      }
       const calculationId = element && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
         ? (element.properties as { calculationId: string }).calculationId
         : element?.type === 'calculation' && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
@@ -383,22 +382,16 @@ export function DisplayEditor({
   );
   const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
     dispatch({ type: 'SELECT_MANY', elementIds, additive });
-    if (!additive && elementIds.length === 1) {
-      setOptionsElementId(elementIds[0]);
-    } else if (!additive) {
-      setOptionsElementId(null);
-    }
+    setPropertiesPanelOpen(false);
+    setOptionsElementId(null);
+    setOptionsTrendId(null);
   }, [dispatch]);
 
   const handleDoubleClick = useCallback((elementId: string) => {
     dispatch({ type: 'SELECT', elementId });
-    setOptionsElementId(elementId);
-    const el = getElementById(documentRef.current, elementId);
-    if (el?.type === TREND_TYPE) {
-      setOptionsTrendId(elementId);
-    } else {
-      setOptionsTrendId(null);
-    }
+    setPropertiesPanelOpen(false);
+    setOptionsElementId(null);
+    setOptionsTrendId(null);
   }, [dispatch]);
 
   const handleStartDrag = useCallback(
@@ -974,7 +967,7 @@ export function DisplayEditor({
     }
   }, [dispatch, publishDocument]);
 
-  const propertiesOpen = mode === 'edit' && Boolean(state.selectedElementId);
+  const propertiesOpen = mode === 'edit' && propertiesPanelOpen && Boolean(state.selectedElementId);
   const selectedElement = propertiesOpen && state.selectedElementId
     ? getElementById(displayDocument, state.selectedElementId)
     : undefined;
@@ -1136,6 +1129,7 @@ export function DisplayEditor({
   }, [commitDocument]);
 
   const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement, event?: React.MouseEvent) => {
+    setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
@@ -1165,6 +1159,7 @@ export function DisplayEditor({
   }, [dispatch]);
 
   const handleTrendContextMenu = useCallback((element: TrendElement, event?: React.MouseEvent) => {
+    setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
@@ -1195,6 +1190,7 @@ export function DisplayEditor({
   }, [dispatch]);
 
   const handleElementContextMenu = useCallback((element: DisplayElement, event?: React.MouseEvent) => {
+    setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
