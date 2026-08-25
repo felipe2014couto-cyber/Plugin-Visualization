@@ -885,6 +885,18 @@ export function DisplaySurface({
   const viewportHeight = surface.height / zoom;
   const viewportX = (viewCenter?.x ?? surface.width / 2) - viewportWidth / 2;
   const viewportY = (viewCenter?.y ?? surface.height / 2) - viewportHeight / 2;
+  // The scrollable canvas must include elements that extend beyond the
+  // nominal surface (for example after resizing a large Trend). Otherwise
+  // the browser scrollbar is sized only from surface.width/height and the
+  // element remains clipped at the edge.
+  const contentWidth = Math.max(
+    surface.width,
+    ...elements.map((element) => Number.isFinite(element.x + element.width) ? element.x + element.width : surface.width),
+  );
+  const contentHeight = Math.max(
+    surface.height,
+    ...elements.map((element) => Number.isFinite(element.y + element.height) ? element.y + element.height : surface.height),
+  );
 
   return (
     <svg
@@ -895,7 +907,7 @@ export function DisplaySurface({
       width={surface.width}
       height={surface.height}
       viewBox={`${viewportX} ${viewportY} ${viewportWidth} ${viewportHeight}`}
-      style={{ minWidth: surface.width, minHeight: surface.height }}
+      style={{ minWidth: contentWidth, minHeight: contentHeight }}
       xmlns="http://www.w3.org/2000/svg"
       className={css`
         display: block;
