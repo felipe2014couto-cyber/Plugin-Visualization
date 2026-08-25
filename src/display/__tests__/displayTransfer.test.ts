@@ -96,6 +96,19 @@ describe('displayTransfer', () => {
     expect(parseImportedDisplay(serializeDisplay(document))).toEqual(document);
   });
 
+  it('preserva a configuração do módulo Programming ao salvar o Display', () => {
+    const document = createDisplayDocument({ id: 'programming-display', name: 'Programming' });
+    document.programming = {
+      type: 'programming',
+      html: '<strong id="value"></strong>',
+      css: '#value { color: red; }',
+      javascript: 'document.querySelector("#value").textContent = window.pimsVision.piPoints[0].value;',
+      query: [{ name: 'SINUSOID', binding }],
+    };
+
+    expect(parseImportedDisplay(serializeDisplay(document)).programming).toEqual(document.programming);
+  });
+
   it('carrega binding único legado e salva várias séries no contrato canônico', () => {
     const envelope = JSON.parse(serializeDisplay(makeDocument()));
     const trend = envelope.document.elements.find((element: { type: string }) => element.type === 'trend');

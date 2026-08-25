@@ -35,7 +35,7 @@ import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
 import { ProgrammingPanel } from '../../programming/ProgrammingModule';
-import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument, type ProgrammingPiPointContext } from '../../programming/ProgrammingTypes';
+import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument, type ProgrammingPiPointContext, type ProgrammingQueryReference } from '../../programming/ProgrammingTypes';
 import { createSqlTable, SQL_TABLE_TYPE, type SqlTableElement } from '../../display/createSqlTable';
 import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
 import { createDefaultTimeSelection, getRefreshIntervalMs, moveTimeSelectionToNow, REFRESH_INTERVAL_OPTIONS } from '../../time/timeRange';
@@ -71,6 +71,22 @@ function getProgrammingPiPointKey(point: PiPointSearchResult): string {
   return point.webId ?? `${point.dataSourceUid ?? ''}\u0000${point.path ?? ''}\u0000${point.name}`;
 }
 
+function queryReferenceToPiPoint(reference: ProgrammingQueryReference): PiPointSearchResult {
+  return {
+    name: reference.name,
+    path: `\\${reference.binding.serverPath}\\${reference.binding.pointName}`,
+    dataSourceUid: reference.binding.dataSourceUid,
+    webId: reference.binding.webId,
+    pointType: reference.binding.pointType,
+    engineeringUnit: reference.unit,
+  };
+}
+
+function piPointToQueryReference(point: PiPointSearchResult): ProgrammingQueryReference | undefined {
+  const binding = createPiPointBinding(point);
+  return binding ? { name: point.name, binding, ...(point.engineeringUnit ? { unit: point.engineeringUnit } : {}) } : undefined;
+}
+
 export function App() {
   const styles = useStyles2(getStyles);
   const [authenticationState, setAuthenticationState] = useState<AuthenticationState>('checking');
@@ -92,6 +108,20 @@ export function App() {
   const [programmingPiPoints, setProgrammingPiPoints] = useState<PiPointSearchResult[]>([]);
   const [programmingPiValues, setProgrammingPiValues] = useState<Record<string, PiPointValue>>({});
   const [isProgrammingPiSearchOpen, setIsProgrammingPiSearchOpen] = useState(true);
+
+  const commitProgrammingDraft = useCallback((next: ProgrammingDocument) => {
+    setProgrammingDraft(next);
+    setDocument((current) => ({ ...current, programming: next }));
+  }, []);
+
+  const updateProgrammingQuery = useCallback((points: PiPointSearchResult[]) => {
+    const query = points.flatMap((point) => {
+      const reference = piPointToQueryReference(point);
+      return reference ? [reference] : [];
+    });
+    setProgrammingPiPoints(points);
+    commitProgrammingDraft({ ...programmingDraft, query });
+  }, [commitProgrammingDraft, programmingDraft]);
 
   const handleManualRefresh = useCallback(() => {
     setTimeSelection((current) => (current.endExpression === '*' ? moveTimeSelectionToNow(current) : current));
@@ -210,6 +240,16 @@ export function App() {
       .then((savedDocument) => {
         if (active && savedDocument) {
           setDocument(savedDocument.document);
+          const savedProgramming = savedDocument.document.programming;
+          if (savedProgramming) {
+            setProgrammingDraft(savedProgramming);
+            setProgrammingApplied(savedProgramming);
+            setProgrammingPiPoints((savedProgramming.query ?? []).map(queryReferenceToPiPoint));
+          } else {
+            setProgrammingDraft(DEFAULT_PROGRAMMING_DOCUMENT);
+            setProgrammingApplied(DEFAULT_PROGRAMMING_DOCUMENT);
+            setProgrammingPiPoints([]);
+          }
           setDashboardUid(uid);
           setSelectedFolderUid(savedDocument.folderUid);
         }
@@ -288,8 +328,8 @@ export function App() {
   const handleAddProgrammingToDisplay = useCallback(() => {
     setDocument((current) => {
       const query = programmingPiPoints.flatMap((point) => {
-        const binding = createPiPointBinding(point);
-        return binding ? [{ name: point.name, binding, ...(point.engineeringUnit ? { unit: point.engineeringUnit } : {}) }] : [];
+        const reference = piPointToQueryReference(point);
+        return reference ? [reference] : [];
       });
       const element = createProgramming({
         html: programmingDraft.html,
@@ -733,7 +773,7 @@ export function App() {
                 <ProgrammingPanel
                   variant="editor"
                   document={programmingDraft}
-                  onDocumentChange={setProgrammingDraft}
+                  onDocumentChange={commitProgrammingDraft}
                   onApply={() => setProgrammingApplied(programmingDraft)}
                   onAddToDisplay={handleAddProgrammingToDisplay}
                   beforeEditor={activeModule === 'programming' ? (
@@ -753,11 +793,12 @@ export function App() {
                         <div id="programming-pi-system-search" className={styles.piSearchContent}>
                           <PiPointSearch
                             enabled={hasPiConnection}
-                            onSelect={(point) => setProgrammingPiPoints((current) => (
-                              current.some((candidate) => getProgrammingPiPointKey(candidate) === getProgrammingPiPointKey(point))
-                                ? current
-                                : [...current, point]
-                            ))}
+                            onSelect={(point) => {
+                              const next = programmingPiPoints.some((candidate) => getProgrammingPiPointKey(candidate) === getProgrammingPiPointKey(point))
+                                ? programmingPiPoints
+                                : [...programmingPiPoints, point];
+                              updateProgrammingQuery(next);
+                            }}
                           />
                         </div>
                       )}
@@ -773,7 +814,7 @@ export function App() {
                                 <button
                                   type="button"
                                   aria-label={`Remover ${point.name} da consulta`}
-                                  onClick={() => setProgrammingPiPoints((current) => current.filter(
+                                  onClick={() => updateProgrammingQuery(programmingPiPoints.filter(
                                     (candidate) => getProgrammingPiPointKey(candidate) !== getProgrammingPiPointKey(point),
                                   ))}
                                 >×</button>

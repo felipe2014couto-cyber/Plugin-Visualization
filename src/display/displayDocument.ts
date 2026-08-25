@@ -3,6 +3,7 @@ import type { DisplaySurface } from './displaySurface';
 import type { DisplayElement } from './displayElement';
 import type { CalculationDefinition } from '../calculations/calculationEngine';
 import type { MiniSheetsDocument } from '../components/MiniSheets/miniSheetsDocument';
+import type { ProgrammingDocument } from '../programming/ProgrammingTypes';
 
 export interface DisplayDocument {
   schemaVersion: DisplaySchemaVersion;
@@ -12,4 +13,5 @@ export interface DisplayDocument {
   elements: DisplayElement[];
   calculations?: CalculationDefinition[];
   miniSheets?: MiniSheetsDocument;
+  programming?: ProgrammingDocument;
 }
