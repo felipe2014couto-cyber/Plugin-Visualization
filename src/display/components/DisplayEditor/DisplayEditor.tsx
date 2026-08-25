@@ -1,4 +1,4 @@
-import React, { useReducer, useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import React, { useReducer, useEffect, useRef, useCallback, useState, useMemo, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
@@ -261,6 +261,24 @@ export function DisplayEditor({
   const trendPopupRef = useRef<TrendPopupState | null>(null);
   const copiedElementsRef = useRef<DisplayElement[]>([]);
   const pasteCountRef = useRef(0);
+  const surfaceWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Keep the native scroll position aligned with the logical viewport. This
+  // is important after “Ajustar à tela”: changing the SVG viewBox alone does
+  // not move a previously scrolled container back to the centered content.
+  useLayoutEffect(() => {
+    const wrapper = surfaceWrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+    const { width, height } = displayDocument.surface;
+    const viewportWidth = width / Math.max(0.01, surfaceZoom);
+    const viewportHeight = height / Math.max(0.01, surfaceZoom);
+    const targetLeft = (surfaceViewCenter.x - viewportWidth / 2) * surfaceZoom;
+    const targetTop = (surfaceViewCenter.y - viewportHeight / 2) * surfaceZoom;
+    wrapper.scrollLeft = Math.max(0, Math.min(targetLeft, wrapper.scrollWidth - wrapper.clientWidth));
+    wrapper.scrollTop = Math.max(0, Math.min(targetTop, wrapper.scrollHeight - wrapper.clientHeight));
+  }, [displayDocument.surface, surfaceViewCenter, surfaceZoom]);
 
   useEffect(() => {
     if (optionsTrendId && state.selectedElementId !== optionsTrendId) {
@@ -1635,6 +1653,7 @@ export function DisplayEditor({
       <div className={styles.workspace}>
         <div
           className={styles.surfaceWrapper}
+          ref={surfaceWrapperRef}
           data-testid="display-editor-surface-wrapper"
           onDragOver={handlePiPointDragOver}
           onDragLeave={handlePiPointDragLeave}
