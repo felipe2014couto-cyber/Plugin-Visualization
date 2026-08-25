@@ -32,6 +32,7 @@ import {
   removeTrendSeries,
   TREND_TYPE,
   type TrendElement,
+  type TrendSeries,
   updateTrendSeriesOptions,
   updateTrendVisualOptions,
 } from '../../createTrend';
@@ -62,7 +63,7 @@ import {
   type GeometricShape,
 } from '../../createRectangle';
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
-import type { PiDigitalStatesResult, PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
+import { getPiPointMetadata, type PiDigitalStatesResult, type PiPointMetadata, type PiPointSearchResult, type PiPointValue } from '../../../pi/piDataSource';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 import { CALCULATION_DRAG_MIME, parseCalculationDragData } from '../../../calculations/calculationDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
@@ -94,6 +95,7 @@ import { isElementLocked, updateElementLocked } from '../../createLocked';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import { TablePropertiesPanel } from './TablePropertiesPanel';
+import { PiPointInfoPanel } from './PiPointInfoPanel';
 import { SqlTablePropertiesPanel } from './SqlTablePropertiesPanel';
 import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
 import {
@@ -189,6 +191,14 @@ interface TrendPopupState {
   cursors: readonly TrendCursor[];
 }
 
+interface TrendPointInfoState {
+  pointName: string;
+  value: string | number | undefined;
+  metadata?: PiPointMetadata;
+  loading: boolean;
+  error?: string;
+}
+
 const TREND_POPUP_MAX_DATA_POINTS = 500;
 const DISPLAY_ZOOM_MIN = 0.1;
 const DISPLAY_ZOOM_MAX = 5;
@@ -235,6 +245,7 @@ export function DisplayEditor({
   const [importError, setImportError] = useState<string | null>(null);
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
+  const [trendPointInfo, setTrendPointInfo] = useState<TrendPointInfoState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
   const [optionsElementId, setOptionsElementId] = useState<string | null>(null);
   // Sidebars are opened explicitly with the element context menu.
@@ -950,9 +961,19 @@ export function DisplayEditor({
         setOptionsTrendId(null);
         setOptionsElementId(null);
       }
+      if (nextMode === 'edit') setTrendPointInfo(null);
     },
     [dispatch, onModeChange],
   );
+
+  const handleTrendLegendInfo = useCallback((series: TrendSeries, value: string | number | undefined) => {
+    const binding = series.binding;
+    setTrendPointInfo({ pointName: binding.pointName, value, loading: true });
+    void getPiPointMetadata(binding).then(
+      (metadata) => setTrendPointInfo((current) => current && current.pointName === binding.pointName ? { ...current, metadata, loading: false } : current),
+      () => setTrendPointInfo((current) => current && current.pointName === binding.pointName ? { ...current, loading: false, error: 'Não foi possível carregar todos os atributos da PI Point.' } : current),
+    );
+  }, []);
 
   const handleExport = useCallback(async (exportFormat: DisplayExportFileFormat) => {
     if (exporting) return;
@@ -1728,6 +1749,7 @@ export function DisplayEditor({
             trendTimeRange={trendTimeRange}
             onTrendOpen={handleTrendOpen}
             onTrendContextMenu={handleTrendContextMenu}
+            onTrendLegendContextMenu={handleTrendLegendInfo}
             onElementContextMenu={handleElementContextMenu}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
             onTableColumnsChange={handleTableColumnsChange}
@@ -1788,6 +1810,7 @@ export function DisplayEditor({
             onOpenInNewTabChange={handleLinkOpenInNewTabChange}
           />
         )}
+        {mode === 'view' && trendPointInfo && <PiPointInfoPanel {...trendPointInfo} />}
         {selectedGauge && (
           <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} binding={selectedGauge.properties.binding} loadDigitalStates={loadDigitalStates} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}

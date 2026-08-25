@@ -7,7 +7,7 @@ import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { CALCULATION_TYPE, type CalculationElement } from '../../createCalculation';
 import { CalculationElementView } from '../CalculationElementView';
 import { evaluateCalculation, type CalculationDefinition } from '../../../calculations/calculationEngine';
-import { createTrendElementForElement, getTrendSeries, TREND_TYPE, type TrendElement } from '../../createTrend';
+import { createTrendElementForElement, getTrendSeries, TREND_TYPE, type TrendElement, type TrendSeries } from '../../createTrend';
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
 import { BAR_CHART_TYPE, getBarChartVisualOptions, getBarChartItemConsumerId, type BarChartElement } from '../../createBarChart';
 import { TABLE_TYPE, type TableColumnConfig, type TableElement } from '../../createTable';
@@ -138,6 +138,7 @@ export interface DisplaySurfaceProps {
   trendTimeRange?: DisplayTimeRange;
   onTrendOpen?: (element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors?: readonly TrendCursor[]) => void;
   onTrendContextMenu?: (element: TrendElement, event?: React.MouseEvent) => void;
+  onTrendLegendContextMenu?: (series: TrendSeries, value: string | number | undefined) => void;
   onElementContextMenu?: (element: DisplayElement, event?: React.MouseEvent) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement, event?: React.MouseEvent) => void;
   onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
@@ -198,6 +199,7 @@ export function DisplaySurface({
   trendTimeRange,
   onTrendOpen,
   onTrendContextMenu,
+  onTrendLegendContextMenu,
   onElementContextMenu,
   onLibrarySymbolContextMenu,
   onTableColumnsChange,
@@ -453,6 +455,13 @@ export function DisplaySurface({
       onElementContextMenu?.(topLevelElement, event);
     }
   }, [editable, elements, onElementContextMenu, onTrendContextMenu]);
+
+  const handleTrendLegendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, _elementId: string, series: TrendSeries, value: string | number | undefined) => {
+    if (editable) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onTrendLegendContextMenu?.(series, value);
+  }, [editable, onTrendLegendContextMenu]);
 
   const handleLibrarySymbolContextMenu = useCallback((event: React.MouseEvent<SVGElement>, elementId: string) => {
     if (!editable) {
@@ -1058,6 +1067,7 @@ export function DisplaySurface({
                 timeRange={trendTimeRange}
                 onDoubleClick={handleTrendDoubleClick}
                 onContextMenu={handleTrendContextMenu}
+                onLegendContextMenu={handleTrendLegendContextMenu}
               />
             );
           }

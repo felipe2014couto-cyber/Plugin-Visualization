@@ -41,6 +41,7 @@ export interface TrendElementViewProps {
   timeRange?: DisplayTimeRange;
   onDoubleClick?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
   onContextMenu?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
+  onLegendContextMenu?: (event: React.MouseEvent<SVGGElement>, elementId: string, series: TrendSeries, value: string | number | undefined) => void;
   showBackground?: boolean;
 }
 
@@ -70,6 +71,7 @@ export function TrendElementView({
   timeRange,
   onDoubleClick,
   onContextMenu,
+  onLegendContextMenu,
   showBackground = true,
 }: TrendElementViewProps) {
   const state = runtimeState ?? { status: 'loading' as const };
@@ -168,6 +170,7 @@ export function TrendElementView({
     effectiveLegendWidth,
     selectedSeriesKeys,
     handleToggleSeriesSelection,
+    onLegendContextMenu,
   );
   const clipPathId = trendContentClipPathId(element.id);
 
@@ -237,6 +240,7 @@ function getTrendContent(
   effectiveLegendWidth: number,
   selectedSeriesKeys: ReadonlySet<string>,
   onToggleSeriesSelection: (key: string, ctrlPressed: boolean) => void,
+  onLegendContextMenu?: (event: React.MouseEvent<SVGGElement>, elementId: string, series: TrendSeries, value: string | number | undefined) => void,
 ): React.ReactNode {
   const formatValue = (value: number) => formatNumber(value, visual.numberFormat);
   const foreground = visual.foregroundColor || TEXT_COLOR;
@@ -293,6 +297,11 @@ function getTrendContent(
             }}
             onPointerDown={(event) => {
               event.stopPropagation();
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onLegendContextMenu?.(event, element.id, series, currentValue ?? currentState);
             }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
