@@ -53,6 +53,7 @@ import {
 } from '../../runtime/trendCursor';
 import {
   getElementById,
+  getCanvasBounds,
   getResizeHandlePositions,
   getResizeHandleRect,
   getHandleCursor,
@@ -881,22 +882,7 @@ export function DisplaySurface({
         height: selectedElementGeom.height,
       })
     : [];
-  const viewportWidth = surface.width / zoom;
-  const viewportHeight = surface.height / zoom;
-  const viewportX = (viewCenter?.x ?? surface.width / 2) - viewportWidth / 2;
-  const viewportY = (viewCenter?.y ?? surface.height / 2) - viewportHeight / 2;
-  // The scrollable canvas must include elements that extend beyond the
-  // nominal surface (for example after resizing a large Trend). Otherwise
-  // the browser scrollbar is sized only from surface.width/height and the
-  // element remains clipped at the edge.
-  const contentWidth = Math.max(
-    surface.width,
-    ...elements.map((element) => Number.isFinite(element.x + element.width) ? element.x + element.width : surface.width),
-  );
-  const contentHeight = Math.max(
-    surface.height,
-    ...elements.map((element) => Number.isFinite(element.y + element.height) ? element.y + element.height : surface.height),
-  );
+  const canvasBounds = getCanvasBounds(surface, elements);
 
   return (
     <svg
@@ -904,10 +890,10 @@ export function DisplaySurface({
       onDoubleClick={handleSvgDoubleClick}
       onContextMenu={handleElementContextMenu}
       ref={svgRef}
-      width={surface.width}
-      height={surface.height}
-      viewBox={`${viewportX} ${viewportY} ${viewportWidth} ${viewportHeight}`}
-      style={{ minWidth: contentWidth, minHeight: contentHeight }}
+      width={canvasBounds.width}
+      height={canvasBounds.height}
+      viewBox={`${canvasBounds.left} ${canvasBounds.top} ${canvasBounds.width} ${canvasBounds.height}`}
+      style={{ width: canvasBounds.width * zoom, height: canvasBounds.height * zoom, flex: '0 0 auto' }}
       xmlns="http://www.w3.org/2000/svg"
       className={css`
         display: block;
@@ -938,20 +924,20 @@ export function DisplaySurface({
         })}
       </defs>
       <rect
-        x={viewportX}
-        y={viewportY}
-        width={viewportWidth}
-        height={viewportHeight}
+        x={canvasBounds.left}
+        y={canvasBounds.top}
+        width={canvasBounds.width}
+        height={canvasBounds.height}
         fill={surface.backgroundColor}
         className={surface.backgroundColor.toLowerCase() === DEFAULT_SURFACE_BACKGROUND ? themedDefaultSurface : undefined}
         data-testid="display-surface-background"
       />
       {editable && (
         <rect
-          x={viewportX}
-          y={viewportY}
-          width={viewportWidth}
-          height={viewportHeight}
+          x={canvasBounds.left}
+          y={canvasBounds.top}
+          width={canvasBounds.width}
+          height={canvasBounds.height}
           fill="url(#visualization-editor-grid)"
           pointerEvents="none"
           data-testid="display-surface-grid"

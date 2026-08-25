@@ -15,6 +15,31 @@ export interface ElementGeometry {
   height: number;
 }
 
+export interface CanvasBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** Returns the full canvas required by the surface and all top-level elements. */
+export function getCanvasBounds(
+  surface: DisplayDocument['surface'],
+  elements: readonly DisplayElement[],
+): CanvasBounds {
+  const left = Math.min(0, ...elements.map((element) => Number.isFinite(element.x) ? element.x : 0));
+  const top = Math.min(0, ...elements.map((element) => Number.isFinite(element.y) ? element.y : 0));
+  const right = Math.max(surface.width, ...elements.map((element) => {
+    const value = element.x + element.width;
+    return Number.isFinite(value) ? value : surface.width;
+  }));
+  const bottom = Math.max(surface.height, ...elements.map((element) => {
+    const value = element.y + element.height;
+    return Number.isFinite(value) ? value : surface.height;
+  }));
+  return { left, top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
+}
+
 export const MIN_ELEMENT_SIZE = 1;
 
 export function getElementById(

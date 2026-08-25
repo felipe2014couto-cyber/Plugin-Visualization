@@ -122,7 +122,9 @@ import { editorReducer, initialEditorState, type EditorAction, type EditorState 
 import {
   computeDragGeometry,
   computeResizeGeometry,
+  getCanvasBounds,
   getElementById,
+  svgPointFromEvent,
   updateElementGeometry,
   type ElementGeometry,
   type Point,
@@ -262,6 +264,10 @@ export function DisplayEditor({
   const copiedElementsRef = useRef<DisplayElement[]>([]);
   const pasteCountRef = useRef(0);
   const surfaceWrapperRef = useRef<HTMLDivElement>(null);
+  const canvasBounds = useMemo(
+    () => getCanvasBounds(displayDocument.surface, displayDocument.elements),
+    [displayDocument.elements, displayDocument.surface],
+  );
 
   // Keep the native scroll position aligned with the logical viewport. This
   // is important after “Ajustar à tela”: changing the SVG viewBox alone does
@@ -271,14 +277,27 @@ export function DisplayEditor({
     if (!wrapper) {
       return;
     }
-    const { width, height } = displayDocument.surface;
-    const viewportWidth = width / Math.max(0.01, surfaceZoom);
-    const viewportHeight = height / Math.max(0.01, surfaceZoom);
-    const targetLeft = (surfaceViewCenter.x - viewportWidth / 2) * surfaceZoom;
-    const targetTop = (surfaceViewCenter.y - viewportHeight / 2) * surfaceZoom;
+    const targetLeft = (surfaceViewCenter.x - canvasBounds.left) * surfaceZoom - wrapper.clientWidth / 2;
+    const targetTop = (surfaceViewCenter.y - canvasBounds.top) * surfaceZoom - wrapper.clientHeight / 2;
     wrapper.scrollLeft = Math.max(0, Math.min(targetLeft, wrapper.scrollWidth - wrapper.clientWidth));
     wrapper.scrollTop = Math.max(0, Math.min(targetTop, wrapper.scrollHeight - wrapper.clientHeight));
-  }, [displayDocument.surface, surfaceViewCenter, surfaceZoom]);
+  }, [canvasBounds, surfaceViewCenter, surfaceZoom]);
+
+  const handleSurfaceScroll = useCallback(() => {
+    const wrapper = surfaceWrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+    const nextCenter = {
+      x: canvasBounds.left + (wrapper.scrollLeft + wrapper.clientWidth / 2) / surfaceZoom,
+      y: canvasBounds.top + (wrapper.scrollTop + wrapper.clientHeight / 2) / surfaceZoom,
+    };
+    setSurfaceViewCenter((current) => (
+      Math.abs(current.x - nextCenter.x) < 0.5 && Math.abs(current.y - nextCenter.y) < 0.5
+        ? current
+        : nextCenter
+    ));
+  }, [canvasBounds, surfaceZoom]);
 
   useEffect(() => {
     if (optionsTrendId && state.selectedElementId !== optionsTrendId) {
@@ -1487,6 +1506,7 @@ export function DisplayEditor({
   const handleZoomFit = useCallback(() => {
     const elements = documentRef.current.elements;
     const surface = documentRef.current.surface;
+    const wrapper = surfaceWrapperRef.current;
     if (elements.length === 0) {
       setSurfaceZoom(1);
       setSurfaceViewCenter({ x: surface.width / 2, y: surface.height / 2 });
@@ -1496,13 +1516,16 @@ export function DisplayEditor({
     const top = Math.min(...elements.map((element) => element.y));
     const right = Math.max(...elements.map((element) => element.x + element.width));
     const bottom = Math.max(...elements.map((element) => element.y + element.height));
-    // Use the full available viewport so the display is shown at the largest
-    // zoom that still keeps every element visible.
-    const padding = 1;
+    // Base the fit on the actual visible editor area, not on the saved surface
+    // dimensions. This keeps the selection centered even when the display is
+    // larger than the viewport and is being shown through native scrolling.
+    const padding = 0.92;
+    const availableWidth = Math.max(1, wrapper?.clientWidth || surface.width);
+    const availableHeight = Math.max(1, wrapper?.clientHeight || surface.height);
     const zoom = Math.max(DISPLAY_ZOOM_MIN, Math.min(
       DISPLAY_ZOOM_MAX,
-      surface.width / Math.max(1, (right - left) * padding),
-      surface.height / Math.max(1, (bottom - top) * padding),
+      availableWidth / Math.max(1, (right - left) / padding),
+      availableHeight / Math.max(1, (bottom - top) / padding),
     ));
     setSurfaceZoom(Number(zoom.toFixed(2)));
     setSurfaceViewCenter({ x: (left + right) / 2, y: (top + bottom) / 2 });
@@ -1655,6 +1678,7 @@ export function DisplayEditor({
           className={styles.surfaceWrapper}
           ref={surfaceWrapperRef}
           data-testid="display-editor-surface-wrapper"
+          onScroll={handleSurfaceScroll}
           onDragOver={handlePiPointDragOver}
           onDragLeave={handlePiPointDragLeave}
           onDrop={handlePiPointDrop}
@@ -1869,27 +1893,20 @@ function getDropPoint(
     || clientY < bounds.top || clientY > bounds.bottom) {
     return undefined;
   }
-  const viewport = getSvgViewport(bounds, document);
-  if (clientX < viewport.left || clientX > viewport.left + viewport.width
-    || clientY < viewport.top || clientY > viewport.top + viewport.height) {
-    return undefined;
-  }
-  return {
-    x: (clientX - viewport.left) / viewport.scale,
-    y: (clientY - viewport.top) / viewport.scale,
-  };
+  return svgPointFromEvent(svg, clientX, clientY);
 }
 
-function getSvgViewport(bounds: DOMRect, document: DisplayDocument) {
-  const scale = Math.min(
-    bounds.width / document.surface.width,
-    bounds.height / document.surface.height,
-  );
-  const width = document.surface.width * scale;
-  const height = document.surface.height * scale;
+function getSvgViewport(svg: SVGSVGElement) {
+  const bounds = svg.getBoundingClientRect();
+  const viewBox = svg.viewBox.baseVal;
+  const scale = viewBox.width > 0 && viewBox.height > 0
+    ? Math.min(bounds.width / viewBox.width, bounds.height / viewBox.height)
+    : 1;
+  const width = viewBox.width * scale;
+  const height = viewBox.height * scale;
   return {
-    left: bounds.left + (bounds.width - width) / 2,
-    top: bounds.top + (bounds.height - height) / 2,
+    left: bounds.left + (bounds.width - width) / 2 - viewBox.x * scale,
+    top: bounds.top + (bounds.height - height) / 2 - viewBox.y * scale,
     width,
     height,
     scale,
@@ -1939,9 +1956,8 @@ function createPiPointDragPreview(
     return createInvalidDragPreview(wrapper, clientX, clientY, label, symbolType);
   }
 
-  const svgBounds = svg.getBoundingClientRect();
   const wrapperBounds = wrapper.getBoundingClientRect();
-  const viewport = getSvgViewport(svgBounds, document);
+  const viewport = getSvgViewport(svg);
   if (targetTrend) {
     const trendLeft = viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale;
     const trendTop = viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale;
@@ -2012,9 +2028,8 @@ function createCalculationDragPreview(
     return undefined;
   }
   if (symbolType === 'trend' && targetTrend) {
-    const svgBounds = svg.getBoundingClientRect();
     const wrapperBounds = wrapper.getBoundingClientRect();
-    const viewport = getSvgViewport(svgBounds, document);
+    const viewport = getSvgViewport(svg);
     return {
       left: viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale,
       top: viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale,
@@ -2028,9 +2043,8 @@ function createCalculationDragPreview(
     };
   }
   const prototype = createCalculationDropPreviewElement(symbolType, document);
-  const svgBounds = svg.getBoundingClientRect();
   const wrapperBounds = wrapper.getBoundingClientRect();
-  const viewport = getSvgViewport(svgBounds, document);
+  const viewport = getSvgViewport(svg);
   const positioned = positionElementAt(prototype, point, document);
   return {
     left: viewport.left - wrapperBounds.left + positioned.x * viewport.scale,
