@@ -44,6 +44,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     };
 
     const timer = setTimeout(() => {
+      window.addEventListener('pointerdown', handlePointerDownOutside, true);
       window.addEventListener('mousedown', handlePointerDownOutside, true);
       window.addEventListener('touchstart', handlePointerDownOutside, true);
       window.addEventListener('contextmenu', handlePointerDownOutside, true);
@@ -53,6 +54,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
     return () => {
       clearTimeout(timer);
+      window.removeEventListener('pointerdown', handlePointerDownOutside, true);
       window.removeEventListener('mousedown', handlePointerDownOutside, true);
       window.removeEventListener('touchstart', handlePointerDownOutside, true);
       window.removeEventListener('contextmenu', handlePointerDownOutside, true);

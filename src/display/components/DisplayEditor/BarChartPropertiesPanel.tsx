@@ -21,7 +21,6 @@ export interface BarChartPropertiesPanelProps {
   onVisualChange: (patch: Partial<BarChartVisualOptions>) => void;
   onRemoveItem: (index: number) => void;
   onMoveItem: (index: number, offset: -1 | 1) => void;
-  onClose: () => void;
 }
 
 export function BarChartPropertiesPanel({
@@ -30,7 +29,6 @@ export function BarChartPropertiesPanel({
   onVisualChange,
   onRemoveItem,
   onMoveItem,
-  onClose,
 }: BarChartPropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const items = getBarChartItems(element);
@@ -54,9 +52,6 @@ export function BarChartPropertiesPanel({
       {/* Header */}
       <div className={styles.heading}>
         <strong>Gráfico de Barras</strong>
-        <button type="button" onClick={onClose} aria-label="Fechar opções do Gráfico de Barras" title="Fechar">
-          ×
-        </button>
       </div>
 
       {/* Título */}
@@ -430,8 +425,8 @@ function HorizontalBarIcon() {
 
 const getStyles = (theme: GrafanaTheme2) => ({
   panel: css`
-    width: 290px;
-    flex: 0 0 290px;
+    width: 300px;
+    flex: 0 0 300px;
     min-height: 0;
     max-height: 100%;
     overflow-x: hidden;
@@ -439,8 +434,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     scrollbar-gutter: stable;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px;
+    gap: 12px;
+    padding: 14px;
     box-sizing: border-box;
     color: var(--text-primary);
     background: var(--surface-primary);

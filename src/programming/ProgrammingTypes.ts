@@ -5,6 +5,19 @@ export interface ProgrammingDocument {
   html: string;
   css: string;
   javascript: string;
+  query?: ProgrammingQueryReference[];
+}
+
+export interface ProgrammingQueryReference {
+  name: string;
+  binding: {
+    dataSourceUid: string;
+    serverPath: string;
+    pointName: string;
+    webId?: string;
+    pointType?: string;
+  };
+  unit?: string;
 }
 
 /** Dados enviados pela aplicação ao iframe, sem conceder acesso ao Grafana. */

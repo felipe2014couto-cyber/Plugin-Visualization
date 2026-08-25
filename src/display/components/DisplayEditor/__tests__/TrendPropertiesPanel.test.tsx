@@ -16,7 +16,6 @@ describe('TrendPropertiesPanel', () => {
     const onVisualChange = jest.fn();
     const onSeriesChange = jest.fn();
     const onSeriesRemove = jest.fn();
-    const onClose = jest.fn();
 
     render(
       <TrendPropertiesPanel
@@ -24,7 +23,6 @@ describe('TrendPropertiesPanel', () => {
         onVisualChange={onVisualChange}
         onSeriesChange={onSeriesChange}
         onSeriesRemove={onSeriesRemove}
-        onClose={onClose}
       />,
     );
 
@@ -51,7 +49,6 @@ describe('TrendPropertiesPanel', () => {
         onVisualChange={jest.fn()}
         onSeriesChange={jest.fn()}
         onSeriesRemove={jest.fn()}
-        onClose={jest.fn()}
       />,
     );
 

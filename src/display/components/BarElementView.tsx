@@ -18,6 +18,12 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const options = element.properties;
   const binding = options.binding;
   const barOptions = getBarOptions(element.properties);
+  // Displays criados antes da opção de cor do preenchimento não possuem essa
+  // propriedade. Nesse caso o trilho deve acompanhar o tema ativo; uma cor
+  // escolhida explicitamente pelo usuário continua sendo preservada.
+  const trackColor = typeof element.properties.backgroundColor === 'string'
+    ? barOptions.backgroundColor
+    : 'var(--surface-secondary, #2d3b4f)';
   const value = getNumericValue(runtimeState);
   const minimum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero : options.minimum;
   const maximum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : options.maximum;
@@ -75,7 +81,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
           {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={barCenterX} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
         </text>
       )}
-      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill={barOptions.backgroundColor} data-testid={`bar-track-${element.id}`} pointerEvents="none" />
+      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill={trackColor} data-testid={`bar-track-${element.id}`} pointerEvents="none" />
       {options.showScale !== false && !horizontal && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
         const valueAtTick = minimum + ((maximum - minimum) * index) / 8;
         const y = plotY + plotHeight - (plotHeight * index) / 8;

@@ -395,6 +395,12 @@ function PopupChart({
       )
     : 24;
   const plot = { x: plotX, y: 20, width: Math.max(120, POPUP_WIDTH - effectiveLegendWidth - plotX), height: 724 };
+  const foreground = visualOptions.foregroundColor || 'var(--text-primary)';
+  const gridColor = visualOptions.foregroundColor || 'var(--border-subtle)';
+  const axisColor = visualOptions.foregroundColor || 'var(--text-secondary)';
+  const plotBackground = visualOptions.backgroundColor || 'transparent';
+  const showHorizontalGrid = visualOptions.gridMode !== 'none';
+  const showVerticalGrid = visualOptions.gridMode === 'both';
   const dividerX = plot.x + plot.width;
   const legendX = dividerX + 16;
   const timeSpan = Math.max(1, domainEnd - domainStart);
@@ -458,13 +464,14 @@ function PopupChart({
         onEndCursorDrag();
       }}
     >
-      {visualOptions.title && <text x={plot.x + plot.width / 2} y={plot.y + 18} textAnchor="middle" fill="var(--text-primary)" fontSize={visualOptions.fontSize} fontFamily={visualOptions.fontFamily}>{visualOptions.title}</text>}
+      <rect x={plot.x} y={plot.y} width={plot.width} height={plot.height} fill={plotBackground} />
+      {visualOptions.title && <text x={plot.x + plot.width / 2} y={plot.y + 18} textAnchor="middle" fill={foreground} fontSize={visualOptions.fontSize} fontFamily={visualOptions.fontFamily}>{visualOptions.title}</text>}
       {Array.from({ length: visualOptions.scaleIntervals + 1 }, (_, index) => index).map((index) => {
         const y = plot.y + (plot.height * index) / visualOptions.scaleIntervals;
         return (
           <g key={index}>
             {index < visualOptions.scaleIntervals && index % 2 === 1 && <rect x={plot.x} y={y} width={plot.width} height={plot.height / visualOptions.scaleIntervals} fill="var(--chart-band)" />}
-            <line x1={plot.x} y1={y} x2={plot.x + plot.width} y2={y} stroke="var(--border-subtle)" />
+            {showHorizontalGrid && <line x1={plot.x} y1={y} x2={plot.x + plot.width} y2={y} stroke={gridColor} />}
             {axisSeries.map(({ color, scale, name, data, stateLabels }, seriesIndex) => {
               const axisValue = data.points.length > 0
                 ? formatValue(scale.max - ((scale.max - scale.min) * index) / visualOptions.scaleIntervals, visualOptions.numberFormat)
@@ -494,12 +501,13 @@ function PopupChart({
           </text>
         )) : []
       ))}
-      <line x1={plot.x} y1={plot.y} x2={plot.x} y2={plot.y + plot.height} stroke="var(--text-secondary)" />
-      <line x1={plot.x} y1={plot.y + plot.height} x2={plot.x + plot.width} y2={plot.y + plot.height} stroke="var(--text-secondary)" />
+      <line x1={plot.x} y1={plot.y} x2={plot.x} y2={plot.y + plot.height} stroke={axisColor} />
+      <line x1={plot.x} y1={plot.y + plot.height} x2={plot.x + plot.width} y2={plot.y + plot.height} stroke={axisColor} />
       {xTicks.map((time, tickIndex) => (
         <g key={`xtick-${time}-${tickIndex}`}>
-          <line x1={xFor(time)} y1={plot.y + plot.height} x2={xFor(time)} y2={plot.y + plot.height - 6} stroke="var(--text-secondary)" />
-          <text x={xFor(time)} y={plot.y + plot.height + 20} textAnchor="middle" fill="var(--text-primary)" fontSize={POPUP_AXIS_FONT_SIZE}>{formatAxisTime(time, timeSpan)}</text>
+          {showVerticalGrid && <line x1={xFor(time)} y1={plot.y} x2={xFor(time)} y2={plot.y + plot.height} stroke={gridColor} />}
+          <line x1={xFor(time)} y1={plot.y + plot.height} x2={xFor(time)} y2={plot.y + plot.height - 6} stroke={axisColor} />
+          <text x={xFor(time)} y={plot.y + plot.height + 20} textAnchor="middle" fill={foreground} fontSize={POPUP_AXIS_FONT_SIZE}>{formatAxisTime(time, timeSpan)}</text>
         </g>
       ))}
       {visualOptions.scaleMode === 'configurable' && scaledSeries
@@ -518,11 +526,11 @@ function PopupChart({
         const seriesOpacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
         return (
           <g key={key} opacity={seriesOpacity}>
-            {path && <path d={path} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="round" strokeLinecap="round" data-testid={`trend-popup-line-${index}`} />}
+            {path && visualOptions.traceMode !== 'markers' && <path d={path} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="round" strokeLinecap="round" data-testid={`trend-popup-line-${index}`} />}
             {visualOptions.showRegression && points.length > 1 && <path d={popupRegressionPath(points, xFor, (value) => yFor(value, scale))} fill="none" stroke={color} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} />}
             {statePath && <path d={statePath} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="miter" data-testid={`trend-popup-state-line-${index}`} />}
-            {marker === 'circle' && points.map((point, pIdx) => <circle key={`c-${point.time}-${pIdx}`} cx={xFor(point.time)} cy={yFor(point.value, scale)} r={3} fill={color} />)}
-            {marker === 'square' && points.map((point, pIdx) => <rect key={`sq-${point.time}-${pIdx}`} x={xFor(point.time) - 3} y={yFor(point.value, scale) - 3} width={6} height={6} fill={color} />)}
+            {(visualOptions.traceMode === 'line-markers' || visualOptions.traceMode === 'markers' || marker === 'circle') && points.map((point, pIdx) => <circle key={`c-${point.time}-${pIdx}`} cx={xFor(point.time)} cy={yFor(point.value, scale)} r={3} fill={color} />)}
+            {visualOptions.traceMode === 'line' && marker === 'square' && points.map((point, pIdx) => <rect key={`sq-${point.time}-${pIdx}`} x={xFor(point.time) - 3} y={yFor(point.value, scale) - 3} width={6} height={6} fill={color} />)}
           </g>
         );
       })}

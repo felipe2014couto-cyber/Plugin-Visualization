@@ -3,7 +3,8 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { createDisplayDocument } from '../../display';
-import { appendProgramming, createProgramming } from '../../display/createProgramming';
+import type { DisplayDocument } from '../../display/displayDocument';
+import { appendProgramming, createProgramming, PROGRAMMING_TYPE, type ProgrammingElement } from '../../display/createProgramming';
 import { DisplayEditor } from '../../display/components/DisplayEditor';
 import {
   DisplayEditorMode,
@@ -35,7 +36,7 @@ import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
 import { ProgrammingPanel } from '../../programming/ProgrammingModule';
-import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument, type ProgrammingPiPointContext } from '../../programming/ProgrammingTypes';
+import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument, type ProgrammingPiPointContext, type ProgrammingQueryReference } from '../../programming/ProgrammingTypes';
 import { createSqlTable, SQL_TABLE_TYPE, type SqlTableElement } from '../../display/createSqlTable';
 import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
 import { createDefaultTimeSelection, getRefreshIntervalMs, moveTimeSelectionToNow, REFRESH_INTERVAL_OPTIONS } from '../../time/timeRange';
@@ -71,6 +72,43 @@ function getProgrammingPiPointKey(point: PiPointSearchResult): string {
   return point.webId ?? `${point.dataSourceUid ?? ''}\u0000${point.path ?? ''}\u0000${point.name}`;
 }
 
+function queryReferenceToPiPoint(reference: ProgrammingQueryReference): PiPointSearchResult {
+  return {
+    name: reference.name,
+    path: `\\${reference.binding.serverPath}\\${reference.binding.pointName}`,
+    dataSourceUid: reference.binding.dataSourceUid,
+    webId: reference.binding.webId,
+    pointType: reference.binding.pointType,
+    engineeringUnit: reference.unit,
+  };
+}
+
+function piPointToQueryReference(point: PiPointSearchResult): ProgrammingQueryReference | undefined {
+  const binding = createPiPointBinding(point);
+  return binding ? { name: point.name, binding, ...(point.engineeringUnit ? { unit: point.engineeringUnit } : {}) } : undefined;
+}
+
+function getDocumentWithProgrammingDraft(document: DisplayDocument, editingElementId: string | null, draft: ProgrammingDocument): DisplayDocument {
+  if (!editingElementId) {
+    return document;
+  }
+  return {
+    ...document,
+    elements: document.elements.map((element) => element.id === editingElementId && element.type === PROGRAMMING_TYPE
+      ? {
+        ...element,
+        properties: {
+          ...element.properties,
+          html: draft.html,
+          css: draft.css,
+          javascript: draft.javascript,
+          query: (draft.query ?? []).map((item) => ({ ...item, binding: { ...item.binding } })),
+        },
+      }
+      : element),
+  };
+}
+
 export function App() {
   const styles = useStyles2(getStyles);
   const [authenticationState, setAuthenticationState] = useState<AuthenticationState>('checking');
@@ -92,6 +130,65 @@ export function App() {
   const [programmingPiPoints, setProgrammingPiPoints] = useState<PiPointSearchResult[]>([]);
   const [programmingPiValues, setProgrammingPiValues] = useState<Record<string, PiPointValue>>({});
   const [isProgrammingPiSearchOpen, setIsProgrammingPiSearchOpen] = useState(true);
+  const [editingProgrammingElementId, setEditingProgrammingElementId] = useState<string | null>(null);
+
+  const commitProgrammingDraft = useCallback((next: ProgrammingDocument) => {
+    setProgrammingDraft(next);
+    setDocument((current) => editingProgrammingElementId
+      ? current
+      : { ...current, programming: next });
+  }, [editingProgrammingElementId]);
+
+  const handleProgrammingEdit = useCallback((elementId: string) => {
+    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === PROGRAMMING_TYPE) as ProgrammingElement | undefined;
+    if (!element) return;
+    const next: ProgrammingDocument = {
+      type: 'programming',
+      html: element.properties.html,
+      css: element.properties.css,
+      javascript: element.properties.javascript,
+      query: element.properties.query.map((item) => ({
+        name: item.name,
+        binding: { ...item.binding },
+        ...(item.unit ? { unit: item.unit } : {}),
+      })),
+    };
+    setEditingProgrammingElementId(elementId);
+    setProgrammingDraft(next);
+    setProgrammingApplied(next);
+    setProgrammingPiPoints(next.query?.map(queryReferenceToPiPoint) ?? []);
+    setActiveModule('programming');
+    setIsAssetsPanelOpen(true);
+  }, [document.elements]);
+
+  const handleProgrammingApply = useCallback(() => {
+    setProgrammingApplied(programmingDraft);
+    if (!editingProgrammingElementId) return;
+    setDocument((current) => ({
+      ...current,
+      elements: current.elements.map((element) => element.id === editingProgrammingElementId && element.type === PROGRAMMING_TYPE
+        ? {
+          ...element,
+          properties: {
+            ...element.properties,
+            html: programmingDraft.html,
+            css: programmingDraft.css,
+            javascript: programmingDraft.javascript,
+            query: (programmingDraft.query ?? []).map((item) => ({ ...item, binding: { ...item.binding } })),
+          },
+        }
+        : element),
+    }));
+  }, [editingProgrammingElementId, programmingDraft]);
+
+  const updateProgrammingQuery = useCallback((points: PiPointSearchResult[]) => {
+    const query = points.flatMap((point) => {
+      const reference = piPointToQueryReference(point);
+      return reference ? [reference] : [];
+    });
+    setProgrammingPiPoints(points);
+    commitProgrammingDraft({ ...programmingDraft, query });
+  }, [commitProgrammingDraft, programmingDraft]);
 
   const handleManualRefresh = useCallback(() => {
     setTimeSelection((current) => (current.endExpression === '*' ? moveTimeSelectionToNow(current) : current));
@@ -125,6 +222,17 @@ export function App() {
   const [expandedFolderUids, setExpandedFolderUids] = useState<string[]>([]);
   const [saveValidationError, setSaveValidationError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
+  // Every module uses the same toggle behavior: clicking the active module
+  // hides/shows its sidebar, while switching modules opens the new sidebar.
+  const handleModuleToggle = useCallback((module: ActiveModule) => {
+    if (activeModule === module) {
+      setIsAssetsPanelOpen((open) => !open);
+      return;
+    }
+    setActiveModule(module);
+    setIsAssetsPanelOpen(true);
+  }, [activeModule]);
   // sqlTableIdRef is no longer needed
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
   if (!progressiveTrendLoaderRef.current) {
@@ -210,6 +318,16 @@ export function App() {
       .then((savedDocument) => {
         if (active && savedDocument) {
           setDocument(savedDocument.document);
+          const savedProgramming = savedDocument.document.programming;
+          if (savedProgramming) {
+            setProgrammingDraft(savedProgramming);
+            setProgrammingApplied(savedProgramming);
+            setProgrammingPiPoints((savedProgramming.query ?? []).map(queryReferenceToPiPoint));
+          } else {
+            setProgrammingDraft(DEFAULT_PROGRAMMING_DOCUMENT);
+            setProgrammingApplied(DEFAULT_PROGRAMMING_DOCUMENT);
+            setProgrammingPiPoints([]);
+          }
           setDashboardUid(uid);
           setSelectedFolderUid(savedDocument.folderUid);
         }
@@ -278,18 +396,18 @@ export function App() {
 
   const programmingPiContexts = useMemo<ProgrammingPiPointContext[]>(() => programmingPiPoints.flatMap((point) => {
     const value = programmingPiValues[getProgrammingPiPointKey(point)];
-    return value ? [{
+    return [{
       name: point.name,
-      value: value.value,
-      timestamp: value.timestamp,
-      unit: value.unit ?? point.engineeringUnit,
-    }] : [];
+      value: value?.value ?? null,
+      ...(value?.timestamp ? { timestamp: value.timestamp } : {}),
+      unit: value?.unit ?? point.engineeringUnit,
+    }];
   }), [programmingPiPoints, programmingPiValues]);
   const handleAddProgrammingToDisplay = useCallback(() => {
     setDocument((current) => {
       const query = programmingPiPoints.flatMap((point) => {
-        const binding = createPiPointBinding(point);
-        return binding ? [{ name: point.name, binding, ...(point.engineeringUnit ? { unit: point.engineeringUnit } : {}) }] : [];
+        const reference = piPointToQueryReference(point);
+        return reference ? [reference] : [];
       });
       const element = createProgramming({
         html: programmingDraft.html,
@@ -303,6 +421,7 @@ export function App() {
     });
     setActiveModule('visualization');
     setIsAssetsPanelOpen(true);
+    setEditingProgrammingElementId(null);
   }, [programmingDraft, programmingPiPoints]);
   const selectedSqlTable = useMemo(() => {
     if (activeModule !== 'sql-query') return null;
@@ -409,13 +528,15 @@ export function App() {
 
     setSaveState('saving');
     try {
-      const saved = await savePimsVisionDashboard(document, dashboardUid, selectedFolderUid);
+      const documentToSave = getDocumentWithProgrammingDraft(document, editingProgrammingElementId, programmingDraft);
+      const saved = await savePimsVisionDashboard(documentToSave, dashboardUid, selectedFolderUid);
+      setDocument(documentToSave);
       setDashboardUid(saved.uid);
       setSaveState('saved');
     } catch {
       setSaveState('error');
     }
-  }, [dashboardUid, document, openSaveAsDialog, selectedFolderUid]);
+  }, [dashboardUid, document, editingProgrammingElementId, openSaveAsDialog, programmingDraft, selectedFolderUid]);
 
   const handleSaveAsDashboard = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -433,7 +554,7 @@ export function App() {
         return;
       }
 
-      const documentToSave = { ...document, name: title };
+      const documentToSave = { ...getDocumentWithProgrammingDraft(document, editingProgrammingElementId, programmingDraft), name: title };
       setDocument(documentToSave);
       const saved = await savePimsVisionDashboard(documentToSave, undefined, saveFolderUid);
       setDashboardUid(saved.uid);
@@ -445,7 +566,7 @@ export function App() {
     } catch {
       setSaveState('error');
     }
-  }, [document, saveFolderUid, saveName, updateDashboardUrl]);
+  }, [document, editingProgrammingElementId, programmingDraft, saveFolderUid, saveName, updateDashboardUrl]);
 
   if (authenticationState !== 'authenticated') {
     const loginUrl = `/login?redirect=${encodeURIComponent(globalThis.location?.href ?? '')}`;
@@ -620,14 +741,7 @@ export function App() {
               aria-label={isAssetsPanelOpen ? 'Ocultar barra de ferramentas' : 'Mostrar barra de ferramentas'}
               aria-pressed={isAssetsPanelOpen}
               data-testid="pims-vision-toggle-assets-panel"
-              onClick={() => {
-                if (activeModule !== 'visualization') {
-                  setActiveModule('visualization');
-                  setIsAssetsPanelOpen(true);
-                } else {
-                  setIsAssetsPanelOpen((prev) => !prev);
-                }
-              }}
+              onClick={() => handleModuleToggle('visualization')}
             ><CubeIcon /></button>
             <button
               type="button"
@@ -636,7 +750,7 @@ export function App() {
               aria-label="Mini-Sheets"
               aria-pressed={activeModule === 'sheets'}
               data-testid="pims-vision-sheets-tab"
-              onClick={() => { setActiveModule('sheets'); setIsAssetsPanelOpen(true); }}
+              onClick={() => handleModuleToggle('sheets')}
             ><SheetsIcon /></button>
             <button
               type="button"
@@ -645,11 +759,7 @@ export function App() {
               aria-label="Consulta SQL Oracle"
               aria-pressed={activeModule === 'sql-query'}
               data-testid="pims-vision-sql-query-tab"
-              onClick={() => { 
-                console.log(">>> [DEBUG] SQL BUTTON CLICKED"); 
-                setActiveModule('sql-query'); 
-                setIsAssetsPanelOpen(true); 
-              }}
+              onClick={() => handleModuleToggle('sql-query')}
             ><DatabaseIcon /></button>
             <button
               type="button"
@@ -658,7 +768,7 @@ export function App() {
               aria-label="Programming"
               aria-pressed={activeModule === 'programming'}
               data-testid="pims-vision-programming-tab"
-              onClick={() => { setActiveModule('programming'); setIsAssetsPanelOpen(true); }}
+              onClick={() => handleModuleToggle('programming')}
             ><ProgrammingIcon /></button>
           </div>
           {isAssetsPanelOpen && (
@@ -758,9 +868,9 @@ export function App() {
                 <ProgrammingPanel
                   variant="editor"
                   document={programmingDraft}
-                  onDocumentChange={setProgrammingDraft}
-                  onApply={() => setProgrammingApplied(programmingDraft)}
-                  onAddToDisplay={handleAddProgrammingToDisplay}
+                  onDocumentChange={commitProgrammingDraft}
+                  onApply={handleProgrammingApply}
+                  onAddToDisplay={editingProgrammingElementId ? undefined : handleAddProgrammingToDisplay}
                   beforeEditor={activeModule === 'programming' ? (
                     <div className={styles.programmingPiSearch}>
                       <button
@@ -778,11 +888,12 @@ export function App() {
                         <div id="programming-pi-system-search" className={styles.piSearchContent}>
                           <PiPointSearch
                             enabled={hasPiConnection}
-                            onSelect={(point) => setProgrammingPiPoints((current) => (
-                              current.some((candidate) => getProgrammingPiPointKey(candidate) === getProgrammingPiPointKey(point))
-                                ? current
-                                : [...current, point]
-                            ))}
+                            onSelect={(point) => {
+                              const next = programmingPiPoints.some((candidate) => getProgrammingPiPointKey(candidate) === getProgrammingPiPointKey(point))
+                                ? programmingPiPoints
+                                : [...programmingPiPoints, point];
+                              updateProgrammingQuery(next);
+                            }}
                           />
                         </div>
                       )}
@@ -798,7 +909,7 @@ export function App() {
                                 <button
                                   type="button"
                                   aria-label={`Remover ${point.name} da consulta`}
-                                  onClick={() => setProgrammingPiPoints((current) => current.filter(
+                                  onClick={() => updateProgrammingQuery(programmingPiPoints.filter(
                                     (candidate) => getProgrammingPiPointKey(candidate) !== getProgrammingPiPointKey(point),
                                   ))}
                                 >×</button>
@@ -849,6 +960,7 @@ export function App() {
                 setIsAssetsPanelOpen(true);
                 setOpenCalculationId(calculationId);
               }}
+              onProgrammingEdit={handleProgrammingEdit}
               />
             </div>
           </div>
@@ -882,7 +994,7 @@ export function App() {
           >
             <ProgrammingPanel
               variant="preview"
-              appliedDocument={programmingApplied}
+              appliedDocument={editingProgrammingElementId ? programmingDraft : programmingApplied}
               piPoints={programmingPiContexts}
             />
           </div>

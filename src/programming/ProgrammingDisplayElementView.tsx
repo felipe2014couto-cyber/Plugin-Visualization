@@ -17,12 +17,12 @@ export function getProgrammingConsumerId(elementId: string, index: number): stri
 export function ProgrammingDisplayElementView({ element, runtimeStates, editable }: ProgrammingDisplayElementViewProps) {
   const piPoints: ProgrammingPiPointContext[] = element.properties.query.flatMap((item, index) => {
     const state = runtimeStates.get(getProgrammingConsumerId(element.id, index));
-    return state?.status === 'success' ? [{
+    return [{
       name: item.name,
-      value: state.result.value,
-      timestamp: state.result.timestamp,
-      unit: state.result.unit ?? item.unit,
-    }] : [];
+      value: state?.status === 'success' ? state.result.value : null,
+      ...(state?.status === 'success' && state.result.timestamp ? { timestamp: state.result.timestamp } : {}),
+      unit: state?.status === 'success' ? state.result.unit ?? item.unit : item.unit,
+    }];
   });
   return (
     <g data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type}>

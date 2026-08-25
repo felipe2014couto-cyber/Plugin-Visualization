@@ -187,6 +187,20 @@ function portableDocument(input: unknown): DisplayDocument {
     surface: { width: surface.width, height: surface.height, backgroundColor: surface.backgroundColor },
     elements,
     calculations: portableCalculations(input.calculations),
+    ...(input.programming === undefined ? {} : { programming: portableProgrammingModule(input.programming) }),
+  };
+}
+
+function portableProgrammingModule(input: unknown) {
+  if (!isRecord(input) || typeof input.html !== 'string' || typeof input.css !== 'string' || typeof input.javascript !== 'string') {
+    throw new DisplayImportError('Configuração Programming inválida.');
+  }
+  return {
+    type: 'programming' as const,
+    html: input.html,
+    css: input.css,
+    javascript: input.javascript,
+    query: portableProgrammingQuery(input.query),
   };
 }
 
@@ -293,7 +307,11 @@ function portableElement(input: unknown): DisplayElement {
         properties: {
           fill: typeof input.properties.fill === 'string' ? input.properties.fill : DEFAULT_RECTANGLE_PROPERTIES.fill,
           stroke: typeof input.properties.stroke === 'string' ? input.properties.stroke : DEFAULT_RECTANGLE_PROPERTIES.stroke,
-          shape: input.properties.shape === 'ellipse' || input.properties.shape === 'triangle'
+          shape: input.properties.shape === 'ellipse'
+            || input.properties.shape === 'line'
+            || input.properties.shape === 'arc'
+            || input.properties.shape === 'pentagon'
+            || input.properties.shape === 'triangle'
             ? input.properties.shape
             : 'rectangle',
           rotation: normalizeRotation(input.properties.rotation),

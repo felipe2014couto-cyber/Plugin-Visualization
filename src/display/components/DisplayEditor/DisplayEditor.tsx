@@ -1,4 +1,5 @@
-import React, { useReducer, useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import React, { useReducer, useEffect, useRef, useCallback, useState, useMemo, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -58,6 +59,7 @@ import {
   RECTANGLE_TYPE,
   updateRectangleProperties,
   type RectangleElement,
+  type GeometricShape,
 } from '../../createRectangle';
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { PiDigitalStatesResult, PiPointSearchResult, PiPointValue } from '../../../pi/piDataSource';
@@ -65,6 +67,7 @@ import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDra
 import { CALCULATION_DRAG_MIME, parseCalculationDragData } from '../../../calculations/calculationDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
 import { DisplaySurface } from './DisplaySurface';
+import { PROGRAMMING_TYPE, type ProgrammingElement } from '../../createProgramming';
 import { TrendPopup } from '../TrendPopup';
 import type { TrendSeriesViewState } from '../TrendElementView';
 import { ValuePropertiesPanel } from './ValuePropertiesPanel';
@@ -119,7 +122,9 @@ import { editorReducer, initialEditorState, type EditorAction, type EditorState 
 import {
   computeDragGeometry,
   computeResizeGeometry,
+  getCanvasBounds,
   getElementById,
+  svgPointFromEvent,
   updateElementGeometry,
   type ElementGeometry,
   type Point,
@@ -149,6 +154,7 @@ export interface DisplayEditorProps {
   timeSelection?: DisplayTimeSelection;
   onTimeSelectionChange?: (selection: DisplayTimeSelection) => void;
   onCalculationOpen?: (calculationId: string) => void;
+  onProgrammingEdit?: (elementId: string) => void;
   symbolModeOnly?: boolean;
   showToolbar?: boolean;
   loadRecordedData?: DisplayDataLoader;
@@ -205,6 +211,7 @@ export function DisplayEditor({
   timeSelection,
   onTimeSelectionChange,
   onCalculationOpen,
+  onProgrammingEdit,
   symbolModeOnly = false,
   showToolbar = true,
   loadRecordedData,
@@ -229,6 +236,8 @@ export function DisplayEditor({
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [optionsTrendId, setOptionsTrendId] = useState<string | null>(null);
   const [optionsElementId, setOptionsElementId] = useState<string | null>(null);
+  // Sidebars are opened explicitly with the element context menu.
+  const [propertiesPanelOpen, setPropertiesPanelOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -237,9 +246,14 @@ export function DisplayEditor({
     showGroup?: boolean;
     showUngroup?: boolean;
     isLocked?: boolean;
+    showProgrammingEdit?: boolean;
   } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
+  const [shapeMenuPosition, setShapeMenuPosition] = useState<{ left: number; top: number } | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [editingDisplayName, setEditingDisplayName] = useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = useState(displayDocument.name);
   const [surfaceZoom, setSurfaceZoom] = useState(1);
   const [surfaceViewCenter, setSurfaceViewCenter] = useState({
     x: displayDocument.surface.width / 2,
@@ -249,6 +263,41 @@ export function DisplayEditor({
   const trendPopupRef = useRef<TrendPopupState | null>(null);
   const copiedElementsRef = useRef<DisplayElement[]>([]);
   const pasteCountRef = useRef(0);
+  const surfaceWrapperRef = useRef<HTMLDivElement>(null);
+  const canvasBounds = useMemo(
+    () => getCanvasBounds(displayDocument.surface, displayDocument.elements),
+    [displayDocument.elements, displayDocument.surface],
+  );
+
+  // Keep the native scroll position aligned with the logical viewport. This
+  // is important after “Ajustar à tela”: changing the SVG viewBox alone does
+  // not move a previously scrolled container back to the centered content.
+  useLayoutEffect(() => {
+    const wrapper = surfaceWrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+    const targetLeft = (surfaceViewCenter.x - canvasBounds.left) * surfaceZoom - wrapper.clientWidth / 2;
+    const targetTop = (surfaceViewCenter.y - canvasBounds.top) * surfaceZoom - wrapper.clientHeight / 2;
+    wrapper.scrollLeft = Math.max(0, Math.min(targetLeft, wrapper.scrollWidth - wrapper.clientWidth));
+    wrapper.scrollTop = Math.max(0, Math.min(targetTop, wrapper.scrollHeight - wrapper.clientHeight));
+  }, [canvasBounds, surfaceViewCenter, surfaceZoom]);
+
+  const handleSurfaceScroll = useCallback(() => {
+    const wrapper = surfaceWrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+    const nextCenter = {
+      x: canvasBounds.left + (wrapper.scrollLeft + wrapper.clientWidth / 2) / surfaceZoom,
+      y: canvasBounds.top + (wrapper.scrollTop + wrapper.clientHeight / 2) / surfaceZoom,
+    };
+    setSurfaceViewCenter((current) => (
+      Math.abs(current.x - nextCenter.x) < 0.5 && Math.abs(current.y - nextCenter.y) < 0.5
+        ? current
+        : nextCenter
+    ));
+  }, [canvasBounds, surfaceZoom]);
 
   useEffect(() => {
     if (optionsTrendId && state.selectedElementId !== optionsTrendId) {
@@ -318,6 +367,22 @@ export function DisplayEditor({
     return true;
   }, [publishDocument, reconcileSelection]);
 
+  useEffect(() => {
+    if (!editingDisplayName) {
+      setDisplayNameDraft(displayDocument.name);
+    }
+  }, [displayDocument.name, editingDisplayName]);
+
+  const commitDisplayName = useCallback(() => {
+    const nextName = displayNameDraft.trim();
+    if (nextName) {
+      commitDocument({ ...documentRef.current, name: nextName });
+    } else {
+      setDisplayNameDraft(documentRef.current.name);
+    }
+    setEditingDisplayName(false);
+  }, [commitDocument, displayNameDraft]);
+
   const handleUndo = useCallback(() => {
     const nextHistory = undoDisplayEdit(historyRef.current);
     if (nextHistory === historyRef.current) {
@@ -343,13 +408,10 @@ export function DisplayEditor({
   const handleSelect = useCallback(
     (elementId: string | null) => {
       dispatch({ type: 'SELECT', elementId });
-      setOptionsElementId(elementId);
+      setPropertiesPanelOpen(Boolean(elementId));
+      setOptionsElementId(null);
+      setOptionsTrendId(null);
       const element = elementId ? getElementById(documentRef.current, elementId) : undefined;
-      if (element?.type === TREND_TYPE) {
-        setOptionsTrendId(elementId);
-      } else {
-        setOptionsTrendId(null);
-      }
       const calculationId = element && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
         ? (element.properties as { calculationId: string }).calculationId
         : element?.type === 'calculation' && typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
@@ -361,22 +423,16 @@ export function DisplayEditor({
   );
   const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
     dispatch({ type: 'SELECT_MANY', elementIds, additive });
-    if (!additive && elementIds.length === 1) {
-      setOptionsElementId(elementIds[0]);
-    } else if (!additive) {
-      setOptionsElementId(null);
-    }
+    setPropertiesPanelOpen(elementIds.length === 1);
+    setOptionsElementId(null);
+    setOptionsTrendId(null);
   }, [dispatch]);
 
   const handleDoubleClick = useCallback((elementId: string) => {
     dispatch({ type: 'SELECT', elementId });
-    setOptionsElementId(elementId);
-    const el = getElementById(documentRef.current, elementId);
-    if (el?.type === TREND_TYPE) {
-      setOptionsTrendId(elementId);
-    } else {
-      setOptionsTrendId(null);
-    }
+    setPropertiesPanelOpen(true);
+    setOptionsElementId(null);
+    setOptionsTrendId(null);
   }, [dispatch]);
 
   const handleStartDrag = useCallback(
@@ -499,19 +555,22 @@ export function DisplayEditor({
     dispatch({ type: 'END_INTERACTION' });
   }, [commitDocument, dispatch]);
 
-  const handleInsertRectangle = useCallback(() => {
+  const handleInsertRectangle = useCallback((shape: GeometricShape = 'rectangle') => {
     const currentDocument = documentRef.current;
     const element = createRectangle({
       surface: currentDocument.surface,
       existingIds: currentDocument.elements.map(({ id }) => id),
+      properties: { shape },
     });
     if (!onChangeRef.current) {
       return;
     }
     commitDocument(appendDisplayElement(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-    setOptionsElementId(element.id);
+    setPropertiesPanelOpen(true);
+    setOptionsElementId(null);
     setOptionsTrendId(null);
+    setShapeMenuOpen(false);
   }, [commitDocument, dispatch]);
 
   const handleInsertText = useCallback(() => {
@@ -525,6 +584,7 @@ export function DisplayEditor({
     }
     commitDocument(appendText(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
+    setPropertiesPanelOpen(true);
     setOptionsElementId(element.id);
     setOptionsTrendId(null);
   }, [commitDocument, dispatch]);
@@ -714,6 +774,7 @@ export function DisplayEditor({
       if (targetText) {
         commitDocument(updateTextProperties(currentDocument, targetText.id, { calculationId, binding: undefined }));
         dispatch({ type: 'SELECT', elementId: targetText.id });
+        setPropertiesPanelOpen(true);
         setOptionsElementId(null);
         return;
       }
@@ -724,6 +785,7 @@ export function DisplayEditor({
           : { enabled: true, rules: [] };
         commitDocument(updateLibrarySymbolProperties(currentDocument, targetLibrarySymbol.id, { calculationId, binding: undefined, multistate }));
         dispatch({ type: 'SELECT', elementId: targetLibrarySymbol.id });
+        setPropertiesPanelOpen(true);
         setOptionsElementId(null);
         return;
       }
@@ -734,6 +796,7 @@ export function DisplayEditor({
           : { enabled: true, rules: [] };
         commitDocument(updateRectangleProperties(currentDocument, targetShape.id, { calculationId, binding: undefined, multistate }));
         dispatch({ type: 'SELECT', elementId: targetShape.id });
+        setPropertiesPanelOpen(true);
         setOptionsElementId(null);
         return;
       }
@@ -756,6 +819,7 @@ export function DisplayEditor({
             : appendBar(currentDocument, positioned as BarElement);
       commitDocument(nextDocument);
       dispatch({ type: 'SELECT', elementId: positioned.id });
+      setPropertiesPanelOpen(true);
       return;
     }
     const librarySymbolId = parseLibrarySymbolDragData(event.dataTransfer.getData(LIBRARY_SYMBOL_DRAG_MIME));
@@ -776,6 +840,7 @@ export function DisplayEditor({
       const positioned = positionElementAt(symbol, point, currentDocument);
       commitDocument(appendLibrarySymbol(currentDocument, positioned));
       dispatch({ type: 'SELECT', elementId: positioned.id });
+      setPropertiesPanelOpen(true);
       return;
     }
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
@@ -813,6 +878,7 @@ export function DisplayEditor({
     if (targetText) {
       commitDocument(updateTextProperties(currentDocument, targetText.id, { binding }));
       dispatch({ type: 'SELECT', elementId: targetText.id });
+      setPropertiesPanelOpen(true);
       setOptionsElementId(null);
       return;
     }
@@ -823,6 +889,7 @@ export function DisplayEditor({
         : { enabled: true, rules: [] };
       commitDocument(updateLibrarySymbolProperties(currentDocument, targetLibrarySymbol.id, { binding, multistate }));
       dispatch({ type: 'SELECT', elementId: targetLibrarySymbol.id });
+      setPropertiesPanelOpen(true);
       setOptionsElementId(null);
       return;
     }
@@ -983,7 +1050,7 @@ export function DisplayEditor({
     }
   }, [dispatch, publishDocument]);
 
-  const propertiesOpen = mode === 'edit' && Boolean(state.selectedElementId);
+  const propertiesOpen = mode === 'edit' && propertiesPanelOpen && Boolean(state.selectedElementId);
   const selectedElement = propertiesOpen && state.selectedElementId
     ? getElementById(displayDocument, state.selectedElementId)
     : undefined;
@@ -1031,6 +1098,9 @@ export function DisplayEditor({
   const selectedSqlTable = selectedElement && selectedElement.type === SQL_TABLE_TYPE
     ? selectedElement as SqlTableElement
     : undefined;
+  const selectedProgramming = selectedElement && selectedElement.type === PROGRAMMING_TYPE
+    ? selectedElement as ProgrammingElement
+    : undefined;
   const selectedRectangle = selectedElement && selectedElement.type === RECTANGLE_TYPE
     ? selectedElement as RectangleElement
     : undefined;
@@ -1076,12 +1146,6 @@ export function DisplayEditor({
   const selectedTrend = mode === 'edit' && state.selectedElementId
     ? (selectedElement && selectedElement.type === TREND_TYPE ? selectedElement as TrendElement : undefined)
     : undefined;
-  const handleAddPiPointToSelectedTrend = useCallback(() => {
-    if (!selectedTrend || !selectedPiPoint) return;
-    const binding = createPiPointBinding(selectedPiPoint);
-    if (!binding) return;
-    commitDocument(addTrendSeries(documentRef.current, selectedTrend.id, binding));
-  }, [commitDocument, selectedPiPoint, selectedTrend]);
   const handleGaugeChange = useCallback((patch: Parameters<typeof updateGaugeOptions>[2]) => {
     commitDocument(updateGaugeOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
   }, [commitDocument]);
@@ -1148,6 +1212,7 @@ export function DisplayEditor({
   }, [commitDocument]);
 
   const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement, event?: React.MouseEvent) => {
+    setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
@@ -1177,6 +1242,7 @@ export function DisplayEditor({
   }, [dispatch]);
 
   const handleTrendContextMenu = useCallback((element: TrendElement, event?: React.MouseEvent) => {
+    setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
@@ -1207,6 +1273,7 @@ export function DisplayEditor({
   }, [dispatch]);
 
   const handleElementContextMenu = useCallback((element: DisplayElement, event?: React.MouseEvent) => {
+    setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
@@ -1244,6 +1311,7 @@ export function DisplayEditor({
       showGroup: false,
       showUngroup: false,
       isLocked: isElementLocked(element),
+      showProgrammingEdit: element.type === PROGRAMMING_TYPE,
     });
     setOptionsElementId(element.id);
     setOptionsTrendId(null);
@@ -1273,6 +1341,17 @@ export function DisplayEditor({
     const targets = contextMenu.elementIds && contextMenu.elementIds.length > 0
       ? contextMenu.elementIds
       : (contextMenu.elementId ? [contextMenu.elementId] : []);
+    if (contextMenu.showProgrammingEdit && targets.length === 1 && onProgrammingEdit) {
+      items.push({
+        id: 'edit-programming',
+        label: 'Editar Programming',
+        testId: 'context-menu-edit-programming',
+        onClick: () => {
+          onProgrammingEdit(targets[0]);
+          setContextMenu(null);
+        },
+      });
+    }
     if (targets.length > 0) {
       const isLocked = Boolean(contextMenu.isLocked);
       items.push({
@@ -1283,7 +1362,7 @@ export function DisplayEditor({
       });
     }
     return items;
-  }, [contextMenu, handleGroupSelected, handleToggleLock, handleUngroupSelected]);
+  }, [contextMenu, handleGroupSelected, handleToggleLock, handleUngroupSelected, onProgrammingEdit]);
   const optionsTrend = optionsTrendId
     ? (getElementById(displayDocument, optionsTrendId) as TrendElement | undefined)
     : undefined;
@@ -1466,6 +1545,7 @@ export function DisplayEditor({
   const handleZoomFit = useCallback(() => {
     const elements = documentRef.current.elements;
     const surface = documentRef.current.surface;
+    const wrapper = surfaceWrapperRef.current;
     if (elements.length === 0) {
       setSurfaceZoom(1);
       setSurfaceViewCenter({ x: surface.width / 2, y: surface.height / 2 });
@@ -1475,11 +1555,16 @@ export function DisplayEditor({
     const top = Math.min(...elements.map((element) => element.y));
     const right = Math.max(...elements.map((element) => element.x + element.width));
     const bottom = Math.max(...elements.map((element) => element.y + element.height));
-    const padding = 1.12;
+    // Base the fit on the actual visible editor area, not on the saved surface
+    // dimensions. This keeps the selection centered even when the display is
+    // larger than the viewport and is being shown through native scrolling.
+    const padding = 0.92;
+    const availableWidth = Math.max(1, wrapper?.clientWidth || surface.width);
+    const availableHeight = Math.max(1, wrapper?.clientHeight || surface.height);
     const zoom = Math.max(DISPLAY_ZOOM_MIN, Math.min(
       DISPLAY_ZOOM_MAX,
-      surface.width / Math.max(1, (right - left) * padding),
-      surface.height / Math.max(1, (bottom - top) * padding),
+      availableWidth / Math.max(1, (right - left) / padding),
+      availableHeight / Math.max(1, (bottom - top) / padding),
     ));
     setSurfaceZoom(Number(zoom.toFixed(2)));
     setSurfaceViewCenter({ x: (left + right) / 2, y: (top + bottom) / 2 });
@@ -1502,9 +1587,38 @@ export function DisplayEditor({
         <div className={styles.headerPrimary}>
           <div className={styles.displayLabel}>
             <span className={styles.displayLabelPrefix}>Display:</span>
-            <span className={styles.title} data-testid="display-editor-name">
-              {displayDocument.name}
-            </span>
+            {editingDisplayName && mode === 'edit' ? (
+              <input
+                className={styles.displayNameInput}
+                value={displayNameDraft}
+                autoFocus
+                aria-label="Nome do Display"
+                data-testid="display-editor-name-input"
+                onChange={(event) => setDisplayNameDraft(event.target.value)}
+                onBlur={commitDisplayName}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') commitDisplayName();
+                  if (event.key === 'Escape') {
+                    setDisplayNameDraft(documentRef.current.name);
+                    setEditingDisplayName(false);
+                  }
+                }}
+              />
+            ) : (
+              <span
+                className={styles.title}
+                data-testid="display-editor-name"
+                onDoubleClick={() => {
+                  if (mode === 'edit') {
+                    setDisplayNameDraft(displayDocument.name);
+                    setEditingDisplayName(true);
+                  }
+                }}
+                title={mode === 'edit' ? 'Clique duas vezes para renomear' : undefined}
+              >
+                {displayDocument.name}
+              </span>
+            )}
           </div>
           <div className={styles.modeControls} role="group" aria-label="Modo do display">
             <button
@@ -1538,7 +1652,22 @@ export function DisplayEditor({
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Inserir elementos">
-                <button type="button" title="Inserir forma geométrica" aria-label="Inserir forma geométrica" className={styles.iconButton} data-testid="display-insert-rectangle" onClick={handleInsertRectangle}><RectangleIcon /></button>
+                <div className={styles.shapeControl}>
+                  <button type="button" title="Inserir retângulo" aria-label="Inserir retângulo" className={styles.shapeMainButton} data-testid="display-insert-rectangle" onClick={() => handleInsertRectangle('rectangle')}><ShapeIcon shape="rectangle" /></button>
+                  <button type="button" title="Mais formas geométricas" aria-label="Mais formas geométricas" aria-haspopup="menu" aria-expanded={shapeMenuOpen} className={styles.shapeMenuButton} data-testid="display-shape-menu-toggle" onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    setShapeMenuPosition({ left: rect.left, top: rect.bottom + 5 });
+                    setShapeMenuOpen((open) => !open);
+                  }}><ChevronDownIcon /></button>
+                  {shapeMenuOpen && shapeMenuPosition && createPortal(<div className={styles.shapeMenu} style={shapeMenuPosition} role="menu" aria-label="Formas geométricas">
+                    <ShapeMenuItem shape="rectangle" label="Retângulo" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="ellipse" label="Elipse" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="line" label="Linha" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="arc" label="Arco" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="pentagon" label="Pentágono" onClick={handleInsertRectangle} />
+                    <ShapeMenuItem shape="triangle" label="Triângulo" onClick={handleInsertRectangle} />
+                  </div>, document.querySelector('[data-testid="pims-vision-home"]') ?? document.body)}
+                </div>
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
                 <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
                 <input ref={imageInputRef} type="file" accept="image/*" data-testid="display-image-input" className={styles.fileInput} onChange={handleImageFile} />
@@ -1548,20 +1677,6 @@ export function DisplayEditor({
                 <button type="button" title="Arrastar como Gráfico de Barras" aria-label="Arrastar como Gráfico de Barras" className={dropSymbolType === 'bar-chart' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar-chart" aria-pressed={dropSymbolType === 'bar-chart'} onClick={() => onDropSymbolTypeChange?.('bar-chart')}><BarChartIcon /></button>
                 <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => onDropSymbolTypeChange?.('trend')}><TrendIcon /></button>
                 <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => onDropSymbolTypeChange?.('table')}>▦</button>
-                {selectedTrend && (
-                  <button
-                    type="button"
-                    title="Adicionar tag à Trend selecionada"
-                    aria-label="Adicionar tag à Trend selecionada"
-                    className={styles.addTrendSeriesButton}
-                    data-testid="display-add-tag-to-selected-trend"
-                    disabled={!selectedTrend || !createPiPointBinding(selectedPiPoint ?? {})}
-                    onClick={handleAddPiPointToSelectedTrend}
-                  >
-                    <AddTagIcon />
-                    <span>Adicionar tag</span>
-                  </button>
-                )}
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
@@ -1600,7 +1715,9 @@ export function DisplayEditor({
       <div className={styles.workspace}>
         <div
           className={styles.surfaceWrapper}
+          ref={surfaceWrapperRef}
           data-testid="display-editor-surface-wrapper"
+          onScroll={handleSurfaceScroll}
           onDragOver={handlePiPointDragOver}
           onDragLeave={handlePiPointDragLeave}
           onDrop={handlePiPointDrop}
@@ -1698,7 +1815,6 @@ export function DisplayEditor({
             onVisualChange={handleBarChartVisualChange}
             onRemoveItem={(index) => commitDocument(removeBarChartItem(documentRef.current, selectedBarChart.id, index))}
             onMoveItem={(index, offset) => commitDocument(moveBarChartItem(documentRef.current, selectedBarChart.id, index, offset))}
-            onClose={() => setOptionsElementId(null)}
           />
         )}
         {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} />}
@@ -1749,8 +1865,8 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedBarChart && !selectedTable && !selectedSqlTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
-        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} onClose={() => setOptionsTrendId(null)} />}
+        {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedBarChart && !selectedTable && !selectedSqlTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !selectedProgramming && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
+        {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} />}
       </div>
       {trendPopup && (
         <TrendPopup
@@ -1813,34 +1929,31 @@ function getDropPoint(
   clientY: number,
   document: DisplayDocument,
 ): Point | undefined {
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return undefined;
+  }
   const bounds = svg.getBoundingClientRect();
-  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)
-    || bounds.width <= 0 || bounds.height <= 0
-    || clientX < bounds.left || clientX > bounds.right
-    || clientY < bounds.top || clientY > bounds.bottom) {
-    return undefined;
+  if (bounds.width > 0 && bounds.height > 0) {
+    if (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) {
+      return undefined;
+    }
   }
-  const viewport = getSvgViewport(bounds, document);
-  if (clientX < viewport.left || clientX > viewport.left + viewport.width
-    || clientY < viewport.top || clientY > viewport.top + viewport.height) {
-    return undefined;
-  }
-  return {
-    x: (clientX - viewport.left) / viewport.scale,
-    y: (clientY - viewport.top) / viewport.scale,
-  };
+  return svgPointFromEvent(svg, clientX, clientY);
 }
 
-function getSvgViewport(bounds: DOMRect, document: DisplayDocument) {
-  const scale = Math.min(
-    bounds.width / document.surface.width,
-    bounds.height / document.surface.height,
-  );
-  const width = document.surface.width * scale;
-  const height = document.surface.height * scale;
+function getSvgViewport(svg: SVGSVGElement) {
+  const bounds = svg.getBoundingClientRect();
+  const viewBox = svg.viewBox?.baseVal;
+  const scale = viewBox && viewBox.width > 0 && viewBox.height > 0
+    ? Math.min(bounds.width / viewBox.width, bounds.height / viewBox.height)
+    : 1;
+  const width = viewBox && viewBox.width > 0 ? viewBox.width * scale : bounds.width;
+  const height = viewBox && viewBox.height > 0 ? viewBox.height * scale : bounds.height;
+  const vx = viewBox?.x ?? 0;
+  const vy = viewBox?.y ?? 0;
   return {
-    left: bounds.left + (bounds.width - width) / 2,
-    top: bounds.top + (bounds.height - height) / 2,
+    left: bounds.left + (bounds.width - width) / 2 - vx * scale,
+    top: bounds.top + (bounds.height - height) / 2 - vy * scale,
     width,
     height,
     scale,
@@ -1890,9 +2003,8 @@ function createPiPointDragPreview(
     return createInvalidDragPreview(wrapper, clientX, clientY, label, symbolType);
   }
 
-  const svgBounds = svg.getBoundingClientRect();
   const wrapperBounds = wrapper.getBoundingClientRect();
-  const viewport = getSvgViewport(svgBounds, document);
+  const viewport = getSvgViewport(svg);
   if (targetTrend) {
     const trendLeft = viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale;
     const trendTop = viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale;
@@ -1965,9 +2077,8 @@ function createCalculationDragPreview(
     return undefined;
   }
   if (targetLibrarySymbol) {
-    const svgBounds = svg.getBoundingClientRect();
     const wrapperBounds = wrapper.getBoundingClientRect();
-    const viewport = getSvgViewport(svgBounds, document);
+    const viewport = getSvgViewport(svg);
     return {
       left: viewport.left - wrapperBounds.left + targetLibrarySymbol.x * viewport.scale,
       top: viewport.top - wrapperBounds.top + targetLibrarySymbol.y * viewport.scale,
@@ -1980,9 +2091,8 @@ function createCalculationDragPreview(
     };
   }
   if (targetShape) {
-    const svgBounds = svg.getBoundingClientRect();
     const wrapperBounds = wrapper.getBoundingClientRect();
-    const viewport = getSvgViewport(svgBounds, document);
+    const viewport = getSvgViewport(svg);
     return {
       left: viewport.left - wrapperBounds.left + targetShape.x * viewport.scale,
       top: viewport.top - wrapperBounds.top + targetShape.y * viewport.scale,
@@ -1995,9 +2105,8 @@ function createCalculationDragPreview(
     };
   }
   if (symbolType === 'trend' && targetTrend) {
-    const svgBounds = svg.getBoundingClientRect();
     const wrapperBounds = wrapper.getBoundingClientRect();
-    const viewport = getSvgViewport(svgBounds, document);
+    const viewport = getSvgViewport(svg);
     return {
       left: viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale,
       top: viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale,
@@ -2011,9 +2120,8 @@ function createCalculationDragPreview(
     };
   }
   const prototype = createCalculationDropPreviewElement(symbolType, document);
-  const svgBounds = svg.getBoundingClientRect();
   const wrapperBounds = wrapper.getBoundingClientRect();
-  const viewport = getSvgViewport(svgBounds, document);
+  const viewport = getSvgViewport(svg);
   const positioned = positionElementAt(prototype, point, document);
   return {
     left: viewport.left - wrapperBounds.left + positioned.x * viewport.scale,
@@ -2378,6 +2486,17 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--text-secondary);
     font-size: 12px;
   `,
+  displayNameInput: css`
+    min-width: 120px;
+    max-width: 360px;
+    padding: 4px 7px;
+    border: 1px solid var(--accent, #d6339a);
+    border-radius: 4px;
+    outline: none;
+    color: var(--text-primary);
+    background: var(--input-bg, #0d1622);
+    font: inherit;
+  `,
   modeControls: css`
     display: flex;
     gap: 2px;
@@ -2436,6 +2555,32 @@ const getStyles = (theme: GrafanaTheme2) => ({
     align-items: center;
     gap: 3px;
     flex: 0 0 auto;
+  `,
+  shapeControl: css`
+    position: relative;
+    display: inline-flex;
+    height: 42px;
+  `,
+  shapeMainButton: css`
+    display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 42px; padding: 0;
+    border: 1px solid var(--border-color); border-right: 0; border-radius: 8px 0 0 8px;
+    background: var(--button-bg); color: var(--text-secondary); cursor: pointer;
+    &:hover { color: var(--text-primary); background: var(--button-hover); }
+  `,
+  shapeMenuButton: css`
+    display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 42px; padding: 0;
+    border: 1px solid var(--border-color); border-radius: 0 8px 8px 0;
+    background: var(--button-bg); color: var(--text-secondary); cursor: pointer;
+    &:hover { color: var(--text-primary); background: var(--button-hover); }
+  `,
+  shapeMenu: css`
+    position: fixed; z-index: 1000;
+    display: flex; flex-direction: column; min-width: 142px; padding: 5px;
+    border: 1px solid var(--border-color, #607086); border-radius: 5px; background: var(--panel-bg, #111923);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .42);
+    button { display:flex; align-items:center; gap:9px; min-height:30px; padding:4px 7px; border:0; border-radius:3px; background:transparent; color:var(--text-primary, #f1f2f5); cursor:pointer; font-size:11px; text-align:left; }
+    button:hover { background:var(--button-hover, #223146); }
+    svg { width:21px; height:21px; color:var(--text-secondary, #aeb3bf); }
   `,
   addTrendSeriesButton: css`
     display: inline-flex;
@@ -2554,12 +2699,15 @@ const getStyles = (theme: GrafanaTheme2) => ({
   surfaceWrapper: css`
     display: flex;
     position: relative;
-    align-items: center;
-    justify-content: center;
+    align-items: flex-start;
+    justify-content: flex-start;
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
-    overflow: hidden;
+    /* Keep the full display reachable when its surface is larger than the
+       available editor area. The SVG supplies the intrinsic minimum size;
+       these scrollbars only appear when they are actually needed. */
+    overflow: auto;
     padding: 0;
     background-color: var(--canvas-bg);
     background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
@@ -2571,6 +2719,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
       height: 100%;
       max-width: none;
       max-height: none;
+      margin: auto;
     }
 
     @media (max-width: 760px) {
@@ -2742,8 +2891,22 @@ function ValueIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M8 9h8M8 12h8M8 15h5" /></svg>;
 }
 
-function RectangleIcon() {
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="4" y="6" width="16" height="12" /></svg>;
+function ShapeMenuItem({ shape, label, onClick }: { shape: GeometricShape; label: string; onClick: (shape: GeometricShape) => void }) {
+  return <button type="button" role="menuitem" data-testid={`display-insert-shape-${shape}`} onClick={() => onClick(shape)}><ShapeIcon shape={shape} /><span>{label}</span></button>;
+}
+
+function ShapeIcon({ shape }: { shape: GeometricShape }) {
+  const props = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, 'aria-hidden': true as const };
+  if (shape === 'ellipse') return <svg viewBox="0 0 24 24" {...props}><ellipse cx="12" cy="12" rx="8" ry="5.5" /></svg>;
+  if (shape === 'line') return <svg viewBox="0 0 24 24" {...props}><path d="m5 5 14 14" /></svg>;
+  if (shape === 'arc') return <svg viewBox="0 0 24 24" {...props}><path d="M5 5a14 14 0 0 1 14 14" /></svg>;
+  if (shape === 'pentagon') return <svg viewBox="0 0 24 24" {...props}><path d="m12 3 8 5.8-3 9.2H7L4 8.8z" /></svg>;
+  if (shape === 'triangle') return <svg viewBox="0 0 24 24" {...props}><path d="m12 4 8 15H4z" /></svg>;
+  return <svg viewBox="0 0 24 24" {...props}><rect x="4" y="6" width="16" height="12" /></svg>;
+}
+
+function ChevronDownIcon() {
+  return <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m7 9 5 5 5-5" /></svg>;
 }
 
 function TextIcon() {
@@ -2812,8 +2975,4 @@ function ExportIcon() {
 
 function ImportIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M12 15V4m-4 7 4 4 4-4" /><path d="M5 13v6h14v-6" /></svg>;
-}
-
-function AddTagIcon() {
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 12.4 11.4 4H20v8.6L11.6 21 3 12.4Z" /><circle cx="16" cy="8" r="1" fill="currentColor" stroke="none" /><path d="M18 15v6M15 18h6" /></svg>;
 }

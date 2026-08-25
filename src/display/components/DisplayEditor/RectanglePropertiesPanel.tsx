@@ -62,6 +62,9 @@ export function RectanglePropertiesPanel({
           <select value={shape} data-testid="geometric-shape-type" onChange={(event) => onChange({ shape: event.target.value as RectangleProperties['shape'] })}>
             <option value="rectangle">Retângulo</option>
             <option value="ellipse">Elipse</option>
+            <option value="line">Linha</option>
+            <option value="arc">Arco</option>
+            <option value="pentagon">Pentágono</option>
             <option value="triangle">Triângulo</option>
           </select>
         </label>
@@ -76,7 +79,7 @@ export function RectanglePropertiesPanel({
             <button type="button" className={styles.unbindButton} onClick={() => onChange({ binding: undefined, calculationId: undefined })}>Desvincular</button>
           </div>
         ) : null}
-        <ColorControl label="Preenchimento" color={fill} onChange={(value) => onChange({ fill: value })} testId="rectangle-fill" />
+        {shape !== 'line' && shape !== 'arc' && <ColorControl label="Preenchimento" color={fill} onChange={(value) => onChange({ fill: value })} testId="rectangle-fill" />}
         <ColorControl label="Contorno" color={stroke} onChange={(value) => onChange({ stroke: value })} testId="rectangle-stroke" />
         <RotationControl value={rotation} onChange={(value) => onChange({ rotation: value })} testId="rectangle-rotation" />
         {onLinkChange && <LinkField value={linkUrl} openInNewTab={openInNewTab} onChange={onLinkChange} onOpenInNewTabChange={onOpenInNewTabChange} testId="rectangle-link-url" />}
@@ -92,17 +95,21 @@ export function RectanglePropertiesPanel({
 
 const getStyles = (theme: GrafanaTheme2) => ({
   panel: css`
-    flex: 0 0 280px;
-    width: 280px;
+    flex: 0 0 300px;
+    width: 300px;
     min-width: 0;
+    min-height: 0;
+    max-height: 100%;
+    box-sizing: border-box;
     border-left: 1px solid var(--border-color);
     background: var(--panel-bg);
     color: var(--text-primary);
     overflow-x: hidden;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   `,
   header: css`
-    padding: 10px 12px;
+    padding: 12px 14px;
     border-bottom: 1px solid var(--border-color);
     background: var(--panel-header-bg);
   `,
@@ -114,7 +121,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     flex-direction: column;
     gap: 10px;
-    padding: 12px;
+    padding: 14px;
   `,
   field: css`
     display: flex;

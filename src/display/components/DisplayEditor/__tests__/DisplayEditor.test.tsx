@@ -98,15 +98,16 @@ describe('DisplayEditor', () => {
     const before = JSON.stringify(doc);
     render(<DisplayEditor document={doc} />);
     const surface = screen.getByTestId('display-surface');
-    const originalViewBox = surface.getAttribute('viewBox');
+    const originalWidth = surface.getAttribute('width');
 
     fireEvent.wheel(surface, { deltaY: -1, clientX: 400, clientY: 225 });
-    expect(surface.getAttribute('viewBox')).toBe(originalViewBox);
+    expect(surface.getAttribute('width')).toBe(originalWidth);
 
     const ctrlWheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -1, clientX: 400, clientY: 225 });
     fireEvent(surface, ctrlWheel);
     expect(ctrlWheel.defaultPrevented).toBe(true);
-    expect(surface.getAttribute('viewBox')).not.toBe(originalViewBox);
+    expect(surface.style.width).not.toBe('');
+    expect(surface.style.width).not.toBe(`${originalWidth}px`);
     expect(JSON.stringify(doc)).toBe(before);
   });
 
