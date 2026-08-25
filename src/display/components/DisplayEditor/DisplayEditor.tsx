@@ -118,6 +118,7 @@ import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeR
 import { updateMultistateConfig, updateBackgroundMultistateConfig, type MultistateConfig } from '../../multistate';
 import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay, serializeDisplayCsv, serializeDisplayXml, type DisplayExportFileFormat } from '../../displayTransfer';
 import { collectDisplayDataBindings, DISPLAY_DATA_EXPORT_MAX_POINTS, serializePiDataCsv, serializePiDataXml, type DisplayDataLoader } from '../../displayDataExport';
+import { serializeTableData, type TableDataExportFormat } from '../../tableDataExport';
 import { editorReducer, initialEditorState, type EditorAction, type EditorState } from './editorState';
 import {
   computeDragGeometry,
@@ -989,6 +990,32 @@ export function DisplayEditor({
     setExportMenuOpen(false);
   }, [exporting, loadInterpolatedData, loadRecordedData, trendTimeRange]);
 
+  const handleTableExport = useCallback(async (table: TableElement, exportFormat: TableDataExportFormat) => {
+    if (exporting) {
+      return;
+    }
+    if (!trendTimeRange || !loadRecordedData) {
+      setImportError('Consulta histórica PI indisponível para exportar a Tabela.');
+      return;
+    }
+    const bindings = table.properties.items.map((item) => item.binding);
+    if (bindings.length === 0) {
+      setImportError('A Tabela não possui PI Points para exportar.');
+      return;
+    }
+    setExporting(true);
+    setImportError(null);
+    try {
+      const recorded = await loadRecordedData(bindings, trendTimeRange, { maxDataPoints: DISPLAY_DATA_EXPORT_MAX_POINTS });
+      const content = serializeTableData(table.properties, recorded, exportFormat);
+      downloadExport(content, exportFormat, `${documentRef.current.name}-tabela`);
+    } catch {
+      setImportError('Não foi possível exportar os dados históricos da Tabela.');
+    } finally {
+      setExporting(false);
+    }
+  }, [exporting, loadRecordedData, trendTimeRange]);
+
   const handleImportFile = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
     const file = input.files?.[0];
@@ -1776,7 +1803,7 @@ export function DisplayEditor({
             onMoveItem={(index, offset) => commitDocument(moveBarChartItem(documentRef.current, selectedBarChart.id, index, offset))}
           />
         )}
-        {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} />}
+        {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} onExport={(format) => void handleTableExport(selectedTable, format)} exporting={exporting} />}
         {selectedSqlTable && <SqlTablePropertiesPanel properties={selectedSqlTable.properties} onChange={handleSqlTableChange} />}
         {selectedRectangle && (
           <RectanglePropertiesPanel
