@@ -1475,7 +1475,9 @@ export function DisplayEditor({
     const top = Math.min(...elements.map((element) => element.y));
     const right = Math.max(...elements.map((element) => element.x + element.width));
     const bottom = Math.max(...elements.map((element) => element.y + element.height));
-    const padding = 1.12;
+    // Use the full available viewport so the display is shown at the largest
+    // zoom that still keeps every element visible.
+    const padding = 1;
     const zoom = Math.max(DISPLAY_ZOOM_MIN, Math.min(
       DISPLAY_ZOOM_MAX,
       surface.width / Math.max(1, (right - left) * padding),
