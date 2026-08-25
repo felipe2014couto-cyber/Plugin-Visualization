@@ -3,14 +3,14 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { PiDataLinkFunctionType } from './PiDataLinkToolbar';
-import { searchPiPointsWithStatus } from '../../pi';
-import { parseCellAddress, parseRangeAddresses } from './miniSheetFormula';
+import { parseCellAddress, parseFormula } from './miniSheetFormula';
 
 interface PiDataLinkFunctionDialogProps {
   embedded?: boolean;
   functionType: PiDataLinkFunctionType;
   initialTargetCell: string;
   currentSelectionAddress?: string;
+  initialFormula?: string;
   onInsert: (formula: string, targetCell: string) => void;
   onClose: () => void;
 }
@@ -31,6 +31,7 @@ export function PiDataLinkFunctionDialog({
   functionType,
   initialTargetCell,
   currentSelectionAddress,
+  initialFormula,
   onInsert,
   onClose,
 }: PiDataLinkFunctionDialogProps) {
@@ -69,41 +70,79 @@ export function PiDataLinkFunctionDialog({
   const [selectionBaselineAddress, setSelectionBaselineAddress] = useState<string | null>(null);
   const targetCellInputRef = useRef<HTMLInputElement>(null);
 
-  // Autocomplete state
-  const [searchResults, setSearchResults] = useState<string[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-
   useEffect(() => {
-    if (!tag.trim() || parseCellAddress(tag) || parseRangeAddresses(tag).length > 0 || tag.includes("'") || tag.includes('"')) {
-      setSearchResults([]);
-      setShowSuggestions(false);
+    setTargetCell(initialTargetCell);
+    if (!initialFormula) {
+      return;
+    }
+    const parsed = parseFormula(initialFormula);
+    if (typeof parsed !== 'object' || !('type' in parsed) || parsed.type === 'error') {
       return;
     }
 
-    let active = true;
-    const timer = setTimeout(() => {
-      setIsSearching(true);
-      searchPiPointsWithStatus({ term: tag.trim(), limit: 10 })
-        .then((res) => {
-          if (active) {
-            setSearchResults(res.results.map((r) => r.name));
-            setShowSuggestions(res.results.length > 0);
-          }
-        })
-        .catch(() => {
-          if (active) setSearchResults([]);
-        })
-        .finally(() => {
-          if (active) setIsSearching(false);
-        });
-    }, 250);
-
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [tag]);
+    if (parsed.type === 'pi_curr_val') {
+      setTag(parsed.tag ?? '');
+      setCurrValTimestampPosition(parsed.timestampPosition ?? 'none');
+    } else if (parsed.type === 'pi_arc_val') {
+      setTag(parsed.tag ?? '');
+      setTimestamp(parsed.timeExpression ?? '*-1h');
+      setMode(parsed.mode ?? 'Interpolated');
+      setCurrValTimestampPosition(parsed.timestampPosition ?? 'none');
+    } else if (parsed.type === 'pi_comp_dat') {
+      setTag(parsed.tag ?? '');
+      setStartTime(parsed.startTime ?? '*-1h');
+      setEndTime(parsed.endTime ?? '*');
+      setMaxCount(parsed.maxCount !== undefined ? String(parsed.maxCount) : '500');
+      setShowTimestamp(parsed.showTimestamp ?? true);
+      setReverseTime(parsed.reverseTime ?? false);
+      setBoundaryType(parsed.boundaryType ?? 'Inside');
+      setHideCount(parsed.hideCount ?? false);
+      setShowValueAttributes(parsed.showValueAttributes ?? false);
+      setShowAnnotations(parsed.showAnnotations ?? false);
+      setFilterExpression(parsed.options?.filterExpression ?? '');
+      setMarkFiltered(parsed.options?.markFiltered ?? false);
+      setOrientation(parsed.options?.orientation ?? 'column');
+      setLimitMode(parsed.limitMode ?? 'time');
+    } else if (parsed.type === 'pi_samp_dat') {
+      setTag(parsed.tag ?? '');
+      setStartTime(parsed.startTime ?? '*-8h');
+      setEndTime(parsed.endTime ?? '*');
+      setInterval(parsed.interval ?? '5m');
+      setShowTimestamp(parsed.showTimestamp ?? true);
+      setOrientation(parsed.options?.orientation ?? 'column');
+      setFilterExpression(parsed.options?.filterExpression ?? '');
+      setMarkFiltered(parsed.options?.markFiltered ?? false);
+    } else if (parsed.type === 'pi_time_dat') {
+      setTag(parsed.tag ?? '');
+      setTimestampsRange(parsed.timestampsRange ?? (currentSelectionAddress ?? 'A1:A4'));
+      setMode(parsed.mode ?? 'Interpolated');
+      setOrientation(parsed.options?.orientation ?? 'column');
+    } else if (parsed.type === 'pi_adv_calc_val') {
+      setTag(parsed.tag ?? '');
+      setStartTime(parsed.startTime ?? '*-8h');
+      setEndTime(parsed.endTime ?? '*');
+      setCalculation(parsed.calculation ?? 'Average');
+      setCalcInterval(parsed.interval ?? '');
+      setConversionFactor(parsed.conversionFactor !== undefined ? String(parsed.conversionFactor) : '1');
+      setOrientation(parsed.options?.orientation ?? 'column');
+      setShowStartTime(parsed.showStartTime ?? false);
+      setShowEndTime(parsed.showEndTime ?? false);
+      setShowMinMaxTime(parsed.showMinMaxTime ?? false);
+      setShowPercentValid(parsed.showPercentValid ?? false);
+      setFilterExpression(parsed.options?.filterExpression ?? '');
+      setMarkFiltered(parsed.options?.markFiltered ?? false);
+    } else if (parsed.type === 'pi_time_filter') {
+      setExpression(parsed.expression ?? "'TAG' > 50");
+      setStartTime(parsed.startTime ?? '*-8h');
+      setEndTime(parsed.endTime ?? '*');
+      setUnit(parsed.unit ?? 'hours');
+      setInterval(parsed.interval ?? '');
+      setOrientation(parsed.options?.orientation ?? 'column');
+      setShowStartTime(parsed.showStartTime ?? false);
+      setShowEndTime(parsed.showEndTime ?? false);
+      setShowPercentValid(parsed.showPercentValid ?? false);
+    }
+  }, [initialFormula, initialTargetCell, functionType]);
 
   const activateSelectionField = (field: SelectableField) => {
     setSelectionField(field);
@@ -267,6 +306,10 @@ export function PiDataLinkFunctionDialog({
         aria-modal={embedded ? undefined : true}
         aria-labelledby="datalink-dialog-title"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        onPaste={(e) => e.stopPropagation()}
+        onCopy={(e) => e.stopPropagation()}
+        onCut={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
       >
         <div className={embedded ? styles.embeddedHeader : styles.header}>
@@ -302,28 +345,8 @@ export function PiDataLinkFunctionDialog({
                   }}
                   onFocus={() => {
                     activateSelectionField('tag');
-                    if (searchResults.length > 0) setShowSuggestions(true);
                   }}
                 />
-                {isSearching && <span className={styles.searchIndicator}>...</span>}
-                {showSuggestions && searchResults.length > 0 && (
-                  <ul className={styles.suggestionsList} role="listbox">
-                    {searchResults.map((res) => (
-                      <li
-                        key={res}
-                        role="option"
-                        aria-selected="false"
-                        className={styles.suggestionItem}
-                        onClick={() => {
-                          setTag(res);
-                          setShowSuggestions(false);
-                        }}
-                      >
-                        {res}
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </div>
             </div>
           ) : (
@@ -727,7 +750,7 @@ export function PiDataLinkFunctionDialog({
             className={styles.submitButton}
             data-testid="datalink-dialog-insert"
           >
-            Inserir
+            {initialFormula ? 'Aplicar' : 'Inserir'}
           </button>
         </div>
       </form>
@@ -741,6 +764,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex: '1 1 auto',
     flexDirection: 'column',
     minHeight: 0,
+    height: '100%',
+    overflow: 'hidden',
     borderBottom: '1px solid var(--border-color, #2b394a)',
     background: 'var(--surface-primary, #111923)',
   }),
@@ -749,6 +774,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex: '1 1 auto',
     flexDirection: 'column',
     minHeight: 0,
+    height: '100%',
+    overflow: 'hidden',
     color: 'var(--text-primary, #f1f2f5)',
     background: 'var(--surface-primary, #111923)',
   }),
@@ -756,6 +783,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
+    flex: '0 0 auto',
     padding: '8px 16px',
     borderBottom: '1px solid var(--border-subtle, #2b394a)',
     color: 'var(--text-primary, #f1f2f5)',
@@ -769,12 +797,22 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: '8px 16px',
     overflowY: 'auto',
     overflowX: 'hidden',
+    scrollbarWidth: 'thin',
+    scrollbarColor: 'var(--border-color, #2b394a) transparent',
     background: 'var(--surface-primary, #111923)',
     color: 'var(--text-primary, #f1f2f5)',
+    '&::-webkit-scrollbar': {
+      width: '6px',
+    },
+    '&::-webkit-scrollbar-thumb': {
+      backgroundColor: 'var(--border-color, #2b394a)',
+      borderRadius: '3px',
+    },
   }),
   embeddedFooter: css({
     display: 'flex',
     justifyContent: 'flex-end',
+    flex: '0 0 auto',
     gap: '8px',
     padding: '8px 16px',
     borderTop: '1px solid var(--border-subtle, #2b394a)',
@@ -942,43 +980,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     '&:focus': {
       borderColor: 'var(--accent, #d33b91)',
       boxShadow: '0 0 0 2px var(--focus-ring, rgba(237, 98, 173, 0.34))',
-    },
-  }),
-  searchIndicator: css({
-    position: 'absolute',
-    right: '8px',
-    fontSize: '11px',
-    color: 'var(--text-muted, #7f8a9a)',
-  }),
-  suggestionsList: css({
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    background: 'var(--surface-elevated, #18212d)',
-    border: '1px solid var(--border-color, #2b394a)',
-    borderRadius: '4px',
-    marginTop: '2px',
-    maxHeight: '160px',
-    overflowY: 'auto',
-    zIndex: 10,
-    listStyle: 'none',
-    padding: 0,
-    margin: 0,
-    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
-  }),
-  suggestionItem: css({
-    padding: '8px 10px',
-    fontSize: '12px',
-    color: 'var(--text-primary, #f1f2f5)',
-    cursor: 'pointer',
-    borderBottom: '1px solid var(--border-subtle, #202d3c)',
-    '&:last-child': {
-      borderBottom: 'none',
-    },
-    '&:hover': {
-      background: 'var(--selection-bg, rgba(211, 59, 145, 0.18))',
-      color: 'var(--accent-hover, #ed62ad)',
     },
   }),
   checkboxRow: css({

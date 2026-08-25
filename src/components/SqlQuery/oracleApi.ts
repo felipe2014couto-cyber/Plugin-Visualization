@@ -21,7 +21,14 @@ export interface OracleQueryResponse {
   max_rows: number;
 }
 
-const API_BASE_URL = 'http://localhost:8085';
+export function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:8085`;
+  }
+  return 'http://localhost:8085';
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 export async function createOracleSession(params: OracleConnectParams): Promise<OracleSession> {
   const response = await fetch(`${API_BASE_URL}/connect`, {

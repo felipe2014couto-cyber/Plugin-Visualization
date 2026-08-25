@@ -124,3 +124,39 @@ export function formatRelativeDuration(duration: number): string {
   }
   return `${Math.max(1, Math.round(duration / UNIT_MS.m))}m`;
 }
+
+export const REFRESH_INTERVAL_OPTIONS = [
+  { label: 'Desativado', value: '' },
+  { label: '5s', value: '5s' },
+  { label: '10s', value: '10s' },
+  { label: '30s', value: '30s' },
+  { label: '1m', value: '1m' },
+  { label: '5m', value: '5m' },
+  { label: '15m', value: '15m' },
+  { label: '30m', value: '30m' },
+  { label: '1h', value: '1h' },
+] as const;
+
+export function getRefreshIntervalMs(interval?: string): number {
+  switch (interval) {
+    case '5s':
+      return 5000;
+    case '10s':
+      return 10000;
+    case '30s':
+      return 30000;
+    case '1m':
+      return 60000;
+    case '5m':
+      return 300000;
+    case '15m':
+      return 900000;
+    case '30m':
+      return 1800000;
+    case '1h':
+      return 3600000;
+    default:
+      return 0;
+  }
+}
+

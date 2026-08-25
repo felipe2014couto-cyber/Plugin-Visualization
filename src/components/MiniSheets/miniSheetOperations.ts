@@ -8,6 +8,7 @@ export interface CellFormat {
   backgroundColor?: string;
   horizontalAlign?: 'left' | 'center' | 'right';
   decimalPlaces?: number | 'auto';
+  scientific?: boolean;
 }
 
 export interface ClipboardCell {
@@ -362,14 +363,29 @@ export function matrixToTsv(matrix: ClipboardCell[][]): string {
 }
 
 /**
- * Formats a display value with specified decimal places.
+ * Formats a display value with specified decimal places and optional scientific notation.
  */
-export function formatDisplayNumber(displayValue: string, decimalPlaces?: number | 'auto'): string {
-  if (decimalPlaces === undefined || decimalPlaces === 'auto' || !displayValue) {
+export function formatDisplayNumber(
+  displayValue: string,
+  decimalPlaces?: number | 'auto',
+  scientific?: boolean
+): string {
+  if (!displayValue) {
     return displayValue;
   }
   const num = parseFloat(displayValue);
-  if (Number.isNaN(num)) {
+  if (Number.isNaN(num) || !Number.isFinite(num)) {
+    return displayValue;
+  }
+
+  if (scientific) {
+    if (typeof decimalPlaces === 'number') {
+      return num.toExponential(decimalPlaces).toUpperCase();
+    }
+    return num.toExponential().toUpperCase();
+  }
+
+  if (decimalPlaces === undefined || decimalPlaces === 'auto') {
     return displayValue;
   }
   return num.toFixed(decimalPlaces);

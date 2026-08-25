@@ -272,4 +272,53 @@ describe('App', () => {
     expect(globalThis.location.search).toBe('?dashboardUid=new-dashboard-uid');
     expect(screen.queryByRole('dialog')).toBeNull();
   });
+
+  it('exibe e altera opções de atualização automática no cabeçalho superior', async () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    const select = screen.getByTestId('header-auto-refresh-select') as HTMLSelectElement;
+    expect(select).toBeInTheDocument();
+    expect(select.value).toBe('');
+
+    fireEvent.change(select, { target: { value: '10s' } });
+    expect(select.value).toBe('10s');
+
+    const refreshBtn = screen.getByTestId('header-refresh-now');
+    expect(refreshBtn).toBeInTheDocument();
+    fireEvent.click(refreshBtn);
+  });
+
+  it('exibe o módulo Programming na barra lateral e abre seu painel', async () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    const programmingButton = screen.getByTestId('pims-vision-programming-tab');
+    expect(programmingButton).toHaveAttribute('aria-label', 'Programming');
+    fireEvent.click(programmingButton);
+
+    const programmingWorkspace = screen.getByTestId('pims-vision-programming-workspace');
+    expect(programmingWorkspace.querySelector('[data-testid="programming-panel"]')).not.toBeNull();
+    expect(screen.getByTestId('programming-html-editor')).toBeInTheDocument();
+    expect(screen.getByTestId('programming-pi-system-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(screen.getByTestId('programming-pi-system-toggle'));
+    expect(screen.getByTestId('programming-pi-system-toggle')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('adiciona o Programming pronto como elemento persistente do Display', async () => {
+    checkPiConnectionMock.mockReturnValue(new Promise(() => undefined));
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('pims-vision-programming-tab'));
+    fireEvent.click(screen.getByTestId('programming-add-to-display'));
+
+    expect(screen.getByTestId('display-editor')).toBeInTheDocument();
+    expect(document.querySelector('[data-element-type="programming"]')).not.toBeNull();
+  });
 });

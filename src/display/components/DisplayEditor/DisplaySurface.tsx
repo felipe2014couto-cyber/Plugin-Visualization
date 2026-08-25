@@ -33,6 +33,8 @@ import { getMultistateColor } from '../../multistate';
 import { TEXT_TYPE, type TextElement } from '../../createText';
 import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
+import { PROGRAMMING_TYPE, type ProgrammingElement } from '../../createProgramming';
+import { ProgrammingDisplayElementView, getProgrammingConsumerId } from '../../../programming/ProgrammingDisplayElementView';
 import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
 import { extractAllGroupBindingsAndElements, findTopLevelElementId, getElementAbsoluteGeometry, GROUP_TYPE, type GroupElement } from '../../createGroup';
 import { isElementLocked } from '../../createLocked';
@@ -286,6 +288,12 @@ export function DisplaySurface({
     if (calculationId && (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE || element.type === TEXT_TYPE)) {
       const calculation = calculations.find((item) => item.id === calculationId);
       return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
+    }
+    if (element.type === PROGRAMMING_TYPE) {
+      return (element as ProgrammingElement).properties.query.map((item, index) => ({
+        elementId: getProgrammingConsumerId(element.id, index),
+        binding: item.binding,
+      }));
     }
     return (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE || element.type === TEXT_TYPE)
       && isPiPointBinding(element.properties.binding)
@@ -1138,6 +1146,14 @@ export function DisplaySurface({
             const image = element as ImageElement;
             const rotation = image.properties.rotation ?? 0;
             return <image key={element.id} href={image.properties.src} x={element.x} y={element.y} width={element.width} height={element.height} transform={`rotate(${rotation} ${element.x + element.width / 2} ${element.y + element.height / 2})`} preserveAspectRatio="none" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }} />;
+          }
+          if (element.type === PROGRAMMING_TYPE) {
+            return <ProgrammingDisplayElementView
+              key={element.id}
+              element={element as ProgrammingElement}
+              runtimeStates={runtimeStates}
+              editable={editable}
+            />;
           }
           if (element.type === LIBRARY_SYMBOL_TYPE) {
             const symbol = element as LibrarySymbolElement;

@@ -17,6 +17,7 @@ import type { DisplayElement } from './displayElement';
 import type { PiPointBinding } from '../pi/piPointBinding';
 import { DEFAULT_TEXT_PROPERTIES, TEXT_TYPE } from './createText';
 import { IMAGE_TYPE } from './createImage';
+import { PROGRAMMING_TYPE } from './createProgramming';
 import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE } from './createLibrarySymbol';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../library';
 import type { CalculationDefinition } from '../calculations/calculationEngine';
@@ -234,6 +235,21 @@ function portableElement(input: unknown): DisplayElement {
         throw new DisplayImportError('Imagem de Display inválida.');
       }
       return { ...base, type: IMAGE_TYPE, properties: { src: input.properties.src, alt: typeof input.properties.alt === 'string' ? input.properties.alt : 'Imagem', rotation: normalizeRotation(input.properties.rotation), ...portableLocked(input.properties), ...portableLink(input.properties) } };
+    case PROGRAMMING_TYPE:
+      if (typeof input.properties.html !== 'string' || typeof input.properties.css !== 'string' || typeof input.properties.javascript !== 'string') {
+        throw new DisplayImportError('Elemento Programming inválido.');
+      }
+      return {
+        ...base,
+        type: PROGRAMMING_TYPE,
+        properties: {
+          html: input.properties.html,
+          css: input.properties.css,
+          javascript: input.properties.javascript,
+          query: portableProgrammingQuery(input.properties.query),
+          ...portableLocked(input.properties),
+        },
+      };
     case LIBRARY_SYMBOL_TYPE: {
       const symbol = typeof input.properties.symbolId === 'string' ? findIndustrialSymbol(input.properties.symbolId) : undefined;
       if (!symbol) {
@@ -428,6 +444,24 @@ function portableOptionalBinding(input: unknown): { binding?: PiPointBinding } {
   return input === undefined ? {} : { binding: portableBinding(input) };
 }
 
+function portableProgrammingQuery(input: unknown): Array<{ name: string; binding: PiPointBinding; unit?: string }> {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  const names = new Set<string>();
+  return input.flatMap((item) => {
+    if (!isRecord(item) || !isNonEmptyString(item.name) || names.has(item.name)) {
+      return [];
+    }
+    names.add(item.name);
+    return [{
+      name: item.name,
+      binding: portableBinding(item.binding),
+      ...(typeof item.unit === 'string' && item.unit.trim() ? { unit: item.unit.trim() } : {}),
+    }];
+  });
+}
+
 function portableTrendSeries(properties: Record<string, unknown>): TrendSeries[] {
   const inputs = Array.isArray(properties.series)
     ? properties.series
@@ -605,4 +639,3 @@ function portableBarChartItems(properties: unknown): BarChartItem[] {
 function portableBarChartVisual(visual: unknown): Partial<BarChartVisualOptions> {
   return normalizeBarChartVisualOptions(isRecord(visual) ? visual as Partial<BarChartVisualOptions> : undefined);
 }
-

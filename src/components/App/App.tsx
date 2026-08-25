@@ -3,6 +3,7 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { createDisplayDocument } from '../../display';
+import { appendProgramming, createProgramming } from '../../display/createProgramming';
 import { DisplayEditor } from '../../display/components/DisplayEditor';
 import {
   DisplayEditorMode,
@@ -22,19 +23,22 @@ import {
   createProgressiveTrendLoader,
   type PiConnectionState,
   type PiPointSearchResult,
+  type PiPointValue,
   type ProgressiveTrendLoader,
 } from '../../pi';
 import { PiPointSearch } from '../../pi/PiPointSearch';
-import { isStatePiPointBinding } from '../../pi/piPointBinding';
+import { createPiPointBinding, isStatePiPointBinding } from '../../pi/piPointBinding';
 import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
 import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
 import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
+import { ProgrammingPanel } from '../../programming/ProgrammingModule';
+import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument, type ProgrammingPiPointContext } from '../../programming/ProgrammingTypes';
 import { createSqlTable, SQL_TABLE_TYPE, type SqlTableElement } from '../../display/createSqlTable';
 import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
-import { createDefaultTimeSelection } from '../../time/timeRange';
+import { createDefaultTimeSelection, getRefreshIntervalMs, moveTimeSelectionToNow, REFRESH_INTERVAL_OPTIONS } from '../../time/timeRange';
 import { PLUGIN_ASSET_BASE_URL } from '../../constants';
 import {
   hasDashboardTitleConflict,
@@ -50,7 +54,7 @@ export type VisualizationTheme = 'dark' | 'light';
 export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
 
 type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
-type ActiveModule = 'visualization' | 'sheets' | 'sql-query';
+type ActiveModule = 'visualization' | 'sheets' | 'sql-query' | 'programming';
 type AssetsTab = 'assets' | 'library' | 'calculations';
 
 // Removed SqlDashboardTableState
@@ -61,6 +65,10 @@ function getInitialTheme(): VisualizationTheme {
   } catch {
     return 'dark';
   }
+}
+
+function getProgrammingPiPointKey(point: PiPointSearchResult): string {
+  return point.webId ?? `${point.dataSourceUid ?? ''}\u0000${point.path ?? ''}\u0000${point.name}`;
 }
 
 export function App() {
@@ -77,6 +85,30 @@ export function App() {
   const [editorMode, setEditorMode] = useState<DisplayEditorMode>('edit');
   const [dropSymbolType, setDropSymbolType] = useState<PiPointDropSymbolType>('trend');
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
+  const [refreshInterval, setRefreshInterval] = useState<string>('');
+  const [refreshCount, setRefreshCount] = useState<number>(0);
+  const [programmingDraft, setProgrammingDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
+  const [programmingApplied, setProgrammingApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
+  const [programmingPiPoints, setProgrammingPiPoints] = useState<PiPointSearchResult[]>([]);
+  const [programmingPiValues, setProgrammingPiValues] = useState<Record<string, PiPointValue>>({});
+  const [isProgrammingPiSearchOpen, setIsProgrammingPiSearchOpen] = useState(true);
+
+  const handleManualRefresh = useCallback(() => {
+    setTimeSelection((current) => (current.endExpression === '*' ? moveTimeSelectionToNow(current) : current));
+    setRefreshCount((count) => count + 1);
+  }, []);
+
+  useEffect(() => {
+    const ms = getRefreshIntervalMs(refreshInterval);
+    if (ms <= 0) {
+      return;
+    }
+    const timer = setInterval(() => {
+      setTimeSelection((current) => (current.endExpression === '*' ? moveTimeSelectionToNow(current) : current));
+      setRefreshCount((count) => count + 1);
+    }, ms);
+    return () => clearInterval(timer);
+  }, [refreshInterval]);
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
   const [assetsTab, setAssetsTab] = useState<AssetsTab>('assets');
   const [openCalculationId, setOpenCalculationId] = useState<string>();
@@ -222,6 +254,56 @@ export function App() {
     [progressiveTrendLoader, rangeFrom, rangeTo],
   );
   const hasPiConnection = piConnection.status === 'connected';
+
+  useEffect(() => {
+    if (!hasPiConnection || programmingPiPoints.length === 0) {
+      setProgrammingPiValues({});
+      return;
+    }
+    let active = true;
+    Promise.all(programmingPiPoints.map(async (point) => {
+      const binding = createPiPointBinding(point);
+      if (!binding) return [getProgrammingPiPointKey(point), undefined] as const;
+      try {
+        return [getProgrammingPiPointKey(point), await getPiPointCurrentValue(binding)] as const;
+      } catch {
+        return [getProgrammingPiPointKey(point), undefined] as const;
+      }
+    })).then((entries) => {
+      if (!active) return;
+      setProgrammingPiValues(Object.fromEntries(entries.filter((entry): entry is [string, PiPointValue] => Boolean(entry[1]))));
+    });
+    return () => { active = false; };
+  }, [hasPiConnection, programmingPiPoints, refreshCount]);
+
+  const programmingPiContexts = useMemo<ProgrammingPiPointContext[]>(() => programmingPiPoints.flatMap((point) => {
+    const value = programmingPiValues[getProgrammingPiPointKey(point)];
+    return value ? [{
+      name: point.name,
+      value: value.value,
+      timestamp: value.timestamp,
+      unit: value.unit ?? point.engineeringUnit,
+    }] : [];
+  }), [programmingPiPoints, programmingPiValues]);
+  const handleAddProgrammingToDisplay = useCallback(() => {
+    setDocument((current) => {
+      const query = programmingPiPoints.flatMap((point) => {
+        const binding = createPiPointBinding(point);
+        return binding ? [{ name: point.name, binding, ...(point.engineeringUnit ? { unit: point.engineeringUnit } : {}) }] : [];
+      });
+      const element = createProgramming({
+        html: programmingDraft.html,
+        css: programmingDraft.css,
+        javascript: programmingDraft.javascript,
+        query,
+        surface: current.surface,
+        existingIds: current.elements.map((item) => item.id),
+      });
+      return appendProgramming(current, element);
+    });
+    setActiveModule('visualization');
+    setIsAssetsPanelOpen(true);
+  }, [programmingDraft, programmingPiPoints]);
   const selectedSqlTable = useMemo(() => {
     if (activeModule !== 'sql-query') return null;
     if (selectedElementIds.length === 1) {
@@ -410,6 +492,32 @@ export function App() {
             </div>
           </div>
           <div className={styles.headerSaveRow}>
+            <div className={styles.headerAutoRefresh}>
+              <button
+                type="button"
+                className={styles.headerRefreshButton}
+                data-testid="header-refresh-now"
+                title="Atualizar agora"
+                aria-label="Atualizar agora"
+                onClick={handleManualRefresh}
+              >
+                <RefreshIcon />
+              </button>
+              <span className={styles.headerRefreshLabel}>Atualização automática:</span>
+              <select
+                className={styles.headerRefreshSelect}
+                value={refreshInterval}
+                data-testid="header-auto-refresh-select"
+                aria-label="Intervalo de atualização automática"
+                onChange={(e) => setRefreshInterval(e.target.value)}
+              >
+                {REFRESH_INTERVAL_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <button
               type="button"
               className={styles.saveButton}
@@ -543,11 +651,19 @@ export function App() {
                 setIsAssetsPanelOpen(true); 
               }}
             ><DatabaseIcon /></button>
-            <span className={styles.assetsRailItem} title="Pesquisa PI" aria-label="Pesquisa PI"><SearchIcon /></span>
+            <button
+              type="button"
+              className={activeModule === 'programming' ? styles.assetsRailActive : styles.assetsRailButton}
+              title="Programming"
+              aria-label="Programming"
+              aria-pressed={activeModule === 'programming'}
+              data-testid="pims-vision-programming-tab"
+              onClick={() => { setActiveModule('programming'); setIsAssetsPanelOpen(true); }}
+            ><ProgrammingIcon /></button>
           </div>
           {isAssetsPanelOpen && (
             <div className={styles.assetsBody}>
-              <div style={{ display: activeModule === 'visualization' ? 'block' : 'none' }}>
+              <div style={{ display: activeModule === 'visualization' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
                   <div className={styles.assetsHeader} role="tablist" aria-label="Módulos do painel">
                     <button
                       type="button"
@@ -628,7 +744,7 @@ export function App() {
                     </div>
                   </div>
               </div>
-              <div style={{ display: activeModule === 'sheets' ? 'block' : 'none' }}>
+              <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
                 <div id="pims-sheets-menu-slot" className={styles.sheetsMenuSlot} data-testid="pims-sheets-menu-slot" />
               </div>
               <div style={{ display: activeModule === 'sql-query' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
@@ -636,6 +752,68 @@ export function App() {
                   onResultChange={handleSqlResultChange} 
                   onApplyToDashboard={handleSqlApplyToDashboard}
                   sqlToLoad={selectedSqlTable?.properties.sql} 
+                />
+              </div>
+              <div style={{ display: activeModule === 'programming' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
+                <ProgrammingPanel
+                  variant="editor"
+                  document={programmingDraft}
+                  onDocumentChange={setProgrammingDraft}
+                  onApply={() => setProgrammingApplied(programmingDraft)}
+                  onAddToDisplay={handleAddProgrammingToDisplay}
+                  beforeEditor={activeModule === 'programming' ? (
+                    <div className={styles.programmingPiSearch}>
+                      <button
+                        type="button"
+                        className={styles.sectionCollapseButton}
+                        aria-expanded={isProgrammingPiSearchOpen}
+                        aria-controls="programming-pi-system-search"
+                        data-testid="programming-pi-system-toggle"
+                        onClick={() => setIsProgrammingPiSearchOpen((open) => !open)}
+                      >
+                        <span className={styles.assetsSectionLabel}>PI System</span>
+                        <ChevronIcon expanded={isProgrammingPiSearchOpen} />
+                      </button>
+                      {isProgrammingPiSearchOpen && (
+                        <div id="programming-pi-system-search" className={styles.piSearchContent}>
+                          <PiPointSearch
+                            enabled={hasPiConnection}
+                            onSelect={(point) => setProgrammingPiPoints((current) => (
+                              current.some((candidate) => getProgrammingPiPointKey(candidate) === getProgrammingPiPointKey(point))
+                                ? current
+                                : [...current, point]
+                            ))}
+                          />
+                        </div>
+                      )}
+                      <div className={styles.programmingQuery} data-testid="programming-pi-query">
+                        <span className={styles.programmingQueryTitle}>Query ({programmingPiPoints.length})</span>
+                        {programmingPiPoints.length === 0 ? (
+                          <span className={styles.programmingQueryEmpty}>Selecione tags na pesquisa para adicioná-las à consulta.</span>
+                        ) : (
+                          <ul className={styles.programmingQueryList}>
+                            {programmingPiPoints.map((point) => (
+                              <li key={getProgrammingPiPointKey(point)}>
+                                <span title={point.name}>{point.name}</span>
+                                <button
+                                  type="button"
+                                  aria-label={`Remover ${point.name} da consulta`}
+                                  onClick={() => setProgrammingPiPoints((current) => current.filter(
+                                    (candidate) => getProgrammingPiPointKey(candidate) !== getProgrammingPiPointKey(point),
+                                  ))}
+                                >×</button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <p className={styles.programmingPiHint}>
+                        {programmingPiPoints.length > 0
+                          ? 'Use window.pimsVision.piPoints ou window.pimsVision.piPointsByName no JavaScript.'
+                          : 'Selecione tags para disponibilizá-las no preview.'}
+                      </p>
+                    </div>
+                  ) : null}
                 />
               </div>
             </div>
@@ -662,7 +840,7 @@ export function App() {
               symbolModeOnly={assetsTab === 'calculations'}
               dropSymbolType={dropSymbolType}
               onDropSymbolTypeChange={setDropSymbolType}
-              trendRefreshKey={`${rangeFrom}:${rangeTo}`}
+              trendRefreshKey={`${rangeFrom}:${rangeTo}:${refreshCount}`}
               trendTimeRange={{ from: rangeFrom, to: rangeTo }}
               timeSelection={timeSelection}
               onTimeSelectionChange={setTimeSelection}
@@ -692,9 +870,28 @@ export function App() {
               }}
             />
           </div>
+          <div
+            style={{
+              display: activeModule === 'programming' ? 'flex' : 'none',
+              flex: 1,
+              minWidth: 0,
+              minHeight: 0,
+              flexDirection: 'column',
+            }}
+            data-testid="pims-vision-programming-workspace"
+          >
+            <ProgrammingPanel
+              variant="preview"
+              appliedDocument={programmingApplied}
+              piPoints={programmingPiContexts}
+            />
+          </div>
         </main>
       </div>
-      <TimeRangeBar selection={timeSelection} onChange={setTimeSelection} />
+      <TimeRangeBar
+        selection={timeSelection}
+        onChange={setTimeSelection}
+      />
     </div>
   );
 }
@@ -992,6 +1189,55 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     align-items: center;
     gap: 6px;
+  `,
+  headerAutoRefresh: css`
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 6px;
+  `,
+  headerRefreshButton: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--button-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+
+    &:hover {
+      color: var(--accent);
+      background: var(--button-hover);
+      border-color: var(--accent);
+    }
+  `,
+  headerRefreshLabel: css`
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  `,
+  headerRefreshSelect: css`
+    min-width: 95px;
+    height: 30px;
+    padding: 2px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    outline: none;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+
+    &:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--focus-ring);
+    }
   `,
   saveButton: css`
     height: 30px;
@@ -1316,6 +1562,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     display: flex;
     flex: 1;
     min-height: 0;
+    height: 100%;
     flex-direction: column;
     overflow: hidden;
   `,
@@ -1333,6 +1580,75 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex-direction: column;
     min-height: 0;
     overflow: hidden;
+  `,
+  programmingPiSearch: css`
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: ${theme.spacing(0.5)};
+    padding: ${theme.spacing(0.75, 1, 0.25)};
+    border-bottom: 1px solid var(--border-color);
+  `,
+  programmingPiHint: css`
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.4;
+  `,
+  programmingQuery: css`
+    display: flex;
+    flex-direction: column;
+    gap: ${theme.spacing(0.5)};
+    padding: ${theme.spacing(0.75)};
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--surface-secondary);
+  `,
+  programmingQueryTitle: css`
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: ${theme.typography.fontWeightMedium};
+  `,
+  programmingQueryEmpty: css`
+    color: var(--text-secondary);
+    font-size: 11px;
+    line-height: 1.35;
+  `,
+  programmingQueryList: css`
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 116px;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+
+    li {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      padding: ${theme.spacing(0.25, 0.5)};
+      border-radius: 3px;
+      color: var(--text-primary);
+      background: var(--button-bg);
+      font-size: 11px;
+    }
+    span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    button {
+      width: 20px;
+      height: 20px;
+      padding: 0;
+      border: 0;
+      border-radius: 3px;
+      color: var(--text-secondary);
+      background: transparent;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      &:hover { color: var(--text-primary); background: var(--button-hover); }
+    }
   `,
   piSearchContent: css`
     display: flex;
@@ -1534,13 +1850,6 @@ function DatabaseIcon() {
   </svg>;
 }
 
-function SearchIcon() {
-  return <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-    <circle cx="10.5" cy="10.5" r="6.5" />
-    <path d="m16 16 5 5" />
-  </svg>;
-}
-
 function FilterIcon() {
   return <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M3 5h18" />
@@ -1577,6 +1886,14 @@ function SheetsIcon() {
   </svg>;
 }
 
+function ProgrammingIcon() {
+  return <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m8 7-5 5 5 5" />
+    <path d="m16 7 5 5-5 5" />
+    <path d="m14 4-4 16" />
+  </svg>;
+}
+
 function ChevronIcon({ expanded }: { expanded: boolean }) {
   return <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
     <path d={expanded ? 'm6 9 6 6 6-6' : 'm9 6 6 6-6 6'} />
@@ -1594,4 +1911,8 @@ function getConnectionLabel(connection: PiConnectionState): string {
     case 'not-configured':
       return 'PI System: Data Source não configurada';
   }
+}
+
+function RefreshIcon() {
+  return <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M19 7v5h-5" /><path d="M18 12a7 7 0 1 1-2-5" /></svg>;
 }

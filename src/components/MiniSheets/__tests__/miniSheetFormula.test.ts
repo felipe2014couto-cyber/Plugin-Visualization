@@ -35,6 +35,32 @@ describe('miniSheetTime', () => {
     expect(parseIntervalToMs('1h')).toBe(3600 * 1000);
   });
 
+  it('parses absolute Brazilian and ISO dates correctly', () => {
+    const expected = new Date(2026, 7, 25, 9, 0, 0).getTime();
+    expect(parsePiTime('25/08/2026 09:00')).toBe(expected);
+    expect(parsePiTime('25/08/2026 09:00:00')).toBe(expected);
+    expect(parsePiTime('25-08-2026 09:00')).toBe(expected);
+    expect(parsePiTime('2026-08-25 09:00:00')).toBe(expected);
+    expect(parsePiTime('2026-08-25T09:00:00')).toBe(expected);
+
+    const dateOnly = new Date(2026, 7, 25, 0, 0, 0).getTime();
+    expect(parsePiTime('25/08/2026')).toBe(dateOnly);
+    expect(parsePiTime('2026-08-25')).toBe(dateOnly);
+  });
+
+  it('parses today (t) and yesterday (y) offsets correctly', () => {
+    const now = new Date(2026, 7, 25, 14, 30, 0).getTime();
+    const todayMidnight = new Date(2026, 7, 25, 0, 0, 0).getTime();
+    const yesterdayMidnight = new Date(2026, 7, 24, 0, 0, 0).getTime();
+
+    expect(parsePiTime('t', now)).toBe(todayMidnight);
+    expect(parsePiTime('today', now)).toBe(todayMidnight);
+    expect(parsePiTime('t+8h', now)).toBe(todayMidnight + 8 * 3600 * 1000);
+    expect(parsePiTime('y', now)).toBe(yesterdayMidnight);
+    expect(parsePiTime('yesterday', now)).toBe(yesterdayMidnight);
+    expect(parsePiTime('y+8h', now)).toBe(yesterdayMidnight + 8 * 3600 * 1000);
+  });
+
   it('formats timestamp to Brazilian/standard format', () => {
     const ts = new Date(2026, 7, 19, 7, 5, 0).getTime();
     expect(formatDateTime(ts)).toBe('19/08/2026 07:05:00');
