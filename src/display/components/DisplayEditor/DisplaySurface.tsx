@@ -1340,7 +1340,7 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
     style: { cursor: 'move' },
     transform: `rotate(${Number(element.properties.rotation) || 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
     stroke: getElementStroke(element),
-    strokeWidth: element.properties.shape === 'line' || element.properties.shape === 'arc' ? 2 : 1,
+    strokeWidth: element.properties.shape === 'line' || element.properties.shape === 'arc' ? 4 : 1,
     pointerEvents: 'all' as const,
   };
   if (element.properties.shape === 'ellipse') {
