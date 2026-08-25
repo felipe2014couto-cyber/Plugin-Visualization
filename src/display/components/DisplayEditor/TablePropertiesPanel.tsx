@@ -36,14 +36,14 @@ export function TablePropertiesPanel({ properties, onChange, onRemoveItem, onMov
         <label><input type="checkbox" checked={selectedColumn.wrapText} onChange={(event) => changeColumn(selectedColumnIndex, { wrapText: event.target.checked })} />Quebrar</label>
       </div>}
     </section>
-    {onExport && <section className={styles.section}>
+    <section className={styles.section} data-testid="table-export-section">
       <strong>Exportar dados</strong>
       <span className={styles.exportHint}>Exporta as colunas marcadas no intervalo de tempo atual.</span>
       <div className={styles.exportActions}>
-        <button type="button" onClick={() => onExport('csv')} disabled={exporting} data-testid="table-export-csv">CSV</button>
-        <button type="button" onClick={() => onExport('xml')} disabled={exporting} data-testid="table-export-xml">XML</button>
+        <button type="button" onClick={() => onExport?.('csv')} disabled={exporting || !onExport} data-testid="table-export-csv">CSV</button>
+        <button type="button" onClick={() => onExport?.('xml')} disabled={exporting || !onExport} data-testid="table-export-xml">XML</button>
       </div>
-    </section>}
+    </section>
     <section className={styles.section}><strong>Tags</strong>{properties.items.map((item, index) => <div className={`${styles.item} ${index === effectiveItemIndex ? styles.itemSelected : ''}`} key={`${item.binding.dataSourceUid}-${item.binding.pointName}-${index}`}><button type="button" className={styles.itemName} onClick={() => setSelectedItemIndex(index)} title={item.binding.pointName}>{item.binding.pointName}</button><button type="button" disabled={index === 0} onClick={() => onMoveItem(index, -1)}>↑</button><button type="button" disabled={index === properties.items.length - 1} onClick={() => onMoveItem(index, 1)}>↓</button><button type="button" disabled={properties.items.length === 1} onClick={() => onRemoveItem(index)}>Excluir</button></div>)}{selectedItem && <div className={styles.itemSettings}><label>Nome exibido<select value={selectedItem.nameMode === 'custom' ? 'custom' : 'tag'} onChange={(event) => changeItem({ nameMode: event.target.value as 'tag' | 'custom', ...(event.target.value === 'custom' && !selectedItem.customName ? { customName: selectedItem.binding.pointName } : {}) })}><option value="tag">Nome da tag</option><option value="custom">Personalizado</option></select></label>{selectedItem.nameMode === 'custom' && <label>Nome personalizado<input value={selectedItem.customName ?? selectedItem.binding.pointName} onChange={(event) => changeItem({ nameMode: 'custom', customName: event.target.value })} data-testid="table-custom-name" /></label>}</div>}</section>
   </aside>;
 }
