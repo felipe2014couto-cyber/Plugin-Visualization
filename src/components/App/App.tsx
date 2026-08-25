@@ -945,7 +945,7 @@ export function App() {
           >
             <ProgrammingPanel
               variant="preview"
-              appliedDocument={programmingApplied}
+              appliedDocument={editingProgrammingElementId ? programmingDraft : programmingApplied}
               piPoints={programmingPiContexts}
             />
           </div>

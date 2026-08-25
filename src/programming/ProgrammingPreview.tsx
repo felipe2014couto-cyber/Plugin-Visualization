@@ -36,6 +36,7 @@ export function ProgrammingPreview({ document, piPoints }: ProgrammingPreviewPro
   return (
     <div className={styles.previewFrame} data-testid="programming-preview">
       <iframe
+        key={srcDoc}
         title="Programming preview"
         sandbox="allow-scripts"
         srcDoc={srcDoc}
