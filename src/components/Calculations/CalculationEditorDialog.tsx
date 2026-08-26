@@ -596,9 +596,23 @@ const getStyles = (theme: GrafanaTheme2) => ({
 
 function extractTagNames(expression: string): string[] {
   const names = new Set<string>();
-  const tokenPattern = /(?:^|[^A-Za-z0-9_.:-])([A-Za-z_][A-Za-z0-9_.:-]*)/g;
+  
+  // 1. Remove string literals (both single and double quotes) so we don't extract tags from them
+  const expressionWithoutStrings = expression.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, '');
+  
+  // 2. Token pattern supporting Unicode letters (\p{L}) and numbers (\p{N})
+  const tokenPattern = /(?:^|[^\p{L}\p{N}_.:-])([\p{L}_][\p{L}\p{N}_.:-]*)(?=[^\p{L}\p{N}_.:-]|$)/gu;
+  
   let match: RegExpExecArray | null;
-  while ((match = tokenPattern.exec(expression)) !== null) {
+  while ((match = tokenPattern.exec(expressionWithoutStrings)) !== null) {
+    const endIndex = match.index + match[0].length;
+    const rest = expressionWithoutStrings.slice(endIndex);
+    
+    // Ignore if this token is immediately followed by '(' (it's a function, not a PI Point)
+    if (rest.trim().startsWith('(')) {
+      continue;
+    }
+    
     if (!CALCULATION_RESERVED_NAMES.has(match[1].toLocaleUpperCase())) {
       names.add(match[1]);
     }
