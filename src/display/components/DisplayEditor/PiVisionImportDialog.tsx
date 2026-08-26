@@ -14,7 +14,7 @@ export interface PiVisionImportDialogProps {
 }
 
 // ---------------------------------------------------------------------------
-// Utilitario de leitura de arquivo
+// Utilitarios
 // ---------------------------------------------------------------------------
 
 function readFileText(file: File): Promise<string> {
@@ -26,17 +26,142 @@ function readFileText(file: File): Promise<string> {
   });
 }
 
+/**
+ * Extrai o ID do Display e a URL base do PI Vision a partir de um link.
+ *
+ * Formatos suportados:
+ *   http://pimsweb/PIVision/#/Displays/48494/Nome
+ *   https://pimsweb/PIVision/#/Displays/48494
+ */
+export function parsePiVisionUrl(url: string): { baseUrl: string; displayId: string } | undefined {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  // Extrai o display ID do fragmento hash: #/Displays/<ID>
+  const hashMatch = trimmed.match(/#\/Displays\/(\d+)/i);
+  if (!hashMatch) {
+    return undefined;
+  }
+  const displayId = hashMatch[1];
+
+  // A URL base e tudo antes do #
+  const hashIndex = trimmed.indexOf('#');
+  const beforeHash = hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
+
+  // Remove trailing slash
+  const baseUrl = beforeHash.replace(/\/+$/, '');
+  if (!baseUrl) {
+    return undefined;
+  }
+
+  return { baseUrl, displayId };
+}
+
+/**
+ * Tenta buscar a definicao do Display na API do PI Vision.
+ * Faz tentativas nos endpoints conhecidos das versoes 2019+ e 2017.
+ */
+async function fetchPiVisionDisplay(baseUrl: string, displayId: string): Promise<unknown> {
+  const endpoints = [
+    `${baseUrl}/api/displays/${displayId}`,
+    `${baseUrl}/Utility/Services/DisplayService.svc/displays/${displayId}`,
+    `${baseUrl}/api/v1/displays/${displayId}`,
+  ];
+
+  let lastError: Error = new Error('Nenhum endpoint respondeu.');
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+      });
+
+      if (response.ok) {
+        const json: unknown = await response.json();
+        return json;
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(
+          'Acesso negado (401/403). Verifique se voce esta autenticado no PI Vision no mesmo navegador.',
+        );
+      }
+
+      if (response.status === 404) {
+        lastError = new Error(`Display #${displayId} nao encontrado no PI Vision.`);
+        continue;
+      }
+
+      lastError = new Error(`Erro HTTP ${response.status} ao acessar o PI Vision.`);
+    } catch (err) {
+      if (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) {
+        lastError = new Error(
+          'Nao foi possivel conectar ao servidor PI Vision. ' +
+          'Isso pode ser causado por CORS ou o servidor nao estar acessivel. ' +
+          'Use a aba "Arquivo" para importar via JSON exportado.',
+        );
+      } else if (err instanceof Error) {
+        lastError = err;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 // ---------------------------------------------------------------------------
 // Componente
 // ---------------------------------------------------------------------------
 
+type Tab = 'link' | 'file';
+
 export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialogProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [tab, setTab] = useState<Tab>('link');
   const [dataSourceUid, setDataSourceUid] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // --- Aba Link ---
+  const [linkUrl, setLinkUrl] = useState('');
+
+  // --- Aba Arquivo ---
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsedJson, setParsedJson] = useState<unknown>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [converting, setConverting] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Handlers — Aba Link
+  // ---------------------------------------------------------------------------
+
+  const handleConvertLink = useCallback(async () => {
+    const parsed = parsePiVisionUrl(linkUrl);
+    if (!parsed) {
+      setError('Link invalido. Use o formato: http://pimsweb/PIVision/#/Displays/48494/Nome');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const json = await fetchPiVisionDisplay(parsed.baseUrl, parsed.displayId);
+      const converted = convertPiVisionDisplay(json, dataSourceUid.trim() || undefined);
+      serializeDisplay(converted);
+      onImport(converted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao converter o display.');
+    } finally {
+      setLoading(false);
+    }
+  }, [dataSourceUid, linkUrl, onImport]);
+
+  // ---------------------------------------------------------------------------
+  // Handlers — Aba Arquivo
+  // ---------------------------------------------------------------------------
 
   const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0];
@@ -44,7 +169,6 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
     if (!file) {
       return;
     }
-
     setError(null);
     setParsedJson(null);
     setFileName(null);
@@ -69,15 +193,14 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
     }
   }, []);
 
-  const handleConvert = useCallback(async () => {
+  const handleConvertFile = useCallback(async () => {
     if (!parsedJson) {
       return;
     }
-    setConverting(true);
+    setLoading(true);
     setError(null);
     try {
       const converted = convertPiVisionDisplay(parsedJson, dataSourceUid.trim() || undefined);
-      // Valida a serializacao (garante que o documento e integro)
       serializeDisplay(converted);
       onImport(converted);
     } catch (err) {
@@ -87,9 +210,13 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
         setError('Falha ao converter o display. Verifique se o arquivo e um export valido do PI Vision.');
       }
     } finally {
-      setConverting(false);
+      setLoading(false);
     }
   }, [dataSourceUid, onImport, parsedJson]);
+
+  // ---------------------------------------------------------------------------
+  // Teclado e backdrop
+  // ---------------------------------------------------------------------------
 
   const handleKeyDown = useCallback((event: React.KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -102,6 +229,16 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
       onClose();
     }
   }, [onClose]);
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
+
+  const canConvert = tab === 'link'
+    ? Boolean(linkUrl.trim()) && !loading
+    : Boolean(parsedJson) && !loading;
+
+  const handleConvert = tab === 'link' ? () => void handleConvertLink() : () => void handleConvertFile();
 
   return (
     <div className={styles.backdrop} onClick={handleBackdropClick} onKeyDown={handleKeyDown} role="presentation">
@@ -126,47 +263,105 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
           </button>
         </div>
 
+        {/* Abas */}
+        <div className={styles.tabs} role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'link'}
+            className={tab === 'link' ? styles.tabActive : styles.tab}
+            data-testid="pi-vision-tab-link"
+            onClick={() => { setTab('link'); setError(null); }}
+          >
+            Colar Link
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'file'}
+            className={tab === 'file' ? styles.tabActive : styles.tab}
+            data-testid="pi-vision-tab-file"
+            onClick={() => { setTab('file'); setError(null); }}
+          >
+            Upload de Arquivo
+          </button>
+        </div>
+
         {/* Body */}
         <div className={styles.body}>
-          {/* Instrucao */}
-          <p className={styles.description}>
-            Exporte o display no PI Vision como JSON e selecione o arquivo abaixo.
-            O conversor ira mapear os elementos para o formato Aperam Visualization.
-          </p>
 
-          {/* Selecao de arquivo */}
-          <div className={styles.field}>
-            <label className={styles.label} htmlFor="piv-file-input">
-              Arquivo JSON do PI Vision
-            </label>
-            <div className={styles.fileRow}>
-              <span className={fileName ? styles.fileNameActive : styles.fileNameEmpty}>
-                {fileName ?? 'Nenhum arquivo selecionado'}
-              </span>
-              <button
-                type="button"
-                className={styles.fileButton}
-                data-testid="pi-vision-import-file-btn"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Selecionar arquivo
-              </button>
-              <input
-                id="piv-file-input"
-                ref={fileInputRef}
-                type="file"
-                accept="application/json,.json"
-                className={styles.hiddenInput}
-                data-testid="pi-vision-import-file-input"
-                onChange={handleFileChange}
-              />
-            </div>
-          </div>
+          {/* Aba: Link */}
+          {tab === 'link' && (
+            <>
+              <p className={styles.description}>
+                Cole o link de um Display do PI Vision. O conversor ira buscar a definicao
+                diretamente no servidor usando suas credenciais ja ativas no navegador.
+              </p>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="piv-link-input">
+                  Link do Display PI Vision
+                </label>
+                <input
+                  id="piv-link-input"
+                  type="text"
+                  className={styles.textInput}
+                  placeholder="http://pimsweb/PIVision/#/Displays/48494/Nome-Da-Tela"
+                  value={linkUrl}
+                  data-testid="pi-vision-import-link"
+                  onChange={(e) => { setLinkUrl(e.target.value); setError(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && canConvert) { handleConvert(); } }}
+                />
+              </div>
+              <div className={styles.notice} role="note">
+                <strong>Requisito:</strong> voce precisa estar autenticado no PI Vision neste mesmo
+                navegador. Se o servidor bloquear a requisicao (CORS), use a aba{' '}
+                <button type="button" className={styles.noticeLink} onClick={() => setTab('file')}>
+                  Upload de Arquivo
+                </button>.
+              </div>
+            </>
+          )}
 
-          {/* DataSource UID */}
+          {/* Aba: Arquivo */}
+          {tab === 'file' && (
+            <>
+              <p className={styles.description}>
+                Exporte o display no PI Vision como JSON e selecione o arquivo abaixo.
+              </p>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="piv-file-input">
+                  Arquivo JSON do PI Vision
+                </label>
+                <div className={styles.fileRow}>
+                  <span className={fileName ? styles.fileNameActive : styles.fileNameEmpty}>
+                    {fileName ?? 'Nenhum arquivo selecionado'}
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.fileButton}
+                    data-testid="pi-vision-import-file-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Selecionar arquivo
+                  </button>
+                  <input
+                    id="piv-file-input"
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/json,.json"
+                    className={styles.hiddenInput}
+                    data-testid="pi-vision-import-file-input"
+                    onChange={handleFileChange}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* DataSource UID — compartilhado entre as abas */}
           <div className={styles.field}>
             <label className={styles.label} htmlFor="piv-ds-uid">
-              UID do Datasource PI (opcional)
+              UID do Datasource PI no Grafana <span className={styles.optional}>(opcional)</span>
             </label>
             <input
               id="piv-ds-uid"
@@ -178,15 +373,9 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
               onChange={(e) => setDataSourceUid(e.target.value)}
             />
             <span className={styles.hint}>
-              Se deixado em branco, sera usado um placeholder que pode ser corrigido no editor apos a importacao.
-              O UID pode ser encontrado na configuracao do datasource no Grafana.
+              Encontrado em: Grafana → Connections → Data sources → PI System → Settings → UID.
+              Se omitido, pode ser corrigido no editor apos a importacao.
             </span>
-          </div>
-
-          {/* Aviso de limitacoes */}
-          <div className={styles.notice} role="note">
-            <strong>Limitacoes conhecidas:</strong> simbolos industriais sem equivalente local serao representados
-            como retangulos. Formulas PI Performance Equations precisarao ser revisadas manualmente.
           </div>
 
           {/* Erro */}
@@ -211,10 +400,12 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
             type="button"
             className={styles.convertButton}
             data-testid="pi-vision-import-convert"
-            disabled={!parsedJson || converting}
-            onClick={() => void handleConvert()}
+            disabled={!canConvert}
+            onClick={handleConvert}
           >
-            {converting ? 'Convertendo...' : 'Converter e Importar'}
+            {loading
+              ? (tab === 'link' ? 'Buscando e convertendo...' : 'Convertendo...')
+              : 'Converter e Importar'}
           </button>
         </div>
       </div>
@@ -237,7 +428,7 @@ const styles = {
     justify-content: center;
   `,
   dialog: css`
-    width: 480px;
+    width: 500px;
     max-width: calc(100vw - 32px);
     background: var(--surface-primary, #1a1d23);
     border: 1px solid var(--border-color, #3d3d3d);
@@ -277,6 +468,33 @@ const styles = {
       color: var(--text-primary, #d8d9da);
     }
   `,
+  tabs: css`
+    display: flex;
+    border-bottom: 1px solid var(--border-color, #3d3d3d);
+    background: var(--surface-secondary, #22262e);
+  `,
+  tab: css`
+    padding: 10px 18px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-secondary, #9fa6b2);
+    font-size: 13px;
+    cursor: pointer;
+    &:hover {
+      color: var(--text-primary, #d8d9da);
+    }
+  `,
+  tabActive: css`
+    padding: 10px 18px;
+    border: none;
+    border-bottom: 2px solid var(--primary, #5a78d1);
+    background: transparent;
+    color: var(--text-primary, #d8d9da);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  `,
   body: css`
     padding: 16px;
     display: flex;
@@ -298,6 +516,10 @@ const styles = {
     font-size: 12px;
     font-weight: 500;
     color: var(--text-primary, #d8d9da);
+  `,
+  optional: css`
+    font-weight: 400;
+    color: var(--text-secondary, #9fa6b2);
   `,
   fileRow: css`
     display: flex;
@@ -362,6 +584,15 @@ const styles = {
     color: var(--warning-text, #d4b82a);
     font-size: 11px;
     line-height: 1.5;
+  `,
+  noticeLink: css`
+    background: none;
+    border: none;
+    color: var(--primary, #5a78d1);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0;
+    text-decoration: underline;
   `,
   error: css`
     padding: 8px 12px;
