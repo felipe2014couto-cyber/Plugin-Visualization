@@ -60,7 +60,7 @@ export function parsePiVisionUrl(url: string): { baseUrl: string; displayId: str
 }
 
 const PIVISION_PROXY_PORT = 3001;
-const PIVISION_PROXY_BASE = `http://localhost:${PIVISION_PROXY_PORT}/pivision`;
+const PIVISION_PROXY_BASE = () => `http://${window.location.hostname}:${PIVISION_PROXY_PORT}/pivision`;
 
 /**
  * Verifica se o proxy local esta rodando.
@@ -70,7 +70,7 @@ async function isProxyRunning(): Promise<boolean> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 1500);
     try {
-      const res = await fetch(`http://localhost:${PIVISION_PROXY_PORT}/health`, { signal: controller.signal });
+      const res = await fetch(`http://${window.location.hostname}:${PIVISION_PROXY_PORT}/health`, { signal: controller.signal });
       return res.ok;
     } finally {
       clearTimeout(timer);
@@ -101,7 +101,7 @@ async function fetchPiVisionDisplay(baseUrl: string, displayId: string): Promise
         const proxyController = new AbortController();
         const proxyTimer = setTimeout(() => proxyController.abort(), 15000);
         try {
-          const proxyUrl = `${PIVISION_PROXY_BASE}?url=${encodeURIComponent(endpoint)}`;
+          const proxyUrl = `${PIVISION_PROXY_BASE()}?url=${encodeURIComponent(endpoint)}`;
           const response = await fetch(proxyUrl, { signal: proxyController.signal });
           if (response.ok) {
             return await response.json() as unknown;
