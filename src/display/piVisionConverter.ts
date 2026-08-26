@@ -299,12 +299,28 @@ export function translatePiVisionExpression(expression: string): string {
     .replace(/\bor\b/gi, '||');
 }
 
+
+const PI_TIME_ABBREVIATIONS = new Set(['*', 't', 'y', 'today', 'yesterday', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
+function isPiTimeString(str: string): boolean {
+  const lower = str.trim().toLocaleLowerCase();
+  if (PI_TIME_ABBREVIATIONS.has(lower)) {
+    return true;
+  }
+  if (/^(\*|t|y|today|yesterday|sun|mon|tue|wed|thu|fri|sat)[+-]\d+[smhdwy]$/.test(lower)) {
+    return true;
+  }
+  if (/^\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/.test(lower)) {
+    return true;
+  }
+  return false;
+}
+
 function extractPiVisionExpressionPointNames(expression: string): string[] {
   const names = new Map<string, string>();
   for (const match of expression.matchAll(/'([^']+)'/g)) {
     const pointName = match[1].trim();
     const normalized = pointName.toLocaleLowerCase();
-    if (pointName && !names.has(normalized)) {
+    if (pointName && !names.has(normalized) && !isPiTimeString(pointName)) {
       names.set(normalized, pointName);
     }
   }
@@ -464,6 +480,8 @@ function convertSymbol(
 
     case 'verticalbar':
     case 'horizontalbar':
+    case 'verticalgauge':
+    case 'horizontalgauge':
     case 'bar':
       return convertBar(symbol, geo, dataSourceUid, existingIds, calculationsByName);
 
@@ -514,6 +532,9 @@ function convertValue(
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
 ): DisplayElement | undefined {
   const cfg = symbol.Configuration ?? {};
+  const valueGeo = hasExplicitWidth(symbol)
+    ? geo
+    : { ...geo, width: estimateCompactValueWidth(cfg) };
   const binding = firstBinding(symbol, dataSourceUid);
   const calculation = firstCalculation(symbol, calculationsByName);
   if (!binding && !calculation) {
@@ -543,10 +564,11 @@ function convertValue(
       customLabel: typeof cfg.CustomName === 'string' ? cfg.CustomName : '',
     },
     _piVisionPreserveFontSize: true,
+    _piVisionSquareBackground: true,
     ...convertMultistateIfPresent(symbol.Multistate),
   };
 
-  return makeElement(VALUE_TYPE, geo, properties, existingIds);
+  return makeElement(VALUE_TYPE, valueGeo, properties, existingIds);
 }
 
 // ---------------------------------------------------------------------------
@@ -693,15 +715,20 @@ function convertBar(
     return undefined;
   }
 
-  const minimum = typeof cfg.MinValue === 'number' ? cfg.MinValue : 0;
-  const maximum = typeof cfg.MaxValue === 'number' ? cfg.MaxValue : 100;
+  const minimum = typeof cfg.ValueScaleSettings?.MinValue === 'number'
+    ? cfg.ValueScaleSettings.MinValue
+    : typeof cfg.MinValue === 'number' ? cfg.MinValue : 0;
+  const maximum = typeof cfg.ValueScaleSettings?.MaxValue === 'number'
+    ? cfg.ValueScaleSettings.MaxValue
+    : typeof cfg.MaxValue === 'number' ? cfg.MaxValue : 100;
   const symType = (symbol.SymbolType ?? '').toLowerCase();
   const cfgOrientation = (cfg.Orientation ?? '').toLowerCase();
-  const orientation = (symType === 'horizontalbar' || cfgOrientation === 'horizontal')
+  const orientation = (symType === 'horizontalbar' || symType === 'horizontalgauge' || cfgOrientation === 'horizontal')
     ? 'horizontal'
     : 'vertical';
-  const color = normalizeColor(cfg.ForeColor) ?? '#6e9fff';
+  const color = normalizeColor(cfg.Fill ?? cfg.ForeColor) ?? '#6e9fff';
   const multistate = convertMultistateIfPresent(symbol.Multistate);
+  const isPiVisionCompactGauge = symType === 'verticalgauge' || symType === 'horizontalgauge';
 
   const properties: BarProperties = {
     ...(binding ? { binding } : {}),
@@ -710,9 +737,17 @@ function convertBar(
     maximum,
     showValue: cfg.ShowValue !== false,
     showTagName: cfg.ShowLabel ?? cfg.ShowTagName ?? true,
-    decimals: normalizeDecimals(cfg.Decimals),
+    showUnit: cfg.ShowUnit === true || cfg.ShowUOM === true,
+    decimals: normalizeDecimals(cfg.Decimals) ?? decimalsFromFormat(cfg.FormatType),
     orientation,
     color,
+    fillColor: color,
+    backgroundColor: normalizeColor(cfg.Background ?? cfg.BackColor) ?? 'transparent',
+    borderColor: normalizeColor(cfg.ValueStroke ?? cfg.Stroke) ?? '#ffffff',
+    borderWidth: typeof cfg.StrokeWidth === 'number' ? cfg.StrokeWidth : 1,
+    tagNameMode: cfg.NameType === 'C' && typeof cfg.CustomName === 'string' ? 'custom' : 'tag',
+    customTagName: typeof cfg.CustomName === 'string' ? cfg.CustomName : '',
+    ...(isPiVisionCompactGauge ? { _piVisionCompactGauge: true } : {}),
     ...multistate,
   };
 
@@ -1212,6 +1247,22 @@ function extractGeometry(symbol: PiVisionSymbol): ElementGeometry {
     width: typeof width === 'number' && width > 0 ? width : 200,
     height: typeof configuredHeight === 'number' && configuredHeight > 0 ? configuredHeight : 100,
   };
+}
+
+function hasExplicitWidth(symbol: PiVisionSymbol): boolean {
+  const cfg = symbol.Configuration ?? {};
+  return (typeof symbol.Width === 'number' && symbol.Width > 0)
+    || (typeof cfg.Width === 'number' && cfg.Width > 0)
+    || (typeof cfg.Right === 'number' && typeof cfg.Left === 'number' && cfg.Right > cfg.Left)
+    || (typeof cfg.Center === 'number' && typeof cfg.Left === 'number' && cfg.Center > cfg.Left);
+}
+
+function estimateCompactValueWidth(cfg: PiVisionSymbolConfiguration): number {
+  const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize) ?? 14;
+  // Valores antigos do PI Vision podem omitir Width. Esses campos exibem apenas
+  // o dado atual. Algarismos em fontes industriais sao estreitos; quatro
+  // larguras de fonte mais a margem reproduzem o painel compacto original.
+  return Math.max(48, Math.min(76, Math.round(fontSize * 4.8)));
 }
 
 function getDisplayBounds(symbols: PiVisionSymbol[]): { width: number; height: number } | undefined {

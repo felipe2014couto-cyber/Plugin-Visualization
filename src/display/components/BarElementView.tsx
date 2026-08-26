@@ -29,17 +29,20 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const maximum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : options.maximum;
   const ratio = value === undefined ? undefined : getScaleRatio(value, minimum, maximum);
   const horizontal = options.orientation === 'horizontal';
+  const isPiVisionCompactGauge = options._piVisionCompactGauge === true;
   const borderClearance = Math.max(0, barOptions.borderWidth);
-  const leftPadding = 78 + borderClearance * 2;
-  const rightPadding = 12;
+  // Os vertical gauges do PI Vision podem ter somente ~70 px de largura. O
+  // layout generico reserva 78 px para a escala e deixava o trilho sem area.
+  const leftPadding = isPiVisionCompactGauge ? 16 + borderClearance : 78 + borderClearance * 2;
+  const rightPadding = isPiVisionCompactGauge ? 4 + borderClearance : 12;
   const plotX = element.x + leftPadding;
   // Horizontal bars reserve the header for the tag/value and the footer for X scale labels.
-  const plotY = element.y + (horizontal ? 48 : 44) + borderClearance * 2;
+  const plotY = element.y + (isPiVisionCompactGauge ? 30 : horizontal ? 48 : 44) + borderClearance * 2;
   const plotWidth = Math.max(1, element.width - leftPadding - rightPadding);
   // Keep title, scale and value clear of thick borders.
   // Horizontal scale labels live below the track, so leave enough room for the
   // border stroke plus the tick labels instead of letting the stroke cover them.
-  const plotHeight = Math.max(1, element.height - (horizontal ? 104 : 90) - borderClearance * 4);
+  const plotHeight = Math.max(1, element.height - (isPiVisionCompactGauge ? 48 : horizontal ? 104 : 90) - borderClearance * 4);
   const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, label, runtimeState, value, options.decimals);
@@ -72,7 +75,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         pointerEvents="all"
       />
       {tagLabel && options.showTagName && (
-        <text x={barCenterX} y={element.y + (horizontal ? 16 : 22)} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
+        <text x={barCenterX} y={element.y + (isPiVisionCompactGauge ? 12 : horizontal ? 16 : 22)} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={isPiVisionCompactGauge ? Math.max(8, Math.min(12, element.width * 0.16)) : horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
           {tagLabel}
         </text>
       )}
@@ -85,7 +88,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
       {options.showScale !== false && !horizontal && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
         const valueAtTick = minimum + ((maximum - minimum) * index) / 8;
         const y = plotY + plotHeight - (plotHeight * index) / 8;
-        return <g key={`bar-scale-${index}`} pointerEvents="none"><line x1={plotX - 4 - borderClearance / 2} y1={y} x2={plotX - borderClearance / 2} y2={y} stroke="var(--text-primary)" /><text x={plotX - 14 - borderClearance} y={y + 6} textAnchor="end" fill="var(--text-primary)" fontSize={18} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
+        return <g key={`bar-scale-${index}`} pointerEvents="none"><line x1={plotX - 4 - borderClearance / 2} y1={y} x2={plotX - borderClearance / 2} y2={y} stroke="var(--text-primary)" /><text x={plotX - (isPiVisionCompactGauge ? 5 : 14) - borderClearance} y={y + (isPiVisionCompactGauge ? 3 : 6)} textAnchor="end" fill="var(--text-primary)" fontSize={isPiVisionCompactGauge ? Math.max(6, Math.min(9, element.width * 0.12)) : 18} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
       })}
       {options.showScale !== false && horizontal && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
         const valueAtTick = minimum + ((maximum - minimum) * index) / 8;
@@ -106,7 +109,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         />
       )}
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill="none" stroke={resolveThemeForeground(barOptions.borderColor)} strokeWidth={barOptions.borderWidth} vectorEffect="non-scaling-stroke" data-testid={`bar-border-${element.id}`} pointerEvents="none" />
-      <text x={barCenterX} y={element.y + element.height - 12} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
+      <text x={barCenterX} y={element.y + element.height - (isPiVisionCompactGauge ? 3 : 12)} textAnchor="middle" fill="var(--text-primary, rgba(255, 255, 255, 0.86))" fontSize={isPiVisionCompactGauge ? Math.max(7, Math.min(11, element.width * 0.15)) : Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
         {!horizontal && detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={barCenterX} dy={index === 0 ? 0 : -16}>{line}</tspan>)}
       </text>
       {!isValidScale(minimum, maximum) && (
