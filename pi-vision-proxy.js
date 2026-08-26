@@ -3,32 +3,22 @@
  * pi-vision-proxy.js
  *
  * Proxy HTTP local que permite ao Aperam Visualization buscar displays
- * do PI Vision sem ser bloqueado pelo CORS do navegador.
+ * do PI Vision sem ser bloqueado pelo CORS.
  *
- * Como funciona:
- *   O navegador nao pode chamar http://pimsweb diretamente de outra origem.
- *   Este proxy roda no mesmo servidor do Grafana e faz a chamada server-side,
- *   sem restricoes de CORS, depois devolve a resposta com os headers corretos.
- *
- * Uso:
- *   node pi-vision-proxy.js
- *   # ou para rodar em background:
- *   nohup node pi-vision-proxy.js &
- *
- * Porta padrao: 3001
- * Endpoint: GET http://localhost:3001/pivision?url=<URL_DA_API>
- *
- * Exemplo:
- *   http://localhost:3001/pivision?url=http://pimsweb/PIVision/api/displays/48494
+ * Suporta Autenticacao Windows (NTLM) usando 'curl' localmente.
  */
 
 'use strict';
 
 const http = require('http');
-const https = require('https');
 const { URL } = require('url');
+const { execFile } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 
-const PORT = process.env.PIVISION_PROXY_PORT || 3001;
+const ENV_PATH = path.join(__dirname, '.env');
+const DEFAULT_PI_VISION_BASE_URL = 'http://pimsweb/PIVision';
 
 // Origens permitidas (Grafana local)
 const ALLOWED_ORIGINS = [
@@ -37,72 +27,228 @@ const ALLOWED_ORIGINS = [
   'http://10.247.140.156:3000',
 ];
 
+// Le arquivo .env simples
+function loadEnv() {
+  const env = {};
+  if (fs.existsSync(ENV_PATH)) {
+    const lines = fs.readFileSync(ENV_PATH, 'utf-8').split('\n');
+    for (const line of lines) {
+      const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+      if (match) {
+        env[match[1]] = match[2];
+      }
+    }
+  }
+  return env;
+}
+
+const startupEnv = loadEnv();
+const PORT = process.env.PIVISION_PROXY_PORT || startupEnv.PIVISION_PROXY_PORT || 3001;
+const HOST = process.env.PIVISION_PROXY_HOST || startupEnv.PIVISION_PROXY_HOST || '127.0.0.1';
+
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin || '';
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  res.setHeader('Access-Control-Allow-Origin', allowed);
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    return false;
+  }
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Accept, Content-Type');
   res.setHeader('Access-Control-Max-Age', '86400');
+  return true;
 }
 
-function proxyRequest(targetUrl, res) {
-  let parsed;
-  try {
-    parsed = new URL(targetUrl);
-  } catch {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'URL invalida: ' + targetUrl }));
+function buildCredentials(env) {
+  const username = (env.PI_VISION_USER || '').trim();
+  const password = env.PI_VISION_PASSWORD || '';
+  const domain = (env.PI_VISION_DOMAIN || '').trim();
+  const qualifiedUsername = domain && username && !username.includes('\\') && !username.includes('@')
+    ? `${domain}\\${username}`
+    : username;
+  return { username: qualifiedUsername, password };
+}
+
+function requestEndpoint(targetUrl, env, cookiePath) {
+  return new Promise((resolve) => {
+    const { username, password } = buildCredentials(env);
+    const marker = '__PIMS_HTTP_RESULT__';
+    const curlArgs = [
+      '-sS',
+      '--noproxy', '*',
+      '--connect-timeout', '5',
+      '--max-time', '20',
+      '--ntlm',
+      '--user', `${username}:${password}`,
+      ...(cookiePath ? ['--cookie-jar', cookiePath, '--cookie', cookiePath] : []),
+      '--header', 'Accept: application/json',
+      '--write-out', `\n${marker}%{http_code}|%{content_type}`,
+      targetUrl,
+    ];
+
+    execFile('curl', curlArgs, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout) => {
+      const markerIndex = stdout.lastIndexOf(`\n${marker}`);
+      if (markerIndex === -1) {
+        resolve({ status: 502, contentType: 'application/json', body: '', transportError: error?.message || 'Resposta invalida do curl.' });
+        return;
+      }
+
+      const result = stdout.slice(markerIndex + marker.length + 1).trim();
+      const separatorIndex = result.indexOf('|');
+      const status = Number(result.slice(0, separatorIndex)) || 502;
+      const contentType = result.slice(separatorIndex + 1) || 'application/octet-stream';
+      resolve({ status, contentType, body: stdout.slice(0, markerIndex), transportError: error?.message });
+    });
+  });
+}
+
+async function proxyDisplay(displayId, res) {
+  const env = loadEnv();
+  const { username, password } = buildCredentials(env);
+  if (!username || !password) {
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Credenciais do PI Vision nao configuradas no proxy.' }));
     return;
   }
 
-  const lib = parsed.protocol === 'https:' ? https : http;
+  let baseUrl;
+  try {
+    baseUrl = new URL(env.PI_VISION_BASE_URL || DEFAULT_PI_VISION_BASE_URL);
+  } catch {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'PI_VISION_BASE_URL invalida.' }));
+    return;
+  }
+  baseUrl.pathname = baseUrl.pathname.replace(/\/+$/, '');
+  const sessionDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'pims-vision-proxy-'));
+  const cookiePath = path.join(sessionDirectory, 'cookies.txt');
 
-  const options = {
-    hostname: parsed.hostname,
-    port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
-    path: parsed.pathname + parsed.search,
-    method: 'GET',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-    },
-    // Permite certificados self-signed (comum em redes corporativas)
-    rejectUnauthorized: false,
-  };
+  const paths = [
+    `/api/displays/${displayId}`,
+    `/Utility/Services/DisplayService.svc/displays/${displayId}`,
+    `/api/v1/displays/${displayId}`,
+    `/Displays/${displayId}/OpenEditDisplay`,
+  ];
+  const attempts = [];
 
-  const proxyReq = lib.request(options, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode || 200, {
-      'Content-Type': proxyRes.headers['content-type'] || 'application/json',
-    });
-    proxyRes.pipe(res);
-  });
+  try {
+    for (const endpointPath of paths) {
+      const targetUrl = new URL(baseUrl.toString());
+      targetUrl.pathname += endpointPath;
+      console.log('[proxy] Buscando:', targetUrl.pathname);
+      const result = await requestEndpoint(targetUrl.toString(), env, cookiePath);
+      attempts.push({ endpoint: endpointPath, status: result.status });
 
-  proxyReq.on('error', (err) => {
-    console.error('[proxy] Erro ao conectar com PI Vision:', err.message);
-    if (!res.headersSent) {
-      res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Nao foi possivel conectar ao servidor PI Vision: ' + err.message,
-      }));
+      if (result.status >= 200 && result.status < 300) {
+        try {
+          const display = JSON.parse(result.body);
+          await hydrateDisplayAttachments(display, baseUrl, env, cookiePath);
+          await hydrateGraphicLibrary(display, baseUrl, env, cookiePath);
+          res.writeHead(result.status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(display));
+          return;
+        } catch {
+          attempts[attempts.length - 1].status = 'resposta nao JSON';
+        }
+      }
     }
-  });
+  } finally {
+    fs.rmSync(sessionDirectory, { recursive: true, force: true });
+  }
 
-  proxyReq.setTimeout(15000, () => {
-    proxyReq.destroy();
-    if (!res.headersSent) {
-      res.writeHead(504, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Timeout ao conectar com PI Vision.' }));
+  const statuses = attempts.map((attempt) => attempt.status);
+  const status = statuses.includes(401) ? 401 : statuses.includes(403) ? 403 : statuses.includes(404) ? 404 : 502;
+  const details = status === 401
+    ? 'Autenticacao Windows recusada. Configure PI_VISION_DOMAIN ou use PI_VISION_USER no formato DOMINIO\\usuario.'
+    : status === 403
+      ? `A conta configurada nao tem permissao para ler o Display #${displayId}.`
+      : `Nenhuma rota compativel retornou JSON para o Display #${displayId}.`;
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Falha ao buscar Display no PI Vision.', details, attempts }));
+}
+
+async function hydrateDisplayAttachments(display, baseUrl, env, cookiePath) {
+  const requestId = typeof display.RequestId === 'string' ? display.RequestId : '';
+  const imageSymbols = Array.isArray(display.Symbols)
+    ? display.Symbols.filter((symbol) => symbol?.SymbolType?.toLowerCase() === 'image')
+    : [];
+  if (!requestId || !/^[a-f0-9-]+$/i.test(requestId)) {
+    return;
+  }
+
+  await Promise.all(imageSymbols.map(async (symbol) => {
+    const attachmentId = symbol?.Configuration?.AttachmentId;
+    if (!Number.isInteger(attachmentId) || attachmentId < 0) {
+      return;
     }
-  });
+    const targetUrl = new URL(baseUrl.toString());
+    targetUrl.pathname += `/Data/${requestId}/Attachment/${attachmentId}`;
+    const result = await requestEndpoint(targetUrl.toString(), env, cookiePath);
+    if (result.status < 200 || result.status >= 300) {
+      return;
+    }
+    try {
+      const dataUrl = JSON.parse(result.body);
+      if (typeof dataUrl === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUrl)) {
+        symbol.Configuration.ImageData = dataUrl;
+      }
+    } catch {
+      // Anexo invalido nao impede a importacao dos demais simbolos.
+    }
+  }));
+}
 
-  proxyReq.end();
+async function hydrateGraphicLibrary(display, baseUrl, env, cookiePath) {
+  const graphicSymbols = Array.isArray(display.Symbols)
+    ? display.Symbols.filter((symbol) => symbol?.SymbolType?.toLowerCase() === 'graphic')
+    : [];
+  const uniqueGraphics = new Map();
+  for (const symbol of graphicSymbols) {
+    const directoryKey = symbol?.Configuration?.DirectoryKey;
+    const fileKey = symbol?.Configuration?.FileKey;
+    if (typeof directoryKey === 'string' && typeof fileKey === 'string') {
+      uniqueGraphics.set(`${directoryKey}\u0000${fileKey}`, { directoryKey, fileKey });
+    }
+  }
+
+  const sources = new Map();
+  await Promise.all([...uniqueGraphics.entries()].map(async ([key, graphic]) => {
+    const targetUrl = new URL(baseUrl.toString());
+    targetUrl.pathname += '/Services/GraphicLibrary/Graphic';
+    targetUrl.searchParams.set('directoryKey', graphic.directoryKey);
+    targetUrl.searchParams.set('fileKey', graphic.fileKey);
+    const result = await requestEndpoint(targetUrl.toString(), env, cookiePath);
+    if (result.status < 200 || result.status >= 300) {
+      return;
+    }
+    try {
+      const definition = JSON.parse(result.body);
+      if (typeof definition?.Source === 'string' && definition.Source.trim().startsWith('<svg')) {
+        sources.set(key, definition.Source);
+      }
+    } catch {
+      // O fallback local continua disponivel quando a biblioteca nao responde.
+    }
+  }));
+
+  for (const symbol of graphicSymbols) {
+    const cfg = symbol.Configuration;
+    const source = sources.get(`${cfg?.DirectoryKey}\u0000${cfg?.FileKey}`);
+    if (source) {
+      cfg.GraphicSource = source;
+    }
+  }
 }
 
 const server = http.createServer((req, res) => {
-  setCorsHeaders(req, res);
+  if (!setCorsHeaders(req, res)) {
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Origem nao permitida.' }));
+    return;
+  }
 
-  // Preflight CORS
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
     res.end();
@@ -115,26 +261,23 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Health check
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', proxy: 'pi-vision-proxy' }));
+    res.end(JSON.stringify({ status: 'ok', proxy: 'pi-vision-proxy-curl' }));
     return;
   }
 
-  // Endpoint principal: GET /pivision?url=<URL>
   if (req.url && req.url.startsWith('/pivision')) {
     const urlObj = new URL('http://localhost' + req.url);
-    const targetUrl = urlObj.searchParams.get('url');
+    const displayId = urlObj.searchParams.get('displayId');
 
-    if (!targetUrl) {
+    if (!displayId || !/^\d+$/.test(displayId)) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Parametro "url" ausente.' }));
+      res.end(JSON.stringify({ error: 'Parametro "displayId" invalido ou ausente.' }));
       return;
     }
 
-    console.log('[proxy] Buscando:', targetUrl);
-    proxyRequest(targetUrl, res);
+    void proxyDisplay(displayId, res);
     return;
   }
 
@@ -142,18 +285,12 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ error: 'Endpoint nao encontrado.' }));
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`PI Vision Proxy rodando em http://0.0.0.0:${PORT}`);
-  console.log('Endpoint: GET /pivision?url=<URL_DA_API_DO_PI_VISION>');
-  console.log('Health:   GET /health');
-  console.log('\nPressione Ctrl+C para parar.');
+server.listen(PORT, HOST, () => {
+  console.log(`PI Vision Proxy rodando em http://${HOST}:${PORT}`);
+  console.log(`Verificando credenciais em: ${ENV_PATH}`);
 });
 
 server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Porta ${PORT} ja em uso. Use: PIVISION_PROXY_PORT=3002 node pi-vision-proxy.js`);
-  } else {
-    console.error('Erro no servidor proxy:', err.message);
-  }
-  process.exit(1);
+  console.error(`Falha ao iniciar proxy na porta ${PORT}:`, err.message);
+  process.exitCode = 1;
 });

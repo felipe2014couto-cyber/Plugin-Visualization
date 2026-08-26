@@ -62,6 +62,19 @@ describe('ValueElementView', () => {
     expect(text).toHaveAttribute('text-anchor', 'end');
   });
 
+  it('preserva o tamanho de fonte original em Values importados do PI Vision', () => {
+    const element = createValue({
+      binding,
+      id: 'value-pi-vision',
+      width: 72,
+      height: 22,
+      visual: { fontSize: 14 },
+    });
+    element.properties._piVisionPreserveFontSize = true;
+    render(<svg><ValueElementView element={element} runtimeState={{ status: 'success', result: { value: 36.15 } }} /></svg>);
+    expect(screen.getByTestId('display-value-value-pi-vision')).toHaveAttribute('font-size', '14');
+  });
+
   it('aplica somente a cor do primeiro estado correspondente e preserva o valor', async () => {
     const element = createValue({
       binding,

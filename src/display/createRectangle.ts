@@ -15,6 +15,9 @@ export type RectangleProperties = Record<string, unknown> & {
   stroke: string;
   shape: GeometricShape;
   rotation: number;
+  strokeWidth?: number;
+  strokeStyle?: string;
+  points?: Array<{ x: number; y: number }>;
   binding?: PiPointBinding;
   calculationId?: string;
   multistate?: MultistateConfig;

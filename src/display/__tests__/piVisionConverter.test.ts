@@ -1,7 +1,9 @@
 import {
   convertPiVisionDisplay,
+  convertPiVisionCalculations,
   convertMultistate,
   parseDataSourcePath,
+  translatePiVisionExpression,
   PI_VISION_IMPORT_DATASOURCE_UID_PLACEHOLDER,
   PiVisionConvertError,
   type PiVisionDisplay,
@@ -15,6 +17,8 @@ import { BAR_TYPE } from '../createBar';
 import { TABLE_TYPE } from '../createTable';
 import { TEXT_TYPE } from '../createText';
 import { RECTANGLE_TYPE } from '../createRectangle';
+import { IMAGE_TYPE } from '../createImage';
+import { LIBRARY_SYMBOL_TYPE } from '../createLibrarySymbol';
 import { isPiPointBinding } from '../../pi/piPointBinding';
 
 // ---------------------------------------------------------------------------
@@ -263,6 +267,344 @@ describe('convertPiVisionDisplay — documento', () => {
     const el = result.elements[0];
     expect((el.properties as any).binding?.dataSourceUid).toBe('my-ds-uid');
   });
+
+  it('converte o formato real retornado por OpenEditDisplay', () => {
+    const result = convertPiVisionDisplay({
+      Name: 'Display real',
+      DisplayProperties: { BackgroundColor: '#202020' },
+      Symbols: [
+        {
+          SymbolType: 'value',
+          DataSources: ['pi:\\PISERVER?server-id\\TAG-01?point-id'],
+          Configuration: {
+            Left: 100,
+            Top: 50,
+            Right: 340,
+            Height: 80,
+            ValueStroke: '#ffffff',
+            Fill: '#101010',
+            ShowUOM: true,
+            ShowTime: true,
+          },
+        },
+        {
+          SymbolType: 'statictext',
+          Configuration: {
+            Left: 10,
+            Top: 200,
+            Width: 300,
+            Height: 40,
+            StaticText: 'Titulo',
+            Stroke: '#eeeeee',
+          },
+        },
+      ],
+    }, 'pi-uid');
+
+    expect(result.surface).toEqual({ width: 340, height: 240, backgroundColor: '#202020' });
+    expect(result.elements).toHaveLength(2);
+    expect(result.elements[0]).toMatchObject({ type: VALUE_TYPE, x: 100, y: 50, width: 240, height: 80 });
+    expect((result.elements[0].properties as any).binding).toMatchObject({
+      dataSourceUid: 'pi-uid',
+      serverPath: 'PISERVER',
+      pointName: 'TAG-01',
+    });
+    expect((result.elements[0].properties as any).visual).toMatchObject({ showUnit: true, showTimestamp: true });
+    expect(result.elements[1]).toMatchObject({ type: TEXT_TYPE, x: 10, y: 200, width: 300, height: 40 });
+    expect((result.elements[1].properties as any).text).toBe('Titulo');
+  });
+
+  it('usa Center para calcular a largura de Values e preserva cores rgba', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'value',
+        DataSources: ['pi:\\pims\\TAG'],
+        Configuration: {
+          Left: 100,
+          Center: 130,
+          Top: 20,
+          Height: 24,
+          Fill: 'rgba(255,255,255,0)',
+          ValueStroke: 'rgba(0,0,0,1)',
+          FormatType: 'N2',
+          NameType: 'C',
+          CustomName: 'Temperatura',
+        },
+      }],
+    }, 'pi-uid');
+
+    expect(result.elements[0]).toMatchObject({ type: VALUE_TYPE, x: 100, width: 60 });
+    expect((result.elements[0].properties as any).visual).toMatchObject({
+      backgroundColor: 'rgba(255,255,255,0)',
+      color: 'rgba(0,0,0,1)',
+      decimals: 2,
+      labelMode: 'custom',
+      customLabel: 'Temperatura',
+    });
+  });
+
+  it('nao desenha metadados de grupo novamente', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{ SymbolType: 'group', Configuration: { Children: ['Symbol1'] } as any }],
+    });
+    expect(result.elements).toEqual([]);
+  });
+
+  it('converte graphic industrial em SVG incorporado', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'graphic',
+        Configuration: {
+          Left: 10,
+          Top: 20,
+          Width: 80,
+          Height: 60,
+          DirectoryKey: 'Machining',
+          FileKey: 'Saw blade',
+          Rotation: 45,
+          Fill: '#ffffff',
+        },
+      }],
+    });
+    expect(result.elements[0]).toMatchObject({ type: IMAGE_TYPE, x: 10, y: 20, width: 80, height: 60 });
+    expect((result.elements[0].properties as any).src).toMatch(/^data:image\/svg\+xml,/);
+    expect((result.elements[0].properties as any).rotation).toBe(45);
+  });
+
+  it('prioriza o SVG oficial incorporado pelo proxy e remove conteudo ativo', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'graphic',
+        Configuration: {
+          Left: 0, Top: 0, Width: 40, Height: 40,
+          FileKey: 'Pilot light',
+          GraphicSource: '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script><circle cx="5" cy="5" r="5"/></svg>',
+        },
+      }],
+    });
+    const source = decodeURIComponent((result.elements[0].properties as any).src.split(',')[1]);
+    expect(source).toContain('<circle');
+    expect(source).not.toContain('<script');
+    expect(source).not.toContain('onload=');
+  });
+
+  it('converte imagem anexada que o proxy incorporou', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'image',
+        Configuration: {
+          Left: 10, Top: 15, Width: 320, Height: 180,
+          AttachmentId: 0,
+          ImageData: 'data:image/png;base64,iVBORw0KGgo=',
+        },
+      }],
+    });
+    expect(result.elements[0]).toMatchObject({
+      type: IMAGE_TYPE,
+      x: 10,
+      y: 15,
+      width: 320,
+      height: 180,
+      properties: { src: 'data:image/png;base64,iVBORw0KGgo=', _piVisionAttachmentId: 0 },
+    });
+  });
+
+  it('preserva pontos e espessura das linhas do PI Vision', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'line',
+        Configuration: {
+          Left: 5,
+          Top: 7,
+          Width: 100,
+          Height: 50,
+          Points: [{ X: 98, Y: 0 }, { X: 0, Y: 48 }],
+          StrokeWidth: 3,
+          Fill: '#778899',
+        },
+      }],
+    });
+    expect(result.elements[0].properties).toMatchObject({
+      shape: 'line',
+      strokeWidth: 3,
+      points: [{ x: 98, y: 0 }, { x: 0, y: 48 }],
+    });
+  });
+
+  it('mapeia escala e estilo reais do radial gauge', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'radialgauge',
+        DataSources: ['pi:\\pims\\VELOCIDADE'],
+        Configuration: {
+          Left: 0, Top: 0, Width: 200, Height: 150,
+          FaceAngle: 300,
+          IndicatorType: 'triangle',
+          IndicatorColor: '#0000ff',
+          BorderColor: '#000000',
+          ScaleColor: '#000000',
+          ScaleLabels: 'all',
+          LabelLocation: 'bottom',
+          ShowUOM: true,
+          ValueScaleSettings: { MinValue: 0, MaxValue: 45 },
+        },
+      }],
+    }, 'pi-uid');
+    expect(result.elements[0].properties).toMatchObject({
+      minimum: 0,
+      maximum: 45,
+      gaugeStyle: 'triangle',
+      gaugeAngle: 300,
+      gaugeBorderColor: '#000000',
+      gaugeScaleColor: '#000000',
+      labelPosition: 'below',
+      showUnit: true,
+    });
+  });
+
+  it('converte multistate real do PI Vision e vincula o retangulo ao MSDataSource', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'rectangle',
+        MSDataSources: ['pi:\\pims\\VIBRACAO'],
+        Configuration: {
+          Left: 10, Top: 20, Width: 100, Height: 30,
+          Fill: 'rgba(255,255,255,1)',
+          Multistates: [{
+            LowerValue: 0,
+            StateVariables: ['Fill', 'Blink'],
+            States: [
+              { UpperValue: 5, StateValues: ['rgba(0,255,0,1)', false] },
+              { UpperValue: 7, StateValues: ['rgba(255,255,0,1)', false] },
+              { UpperValue: 20, StateValues: ['rgba(255,0,0,1)', false] },
+            ],
+          }],
+        },
+      }],
+    }, 'pi-uid');
+
+    expect(result.elements[0].properties).toMatchObject({
+      binding: { dataSourceUid: 'pi-uid', serverPath: 'pims', pointName: 'VIBRACAO' },
+      multistate: {
+        enabled: true,
+        rules: [
+          { operator: 'lte', value: 5, color: '#00ff00' },
+          { operator: 'lte', value: 7, color: '#ffff00' },
+          { operator: 'gte', value: 7, color: '#ff0000' },
+        ],
+      },
+    });
+  });
+
+  it('converte graphic com multistate em simbolo dinamico colorizavel', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'graphic',
+        MSDataSources: ['pi:\\pims\\ESTADO_MOTOR'],
+        Configuration: {
+          Left: 10, Top: 20, Width: 200, Height: 100,
+          DirectoryKey: 'Motors', FileKey: 'Motor 17', Fill: '#0000ff',
+          GraphicSource: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 61"><path fill="#ccc" d="M0 0h112v61H0z"/></svg>',
+          Multistates: [{
+            StateVariables: ['MSColor', 'MSBlink'],
+            States: [
+              { UpperValue: 0.5, StateValues: ['rgba(0,255,0,1)', false] },
+              { UpperValue: 20, StateValues: ['rgba(255,0,0,1)', false] },
+            ],
+          }],
+        },
+      }],
+    }, 'pi-uid');
+
+    expect(result.elements[0]).toMatchObject({ type: LIBRARY_SYMBOL_TYPE });
+    expect(result.elements[0].properties).toMatchObject({
+      viewBox: '0 0 112 61',
+      binding: { dataSourceUid: 'pi-uid', serverPath: 'pims', pointName: 'ESTADO_MOTOR' },
+      multistate: { enabled: true },
+    });
+  });
+
+  it('cria calculos e associa referencias calc aos Values e Trends importados', () => {
+    const result = convertPiVisionDisplay({
+      Name: 'Display com calculos',
+      DisplayProperties: {
+        Calculations: [
+          {
+            Name: 'calc zona 1',
+            Description: 'Razao ar gas',
+            Server: 'pims?server-web-id',
+            Expression: "if 'VAZ_GAS'<= 0 then 0 else 'VAZ_AR' / 'VAZ_GAS'",
+          },
+          {
+            Name: 'TV',
+            Server: 'pims?server-web-id',
+            Expression: "'VELOCIDADE' * 'ESPESSURA'",
+          },
+        ],
+      },
+      Symbols: [
+        {
+          SymbolType: 'value',
+          DataSources: ['calc:TV.Value'],
+          Configuration: { Left: 10, Top: 10, Width: 100, Height: 40 },
+        },
+        {
+          SymbolType: 'trend',
+          DataSources: ['calc:calc zona 1.Value', 'pi:\\pims\\TEMPERATURA'],
+          Configuration: {
+            Left: 10,
+            Top: 60,
+            Width: 400,
+            Height: 200,
+            TraceSettings: [{ Color: '#ff0000' }, { Color: '#00ff00' }],
+          },
+        },
+      ],
+    }, 'pi-principal');
+
+    expect(result.calculations).toHaveLength(2);
+    expect(result.calculations?.[0]).toMatchObject({
+      name: 'calc zona 1',
+      description: 'Razao ar gas',
+      expression: 'IF(VAZ_GAS<= 0, 0, VAZ_AR / VAZ_GAS)',
+      inputs: [
+        { name: 'VAZ_GAS', binding: { dataSourceUid: 'pi-principal', serverPath: 'pims', pointName: 'VAZ_GAS' } },
+        { name: 'VAZ_AR', binding: { dataSourceUid: 'pi-principal', serverPath: 'pims', pointName: 'VAZ_AR' } },
+      ],
+    });
+
+    const calculationByName = new Map(result.calculations?.map((calculation) => [calculation.name, calculation]));
+    const valueProperties = result.elements[0].properties as any;
+    expect(valueProperties.calculationId).toBe(calculationByName.get('TV')?.id);
+    expect(valueProperties.binding).toBeUndefined();
+
+    const trendProperties = result.elements[1].properties as any;
+    expect(trendProperties.series).toHaveLength(2);
+    expect(trendProperties.series[0]).toMatchObject({
+      calculationId: calculationByName.get('calc zona 1')?.id,
+      legendLabel: 'calc zona 1',
+      binding: { dataSourceUid: '__pims_calculation__' },
+    });
+    expect(trendProperties.series[1]).toMatchObject({
+      binding: { dataSourceUid: 'pi-principal', serverPath: 'pims', pointName: 'TEMPERATURA' },
+    });
+  });
+});
+
+describe('conversao de calculos do PI Vision', () => {
+  it('traduz IF/THEN/ELSE, igualdade e operadores logicos', () => {
+    expect(translatePiVisionExpression("if 'TAG_A'= 1 then 'TAG_B' else 'TAG_C' and 'TAG_D'"))
+      .toBe('IF(TAG_A== 1, TAG_B, TAG_C && TAG_D)');
+  });
+
+  it('ignora calculos duplicados e entradas incompletas', () => {
+    const calculations = convertPiVisionCalculations([
+      { Name: 'Calc', Server: 'pims', Expression: "'A' + 'B'" },
+      { Name: ' calc ', Server: 'pims', Expression: "'C'" },
+      { Name: 'Sem expressão', Server: 'pims' },
+    ], 'pi');
+    expect(calculations).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -434,6 +776,40 @@ describe('conversao de Trend', () => {
     const { elements } = convertPiVisionDisplay(makeDisplay(sym));
     const props = elements[0].properties as any;
     expect(props.series).toHaveLength(2);
+  });
+
+  it('importa largura da legenda e elimina intersecao entre Trends da mesma linha', () => {
+    const display: PiVisionDisplay = {
+      Symbols: [
+        {
+          SymbolType: 'trend',
+          DataSources: ['pi:\\SERVER\\TAG_A'],
+          Configuration: {
+            Left: 0,
+            Top: 40,
+            Width: 600,
+            Height: 250,
+            FontName: 'Arial',
+            FontSize: 12,
+            TrendConfig: { LegendWidth: 120 },
+          },
+        },
+        {
+          SymbolType: 'trend',
+          DataSources: ['pi:\\SERVER\\TAG_B'],
+          Configuration: { Left: 480, Top: 42, Width: 600, Height: 250 },
+        },
+      ],
+    };
+
+    const { elements } = convertPiVisionDisplay(display, 'pi');
+    expect(elements[0]).toMatchObject({ x: 0, width: 472 });
+    expect((elements[0].properties as any).visual).toMatchObject({
+      fontFamily: 'Arial',
+      fontSize: 12,
+      legendWidth: 120,
+    });
+    expect(elements[0].x + elements[0].width).toBeLessThan(elements[1].x);
   });
 });
 

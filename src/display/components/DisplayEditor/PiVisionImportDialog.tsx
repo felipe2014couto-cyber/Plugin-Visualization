@@ -1,8 +1,10 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { css } from '@emotion/css';
+import { getDataSourceSrv } from '@grafana/runtime';
 import { convertPiVisionDisplay, PI_VISION_IMPORT_DATASOURCE_UID_PLACEHOLDER, PiVisionConvertError } from '../../piVisionConverter';
 import { serializeDisplay } from '../../displayTransfer';
 import type { DisplayDocument } from '../../displayDocument';
+import { resolvePiDataSource } from '../../../pi';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -62,6 +64,20 @@ export function parsePiVisionUrl(url: string): { baseUrl: string; displayId: str
 const PIVISION_PROXY_PORT = 3001;
 const PIVISION_PROXY_BASE = () => `http://${window.location.hostname}:${PIVISION_PROXY_PORT}/pivision`;
 
+interface PiVisionProxyErrorResponse {
+  error?: string;
+  details?: string;
+}
+
+async function getHttpErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = await response.json() as PiVisionProxyErrorResponse;
+    return body.details || body.error || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 /**
  * Verifica se o proxy local esta rodando.
  */
@@ -86,45 +102,48 @@ async function isProxyRunning(): Promise<boolean> {
  *  1. Tenta via proxy local (pi-vision-proxy.js) — sem CORS, autenticacao server-side
  *  2. Se proxy nao estiver rodando, tenta fetch direto com credenciais do navegador
  */
-async function fetchPiVisionDisplay(baseUrl: string, displayId: string): Promise<unknown> {
+export async function fetchPiVisionDisplay(baseUrl: string, displayId: string): Promise<unknown> {
   const apiEndpoints = [
     `${baseUrl}/api/displays/${displayId}`,
     `${baseUrl}/Utility/Services/DisplayService.svc/displays/${displayId}`,
     `${baseUrl}/api/v1/displays/${displayId}`,
+    `${baseUrl}/Displays/${displayId}/OpenEditDisplay`,
   ];
 
   // Tenta via proxy local primeiro
   const proxyAvailable = await isProxyRunning();
+  let proxyError: Error | undefined;
   if (proxyAvailable) {
-    for (const endpoint of apiEndpoints) {
-      try {
-        const proxyController = new AbortController();
-        const proxyTimer = setTimeout(() => proxyController.abort(), 15000);
-        try {
-          const proxyUrl = `${PIVISION_PROXY_BASE()}?url=${encodeURIComponent(endpoint)}`;
-          const response = await fetch(proxyUrl, { signal: proxyController.signal });
-          if (response.ok) {
-            return await response.json() as unknown;
-          }
-          if (response.status === 404) {
-            continue;
-          }
-          if (response.status === 401 || response.status === 403) {
-            throw new Error('Acesso negado (401/403) via proxy. O servidor PI Vision pode exigir autenticacao Windows.');
-          }
-        } finally {
-          clearTimeout(proxyTimer);
-        }
-      } catch (err) {
-        if (err instanceof Error && (err.message.includes('401') || err.message.includes('403'))) {
-          throw err;
-        }
+    const proxyController = new AbortController();
+    const proxyTimer = setTimeout(() => proxyController.abort(), 60000);
+    try {
+      const proxyUrl = `${PIVISION_PROXY_BASE()}?displayId=${encodeURIComponent(displayId)}`;
+      const response = await fetch(proxyUrl, {
+        headers: { Accept: 'application/json' },
+        signal: proxyController.signal,
+      });
+      if (response.ok) {
+        return await response.json() as unknown;
       }
+
+      const fallback = response.status === 401
+        ? 'Autenticacao Windows recusada pelo PI Vision (401). Configure o usuario com dominio no proxy.'
+        : response.status === 403
+          ? `O usuario do proxy nao tem permissao para ler o Display #${displayId} (403).`
+          : `O proxy nao conseguiu obter o Display #${displayId} (HTTP ${response.status}).`;
+      proxyError = new Error(await getHttpErrorMessage(response, fallback));
+    } catch (err) {
+      proxyError = err instanceof Error
+        ? err
+        : new Error('Falha ao consultar o proxy do PI Vision.');
+    } finally {
+      clearTimeout(proxyTimer);
     }
   }
 
-  // Tenta fetch direto com credenciais do navegador (pode falhar por CORS)
-  let lastError: Error = new Error('Nenhum endpoint respondeu.');
+  // Tenta fetch direto com as credenciais integradas do navegador. Isso permite
+  // que a importacao funcione mesmo quando a conta de servico do proxy falhar.
+  let lastError: Error = proxyError ?? new Error('Nenhum endpoint respondeu.');
   for (const endpoint of apiEndpoints) {
     const directController = new AbortController();
     const directTimer = setTimeout(() => directController.abort(), 10000);
@@ -136,11 +155,20 @@ async function fetchPiVisionDisplay(baseUrl: string, displayId: string): Promise
         signal: directController.signal,
       });
       if (response.ok) {
-        clearTimeout(directTimer);
+        const contentType = response.headers.get('content-type') ?? '';
+        if (!contentType.toLowerCase().includes('json')) {
+          lastError = new Error(`O endpoint respondeu, mas nao retornou JSON (${contentType || 'tipo desconhecido'}).`);
+          continue;
+        }
         return await response.json() as unknown;
       }
       if (response.status === 401 || response.status === 403) {
-        throw new Error('Acesso negado (401/403). Verifique se voce esta autenticado no PI Vision neste navegador.');
+        lastError = new Error(
+          response.status === 401
+            ? 'Autenticacao Windows recusada pelo PI Vision (401).'
+            : `Seu usuario nao tem permissao para ler o Display #${displayId} (403).`,
+        );
+        continue;
       }
       if (response.status === 404) {
         lastError = new Error(`Display #${displayId} nao encontrado no PI Vision.`);
@@ -148,12 +176,10 @@ async function fetchPiVisionDisplay(baseUrl: string, displayId: string): Promise
       }
       lastError = new Error(`Erro HTTP ${response.status} ao acessar o PI Vision.`);
     } catch (err) {
-      if (err instanceof Error && (err.message.includes('401') || err.message.includes('403') || err.message.includes('404'))) {
-        lastError = err;
-      } else {
+      if (!proxyError) {
         lastError = new Error(
           proxyAvailable
-            ? `Nao foi possivel obter o display. Verifique se a URL esta correta.`
+            ? 'Nao foi possivel obter o display diretamente no navegador.'
             : `CORS bloqueou a requisicao. Inicie o proxy local:\n\ncd /PIMS/Plugin_grafana && node pi-vision-proxy.js\n\nDepois tente novamente.`,
         );
       }
@@ -163,7 +189,7 @@ async function fetchPiVisionDisplay(baseUrl: string, displayId: string): Promise
   }
 
 
-  throw lastError;
+  throw proxyError ?? lastError;
 }
 
 
@@ -178,6 +204,7 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
 
   const [tab, setTab] = useState<Tab>('link');
   const [dataSourceUid, setDataSourceUid] = useState('');
+  const [detectedDataSourceName, setDetectedDataSourceName] = useState<string>();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -187,6 +214,15 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
   // --- Aba Arquivo ---
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsedJson, setParsedJson] = useState<unknown>(null);
+
+  useEffect(() => {
+    const detected = resolvePiDataSource(getDataSourceSrv());
+    if (!detected) {
+      return;
+    }
+    setDataSourceUid((current) => current.trim() || detected.uid);
+    setDetectedDataSourceName(detected.name);
+  }, []);
 
   // ---------------------------------------------------------------------------
   // Handlers — Aba Link
@@ -198,12 +234,17 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
       setError('Link invalido. Use o formato: http://pimsweb/PIVision/#/Displays/48494/Nome');
       return;
     }
+    const effectiveDataSourceUid = dataSourceUid.trim();
+    if (!effectiveDataSourceUid) {
+      setError('Nenhum datasource PI foi detectado. Informe o UID do datasource antes de converter.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
     try {
       const json = await fetchPiVisionDisplay(parsed.baseUrl, parsed.displayId);
-      const converted = convertPiVisionDisplay(json, dataSourceUid.trim() || undefined);
+      const converted = convertPiVisionDisplay(json, effectiveDataSourceUid);
       serializeDisplay(converted);
       onImport(converted);
     } catch (err) {
@@ -251,10 +292,15 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
     if (!parsedJson) {
       return;
     }
+    const effectiveDataSourceUid = dataSourceUid.trim();
+    if (!effectiveDataSourceUid) {
+      setError('Nenhum datasource PI foi detectado. Informe o UID do datasource antes de converter.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const converted = convertPiVisionDisplay(parsedJson, dataSourceUid.trim() || undefined);
+      const converted = convertPiVisionDisplay(parsedJson, effectiveDataSourceUid);
       serializeDisplay(converted);
       onImport(converted);
     } catch (err) {
@@ -367,8 +413,9 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
                 />
               </div>
               <div className={styles.notice} role="note">
-                <strong>Requisito:</strong> voce precisa estar autenticado no PI Vision neste mesmo
-                navegador. Se o servidor bloquear a requisicao (CORS), use a aba{' '}
+                <strong>Requisito:</strong> o proxy precisa estar configurado com uma conta Windows
+                que tenha acesso ao Display. Como alternativa, autentique-se no PI Vision neste mesmo
+                navegador. Se a importacao por link nao estiver disponivel, use a aba{' '}
                 <button type="button" className={styles.noticeLink} onClick={() => setTab('file')}>
                   Upload de Arquivo
                 </button>.
@@ -415,7 +462,7 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
           {/* DataSource UID — compartilhado entre as abas */}
           <div className={styles.field}>
             <label className={styles.label} htmlFor="piv-ds-uid">
-              UID do Datasource PI no Grafana <span className={styles.optional}>(opcional)</span>
+              UID do Datasource PI no Grafana
             </label>
             <input
               id="piv-ds-uid"
@@ -427,8 +474,9 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
               onChange={(e) => setDataSourceUid(e.target.value)}
             />
             <span className={styles.hint}>
-              Encontrado em: Grafana → Connections → Data sources → PI System → Settings → UID.
-              Se omitido, pode ser corrigido no editor apos a importacao.
+              {detectedDataSourceName
+                ? `Detectado automaticamente: ${detectedDataSourceName}.`
+                : 'Nao detectado automaticamente. Encontre o UID em: Grafana → Connections → Data sources → PI System → Settings.'}
             </span>
           </div>
 

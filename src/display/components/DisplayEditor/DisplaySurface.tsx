@@ -1366,7 +1366,12 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
     style: { cursor: 'move' },
     transform: `rotate(${Number(element.properties.rotation) || 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
     stroke: getElementStroke(element),
-    strokeWidth: element.properties.shape === 'line' || element.properties.shape === 'arc' ? 4 : 1,
+    strokeWidth: typeof element.properties.strokeWidth === 'number'
+      ? element.properties.strokeWidth
+      : element.properties.shape === 'line' || element.properties.shape === 'arc' ? 4 : 1,
+    strokeDasharray: element.properties.strokeStyle === 'dashed'
+      ? '8 5'
+      : element.properties.strokeStyle === 'dotted' ? '2 4' : undefined,
     pointerEvents: 'all' as const,
   };
   if (element.properties.shape === 'ellipse') {
@@ -1376,6 +1381,12 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
     return <polygon {...common} fill={fill} points={`${element.x + element.width / 2},${element.y} ${element.x + element.width},${element.y + element.height} ${element.x},${element.y + element.height}`} />;
   }
   if (element.properties.shape === 'line') {
+    if (Array.isArray(element.properties.points) && element.properties.points.length >= 2) {
+      const points = element.properties.points
+        .map((point) => `${element.x + point.x},${element.y + point.y}`)
+        .join(' ');
+      return <polyline {...common} fill="none" points={points} />;
+    }
     return <line {...common} fill="none" x1={element.x} y1={element.y + element.height / 2} x2={element.x + element.width} y2={element.y + element.height / 2} />;
   }
   if (element.properties.shape === 'arc') {

@@ -58,7 +58,9 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, visual.backgroundColor || 'transparent');
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
-  const responsiveFontSize = getResponsiveFontSize(element, visual.fontSize);
+  const responsiveFontSize = element.properties._piVisionPreserveFontSize === true
+    ? visual.fontSize
+    : getResponsiveFontSize(element, visual.fontSize);
   return (
     <g
       data-testid={`display-element-${element.id}`}
