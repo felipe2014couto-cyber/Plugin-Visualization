@@ -119,6 +119,7 @@ import type { LoadTrendSeries } from '../../runtime/trendRuntime';
 import type { DisplayTimeRange, DisplayTimeSelection } from '../../../time/timeRange';
 import { updateMultistateConfig, updateBackgroundMultistateConfig, type MultistateConfig } from '../../multistate';
 import { getDisplayExportFileName, parseImportedDisplay, serializeDisplay, serializeDisplayCsv, serializeDisplayXml, type DisplayExportFileFormat } from '../../displayTransfer';
+import { PiVisionImportDialog } from './PiVisionImportDialog';
 import { collectDisplayDataBindings, DISPLAY_DATA_EXPORT_MAX_POINTS, serializePiDataCsv, serializePiDataXml, type DisplayDataLoader } from '../../displayDataExport';
 import { serializeTableData, type TableDataExportFormat } from '../../tableDataExport';
 import { editorReducer, initialEditorState, type EditorAction, type EditorState } from './editorState';
@@ -243,6 +244,7 @@ export function DisplayEditor({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [, refreshHistory] = useState(0);
   const [importError, setImportError] = useState<string | null>(null);
+  const [piVisionImportOpen, setPiVisionImportOpen] = useState(false);
   const [piPointDragPreview, setPiPointDragPreview] = useState<PiPointDragPreview | null>(null);
   const [trendPopup, setTrendPopup] = useState<TrendPopupState | null>(null);
   const [trendPointInfo, setTrendPointInfo] = useState<TrendPointInfoState | null>(null);
@@ -1096,6 +1098,19 @@ export function DisplayEditor({
     }
   }, [dispatch, publishDocument]);
 
+  const handlePiVisionImport = useCallback((imported: DisplayDocument) => {
+    if (!onChangeRef.current) {
+      return;
+    }
+    historyRef.current = createDisplayHistory(imported);
+    refreshHistory((version) => version + 1);
+    pendingTransactionRef.current = null;
+    dispatch({ type: 'CLEAR_SELECTION' });
+    setImportError(null);
+    setPiVisionImportOpen(false);
+    publishDocument(imported);
+  }, [dispatch, publishDocument]);
+
   const propertiesOpen = mode === 'edit' && propertiesPanelOpen && Boolean(state.selectedElementId);
   const selectedElement = propertiesOpen && state.selectedElementId
     ? getElementById(displayDocument, state.selectedElementId)
@@ -1754,10 +1769,19 @@ export function DisplayEditor({
               <ImportIcon />
             </button>
             <input ref={importInputRef} type="file" accept="application/json,.json,.pims-vision.json" data-testid="display-import-input" className={styles.fileInput} onChange={handleImportFile} />
+            <button type="button" title="Importar do PI Vision" aria-label="Importar do PI Vision" className={styles.iconButton} data-testid="display-import-pivision" disabled={!onChange} onClick={() => setPiVisionImportOpen(true)}>
+              <PiVisionImportIcon />
+            </button>
           </div>
         </div>
       </div>
       {importError && <div className={styles.importError} role="alert" data-testid="display-import-error">{importError}</div>}
+      {piVisionImportOpen && (
+        <PiVisionImportDialog
+          onImport={handlePiVisionImport}
+          onClose={() => setPiVisionImportOpen(false)}
+        />
+      )}
       <div className={styles.workspace}>
         <div
           className={styles.surfaceWrapper}
@@ -3027,4 +3051,14 @@ function ExportIcon() {
 
 function ImportIcon() {
   return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M12 15V4m-4 7 4 4 4-4" /><path d="M5 13v6h14v-6" /></svg>;
+}
+
+function PiVisionImportIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+      <path d="M5 13v6h14v-6" />
+      <path d="M12 15V8m-4 7 4 4 4-4" />
+      <text x="7" y="7" fontSize="6" fontWeight="700" fill="currentColor" stroke="none" fontFamily="monospace">PI</text>
+    </svg>
+  );
 }
