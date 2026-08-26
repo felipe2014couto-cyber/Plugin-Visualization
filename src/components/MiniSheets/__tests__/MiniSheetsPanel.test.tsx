@@ -24,6 +24,12 @@ jest.mock('../../../pi/piDataSource', () => ({
   getPiTrendsPreviewForRange: jest.fn(),
 }));
 
+jest.mock('../../SqlQuery/oracleApi', () => ({
+  createOracleSession: jest.fn(),
+  closeOracleSession: jest.fn(),
+  runOracleQuery: jest.fn(),
+}));
+
 describe('MiniSheetsPanel', () => {
   const searchMock = searchPiPointsWithStatus as jest.MockedFunction<typeof searchPiPointsWithStatus>;
   const currValMock = getPiPointCurrentValue as jest.MockedFunction<typeof getPiPointCurrentValue>;
@@ -1068,6 +1074,68 @@ describe('MiniSheetsPanel', () => {
 
       await waitFor(() => {
         expect(screen.queryByText('Valor atual (PICurrVal)')).not.toBeInTheDocument();
+      });
+    });
+
+    it('abre a ferramenta SIP, efetua login, executa SQL e insere os dados na grade', async () => {
+      const { createOracleSession, runOracleQuery } = require('../../SqlQuery/oracleApi');
+      (createOracleSession as jest.Mock).mockResolvedValueOnce({ session_id: 'sess-123' });
+      (runOracleQuery as jest.Mock).mockResolvedValueOnce({
+        rows: [
+          { TAG: 'TEMP_01', VALOR: 85.5 },
+          { TAG: 'TEMP_02', VALOR: 91.2 },
+        ],
+        row_count: 2,
+        max_rows: 200,
+      });
+
+      render(<MiniSheetsPanel />);
+
+      // Abre ferramenta SIP na barra
+      fireEvent.click(screen.getByTestId('datalink-sip-query'));
+      expect(screen.getByTestId('mini-sheets-sip-dialog')).toBeInTheDocument();
+
+      // Login
+      fireEvent.change(screen.getByTestId('sip-username-input'), { target: { value: 'usuario' } });
+      fireEvent.change(screen.getByTestId('sip-password-input'), { target: { value: 'senha' } });
+      fireEvent.click(screen.getByTestId('sip-connect-button'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sip-status-bar')).toBeInTheDocument();
+      });
+
+      // Define célula de saída A1 e executa
+      fireEvent.change(screen.getByTestId('sip-target-cell'), { target: { value: 'A1' } });
+      fireEvent.click(screen.getByTestId('sip-execute-button'));
+
+      await waitFor(() => {
+        // Cabeçalhos
+        expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('TAG');
+        expect(screen.getByTestId('mini-sheets-cell-B1')).toHaveTextContent('VALOR');
+        // Linhas de dados
+        expect(screen.getByTestId('mini-sheets-cell-A2')).toHaveTextContent('TEMP_01');
+        expect(screen.getByTestId('mini-sheets-cell-B2')).toHaveTextContent('85.5');
+        expect(screen.getByTestId('mini-sheets-cell-A3')).toHaveTextContent('TEMP_02');
+        expect(screen.getByTestId('mini-sheets-cell-B3')).toHaveTextContent('91.2');
+      });
+
+      // Fecha o diálogo de SIP
+      const closeBtn = screen.getByLabelText('Fechar');
+      fireEvent.click(closeBtn);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('mini-sheets-sip-dialog')).not.toBeInTheDocument();
+      });
+
+      // Clica em outra célula vazia (D5) -> diálogo continua fechado
+      fireEvent.click(screen.getByTestId('mini-sheets-cell-D5'));
+      expect(screen.queryByTestId('mini-sheets-sip-dialog')).not.toBeInTheDocument();
+
+      // Clica na célula B2 (que tem dados do SIP) -> deve reabrir o SIP automaticamente como no Amostragem!
+      fireEvent.click(screen.getByTestId('mini-sheets-cell-B2'));
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-sip-dialog')).toBeInTheDocument();
+        expect(screen.getByTestId('sip-target-cell')).toHaveValue('A1');
       });
     });
   });

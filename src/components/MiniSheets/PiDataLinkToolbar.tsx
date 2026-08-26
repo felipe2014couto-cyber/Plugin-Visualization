@@ -2,7 +2,7 @@ import React from 'react';
 import { css } from '@emotion/css';
 import { useStyles2 } from '@grafana/ui';
 
-export type PiDataLinkFunctionType = 'PICurrVal' | 'PIArcVal' | 'PICompDat' | 'PISampDat' | 'PITimeDat' | 'PIAdvCalcVal' | 'PITimeFilter';
+export type PiDataLinkFunctionType = 'PICurrVal' | 'PIArcVal' | 'PICompDat' | 'PISampDat' | 'PITimeDat' | 'PIAdvCalcVal' | 'PITimeFilter' | 'SIPQuery';
 
 interface PiDataLinkToolbarProps {
   activeFunction: PiDataLinkFunctionType | null;
@@ -26,6 +26,7 @@ const RIBBON_ITEMS: readonly RibbonItem[] = [
   { type: 'PISampDat', label: 'Dados de amostragem', shortLabel: 'Amostragem', testId: 'datalink-samp-dat', color: '#4285f4', icon: <ChartIcon /> },
   { type: 'PITimeDat', label: 'Dados com marcação de tempo', shortLabel: 'Marcação de tempo', testId: 'datalink-time-dat', color: '#1acb9b', icon: <TagIcon /> },
   { type: 'PIAdvCalcVal', label: 'Dados calculados', shortLabel: 'Calculados', testId: 'datalink-calc-dat', color: '#e83ca7', icon: <SigmaIcon /> },
+  { type: 'SIPQuery', label: 'Consulta SIP (SQL)', shortLabel: 'SIP', testId: 'datalink-sip-query', color: '#5794f2', icon: <DatabaseIcon /> },
 ];
 
 export function PiDataLinkToolbar({ activeFunction, onOpenFunction }: PiDataLinkToolbarProps) {
@@ -52,3 +53,10 @@ function HourglassIcon() { return <svg viewBox="0 0 24 24" fill="none" stroke="c
 function ChartIcon() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19V5M4 19h16M7 15l4-5 3 3 5-7" /></svg>; }
 function TagIcon() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12V5h7l9 9-7 7z" /><circle cx="8" cy="8" r="1" /></svg>; }
 function SigmaIcon() { return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 4H7l6 8-6 8h11" /></svg>; }
+function DatabaseIcon() {
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <ellipse cx="12" cy="5" rx="9" ry="3" />
+    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+  </svg>;
+}

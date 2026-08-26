@@ -854,9 +854,14 @@ export function DisplaySurface({
         return;
       }
       if (selectionBoxRef.current) {
-        const box = normalizeSelectionBox(selectionBoxRef.current.start, selectionBoxRef.current.current);
+        const start = selectionBoxRef.current.start;
+        const current = selectionBoxRef.current.current;
+        const isWindow = current.x >= start.x;
+        const box = normalizeSelectionBox(start, current);
         if (box.width > 2 || box.height > 2) {
-          const ids = elements.filter((element) => intersectsSelection(element, box)).map((element) => element.id);
+          const ids = elements
+            .filter((element) => (isWindow ? isFullyInsideSelection(element, box) : intersectsSelection(element, box)))
+            .map((element) => element.id);
           onSelectMany(ids);
           multiSelectionRef.current = ids.length > 1;
         } else {
@@ -1207,7 +1212,22 @@ export function DisplaySurface({
 
       {selectionBox && (() => {
         const box = normalizeSelectionBox(selectionBox.start, selectionBox.current);
-        return <rect x={box.x} y={box.y} width={box.width} height={box.height} fill="rgba(110, 159, 255, 0.12)" stroke={SELECTION_STROKE} strokeDasharray="4 2" data-testid="display-selection-box" pointerEvents="none" />;
+        const isWindow = selectionBox.current.x >= selectionBox.start.x;
+        return (
+          <rect
+            x={box.x}
+            y={box.y}
+            width={box.width}
+            height={box.height}
+            fill={isWindow ? 'rgba(0, 120, 215, 0.2)' : 'rgba(46, 204, 113, 0.22)'}
+            stroke={isWindow ? '#0078d7' : '#2ecc71'}
+            strokeWidth={1}
+            strokeDasharray={isWindow ? undefined : '4 2'}
+            data-testid="display-selection-box"
+            data-selection-mode={isWindow ? 'window' : 'crossing'}
+            pointerEvents="none"
+          />
+        );
       })()}
       {selectedElementIds.filter((id) => id !== selectedElement?.id).map((id) => {
         const element = getElementById(displayDocument, id);
@@ -1408,6 +1428,12 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
 
 function normalizeSelectionBox(start: Point, current: Point) {
   return { x: Math.min(start.x, current.x), y: Math.min(start.y, current.y), width: Math.abs(current.x - start.x), height: Math.abs(current.y - start.y) };
+}
+
+function isFullyInsideSelection(element: DisplayDocument['elements'][number], box: ReturnType<typeof normalizeSelectionBox>): boolean {
+  return element.x >= box.x && element.y >= box.y
+    && element.x + element.width <= box.x + box.width
+    && element.y + element.height <= box.y + box.height;
 }
 
 function intersectsSelection(element: DisplayDocument['elements'][number], box: ReturnType<typeof normalizeSelectionBox>): boolean {

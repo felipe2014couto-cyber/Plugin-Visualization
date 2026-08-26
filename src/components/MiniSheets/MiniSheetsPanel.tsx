@@ -25,6 +25,8 @@ import {
 import { parsePiTime, formatDateTime } from './miniSheetTime';
 import { PiDataLinkToolbar, type PiDataLinkFunctionType } from './PiDataLinkToolbar';
 import { PiDataLinkFunctionDialog } from './PiDataLinkFunctionDialog';
+import { MiniSheetsSipDialog } from './MiniSheetsSipDialog';
+import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
 import {
   SheetRange,
   formatRangeAddress,
@@ -63,12 +65,21 @@ import {
   canRedoMiniSheetsHistory,
 } from './miniSheetsHistory';
 
+export interface SipOriginInfo {
+  sql: string;
+  maxRows?: number;
+  targetCell: string;
+  includeHeaders?: boolean;
+  originCoord: CellCoord;
+}
+
 export interface CellData {
   rawValue: string; // The formula or raw entered string, e.g. '=PICurrVal("TAG")'
   displayValue: string; // The computed result to show
   spilledFrom?: string; // If this cell is populated by a spill from another cell address (e.g. 'A1')
   spillTargetAddresses?: string[]; // If this cell generated a spill across other cell addresses
   format?: CellFormat; // Formatting: bold, italic, textColor, backgroundColor, horizontalAlign, decimalPlaces
+  sipOrigin?: SipOriginInfo;
 }
 
 const TOTAL_COLS = 20; // A to T
@@ -113,15 +124,42 @@ export interface MiniSheetsPanelProps {
   dataLinkMenuActive?: boolean;
 }
 
+export interface PiDataLinkInfo {
+  functionType: PiDataLinkFunctionType;
+  formula?: string;
+  targetCell: string;
+  originCoord: CellCoord;
+  sipQuery?: {
+    sql: string;
+    maxRows?: number;
+    includeHeaders?: boolean;
+  };
+}
+
 function getPiDataLinkInfoForCell(
   cellCoord: CellCoord,
   cellsMap: Map<string, CellData>
-): { functionType: PiDataLinkFunctionType; formula: string; targetCell: string; originCoord: CellCoord } | null {
-  const cell = cellsMap.get(`${cellCoord.col},${cellCoord.row}`);
+): PiDataLinkInfo | null {
+  let cell = cellsMap.get(`${cellCoord.col},${cellCoord.row}`);
+  let effectiveCoord = cellCoord;
+
+  // If selecting the top of a column that is empty, inspect down the column for DataLink/SIP data
+  if (!cell) {
+    for (let r = 0; r < 200; r++) {
+      const candidate = cellsMap.get(`${cellCoord.col},${r}`);
+      if (candidate && (candidate.sipOrigin || candidate.spilledFrom || candidate.rawValue?.startsWith('='))) {
+        cell = candidate;
+        effectiveCoord = { col: cellCoord.col, row: r };
+        break;
+      }
+    }
+  }
+
   if (!cell) {
     return null;
   }
-  let originCoord = cellCoord;
+
+  let originCoord = effectiveCoord;
   let originCell = cell;
   if (cell.spilledFrom) {
     const parsedSpill = parseCellAddress(cell.spilledFrom);
@@ -133,6 +171,22 @@ function getPiDataLinkInfoForCell(
       }
     }
   }
+
+  // 1. Check SIP origin
+  const sip = originCell.sipOrigin || cell.sipOrigin;
+  if (sip) {
+    return {
+      functionType: 'SIPQuery',
+      targetCell: sip.targetCell,
+      originCoord: sip.originCoord || originCoord,
+      sipQuery: {
+        sql: sip.sql,
+        maxRows: sip.maxRows,
+        includeHeaders: sip.includeHeaders,
+      },
+    };
+  }
+
   const raw = originCell.rawValue?.trim() ?? '';
   if (!raw.startsWith('=')) {
     return null;
@@ -209,10 +263,14 @@ export function MiniSheetsPanel({
   const [activeDataLinkDialog, setActiveDataLinkDialog] = useState<PiDataLinkFunctionType | null>(null);
   const [dataLinkInitialFormula, setDataLinkInitialFormula] = useState<string | undefined>(undefined);
   const [dataLinkTargetCell, setDataLinkTargetCell] = useState<string | undefined>(undefined);
+  const [sipSessionId, setSipSessionId] = useState<string | null>(null);
+  const [sipSql, setSipSql] = useState<string | undefined>(undefined);
+  const [sipMaxRows, setSipMaxRows] = useState<number | undefined>(undefined);
+  const [sipIncludeHeaders, setSipIncludeHeaders] = useState<boolean | undefined>(undefined);
   const lastAutoOpenedOriginKeyRef = useRef<string | null>(null);
   const [dataLinkMenuHost, setDataLinkMenuHost] = useState<HTMLElement | null>(null);
 
-  // Auto-open or sync PiDataLink configuration dialog when selecting a cell with calculation/spill
+  // Auto-open or sync PiDataLink / SIP configuration dialog when selecting a cell with calculation/spill/SIP
   useEffect(() => {
     const piInfo = getPiDataLinkInfoForCell(activeCell, cells);
     if (piInfo) {
@@ -220,8 +278,15 @@ export function MiniSheetsPanel({
       if (lastAutoOpenedOriginKeyRef.current !== originKey) {
         lastAutoOpenedOriginKeyRef.current = originKey;
         setActiveDataLinkDialog(piInfo.functionType);
-        setDataLinkInitialFormula(piInfo.formula);
-        setDataLinkTargetCell(piInfo.targetCell);
+        if (piInfo.functionType === 'SIPQuery' && piInfo.sipQuery) {
+          if (piInfo.sipQuery.sql) setSipSql(piInfo.sipQuery.sql);
+          if (piInfo.sipQuery.maxRows) setSipMaxRows(piInfo.sipQuery.maxRows);
+          if (piInfo.sipQuery.includeHeaders !== undefined) setSipIncludeHeaders(piInfo.sipQuery.includeHeaders);
+          setDataLinkTargetCell(piInfo.targetCell);
+        } else {
+          setDataLinkInitialFormula(piInfo.formula);
+          setDataLinkTargetCell(piInfo.targetCell);
+        }
       }
     } else {
       lastAutoOpenedOriginKeyRef.current = null;
@@ -2309,6 +2374,97 @@ export function MiniSheetsPanel({
 
   // Primary Range bounds for Fill Handle
   const primaryRange = ranges.length > 0 ? normalizeRange(ranges[ranges.length - 1]) : null;
+  const handleSipInsert = useCallback(
+    (
+      result: OracleQueryResponse,
+      targetAddress: string,
+      includeHeaders: boolean,
+      querySql?: string,
+      queryMaxRows?: number
+    ) => {
+      const targetRange = parseRangeAddresses(targetAddress);
+      const startCoord = targetRange[0] ?? parseCellAddress(targetAddress) ?? activeCell;
+      const startCol = startCoord.col;
+      const startRow = startCoord.row;
+
+      if (!result.rows || result.rows.length === 0) {
+        return;
+      }
+
+      const cols = Object.keys(result.rows[0]);
+      if (cols.length === 0) {
+        return;
+      }
+
+      const effectiveSql = querySql || sipSql || '';
+      const effectiveMaxRows = queryMaxRows || sipMaxRows || 200;
+      const sipOriginMeta: SipOriginInfo = {
+        sql: effectiveSql,
+        maxRows: effectiveMaxRows,
+        targetCell: formatCellAddress(startCoord),
+        includeHeaders,
+        originCoord: startCoord,
+      };
+
+      const originAddress = formatCellAddress(startCoord);
+      const next = new Map(cellsRef.current);
+      let currentRow = startRow;
+
+      // Header row
+      if (includeHeaders && currentRow < TOTAL_ROWS) {
+        cols.forEach((colName, cIdx) => {
+          const col = startCol + cIdx;
+          if (col < TOTAL_COLS) {
+            const key = `${col},${currentRow}`;
+            const isOrigin = col === startCol && currentRow === startRow;
+            next.set(key, {
+              rawValue: String(colName),
+              displayValue: String(colName),
+              format: { bold: true },
+              sipOrigin: sipOriginMeta,
+              spilledFrom: isOrigin ? undefined : originAddress,
+            });
+          }
+        });
+        currentRow++;
+      }
+
+      // Data rows
+      result.rows.forEach((rowObj) => {
+        if (currentRow < TOTAL_ROWS) {
+          cols.forEach((colName, cIdx) => {
+            const col = startCol + cIdx;
+            if (col < TOTAL_COLS) {
+              const key = `${col},${currentRow}`;
+              const val = rowObj[colName];
+              let strVal = '';
+              if (val !== null && val !== undefined) {
+                strVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+              }
+              const isOrigin = !includeHeaders && col === startCol && currentRow === startRow;
+              next.set(key, {
+                rawValue: strVal,
+                displayValue: strVal,
+                sipOrigin: sipOriginMeta,
+                spilledFrom: isOrigin ? undefined : originAddress,
+              });
+            }
+          });
+          currentRow++;
+        }
+      });
+
+      const finalMap = evaluateStaticFormulas(next).nextMap;
+      setCells(finalMap);
+      cellsRef.current = finalMap;
+      commitStateToHistory(finalMap);
+
+      setActiveCell(startCoord);
+      setRanges([rangeFromCells(startCoord, startCoord)]);
+    },
+    [activeCell, commitStateToHistory, evaluateStaticFormulas, sipSql, sipMaxRows]
+  );
+
   const dataLinkMenu = (
     <div
       onKeyDown={(e) => e.stopPropagation()}
@@ -2339,7 +2495,28 @@ export function MiniSheetsPanel({
           }
         }}
       />
-      {activeDataLinkDialog && (
+      {activeDataLinkDialog === 'SIPQuery' ? (
+        <MiniSheetsSipDialog
+          embedded
+          initialTargetCell={dataLinkTargetCell || formatCellAddress(activeCell)}
+          currentSelectionAddress={ranges.length > 0 ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS) : undefined}
+          sessionId={sipSessionId}
+          onSessionIdChange={setSipSessionId}
+          sql={sipSql}
+          onSqlChange={setSipSql}
+          maxRows={sipMaxRows}
+          onMaxRowsChange={setSipMaxRows}
+          includeHeaders={sipIncludeHeaders}
+          onIncludeHeadersChange={setSipIncludeHeaders}
+          onExecuteInsert={handleSipInsert}
+          onClose={() => {
+            setActiveDataLinkDialog(null);
+            setDataLinkInitialFormula(undefined);
+            setDataLinkTargetCell(undefined);
+            lastAutoOpenedOriginKeyRef.current = null;
+          }}
+        />
+      ) : activeDataLinkDialog ? (
         <PiDataLinkFunctionDialog
           embedded
           functionType={activeDataLinkDialog}
@@ -2368,7 +2545,7 @@ export function MiniSheetsPanel({
             lastAutoOpenedOriginKeyRef.current = null;
           }}
         />
-      )}
+      ) : null}
     </div>
   );
 
@@ -2720,10 +2897,10 @@ export function MiniSheetsPanel({
                         }
 
                         const shadows: string[] = [];
-                        if (rIndex === normalized.top) shadows.push('inset 0 2px 0 var(--accent)');
-                        if (rIndex === normalized.bottom) shadows.push('inset 0 -2px 0 var(--accent)');
-                        if (cIndex === normalized.left) shadows.push('inset 2px 0 0 var(--accent)');
-                        if (cIndex === normalized.right) shadows.push('inset -2px 0 0 var(--accent)');
+                        if (rIndex === normalized.top) shadows.push('inset 0 2px 0 #1890ff');
+                        if (rIndex === normalized.bottom) shadows.push('inset 0 -2px 0 #1890ff');
+                        if (cIndex === normalized.left) shadows.push('inset 2px 0 0 #1890ff');
+                        if (cIndex === normalized.right) shadows.push('inset -2px 0 0 #1890ff');
                         return shadows;
                       });
                       if (rangeOutline.length > 0) {
@@ -3162,8 +3339,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   colHeaderSelected: css`
-    color: var(--accent-hover, var(--accent)) !important;
-    background: var(--selection-bg) !important;
+    color: var(--text-primary) !important;
+    background: rgba(24, 144, 255, 0.18) !important;
     font-weight: 700;
   `,
   rowHeader: css`
@@ -3183,8 +3360,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     text-align: center;
   `,
   rowHeaderSelected: css`
-    color: var(--accent-hover, var(--accent)) !important;
-    background: var(--selection-bg) !important;
+    color: var(--text-primary) !important;
+    background: rgba(24, 144, 255, 0.18) !important;
     font-weight: 700;
   `,
   cell: css`
@@ -3207,30 +3384,29 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   cellActive: css`
-    outline: 2px solid var(--accent);
+    outline: 2px solid #1890ff;
     outline-offset: -2px;
-    background: var(--selection-bg) !important;
+    background: transparent !important;
     z-index: 1;
   `,
   cellInRange: css`
-    background: var(--selection-bg) !important;
+    background: rgba(24, 144, 255, 0.12) !important;
   `,
   cellFormulaReference: css`
-    background: color-mix(in srgb, var(--accent) 18%, var(--surface-primary, var(--panel-bg))) !important;
-    box-shadow: inset 0 0 0 2px var(--accent);
+    background: rgba(24, 144, 255, 0.18) !important;
+    box-shadow: inset 0 0 0 2px #1890ff;
   `,
   cellAutofillPreview: css`
-    outline: 1px dashed var(--accent);
-    background: var(--selection-bg) !important;
+    outline: 1px dashed #1890ff;
+    background: rgba(24, 144, 255, 0.12) !important;
   `,
   cellSelected: css`
-    outline: 2px solid var(--accent);
+    outline: 2px solid #1890ff;
     outline-offset: -2px;
-    background: var(--selection-bg) !important;
+    background: rgba(24, 144, 255, 0.12) !important;
   `,
   cellSpilled: css`
     font-style: normal;
-    background: var(--selection-bg);
   `,
   cellError: css`
     color: var(--danger, #f87171) !important;
@@ -3259,8 +3435,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     bottom: 0;
     width: 6px;
     height: 6px;
-    background: var(--accent);
-    border: 1px solid var(--selection-handle-fill, #ffffff);
+    background: #1890ff;
+    border: 1px solid #ffffff;
     cursor: crosshair;
     z-index: 4;
   `,

@@ -381,3 +381,63 @@ describe('DisplayEditor - bounding box acompanha geometria', () => {
     expect(box.getAttribute('height')).toBe('82');
   });
 });
+
+describe('DisplayEditor - Selecao por Janela (AutoCAD Style: Window Azul / Crossing Verde)', () => {
+  it('Janela Azul (Window - Esquerda para a Direita): seleciona apenas objetos totalmente contidos', () => {
+    render(<Harness initial={makeDocWithElement()} />);
+    const surface = getSurface();
+
+    // 1. Arrastar de (50, 50) para (200, 150) (Esquerda -> Direita, cruzando parcialmente o elemento e1 que vai de x:100 a x:300)
+    act(() => {
+      fireEvent.pointerDown(surface, { clientX: 50, clientY: 50, pointerId: 10, button: 0 });
+      fireEvent.pointerMove(surface, { clientX: 200, clientY: 150, pointerId: 10 });
+    });
+
+    const selectionBox = screen.getByTestId('display-selection-box');
+    expect(selectionBox).toHaveAttribute('data-selection-mode', 'window');
+    expect(selectionBox).toHaveAttribute('fill', 'rgba(0, 120, 215, 0.2)');
+    expect(selectionBox).toHaveAttribute('stroke', '#0078d7');
+    expect(selectionBox).not.toHaveAttribute('stroke-dasharray');
+
+    act(() => {
+      fireEvent.pointerUp(surface, { clientX: 200, clientY: 150, pointerId: 10, button: 0 });
+    });
+
+    // Como cobriu apenas parcialmente, NÃO deve selecionar e1
+    expect(screen.queryByTestId('display-selection-bounding-box')).not.toBeInTheDocument();
+
+    // 2. Arrastar de (50, 50) para (350, 250) (Esquerda -> Direita, cobrindo totalmente o elemento e1 [100, 100, 200, 80])
+    act(() => {
+      fireEvent.pointerDown(surface, { clientX: 50, clientY: 50, pointerId: 11, button: 0 });
+      fireEvent.pointerMove(surface, { clientX: 350, clientY: 250, pointerId: 11 });
+      fireEvent.pointerUp(surface, { clientX: 350, clientY: 250, pointerId: 11, button: 0 });
+    });
+
+    // Como cobriu totalmente, DEVE selecionar e1
+    expect(screen.getByTestId('display-selection-bounding-box')).toBeInTheDocument();
+  });
+
+  it('Janela Verde (Crossing - Direita para a Esquerda): seleciona objetos tocados ou contidos', () => {
+    render(<Harness initial={makeDocWithElement()} />);
+    const surface = getSurface();
+
+    // 1. Arrastar de (200, 150) para (50, 50) (Direita -> Esquerda, cruzando parcialmente o elemento e1)
+    act(() => {
+      fireEvent.pointerDown(surface, { clientX: 200, clientY: 150, pointerId: 12, button: 0 });
+      fireEvent.pointerMove(surface, { clientX: 50, clientY: 50, pointerId: 12 });
+    });
+
+    const selectionBox = screen.getByTestId('display-selection-box');
+    expect(selectionBox).toHaveAttribute('data-selection-mode', 'crossing');
+    expect(selectionBox).toHaveAttribute('fill', 'rgba(46, 204, 113, 0.22)');
+    expect(selectionBox).toHaveAttribute('stroke', '#2ecc71');
+    expect(selectionBox).toHaveAttribute('stroke-dasharray', '4 2');
+
+    act(() => {
+      fireEvent.pointerUp(surface, { clientX: 50, clientY: 50, pointerId: 12, button: 0 });
+    });
+
+    // Como cruzou/tocou o elemento, DEVE selecionar e1
+    expect(screen.getByTestId('display-selection-bounding-box')).toBeInTheDocument();
+  });
+});

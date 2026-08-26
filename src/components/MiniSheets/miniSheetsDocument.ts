@@ -2,9 +2,19 @@ import { CellData } from './MiniSheetsPanel';
 import { colIndexToLetter, parseCellAddress } from './miniSheetFormula';
 import { CellFormat } from './miniSheetOperations';
 
+export interface SipQueryMetadata {
+  sql: string;
+  maxRows?: number;
+  targetCell: string;
+  includeHeaders?: boolean;
+  originCoord: { col: number; row: number };
+}
+
 export interface MiniSheetCell {
   rawValue?: string;
   format?: CellFormat;
+  sipOrigin?: SipQueryMetadata;
+  spilledFrom?: string;
 }
 
 export interface MiniSheetsDocument {
@@ -74,7 +84,9 @@ export function serializeMiniSheets(
           (cell.format.decimalPlaces !== undefined && cell.format.decimalPlaces !== 'auto'))
     );
 
-    if (hasRawValue || hasFormat) {
+    const hasSipOrigin = Boolean(cell.sipOrigin);
+
+    if (hasRawValue || hasFormat || hasSipOrigin) {
       const address = `${colIndexToLetter(colIndex)}${rowIndex + 1}`;
       const savedCell: MiniSheetCell = {};
       if (hasRawValue) {
@@ -82,6 +94,9 @@ export function serializeMiniSheets(
       }
       if (hasFormat) {
         savedCell.format = { ...cell.format };
+      }
+      if (hasSipOrigin) {
+        savedCell.sipOrigin = { ...cell.sipOrigin! };
       }
       cellsRecord[address] = savedCell;
     }
@@ -190,6 +205,10 @@ export function deserializeMiniSheets(rawDoc?: unknown): DeserializedMiniSheets 
         if (Object.keys(cleanFormat).length > 0) {
           cellData.format = cleanFormat;
         }
+      }
+
+      if (cell.sipOrigin && typeof cell.sipOrigin === 'object') {
+        cellData.sipOrigin = { ...cell.sipOrigin };
       }
 
       const key = `${coord.col},${coord.row}`;

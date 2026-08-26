@@ -140,7 +140,12 @@ export function SqlEditor({
 }: SqlEditorProps) {
   const styles = useStyles2(getStyles);
   
-  const [sql, setSql] = useState(sqlToLoad || '');
+  const [sql, setSql] = useState<string>(sqlToLoad !== undefined ? sqlToLoad : '');
+
+  const handleSqlChange = (val: string) => {
+    setSql(val);
+  };
+
   const [maxRows, setMaxRows] = useState(200);
   
   const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
@@ -442,7 +447,7 @@ export function SqlEditor({
         <textarea
           className={styles.textarea}
           value={sql}
-          onChange={(e) => setSql(e.target.value)}
+          onChange={(e) => handleSqlChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Digite sua consulta SQL aqui (SELECT / WITH; final opcional)...&#10;Pressione Ctrl+Enter para executar."
           spellCheck={false}
@@ -468,7 +473,7 @@ export function SqlEditor({
             <button 
               type="button"
               className={styles.clearButton} 
-              onClick={() => setSql('')} 
+              onClick={() => handleSqlChange('')} 
               disabled={isExecuting || !sql}
             >
               Limpar

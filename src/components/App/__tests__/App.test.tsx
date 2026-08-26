@@ -143,8 +143,10 @@ describe('App', () => {
 
     fireEvent.click(screen.getByTestId('visualization-theme-light'));
 
-    expect(screen.getByTestId('pims-vision-home')).toHaveAttribute('data-visualization-theme', 'light');
-    expect(localStorage.getItem(VISUALIZATION_THEME_STORAGE_KEY)).toBe('light');
+    await waitFor(() => {
+      expect(screen.getByTestId('pims-vision-home')).toHaveAttribute('data-visualization-theme', 'light');
+      expect(localStorage.getItem(VISUALIZATION_THEME_STORAGE_KEY)).toBe('light');
+    });
   });
 
   it('restaura o tema persistido sem alterar a interface', async () => {
@@ -245,6 +247,7 @@ describe('App', () => {
 
     render(<App />);
     await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Dashboard atual')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByTestId('pims-vision-save-dashboard')).toBeEnabled());
 
     fireEvent.click(screen.getByTestId('pims-vision-save-dashboard'));

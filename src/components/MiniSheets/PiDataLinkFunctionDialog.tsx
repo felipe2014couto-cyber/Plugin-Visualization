@@ -295,6 +295,10 @@ export function PiDataLinkFunctionDialog({
         return 'Dados calculados (PIAdvCalcVal)';
       case 'PITimeFilter':
         return 'Tempo Filtrado (PITimeFilter)';
+      case 'SIPQuery':
+        return 'Consulta SIP (SQL)';
+      default:
+        return 'Função PI DataLink';
     }
   };
 
