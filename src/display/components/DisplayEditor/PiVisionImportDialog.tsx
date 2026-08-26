@@ -59,59 +59,113 @@ export function parsePiVisionUrl(url: string): { baseUrl: string; displayId: str
   return { baseUrl, displayId };
 }
 
+const PIVISION_PROXY_PORT = 3001;
+const PIVISION_PROXY_BASE = `http://localhost:${PIVISION_PROXY_PORT}/pivision`;
+
+/**
+ * Verifica se o proxy local esta rodando.
+ */
+async function isProxyRunning(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 1500);
+    try {
+      const res = await fetch(`http://localhost:${PIVISION_PROXY_PORT}/health`, { signal: controller.signal });
+      return res.ok;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Tenta buscar a definicao do Display na API do PI Vision.
- * Faz tentativas nos endpoints conhecidos das versoes 2019+ e 2017.
+ * Estrategia:
+ *  1. Tenta via proxy local (pi-vision-proxy.js) — sem CORS, autenticacao server-side
+ *  2. Se proxy nao estiver rodando, tenta fetch direto com credenciais do navegador
  */
 async function fetchPiVisionDisplay(baseUrl: string, displayId: string): Promise<unknown> {
-  const endpoints = [
+  const apiEndpoints = [
     `${baseUrl}/api/displays/${displayId}`,
     `${baseUrl}/Utility/Services/DisplayService.svc/displays/${displayId}`,
     `${baseUrl}/api/v1/displays/${displayId}`,
   ];
 
-  let lastError: Error = new Error('Nenhum endpoint respondeu.');
+  // Tenta via proxy local primeiro
+  const proxyAvailable = await isProxyRunning();
+  if (proxyAvailable) {
+    for (const endpoint of apiEndpoints) {
+      try {
+        const proxyController = new AbortController();
+        const proxyTimer = setTimeout(() => proxyController.abort(), 15000);
+        try {
+          const proxyUrl = `${PIVISION_PROXY_BASE}?url=${encodeURIComponent(endpoint)}`;
+          const response = await fetch(proxyUrl, { signal: proxyController.signal });
+          if (response.ok) {
+            return await response.json() as unknown;
+          }
+          if (response.status === 404) {
+            continue;
+          }
+          if (response.status === 401 || response.status === 403) {
+            throw new Error('Acesso negado (401/403) via proxy. O servidor PI Vision pode exigir autenticacao Windows.');
+          }
+        } finally {
+          clearTimeout(proxyTimer);
+        }
+      } catch (err) {
+        if (err instanceof Error && (err.message.includes('401') || err.message.includes('403'))) {
+          throw err;
+        }
+      }
+    }
+  }
 
-  for (const endpoint of endpoints) {
+  // Tenta fetch direto com credenciais do navegador (pode falhar por CORS)
+  let lastError: Error = new Error('Nenhum endpoint respondeu.');
+  for (const endpoint of apiEndpoints) {
+    const directController = new AbortController();
+    const directTimer = setTimeout(() => directController.abort(), 10000);
     try {
       const response = await fetch(endpoint, {
         method: 'GET',
         credentials: 'include',
         headers: { Accept: 'application/json' },
+        signal: directController.signal,
       });
-
       if (response.ok) {
-        const json: unknown = await response.json();
-        return json;
+        clearTimeout(directTimer);
+        return await response.json() as unknown;
       }
-
       if (response.status === 401 || response.status === 403) {
-        throw new Error(
-          'Acesso negado (401/403). Verifique se voce esta autenticado no PI Vision no mesmo navegador.',
-        );
+        throw new Error('Acesso negado (401/403). Verifique se voce esta autenticado no PI Vision neste navegador.');
       }
-
       if (response.status === 404) {
         lastError = new Error(`Display #${displayId} nao encontrado no PI Vision.`);
         continue;
       }
-
       lastError = new Error(`Erro HTTP ${response.status} ao acessar o PI Vision.`);
     } catch (err) {
-      if (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) {
-        lastError = new Error(
-          'Nao foi possivel conectar ao servidor PI Vision. ' +
-          'Isso pode ser causado por CORS ou o servidor nao estar acessivel. ' +
-          'Use a aba "Arquivo" para importar via JSON exportado.',
-        );
-      } else if (err instanceof Error) {
+      if (err instanceof Error && (err.message.includes('401') || err.message.includes('403') || err.message.includes('404'))) {
         lastError = err;
+      } else {
+        lastError = new Error(
+          proxyAvailable
+            ? `Nao foi possivel obter o display. Verifique se a URL esta correta.`
+            : `CORS bloqueou a requisicao. Inicie o proxy local:\n\ncd /PIMS/Plugin_grafana && node pi-vision-proxy.js\n\nDepois tente novamente.`,
+        );
       }
+    } finally {
+      clearTimeout(directTimer);
     }
   }
 
+
   throw lastError;
 }
+
 
 // ---------------------------------------------------------------------------
 // Componente
