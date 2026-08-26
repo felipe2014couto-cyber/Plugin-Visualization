@@ -85,6 +85,25 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
       }
       return value;
     }
+    // Parser de strings
+    const stringMatch = expression.slice(cursor).match(/^(["'])(.*?)\1/);
+    if (stringMatch) {
+      cursor += stringMatch[0].length;
+      return parsePiTime(stringMatch[2]);
+    }
+    
+    // Parser de abreviações temporais unquoted (*, t, y)
+    const piTimeMatch = expression.slice(cursor).match(/^(t|y|today|yesterday|sun|mon|tue|wed|thu|fri|sat)(?=[^A-Za-z_0-9]|$)/i);
+    if (piTimeMatch) {
+      cursor += piTimeMatch[0].length;
+      return parsePiTime(piTimeMatch[1]);
+    }
+
+    if (expression[cursor] === '*') {
+      cursor += 1;
+      return parsePiTime('*');
+    }
+    
     const functionName = expression.slice(cursor).match(/^[A-Za-z_][A-Za-z0-9_]*/)?.[0];
     if (functionName) {
       cursor += functionName.length;
@@ -228,8 +247,42 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
   return result;
 }
 
+
+function parsePiTime(str: string): number {
+  const lower = str.toLowerCase();
+  const now = new Date();
+  switch (lower) {
+    case '*':
+      return Math.floor(now.getTime() / 1000);
+    case 't':
+    case 'today':
+      return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000);
+    case 'y':
+    case 'yesterday':
+      return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime() / 1000);
+    default:
+      // Pode adicionar fallback para parsing mais avancado depois se quiser
+      return Math.floor(now.getTime() / 1000);
+  }
+}
+
 function evaluateFunction(name: string, values: number[]): number {
   const normalizedName = name.toLocaleUpperCase();
+  
+  // Funcoes de tempo do PI
+  if (['DAY', 'MONTH', 'YEAR', 'HOUR', 'MINUTE', 'SECOND'].includes(normalizedName)) {
+    requireArgumentCount(name, values, 1);
+    const date = new Date(values[0] * 1000);
+    switch (normalizedName) {
+      case 'DAY': return date.getDate();
+      case 'MONTH': return date.getMonth() + 1;
+      case 'YEAR': return date.getFullYear();
+      case 'HOUR': return date.getHours();
+      case 'MINUTE': return date.getMinutes();
+      case 'SECOND': return date.getSeconds();
+    }
+  }
+
   if (normalizedName === 'IF' || normalizedName === 'SE') {
     requireArgumentCount(name, values, 3);
     return values[0] !== 0 ? values[1] : values[2];

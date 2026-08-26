@@ -44,7 +44,10 @@ function loadEnv() {
 
 const startupEnv = loadEnv();
 const PORT = process.env.PIVISION_PROXY_PORT || startupEnv.PIVISION_PROXY_PORT || 3001;
-const HOST = process.env.PIVISION_PROXY_HOST || startupEnv.PIVISION_PROXY_HOST || '127.0.0.1';
+// O Grafana e acessado por outros computadores da rede. Escutar somente em
+// loopback faria o navegador chamar <host-do-grafana>:3001 sem conseguir
+// conectar. As origens HTTP continuam restritas por ALLOWED_ORIGINS.
+const HOST = process.env.PIVISION_PROXY_HOST || startupEnv.PIVISION_PROXY_HOST || '0.0.0.0';
 
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin || '';
@@ -88,7 +91,7 @@ function requestEndpoint(targetUrl, env, cookiePath) {
       targetUrl,
     ];
 
-    execFile('curl', curlArgs, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout) => {
+    execFile('curl', curlArgs, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout) => {
       const markerIndex = stdout.lastIndexOf(`\n${marker}`);
       if (markerIndex === -1) {
         resolve({ status: 502, contentType: 'application/json', body: '', transportError: error?.message || 'Resposta invalida do curl.' });

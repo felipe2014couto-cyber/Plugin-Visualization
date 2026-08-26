@@ -27,6 +27,22 @@ const CALCULATION_HELP_ITEMS: readonly CalculationHelpItem[] = [
   { name: 'WHILE', description: 'Não é permitido em cálculos para evitar expressões sem término. Use IF para decisões condicionais.', example: 'Use IF(Condicao, valor_se_sim, valor_se_nao)', unsupported: true },
 ];
 
+
+const PI_TIME_ABBREVIATIONS = new Set(['*', 't', 'y', 'today', 'yesterday', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
+function isPiTimeString(str: string): boolean {
+  const lower = str.trim().toLocaleLowerCase();
+  if (PI_TIME_ABBREVIATIONS.has(lower)) {
+    return true;
+  }
+  if (/^(\*|t|y|today|yesterday|sun|mon|tue|wed|thu|fri|sat)[+-]\d+[smhdwy]$/.test(lower)) {
+    return true;
+  }
+  if (/^\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/.test(lower)) {
+    return true;
+  }
+  return false;
+}
+
 const CALCULATION_RESERVED_NAMES = new Set(['IF', 'SE', 'AND', 'OR', 'NOT', 'MIN', 'MAX', 'ABS', 'ROUND', 'CLAMP', 'WHILE']);
 
 export interface CalculationDraft {
@@ -97,7 +113,9 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
   };
 
   const resolveInputs = async (normalizedExpression: string): Promise<CalculationInput[]> => {
-    const knownNames = new Set(inputs.map((input) => input.name.toLocaleLowerCase()));
+    const extractedNames = new Set(extractTagNames(normalizedExpression).map(n => n.toLocaleLowerCase()));
+    const validInputs = inputs.filter((input) => extractedNames.has(input.name.toLocaleLowerCase()));
+    const knownNames = new Set(validInputs.map((input) => input.name.toLocaleLowerCase()));
     const missingNames = extractTagNames(normalizedExpression)
       .filter((tagName) => !knownNames.has(tagName.toLocaleLowerCase()));
     const resolvedInputs = await Promise.all(missingNames.map(async (tagName) => {
@@ -111,7 +129,7 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
       }
       return { name: tagName, binding };
     }));
-    return [...inputs, ...resolvedInputs];
+    return [...validInputs, ...resolvedInputs];
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -596,10 +614,33 @@ const getStyles = (theme: GrafanaTheme2) => ({
 
 function extractTagNames(expression: string): string[] {
   const names = new Set<string>();
-  const tokenPattern = /(?:^|[^A-Za-z0-9_.:-])([A-Za-z_][A-Za-z0-9_.:-]*)/g;
+  
+  // 1. Extrair tags entre aspas simples, ignorando strings de tempo
+  const singleQuotePattern = /'([^']+)'/g;
+  let sqMatch: RegExpExecArray | null;
+  while ((sqMatch = singleQuotePattern.exec(expression)) !== null) {
+    if (!isPiTimeString(sqMatch[1])) {
+      names.add(sqMatch[1]);
+    }
+  }
+  
+  // 2. Remove strings para processar identificadores sem aspas
+  const expressionWithoutStrings = expression.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, '');
+  
+  // 2. Token pattern supporting Unicode letters (\p{L}) and numbers (\p{N})
+  const tokenPattern = /(?:^|[^\p{L}\p{N}_.:-])([\p{L}_][\p{L}\p{N}_.:-]*)(?=[^\p{L}\p{N}_.:-]|$)/gu;
+  
   let match: RegExpExecArray | null;
-  while ((match = tokenPattern.exec(expression)) !== null) {
-    if (!CALCULATION_RESERVED_NAMES.has(match[1].toLocaleUpperCase())) {
+  while ((match = tokenPattern.exec(expressionWithoutStrings)) !== null) {
+    const endIndex = match.index + match[0].length;
+    const rest = expressionWithoutStrings.slice(endIndex);
+    
+    // Ignore if this token is immediately followed by '(' (it's a function, not a PI Point)
+    if (rest.trim().startsWith('(')) {
+      continue;
+    }
+    
+    if (!CALCULATION_RESERVED_NAMES.has(match[1].toLocaleUpperCase()) && !isPiTimeString(match[1])) {
       names.add(match[1]);
     }
   }

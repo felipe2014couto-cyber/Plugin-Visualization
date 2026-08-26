@@ -343,6 +343,43 @@ describe('convertPiVisionDisplay — documento', () => {
     });
   });
 
+  it('usa largura compacta para Value do PI Vision sem largura declarada', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'value',
+        DataSources: ['pi:\\pims\\PRESSAO'],
+        Configuration: {
+          Left: 100, Top: 20, Height: 19, Fill: '#000000', ValueStroke: '#2cfe21', FontSize: 14,
+        },
+      }],
+    }, 'pi-uid');
+    expect(result.elements[0]).toMatchObject({ type: VALUE_TYPE, width: 67 });
+    expect(result.elements[0].properties).toMatchObject({ _piVisionSquareBackground: true });
+  });
+
+  it('converte verticalgauge do PI Vision em barra compacta com escala', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'verticalgauge',
+        DataSources: ['pi:\\pims\\PR58_LIGADA'],
+        Configuration: {
+          Left: 100, Top: 50, Width: 73, Height: 213,
+          Fill: 'rgb(0, 162, 232)', Background: 'rgba(255,255,255,0)',
+          Stroke: 'white', StrokeWidth: 2, ShowLabel: true, ShowValue: true,
+          ShowUOM: true, NameType: 'C', CustomName: 'LIGADO', FormatType: 'N2',
+          ValueScaleSettings: { MinValue: 0, MaxValue: 100 },
+        },
+      }],
+    }, 'pi-uid');
+    expect(result.elements[0]).toMatchObject({ type: BAR_TYPE, x: 100, y: 50, width: 73, height: 213 });
+    expect(result.elements[0].properties).toMatchObject({
+      minimum: 0, maximum: 100, orientation: 'vertical', fillColor: 'rgb(0, 162, 232)',
+      backgroundColor: 'rgba(255,255,255,0)', borderColor: 'white', borderWidth: 2,
+      tagNameMode: 'custom', customTagName: 'LIGADO', showUnit: true,
+      _piVisionCompactGauge: true,
+    });
+  });
+
   it('nao desenha metadados de grupo novamente', () => {
     const result = convertPiVisionDisplay({
       Symbols: [{ SymbolType: 'group', Configuration: { Children: ['Symbol1'] } as any }],
