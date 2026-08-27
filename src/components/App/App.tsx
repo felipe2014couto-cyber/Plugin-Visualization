@@ -68,6 +68,20 @@ function getInitialTheme(): VisualizationTheme {
   }
 }
 
+/**
+ * Grafana adds the `kiosk` query parameter when a dashboard is opened in
+ * kiosk/TV mode (for example `?kiosk` or `?kiosk=tv`).  Keep this detection
+ * local to the app so the normal editor remains unchanged outside kiosk mode.
+ */
+function isGrafanaKioskMode(): boolean {
+  try {
+    const search = globalThis.location?.search ?? '';
+    return new URLSearchParams(search).has('kiosk');
+  } catch {
+    return false;
+  }
+}
+
 function getProgrammingPiPointKey(point: PiPointSearchResult): string {
   return point.webId ?? `${point.dataSourceUid ?? ''}\u0000${point.path ?? ''}\u0000${point.name}`;
 }
@@ -131,6 +145,7 @@ export function App() {
   const [programmingPiValues, setProgrammingPiValues] = useState<Record<string, PiPointValue>>({});
   const [isProgrammingPiSearchOpen, setIsProgrammingPiSearchOpen] = useState(true);
   const [editingProgrammingElementId, setEditingProgrammingElementId] = useState<string | null>(null);
+  const kioskMode = isGrafanaKioskMode();
 
   const commitProgrammingDraft = useCallback((next: ProgrammingDocument) => {
     setProgrammingDraft(next);
@@ -594,7 +609,7 @@ export function App() {
       data-visualization-theme={visualizationTheme}
       className={`${styles.container} ${visualizationTheme === 'light' ? styles.themeLight : styles.themeDark}`}
     >
-      <header className={styles.header} data-testid="pims-vision-header">
+      {! (kioskMode && editorMode === 'view') && <header className={styles.header} data-testid="pims-vision-header">
         <span
           className={styles.productMark}
           role="img"
@@ -660,7 +675,7 @@ export function App() {
             )}
           </div>
         </div>
-      </header>
+      </header>}
       {isSaveDialogOpen && (
         <div className={styles.dialogBackdrop} role="presentation">
           <form className={styles.saveDialog} role="dialog" aria-modal="true" aria-labelledby="save-dashboard-title" onSubmit={handleSaveAsDashboard}>
