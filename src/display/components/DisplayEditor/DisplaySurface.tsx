@@ -1162,7 +1162,7 @@ export function DisplaySurface({
                   fill={textColor}
                   fontSize={fontSize}
                   textAnchor={anchor}
-                  dominantBaseline={lineCount === 1 ? 'middle' : undefined}
+                  dominantBaseline={lineCount === 1 ? 'central' : undefined}
                   pointerEvents="none"
                 >
                   {lineCount === 1

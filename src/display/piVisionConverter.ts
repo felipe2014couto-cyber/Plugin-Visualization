@@ -837,8 +837,11 @@ function convertText(
 ): DisplayElement {
   const cfg = symbol.Configuration ?? {};
   const text = cfg.Content ?? cfg.Text ?? cfg.StaticText ?? '';
-  const color = normalizeColor(cfg.ForeColor ?? cfg.Stroke) ?? '#131313';
-  const backgroundColor = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill) ?? DEFAULT_TEXT_PROPERTIES.backgroundColor;
+  const rawColor = normalizeColor(cfg.ForeColor ?? cfg.Stroke);
+  const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
+  const isDefaultWhiteOrTransparent = !rawBg || rawBg.toLowerCase() === '#ffffff' || rawBg.toLowerCase() === '#fff' || rawBg === 'transparent' || cfg.Transparent === true;
+  const backgroundColor = isDefaultWhiteOrTransparent ? 'transparent' : rawBg;
+  const color = rawColor ?? '#131313';
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize) ?? DEFAULT_TEXT_PROPERTIES.fontSize;
   const textAlign = normalizeTextAlign(cfg.TextAlignment) as TextAlign;
 
@@ -849,7 +852,7 @@ function convertText(
     ...DEFAULT_TEXT_PROPERTIES,
     text,
     color,
-    backgroundColor: backgroundColor ?? 'transparent',
+    backgroundColor,
     fontSize,
     textAlign,
     rotation: typeof cfg.Rotation === 'number' ? cfg.Rotation : 0,
