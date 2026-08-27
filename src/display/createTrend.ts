@@ -70,8 +70,8 @@ export type TrendElement = DisplayElement<typeof TREND_TYPE, TrendProperties>;
 
 // A new Trend must leave a comfortable working margin around itself.  Users
 // can still resize it freely after insertion.
-const DEFAULT_TREND_WIDTH = 800;
-const DEFAULT_TREND_HEIGHT = 320;
+export const DEFAULT_TREND_WIDTH = 480;
+export const DEFAULT_TREND_HEIGHT = 250;
 export const TREND_SERIES_COLORS = [
   '#6e9fff',
   '#ff9830',
