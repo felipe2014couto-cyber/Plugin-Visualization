@@ -108,15 +108,30 @@ function TableCell({ column, textColor, fontSize, x, y, width, height, item, cur
 function Sparkline({ x, y, width, height, trend }: { x: number; y: number; width: number; height: number; trend?: TrendRuntimeState }) {
   const points = trend?.status === 'success' ? trend.data.points : [];
   const states = trend?.status === 'success' ? trend.data.states ?? [] : [];
-  if (points.length < 2 && states.length < 2) return <text x={x + width / 2} y={y + height / 2} fill="var(--text-secondary, #aaa)" fontSize={11} textAnchor="middle" dominantBaseline="middle">—</text>;
+  if (points.length < 2 && states.length === 0) return <text x={x + width / 2} y={y + height / 2} fill="var(--text-secondary, #aaa)" fontSize={11} textAnchor="middle" dominantBaseline="middle">—</text>;
+  const stateLabels = [...new Set(states.map((state) => state.value))];
   const values = points.length >= 2
     ? points.map((point) => point.value)
-    : states.map((state) => [...new Set(states.map((item) => item.value))].indexOf(state.value));
+    : states.map((state) => stateLabels.indexOf(state.value));
   const min = Math.min(...values); const max = Math.max(...values); const span = max - min || 1;
   const path = points.length >= 2
     ? points.map((point, index) => `${index ? 'L' : 'M'}${x + (index / (points.length - 1)) * width},${y + height - ((point.value - min) / span) * height}`).join(' ')
-    : states.map((state, index) => `${index ? 'L' : 'M'}${x + (index / (states.length - 1)) * width},${y + height - ((values[index] - min) / span) * height}`).join(' ');
+    : digitalSparklinePath(x, y, width, height, values, min, span);
   return <path d={path} fill="none" stroke="#6e9fff" strokeWidth={1.5} pointerEvents="none" />;
+}
+
+function digitalSparklinePath(x: number, y: number, width: number, height: number, values: readonly number[], min: number, span: number): string {
+  const yFor = (value: number) => y + height - ((value - min) / span) * height;
+  if (values.length === 1) {
+    const midY = y + height / 2;
+    return `M${x},${midY} L${x + width},${midY}`;
+  }
+  return values.map((value, index) => {
+    const xPosition = x + (index / (values.length - 1)) * width;
+    if (index === 0) return `M${xPosition},${yFor(value)}`;
+    const previousX = x + ((index - 1) / (values.length - 1)) * width;
+    return `L${xPosition},${yFor(values[index - 1])} L${xPosition},${yFor(value)}${index === values.length - 1 ? ` L${x + width},${yFor(value)}` : ''}`;
+  }).join(' ');
 }
 
 function visibleColumns(columns: readonly TableColumnConfig[], tableWidth: number): TableColumnConfig[] {
