@@ -570,7 +570,7 @@ function getTrendContent(
               <tspan x={labelX} y={chart.plotY + 12}>{formatCursorTime(cursor.time)}</tspan>
               {values.map(({ pointName, value, color }, index) => (
                 <tspan key={pointName} x={labelX} y={chart.plotY + 12 + (index + 1) * 18} fill={color}>
-                  {pointName} {formatValue(value)}
+                  {formatValue(value)}
                 </tspan>
               ))}
             </text>
@@ -871,7 +871,7 @@ function DigitalTrend({
           />
           <text x={labelX} y={plotY + 12} textAnchor={labelAnchor} fill="var(--trend-cursor, #ffffff)" fontSize={AXIS_FONT_SIZE} pointerEvents="none">
             <tspan x={labelX} y={plotY + 12}>{formatCursorTime(cursor.time)}</tspan>
-            {values.map(({ name, value, color }, index) => <tspan key={name} x={labelX} y={plotY + 12 + (index + 1) * 18} fill={color}>{name} {value}</tspan>)}
+            {values.map(({ name, value, color }, index) => <tspan key={name} x={labelX} y={plotY + 12 + (index + 1) * 18} fill={color}>{value}</tspan>)}
           </text>
         </g>;
       })}

@@ -257,8 +257,8 @@ describe('TrendElementView', () => {
     expect(screen.getByTestId('trend-legend-value-trend-1-0')).toHaveTextContent('2');
     expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveTextContent('OTHER');
     expect(screen.getByTestId('trend-legend-value-trend-1-1')).toHaveTextContent('20');
-    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('SINUSOID 1');
-    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('OTHER 15');
+    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('1');
+    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('15');
     expect(screen.queryByTestId('trend-refresh-error-trend-1')).toBeNull();
   });
 
