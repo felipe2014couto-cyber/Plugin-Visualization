@@ -1691,28 +1691,23 @@ export function DisplayEditor({
     const elements = documentRef.current.elements;
     const surface = documentRef.current.surface;
     const wrapper = surfaceWrapperRef.current;
-    if (elements.length === 0) {
+    const bounds = getCanvasBounds(surface, elements);
+    if (elements.length === 0 && (!bounds.width || !bounds.height)) {
       setSurfaceZoom(1);
       setSurfaceViewCenter({ x: surface.width / 2, y: surface.height / 2 });
       return;
     }
-    const left = Math.min(...elements.map((element) => element.x));
-    const top = Math.min(...elements.map((element) => element.y));
-    const right = Math.max(...elements.map((element) => element.x + element.width));
-    const bottom = Math.max(...elements.map((element) => element.y + element.height));
-    // Base the fit on the actual visible editor area, not on the saved surface
-    // dimensions. This keeps the selection centered even when the display is
-    // larger than the viewport and is being shown through native scrolling.
-    const padding = 0.92;
-    const availableWidth = Math.max(1, wrapper?.clientWidth || surface.width);
-    const availableHeight = Math.max(1, wrapper?.clientHeight || surface.height);
-    const zoom = Math.max(DISPLAY_ZOOM_MIN, Math.min(
-      DISPLAY_ZOOM_MAX,
-      availableWidth / Math.max(1, (right - left) / padding),
-      availableHeight / Math.max(1, (bottom - top) / padding),
-    ));
+    const availableWidth = Math.max(1, (wrapper?.clientWidth || surface.width) - 32);
+    const availableHeight = Math.max(1, (wrapper?.clientHeight || surface.height) - 32);
+    const scaleX = availableWidth / bounds.width;
+    const scaleY = availableHeight / bounds.height;
+    const zoom = Math.max(DISPLAY_ZOOM_MIN, Math.min(DISPLAY_ZOOM_MAX, Math.min(scaleX, scaleY)));
     setSurfaceZoom(Number(zoom.toFixed(2)));
-    setSurfaceViewCenter({ x: (left + right) / 2, y: (top + bottom) / 2 });
+    setSurfaceViewCenter({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 });
+    if (wrapper) {
+      wrapper.scrollLeft = Math.max(0, (wrapper.scrollWidth - wrapper.clientWidth) / 2);
+      wrapper.scrollTop = Math.max(0, (wrapper.scrollHeight - wrapper.clientHeight) / 2);
+    }
   }, []);
 
   useEffect(() => {
@@ -2885,8 +2880,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
   surfaceWrapper: css`
     display: flex;
     position: relative;
-    align-items: flex-start;
-    justify-content: flex-start;
+    align-items: center;
+    justify-content: center;
     flex: 1 1 auto;
     min-width: 0;
     min-height: 0;
@@ -2894,7 +2889,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
        available editor area. The SVG supplies the intrinsic minimum size;
        these scrollbars only appear when they are actually needed. */
     overflow: auto;
-    padding: 0;
+    padding: 16px;
+    box-sizing: border-box;
     background-color: var(--canvas-bg);
     background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
     background-size: 16px 16px;
@@ -2903,7 +2899,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     & > svg {
       max-width: none;
       max-height: none;
-      margin: 0;
+      margin: auto;
+      flex-shrink: 0;
     }
 
     @media (max-width: 760px) {
