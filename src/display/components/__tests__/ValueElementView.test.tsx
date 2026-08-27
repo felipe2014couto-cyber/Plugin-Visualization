@@ -58,7 +58,8 @@ describe('ValueElementView', () => {
     expect(screen.getByTestId('display-value-value-3')).toHaveTextContent('12.35');
     const text = screen.getByTestId('display-value-value-3');
     expect(text).toHaveAttribute('fill', '#ff0000');
-    expect(text).toHaveAttribute('font-size', '24');
+    expect(Number(text.getAttribute('font-size'))).toBeLessThan(24);
+    expect(Number(text.getAttribute('font-size'))).toBeGreaterThanOrEqual(8);
     expect(text).toHaveAttribute('text-anchor', 'end');
   });
 

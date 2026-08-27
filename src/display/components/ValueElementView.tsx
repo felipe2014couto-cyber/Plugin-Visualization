@@ -60,7 +60,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
   const responsiveFontSize = element.properties._piVisionPreserveFontSize === true
     ? visual.fontSize
-    : getResponsiveFontSize(element, visual.fontSize);
+    : getResponsiveFontSize(element, visual.fontSize, lines);
   return (
     <g
       data-testid={`display-element-${element.id}`}
@@ -177,7 +177,20 @@ function getTextX(element: ValueElement, textAlign: ValueVisualOptions['textAlig
   }
 }
 
-function getResponsiveFontSize(element: ValueElement, configuredSize: number): number {
-  const areaScale = Math.sqrt((element.width * element.height) / (240 * 100));
-  return Math.max(8, Math.min(96, configuredSize * Math.min(1.5, Math.max(0.7, areaScale))));
+/**
+ * PI Vision lets the reading use the available area, but never lets it spill
+ * out of the element.  The configured size remains the reference size; the
+ * two fit limits only reduce it when the content would not fit.
+ */
+function getResponsiveFontSize(element: ValueElement, configuredSize: number, lines: readonly string[]): number {
+  const horizontalPadding = 16;
+  const verticalPadding = 12;
+  const longestLineLength = Math.max(1, ...lines.map((line) => line.length));
+  const lineCount = Math.max(1, lines.length);
+  const areaScale = Math.sqrt((element.width * element.height) / (120 * 40));
+  const preferredSize = configuredSize * Math.min(3, Math.max(0.55, areaScale));
+  const widthLimit = Math.max(1, element.width - horizontalPadding) / (longestLineLength * 0.6);
+  const heightLimit = Math.max(1, element.height - verticalPadding) / (lineCount * 1.2);
+
+  return Math.max(8, Math.min(96, preferredSize, widthLimit, heightLimit));
 }
