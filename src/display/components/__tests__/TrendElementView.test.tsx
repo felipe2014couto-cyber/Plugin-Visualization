@@ -178,7 +178,7 @@ describe('TrendElementView', () => {
     );
 
     expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveAttribute('x', '722');
-    expect(screen.getByTestId('trend-plot-trend-1')).toHaveAttribute('width', '614');
+    expect(screen.getByTestId('trend-plot-trend-1')).toHaveAttribute('width', '684');
   });
 
   it('mantém no eixo X todo o período solicitado mesmo com dados apenas recentes', () => {

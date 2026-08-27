@@ -37,7 +37,7 @@ describe('trendLegendLayout', () => {
       expect(getEffectiveTrendLegendWidth(-500)).toBe(MIN_TREND_LEGEND_WIDTH);
       expect(getEffectiveTrendLegendWidth(0)).toBe(MIN_TREND_LEGEND_WIDTH);
       expect(getEffectiveTrendLegendWidth(800, Number.POSITIVE_INFINITY)).toBe(240);
-      expect(getEffectiveTrendLegendWidth(800, 999999)).toBe(800 - 86 - 120);
+      expect(getEffectiveTrendLegendWidth(800, 999999)).toBe(800 - 8 - 120);
       expect(getEffectiveTrendLegendWidth(800, Number.NaN)).toBe(240);
     });
 

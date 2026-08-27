@@ -53,12 +53,12 @@ export interface TrendSeriesViewState {
   runtimeState: TrendRuntimeState;
 }
 
-const PLOT_MARGIN = { left: 86, right: 150, top: 30, bottom: 32 };
+const PLOT_MARGIN = { left: 8, right: 8, top: 8, bottom: 22 };
 const GRID_COLOR = 'var(--border-subtle, rgba(255, 255, 255, 0.14))';
 const AXIS_COLOR = 'var(--text-muted, rgba(255, 255, 255, 0.45))';
 const TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.82))';
 const LINE_COLOR = '#6e9fff';
-const AXIS_FONT_SIZE = 16;
+const AXIS_FONT_SIZE = 11;
 
 export function TrendElementView({
   element,
@@ -426,7 +426,7 @@ function getTrendContent(
         pointerEvents="all"
         onPointerDown={onPlotPointerDown ? (event) => onPlotPointerDown(event, element.id, chart) : undefined}
       />
-      {chart.yTicks.map((tick) => (
+      {chart.yTicks.map((tick, index) => (
         <g key={`y-${tick.value}`} pointerEvents="none">
           {showHorizontalGrid && <line
             x1={chart.plotX}
@@ -436,7 +436,14 @@ function getTrendContent(
             stroke={gridColor}
             strokeWidth={1}
           />}
-          <text x={chart.plotX - 6} y={tick.y + 4} textAnchor="end" fill={foreground} fontSize={AXIS_FONT_SIZE}>
+          <text
+            x={chart.plotX + 4}
+            y={tick.y + (index === 0 ? 9 : index === chart.yTicks.length - 1 ? -2 : 4)}
+            textAnchor="start"
+            fill={primary?.series?.color || foreground}
+            fontSize={AXIS_FONT_SIZE}
+            fontWeight={500}
+          >
             {formatValue(tick.value)}
           </text>
         </g>
@@ -445,12 +452,12 @@ function getTrendContent(
         .filter(({ series }) => series !== primary?.series && (Number.isFinite(series.scaleMin) || Number.isFinite(series.scaleMax)))
         .map(({ series }, index) => {
           const key = trendBindingKey(series.binding);
-          const labelX = chart.plotX + 8 + index * 48;
+          const labelX = chart.plotX + 28 + index * 32;
           const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
           return (
             <g key={`configured-scale-${key}`} fill={series.color} fontSize={AXIS_FONT_SIZE} pointerEvents="none" opacity={opacity}>
-              {Number.isFinite(series.scaleMax) && <text x={labelX} y={chart.plotY + 14} textAnchor="start">{formatValue(series.scaleMax as number)}</text>}
-              {Number.isFinite(series.scaleMin) && <text x={labelX} y={chart.plotY + chart.plotHeight - 6} textAnchor="start">{formatValue(series.scaleMin as number)}</text>}
+              {Number.isFinite(series.scaleMax) && <text x={labelX} y={chart.plotY + 12} textAnchor="start">{formatValue(series.scaleMax as number)}</text>}
+              {Number.isFinite(series.scaleMin) && <text x={labelX} y={chart.plotY + chart.plotHeight - 2} textAnchor="start">{formatValue(series.scaleMin as number)}</text>}
             </g>
           );
         })}
@@ -474,21 +481,30 @@ function getTrendContent(
         data-testid={`trend-x-axis-${element.id}`}
         pointerEvents="none"
       />
-      {chart.xTicks.map((tick) => (
-        <g key={`x-${tick.time}`}>
-          {showVerticalGrid && <line x1={tick.x} y1={chart.plotY} x2={tick.x} y2={chart.plotY + chart.plotHeight} stroke={gridColor} strokeWidth={1} pointerEvents="none" />}
-          <text
-            x={tick.x}
-            y={chart.plotY + chart.plotHeight + 18}
-            textAnchor="middle"
-            fill={foreground}
-            fontSize={AXIS_FONT_SIZE}
-            pointerEvents="none"
-          >
-            {formatAxisTime(tick.time, chart.domainEnd - chart.domainStart)}
-          </text>
-        </g>
-      ))}
+      {chart.xTicks.map((tick, index) => {
+        const isStart = index === 0;
+        const isEnd = index === chart.xTicks.length - 1;
+        const isMiddle = !isStart && !isEnd;
+        const anchor = isStart ? 'start' : isEnd ? 'end' : 'middle';
+        const xPos = isStart ? chart.plotX + 2 : isEnd ? chart.plotX + chart.plotWidth - 2 : tick.x;
+        return (
+          <g key={`x-${tick.time}`}>
+            {showVerticalGrid && <line x1={tick.x} y1={chart.plotY} x2={tick.x} y2={chart.plotY + chart.plotHeight} stroke={gridColor} strokeWidth={1} pointerEvents="none" />}
+            <text
+              x={xPos}
+              y={chart.plotY + chart.plotHeight + 14}
+              textAnchor={anchor}
+              fill={foreground}
+              fontSize={AXIS_FONT_SIZE}
+              pointerEvents="none"
+            >
+              {isMiddle && chart.domainEnd > chart.domainStart
+                ? formatDuration(chart.domainEnd - chart.domainStart)
+                : formatAxisTime(tick.time, chart.domainEnd - chart.domainStart)}
+            </text>
+          </g>
+        );
+      })}
       {drawableSeries.map(({ series, data }, index) => {
         const key = trendBindingKey(series.binding);
         const seriesChart = seriesCharts.get(key) ?? chart;
@@ -631,15 +647,19 @@ function MixedTrend({
   legendWidth: number;
   selectedSeriesKeys?: ReadonlySet<string>;
 }) {
+  const visual = getTrendVisualOptions(element);
+  const isLegendVisible = !visual.hideLegend && element.width >= AUTO_HIDE_LEGEND_WIDTH_THRESHOLD;
+  const rightMargin = isLegendVisible ? legendWidth + 8 : 8;
+  const topMargin = visual.title ? 24 : PLOT_MARGIN.top;
   const allNumericPoints = numericSeries.flatMap(({ data }) => data.points);
   const primaryNumeric = numericSeries.find(({ series }) => series.primaryScale === true) ?? numericSeries[0];
   const numericPoints = primaryNumeric?.data.points ?? [];
   const states = stateSeries.flatMap(({ states: points }) => points);
   const stateLabels = [...new Set(states.map((state) => state.value))];
   const plotX = element.x + PLOT_MARGIN.left;
-  const plotY = element.y + PLOT_MARGIN.top;
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth);
-  const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
+  const plotY = element.y + topMargin;
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - rightMargin);
+  const plotHeight = Math.max(1, element.height - topMargin - PLOT_MARGIN.bottom);
   const allTimes = [...allNumericPoints.map((point) => point.time), ...states.map((state) => state.time)];
   const firstTime = Math.min(...allTimes);
   const lastTime = Math.max(...allTimes);
@@ -673,36 +693,56 @@ function MixedTrend({
     const index = Math.max(0, stateLabels.indexOf(value));
     return plotY + (1 - index / Math.max(1, stateLabels.length - 1)) * plotHeight;
   };
-  const stateAxisX = plotX - 48;
-  const numericIntervals = plotHeight < 70 ? 2 : (plotHeight < 140 ? 4 : (plotHeight < 180 ? 5 : (individualScale ? 2 : 5)));
+  const numericIntervals = plotHeight < 50 ? 2 : (plotHeight < 110 ? 4 : (plotHeight < 160 ? 5 : (individualScale ? 2 : 5)));
   const numericTicks = Array.from({ length: numericIntervals + 1 }, (_, index) => index).map((index) => domainMax - ((domainMax - domainMin) * index) / numericIntervals);
   const xTicks = [0, 1, 2].map((index) => domainStart + ((domainEnd - domainStart) * index) / 2);
 
   return (
     <>
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} fill="rgba(0, 0, 0, 0.12)" data-testid={`trend-mixed-plot-${element.id}`} pointerEvents="all" />
-      {stateLabels.map((label, index) => {
+      {stateLabels.map((label) => {
         const y = stateY(label);
         return (
           <g key={label} pointerEvents="none">
             <line x1={plotX} y1={y} x2={plotX + plotWidth} y2={y} stroke={GRID_COLOR} strokeWidth={1} />
-            <text x={stateAxisX - 6} y={y + 4} textAnchor="end" fill={stateSeries[0]?.series.color || LINE_COLOR} fontSize={AXIS_FONT_SIZE}>{index}</text>
           </g>
         );
       })}
-      <line x1={stateAxisX} y1={plotY} x2={stateAxisX} y2={plotY + plotHeight} stroke={stateSeries[0]?.series.color || AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
       <line x1={plotX} y1={plotY} x2={plotX} y2={plotY + plotHeight} stroke={primaryNumeric?.series.color || AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
-      {numericTicks.map((value) => (
-        <text key={value} x={plotX - 6} y={numericY(value) + 4} textAnchor="end" fill={primaryNumeric?.series.color || TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
+      {numericTicks.map((value, index) => (
+        <text
+          key={value}
+          x={plotX + 4}
+          y={numericY(value) + (index === 0 ? 9 : index === numericTicks.length - 1 ? -2 : 4)}
+          textAnchor="start"
+          fill={primaryNumeric?.series.color || TEXT_COLOR}
+          fontSize={AXIS_FONT_SIZE}
+          pointerEvents="none"
+        >
           {formatNumber(value)}
         </text>
       ))}
       <line x1={plotX} y1={plotY + plotHeight} x2={plotX + plotWidth} y2={plotY + plotHeight} stroke={AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
-      {xTicks.map((time) => (
-        <text key={time} x={xFor(time)} y={plotY + plotHeight + 18} textAnchor="middle" fill={TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
-          {formatAxisTime(time, domainEnd - domainStart)}
-        </text>
-      ))}
+      {xTicks.map((time, index) => {
+        const isStart = index === 0;
+        const isEnd = index === xTicks.length - 1;
+        const isMiddle = !isStart && !isEnd;
+        const anchor = isStart ? 'start' : isEnd ? 'end' : 'middle';
+        const xPos = isStart ? plotX + 2 : isEnd ? plotX + plotWidth - 2 : xFor(time);
+        return (
+          <text
+            key={time}
+            x={xPos}
+            y={plotY + plotHeight + 14}
+            textAnchor={anchor}
+            fill={TEXT_COLOR}
+            fontSize={AXIS_FONT_SIZE}
+            pointerEvents="none"
+          >
+            {isMiddle && domainEnd > domainStart ? formatDuration(domainEnd - domainStart) : formatAxisTime(time, domainEnd - domainStart)}
+          </text>
+        );
+      })}
       {stateSeries.map(({ series, states: points }, index) => {
         const key = trendBindingKey(series.binding);
         const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
@@ -769,12 +809,16 @@ function DigitalTrend({
   legendWidth: number;
   selectedSeriesKeys?: ReadonlySet<string>;
 }) {
+  const visual = getTrendVisualOptions(element);
+  const isLegendVisible = !visual.hideLegend && element.width >= AUTO_HIDE_LEGEND_WIDTH_THRESHOLD;
+  const rightMargin = isLegendVisible ? legendWidth + 8 : 8;
+  const topMargin = visual.title ? 24 : PLOT_MARGIN.top;
   const allStates = series.flatMap((item) => item.states);
   const labels = [...new Set(allStates.map((state) => state.value))];
   const plotX = element.x + PLOT_MARGIN.left;
-  const plotY = element.y + PLOT_MARGIN.top;
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth);
-  const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
+  const plotY = element.y + topMargin;
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - rightMargin);
+  const plotHeight = Math.max(1, element.height - topMargin - PLOT_MARGIN.bottom);
   const firstTime = Math.min(...allStates.map((state) => state.time));
   const lastTime = Math.max(...allStates.map((state) => state.time));
   const hasRequestedRange = timeRange
@@ -823,17 +867,32 @@ function DigitalTrend({
         return (
           <g key={labels[index]} pointerEvents="none">
             <line x1={plotX} y1={y} x2={plotX + plotWidth} y2={y} stroke={GRID_COLOR} strokeWidth={1} />
-            <text x={plotX - 6} y={y + 4} textAnchor="end" fill={TEXT_COLOR} fontSize={AXIS_FONT_SIZE}>{index}</text>
+            <text x={plotX + 4} y={y + 4} textAnchor="start" fill={TEXT_COLOR} fontSize={AXIS_FONT_SIZE}>{index}</text>
           </g>
         );
       })}
       <line x1={plotX} y1={plotY} x2={plotX} y2={plotY + plotHeight} stroke={AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
       <line x1={plotX} y1={plotY + plotHeight} x2={plotX + plotWidth} y2={plotY + plotHeight} stroke={AXIS_COLOR} strokeWidth={1} pointerEvents="none" />
-      {xTicks.map((time) => (
-        <text key={time} x={xFor(time)} y={plotY + plotHeight + 18} textAnchor="middle" fill={TEXT_COLOR} fontSize={AXIS_FONT_SIZE} pointerEvents="none">
-          {formatAxisTime(time, domainEnd - domainStart)}
-        </text>
-      ))}
+      {xTicks.map((time, index) => {
+        const isStart = index === 0;
+        const isEnd = index === xTicks.length - 1;
+        const isMiddle = !isStart && !isEnd;
+        const anchor = isStart ? 'start' : isEnd ? 'end' : 'middle';
+        const xPos = isStart ? plotX + 2 : isEnd ? plotX + plotWidth - 2 : xFor(time);
+        return (
+          <text
+            key={time}
+            x={xPos}
+            y={plotY + plotHeight + 14}
+            textAnchor={anchor}
+            fill={TEXT_COLOR}
+            fontSize={AXIS_FONT_SIZE}
+            pointerEvents="none"
+          >
+            {isMiddle && domainEnd > domainStart ? formatDuration(domainEnd - domainStart) : formatAxisTime(time, domainEnd - domainStart)}
+          </text>
+        );
+      })}
       {series.map(({ series: trendSeries, states }, index) => {
         const key = trendBindingKey(trendSeries.binding);
         const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
@@ -864,20 +923,29 @@ function DigitalTrend({
           return state === undefined ? [] : [{ name: trendSeries.legendLabel || trendSeries.binding.pointName, value: state, color: trendSeries.color || LINE_COLOR }];
         });
         if (values.length === 0) return null;
-        return <g key={cursor.id} data-testid={`trend-cursor-${element.id}-${cursor.id}`}>
-          <line x1={x} y1={plotY} x2={x} y2={plotY + plotHeight} stroke="var(--trend-cursor, #ffffff)" strokeWidth={selected ? 2 : 1} pointerEvents="none" />
-          <line
-            x1={x} y1={plotY} x2={x} y2={plotY + plotHeight} stroke="transparent" strokeWidth={18}
-            style={onCursorPointerDown ? { cursor: 'ew-resize' } : undefined}
-            data-testid={`trend-cursor-hit-${element.id}-${cursor.id}`}
-            onPointerDown={onCursorPointerDown ? (event) => onCursorPointerDown(event, element.id, cursor, chart) : undefined}
-            onDoubleClick={onCursorDoubleClick ? (event) => onCursorDoubleClick(event, element.id, cursor) : undefined}
-          />
-          <text x={labelX} y={plotY + 12} textAnchor={labelAnchor} fill="var(--trend-cursor, #ffffff)" fontSize={AXIS_FONT_SIZE} pointerEvents="none">
-            <tspan x={labelX} y={plotY + 12}>{formatCursorTime(cursor.time)}</tspan>
-            {values.map(({ name, value, color }, index) => <tspan key={name} x={labelX} y={plotY + 12 + (index + 1) * 18} fill={color}>{value}</tspan>)}
-          </text>
-        </g>;
+        return (
+          <g key={cursor.id} data-testid={`trend-cursor-${element.id}-${cursor.id}`}>
+            <line x1={x} y1={plotY} x2={x} y2={plotY + plotHeight} stroke="var(--trend-cursor, #ffffff)" strokeWidth={selected ? 2 : 1} pointerEvents="none" />
+            <line
+              x1={x}
+              y1={plotY}
+              x2={x}
+              y2={plotY + plotHeight}
+              stroke="transparent"
+              strokeWidth={18}
+              style={onCursorPointerDown ? { cursor: 'ew-resize' } : undefined}
+              data-testid={`trend-cursor-hit-${element.id}-${cursor.id}`}
+              onPointerDown={onCursorPointerDown ? (event) => onCursorPointerDown(event, element.id, cursor, chart) : undefined}
+              onDoubleClick={onCursorDoubleClick ? (event) => onCursorDoubleClick(event, element.id, cursor) : undefined}
+            />
+            <text x={labelX} y={plotY + 12} textAnchor={labelAnchor} fill="var(--trend-cursor, #ffffff)" fontSize={AXIS_FONT_SIZE} pointerEvents="none">
+              <tspan x={labelX} y={plotY + 12}>{formatCursorTime(cursor.time)}</tspan>
+              {values.map(({ name, value, color }, index) => (
+                <tspan key={name} x={labelX} y={plotY + 12 + (index + 1) * 18} fill={color}>{value}</tspan>
+              ))}
+            </text>
+          </g>
+        );
       })}
     </>
   );
@@ -938,11 +1006,13 @@ export function buildTrendChartForSeries(
   const isLegendVisible = !visual.hideLegend && element.width >= AUTO_HIDE_LEGEND_WIDTH_THRESHOLD;
   const legendWidth = explicitLegendWidth ?? (isLegendVisible
     ? getEffectiveTrendLegendWidth(element.width, visual.legendWidth)
-    : 16);
+    : 0);
+  const rightMargin = isLegendVisible ? legendWidth + 8 : 8;
+  const topMargin = visual.title ? 24 : PLOT_MARGIN.top;
   const plotX = element.x + PLOT_MARGIN.left;
-  const plotY = element.y + PLOT_MARGIN.top;
-  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth);
-  const plotHeight = Math.max(1, element.height - PLOT_MARGIN.top - PLOT_MARGIN.bottom);
+  const plotY = element.y + topMargin;
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - rightMargin);
+  const plotHeight = Math.max(1, element.height - topMargin - PLOT_MARGIN.bottom);
   const points = seriesPoints.flat();
   const values = points.map((point) => point.value);
   const valueMin = Math.min(...values);
@@ -1051,15 +1121,35 @@ function formatNumber(value: number, format: 'automatic' | 'integer' | 'oneDecim
 
 function formatAxisTime(time: number, span: number): string {
   const date = new Date(time);
-  if (span >= 24 * 60 * 60 * 1000) {
-    return date.toLocaleString([], {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const dateStr = date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+  const timeStr = date.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  return `${dateStr} ${timeStr}`;
+}
+
+function formatDuration(spanMs: number): string {
+  const hours = spanMs / (1000 * 60 * 60);
+  if (hours >= 24) {
+    const days = Math.round(hours / 24);
+    return `${days} d`;
   }
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (hours >= 1) {
+    const rounded = Math.round(hours * 10) / 10;
+    return `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} h`;
+  }
+  const minutes = Math.round(spanMs / (1000 * 60));
+  if (minutes >= 1) {
+    return `${minutes} min`;
+  }
+  const seconds = Math.round(spanMs / 1000);
+  return `${seconds} s`;
 }
 
 function formatCursorTime(time: number): string {

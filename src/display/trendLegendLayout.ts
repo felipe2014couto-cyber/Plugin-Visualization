@@ -11,7 +11,7 @@ export const AUTO_HIDE_LEGEND_WIDTH_THRESHOLD = 500;
 export function getEffectiveTrendLegendWidth(
   containerWidth: number,
   preferredLegendWidth?: number,
-  plotLeftMargin = 86,
+  plotLeftMargin = 8,
   minPlotWidth = MIN_TREND_PLOT_WIDTH,
   minLegendWidth = MIN_TREND_LEGEND_WIDTH,
 ): number {
