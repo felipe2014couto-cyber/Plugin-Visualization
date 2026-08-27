@@ -129,7 +129,6 @@ function digitalSparklinePath(x: number, y: number, width: number, height: numbe
   return values.map((value, index) => {
     const xPosition = x + (index / (values.length - 1)) * width;
     if (index === 0) return `M${xPosition},${yFor(value)}`;
-    const previousX = x + ((index - 1) / (values.length - 1)) * width;
     return `L${xPosition},${yFor(values[index - 1])} L${xPosition},${yFor(value)}${index === values.length - 1 ? ` L${x + width},${yFor(value)}` : ''}`;
   }).join(' ');
 }
