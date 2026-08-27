@@ -127,11 +127,13 @@ function getValueLines(
   if (visual.showTagName) {
     lines.push(label);
   }
-  if (visual.showUnit && result?.unit) {
-    lines.push(result.unit);
-  }
   if (visual.showValue) {
-    lines.push(valueText);
+    // PI Vision presents the engineering unit alongside the value instead of
+    // consuming a separate line. This keeps the reading compact and prevents
+    // the value/unit pair from appearing detached in small elements.
+    lines.push(visual.showUnit && result?.unit ? `${valueText} ${result.unit}` : valueText);
+  } else if (visual.showUnit && result?.unit) {
+    lines.push(result.unit);
   }
   if (visual.showTimestamp && result?.timestamp) {
     lines.push(formatTimestamp(result.timestamp));
