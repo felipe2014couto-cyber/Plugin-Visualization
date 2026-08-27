@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -31,11 +31,6 @@ import { PiPointSearch } from '../../pi/PiPointSearch';
 import { createPiPointBinding, isStatePiPointBinding } from '../../pi/piPointBinding';
 import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
 import { TimeRangeBar } from '../TimeRangeBar';
-import { LibraryPanel } from '../Library/LibraryPanel';
-import { CalculationsPanel } from '../Calculations/CalculationsPanel';
-import { MiniSheetsPanel } from '../MiniSheets/MiniSheetsPanel';
-import { SqlQueryPanel } from '../SqlQuery/SqlQueryPanel';
-import { ProgrammingPanel } from '../../programming/ProgrammingModule';
 import { DEFAULT_PROGRAMMING_DOCUMENT, type ProgrammingDocument, type ProgrammingPiPointContext, type ProgrammingQueryReference } from '../../programming/ProgrammingTypes';
 import { createSqlTable, SQL_TABLE_TYPE, type SqlTableElement } from '../../display/createSqlTable';
 import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
@@ -49,6 +44,27 @@ import {
   savePimsVisionDashboard,
   type GrafanaDashboardFolder,
 } from '../../grafana/dashboardPersistence';
+
+const MiniSheetsPanel = React.lazy(async () => {
+  const module = await import('../MiniSheets/MiniSheetsPanel');
+  return { default: module.MiniSheetsPanel };
+});
+const SqlQueryPanel = React.lazy(async () => {
+  const module = await import('../SqlQuery/SqlQueryPanel');
+  return { default: module.SqlQueryPanel };
+});
+const ProgrammingPanel = React.lazy(async () => {
+  const module = await import('../../programming/ProgrammingModule');
+  return { default: module.ProgrammingPanel };
+});
+const LibraryPanel = React.lazy(async () => {
+  const module = await import('../Library/LibraryPanel');
+  return { default: module.LibraryPanel };
+});
+const CalculationsPanel = React.lazy(async () => {
+  const module = await import('../Calculations/CalculationsPanel');
+  return { default: module.CalculationsPanel };
+});
 
 export type VisualizationTheme = 'dark' | 'light';
 
@@ -127,6 +143,10 @@ export function App() {
   const styles = useStyles2(getStyles);
   const [authenticationState, setAuthenticationState] = useState<AuthenticationState>('checking');
   const [activeModule, setActiveModule] = useState<ActiveModule>('visualization');
+  // Carrega os modulos secundarios somente no primeiro acesso e os mantem
+  // montados depois disso para preservar sessoes e rascunhos ao alternar abas.
+  const loadedModulesRef = useRef(new Set<ActiveModule>(['visualization']));
+  loadedModulesRef.current.add(activeModule);
   // Sql tables are now managed within DisplayDocument
   const [document, setDocument] = useState(() =>
     createDisplayDocument({ name: 'Visualization' }),
@@ -137,7 +157,7 @@ export function App() {
   const [editorMode, setEditorMode] = useState<DisplayEditorMode>('edit');
   const [dropSymbolType, setDropSymbolType] = useState<PiPointDropSymbolType>('trend');
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
-  const [refreshInterval, setRefreshInterval] = useState<string>('');
+  const [refreshInterval, setRefreshInterval] = useState<string>('adaptativa');
   const [refreshCount, setRefreshCount] = useState<number>(0);
   const [programmingDraft, setProgrammingDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
   const [programmingApplied, setProgrammingApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
@@ -211,7 +231,19 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const ms = getRefreshIntervalMs(refreshInterval);
+    let ms = getRefreshIntervalMs(refreshInterval);
+    
+    if (refreshInterval === 'adaptativa') {
+      const pointsCount = programmingPiPoints.length;
+      if (pointsCount <= 20) {
+        ms = 5000;
+      } else if (pointsCount <= 50) {
+        ms = 10000;
+      } else {
+        ms = 25000;
+      }
+    }
+
     if (ms <= 0) {
       return;
     }
@@ -220,9 +252,11 @@ export function App() {
       setRefreshCount((count) => count + 1);
     }, ms);
     return () => clearInterval(timer);
-  }, [refreshInterval]);
+  }, [refreshInterval, programmingPiPoints.length]);
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
   const [assetsTab, setAssetsTab] = useState<AssetsTab>('assets');
+  const loadedAssetsTabsRef = useRef(new Set<AssetsTab>(['assets']));
+  loadedAssetsTabsRef.current.add(assetsTab);
   const [openCalculationId, setOpenCalculationId] = useState<string>();
   const [isPiPointFiltersOpen, setIsPiPointFiltersOpen] = useState(false);
   const [isPiSearchOpen, setIsPiSearchOpen] = useState(true);
@@ -855,33 +889,35 @@ export function App() {
                         )}
                       </div>}
                     </div>
-                    <div className={styles.libraryTabContent} hidden={assetsTab !== 'library'}>
-                      <LibraryPanel />
-                    </div>
-                    <div className={`${styles.libraryTabContent} ${styles.calculationsTabContent}`} hidden={assetsTab !== 'calculations'}>
-                      <CalculationsPanel
+                    {loadedAssetsTabsRef.current.has('library') && <div className={styles.libraryTabContent} hidden={assetsTab !== 'library'}>
+                      <Suspense fallback={<p>Carregando biblioteca...</p>}><LibraryPanel /></Suspense>
+                    </div>}
+                    {loadedAssetsTabsRef.current.has('calculations') && <div className={`${styles.libraryTabContent} ${styles.calculationsTabContent}`} hidden={assetsTab !== 'calculations'}>
+                      <Suspense fallback={<p>Carregando cálculos...</p>}><CalculationsPanel
                         document={document}
                         onChange={setDocument}
                         resolvePiPoint={resolveCalculationPiPoint}
                         loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
                         openCalculationId={openCalculationId}
                         onCalculationOpenHandled={() => setOpenCalculationId(undefined)}
-                      />
-                    </div>
+                      /></Suspense>
+                    </div>}
                   </div>
               </div>
               <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
                 <div id="pims-sheets-menu-slot" className={styles.sheetsMenuSlot} data-testid="pims-sheets-menu-slot" />
               </div>
               <div style={{ display: activeModule === 'sql-query' ? 'flex' : 'none', flexDirection: 'column', height: '100%' }}>
-                <SqlQueryPanel 
-                  onResultChange={handleSqlResultChange} 
-                  onApplyToDashboard={handleSqlApplyToDashboard}
-                  sqlToLoad={selectedSqlTable?.properties.sql} 
-                />
+                {loadedModulesRef.current.has('sql-query') && <Suspense fallback={<p>Carregando SQL...</p>}>
+                  <SqlQueryPanel
+                    onResultChange={handleSqlResultChange}
+                    onApplyToDashboard={handleSqlApplyToDashboard}
+                    sqlToLoad={selectedSqlTable?.properties.sql}
+                  />
+                </Suspense>}
               </div>
               <div style={{ display: activeModule === 'programming' ? 'flex' : 'none', flex: 1, minHeight: 0, flexDirection: 'column', height: '100%' }}>
-                <ProgrammingPanel
+                {loadedModulesRef.current.has('programming') && <Suspense fallback={<p>Carregando Programming...</p>}><ProgrammingPanel
                   variant="editor"
                   document={programmingDraft}
                   onDocumentChange={commitProgrammingDraft}
@@ -941,7 +977,7 @@ export function App() {
                       </p>
                     </div>
                   ) : null}
-                />
+                /></Suspense>}
               </div>
             </div>
           )}
@@ -981,7 +1017,7 @@ export function App() {
             </div>
           </div>
           <div style={{ display: activeModule === 'sheets' ? 'flex' : 'none', flex: 1, minWidth: 0, minHeight: 0 }}>
-            <MiniSheetsPanel
+            {loadedModulesRef.current.has('sheets') && <Suspense fallback={<p>Carregando Sheets...</p>}><MiniSheetsPanel
               initialDocument={document.miniSheets}
               dataLinkMenuHostId="pims-sheets-menu-slot"
               dataLinkMenuActive={activeModule === 'sheets' && isAssetsPanelOpen}
@@ -996,7 +1032,7 @@ export function App() {
                   };
                 });
               }}
-            />
+            /></Suspense>}
           </div>
           <div
             style={{
@@ -1008,11 +1044,11 @@ export function App() {
             }}
             data-testid="pims-vision-programming-workspace"
           >
-            <ProgrammingPanel
+            {loadedModulesRef.current.has('programming') && <Suspense fallback={<p>Carregando Programming...</p>}><ProgrammingPanel
               variant="preview"
               appliedDocument={editingProgrammingElementId ? programmingDraft : programmingApplied}
               piPoints={programmingPiContexts}
-            />
+            /></Suspense>}
           </div>
         </main>
       </div>

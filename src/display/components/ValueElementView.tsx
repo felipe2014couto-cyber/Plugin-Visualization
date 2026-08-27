@@ -73,7 +73,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
         y={element.y}
         width={element.width}
         height={element.height}
-        rx={14}
+        rx={element.properties._piVisionSquareBackground === true ? 0 : 14}
         fill={bgColor}
         stroke="none"
         strokeWidth={0}

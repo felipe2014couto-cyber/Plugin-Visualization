@@ -334,7 +334,9 @@ describe('ValueRuntime', () => {
 
     expect(loadValues).toHaveBeenCalledTimes(1);
     await act(async () => {
-      jest.advanceTimersByTime(VALUE_REFRESH_INTERVAL_MS - DATA_QUERY_BATCH_WINDOW_MS);
+      // O hook distribui a primeira atualização por uma janela de até 1 s
+      // para evitar que muitos clientes consultem o PI simultaneamente.
+      jest.advanceTimersByTime(VALUE_REFRESH_INTERVAL_MS + 1000);
       await Promise.resolve();
     });
     expect(loadValues).toHaveBeenCalledTimes(2);

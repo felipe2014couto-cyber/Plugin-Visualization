@@ -75,6 +75,13 @@ describe('ValueElementView', () => {
     expect(screen.getByTestId('display-value-value-pi-vision')).toHaveAttribute('font-size', '14');
   });
 
+  it('mantem fundo quadrado para Value importado do PI Vision', () => {
+    const element = createValue({ binding, id: 'value-pi-vision-square' });
+    element.properties._piVisionSquareBackground = true;
+    render(<svg><ValueElementView element={element} runtimeState={{ status: 'success', result: { value: 10 } }} /></svg>);
+    expect(screen.getByTestId('value-background-value-pi-vision-square')).toHaveAttribute('rx', '0');
+  });
+
   it('aplica somente a cor do primeiro estado correspondente e preserva o valor', async () => {
     const element = createValue({
       binding,

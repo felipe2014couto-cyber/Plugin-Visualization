@@ -126,6 +126,7 @@ export function formatRelativeDuration(duration: number): string {
 }
 
 export const REFRESH_INTERVAL_OPTIONS = [
+  { label: 'Adaptativa', value: 'adaptativa' },
   { label: 'Desativado', value: '' },
   { label: '5s', value: '5s' },
   { label: '10s', value: '10s' },

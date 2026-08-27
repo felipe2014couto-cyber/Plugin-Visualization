@@ -170,7 +170,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByTestId('pims-vision-library-tab'));
     expect(screen.getByTestId('pims-vision-library-tab')).toHaveAttribute('aria-selected', 'true');
-    fireEvent.change(screen.getByTestId('library-symbol-search'), { target: { value: 'PV003B' } });
+    fireEvent.change(await screen.findByTestId('library-symbol-search'), { target: { value: 'PV003B' } });
     fireEvent.click(screen.getByTestId('pims-vision-assets-tab'));
     expect(screen.getByTestId('pims-vision-assets-tab')).toHaveAttribute('aria-selected', 'true');
     fireEvent.click(screen.getByTestId('pims-vision-library-tab'));
@@ -187,7 +187,7 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('pims-vision-calculations-tab'));
 
     expect(screen.getByTestId('pims-vision-calculations-tab')).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByTestId('calculations-panel')).toBeVisible();
+    expect(await screen.findByTestId('calculations-panel')).toBeVisible();
     expect(screen.getByTestId('pims-vision-library-tab')).toHaveAttribute('aria-selected', 'false');
   });
 
@@ -207,7 +207,7 @@ describe('App', () => {
     fireEvent.click(screen.getByTestId('pims-vision-sheets-tab'));
 
     expect(screen.getByTestId('pims-vision-sheets-tab')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('mini-sheets-panel')).toBeVisible();
+    expect(await screen.findByTestId('mini-sheets-panel')).toBeVisible();
     expect(screen.getByTestId('mini-sheets-cell-A1')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId('pims-sheets-menu-slot')).toContainElement(screen.getByTestId('pi-datalink-ribbon')));
     expect(screen.getByTestId('mini-sheets-panel')).not.toContainElement(screen.getByTestId('pi-datalink-ribbon'));
@@ -252,7 +252,7 @@ describe('App', () => {
 
     fireEvent.click(screen.getByTestId('pims-vision-save-dashboard'));
 
-    await waitFor(() => expect(mockPostBackendSrv).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockPostBackendSrv).toHaveBeenCalledTimes(1));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(mockPostBackendSrv.mock.calls[0][1]).toMatchObject({
       dashboard: expect.objectContaining({ uid: 'current-dashboard-uid' }),
@@ -271,9 +271,9 @@ describe('App', () => {
 
     fireEvent.click(screen.getByTestId('pims-vision-save-as-submit'));
 
-    await waitFor(() => expect(mockPostBackendSrv).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockPostBackendSrv).toHaveBeenCalledTimes(1));
     expect(mockPostBackendSrv.mock.calls[0][1]).toMatchObject({
-      dashboard: expect.objectContaining({ uid: undefined }),
+      dashboard: expect.objectContaining({ uid: expect.stringMatching(/^pims-/) }),
       overwrite: false,
     });
     expect(globalThis.location.search).toBe('?dashboardUid=new-dashboard-uid');
@@ -309,7 +309,7 @@ describe('App', () => {
     fireEvent.click(programmingButton);
 
     const programmingWorkspace = screen.getByTestId('pims-vision-programming-workspace');
-    expect(programmingWorkspace.querySelector('[data-testid="programming-panel"]')).not.toBeNull();
+    await waitFor(() => expect(programmingWorkspace.querySelector('[data-testid="programming-panel"]')).not.toBeNull());
     expect(screen.getByTestId('programming-html-editor')).toBeInTheDocument();
     expect(screen.getByTestId('programming-pi-system-toggle')).toHaveAttribute('aria-expanded', 'true');
 
@@ -323,7 +323,7 @@ describe('App', () => {
     await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
 
     fireEvent.click(screen.getByTestId('pims-vision-programming-tab'));
-    fireEvent.click(screen.getByTestId('programming-add-to-display'));
+    fireEvent.click(await screen.findByTestId('programming-add-to-display'));
 
     expect(screen.getByTestId('display-editor')).toBeInTheDocument();
     expect(document.querySelector('[data-element-type="programming"]')).not.toBeNull();

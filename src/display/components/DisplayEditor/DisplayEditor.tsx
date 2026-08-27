@@ -35,6 +35,7 @@ import {
   type TrendSeries,
   updateTrendSeriesOptions,
   updateTrendVisualOptions,
+  createTrendElementForElement,
 } from '../../createTrend';
 import {
   appendGauge,
@@ -268,10 +269,10 @@ export function DisplayEditor({
   const [exporting, setExporting] = useState(false);
   const [editingDisplayName, setEditingDisplayName] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState(displayDocument.name);
-  const [surfaceZoom, setSurfaceZoom] = useState(1);
+  const [surfaceZoom, setSurfaceZoom] = useState(displayDocument.surface.zoom ?? 1);
   const [surfaceViewCenter, setSurfaceViewCenter] = useState({
-    x: displayDocument.surface.width / 2,
-    y: displayDocument.surface.height / 2,
+    x: displayDocument.surface.viewCenterX ?? (displayDocument.surface.width / 2),
+    y: displayDocument.surface.viewCenterY ?? (displayDocument.surface.height / 2),
   });
   const trendPopupRequest = useRef(0);
   const trendPopupRef = useRef<TrendPopupState | null>(null);
@@ -361,6 +362,28 @@ export function DisplayEditor({
     expectedDocumentRef.current = nextDocument;
     onChangeRef.current?.(nextDocument);
   }, []);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      const currentDoc = documentRef.current;
+      if (
+        currentDoc.surface.zoom !== surfaceZoom ||
+        currentDoc.surface.viewCenterX !== surfaceViewCenter.x ||
+        currentDoc.surface.viewCenterY !== surfaceViewCenter.y
+      ) {
+        publishDocument({
+          ...currentDoc,
+          surface: {
+            ...currentDoc.surface,
+            zoom: surfaceZoom,
+            viewCenterX: surfaceViewCenter.x,
+            viewCenterY: surfaceViewCenter.y,
+          },
+        });
+      }
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [surfaceZoom, surfaceViewCenter, publishDocument]);
 
   const reconcileSelection = useCallback((nextDocument: DisplayDocument) => {
     const selectedId = stateRef.current.selectedElementId;
@@ -1637,8 +1660,12 @@ export function DisplayEditor({
       return;
     }
     const element = displayDocument.elements.find((candidate) => candidate.id === current.element.id);
-    if (element?.type === TREND_TYPE) {
-    handleTrendOpen(element as TrendElement, current.seriesStates, current.cursors);
+    if (!element) {
+      return;
+    }
+    const trendElement = createTrendElementForElement(element);
+    if (trendElement) {
+      handleTrendOpen(trendElement, current.seriesStates, current.cursors);
     }
   }, [displayDocument.elements, handleTrendOpen, trendRefreshKey]);
 

@@ -37,13 +37,16 @@ export class ValueRuntime {
   private lifecycle = 0;
   private consumerSignature = '';
   private loader: LoadCurrentValues;
+  private nextDelayMs: number;
 
   constructor(
     loader: LoadCurrentValues,
     private readonly onChange: ValueRuntimeListener,
     private readonly intervalMs = VALUE_REFRESH_INTERVAL_MS,
+    initialDelayMs = intervalMs,
   ) {
     this.loader = loader;
+    this.nextDelayMs = initialDelayMs;
   }
 
   updateLoader(loader: LoadCurrentValues): void {
@@ -117,10 +120,12 @@ export class ValueRuntime {
 
   private startTimer(): void {
     if (!this.timer) {
+      const delay = this.nextDelayMs;
+      this.nextDelayMs = this.intervalMs;
       this.timer = setTimeout(() => {
         this.timer = undefined;
         void this.tick();
-      }, this.intervalMs);
+      }, delay);
     }
   }
 
@@ -297,7 +302,11 @@ export function useValueRuntime(
   const [states, setStates] = useState<Map<string, ValueRuntimeState>>(new Map());
   const runtimeRef = useRef<ValueRuntime>();
   if (!runtimeRef.current) {
-    runtimeRef.current = new ValueRuntime(loader, setStates);
+    // Espalha a primeira atualizacao dos navegadores por um segundo. Quando
+    // muitos operadores abrem a mesma tela juntos, isso evita uma rajada de
+    // consultas PI exatamente no mesmo instante sem alterar a cadencia normal.
+    const initialDelayMs = VALUE_REFRESH_INTERVAL_MS + Math.floor(Math.random() * 1000);
+    runtimeRef.current = new ValueRuntime(loader, setStates, VALUE_REFRESH_INTERVAL_MS, initialDelayMs);
   }
 
   const runtime = runtimeRef.current;
