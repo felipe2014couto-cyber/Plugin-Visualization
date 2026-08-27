@@ -282,8 +282,29 @@ function getTrendContent(
     return data?.states && data.states.length > 0 ? [{ series, states: data.states }] : [];
   });
   const isLegendVisible = !visual.hideLegend && element.width >= AUTO_HIDE_LEGEND_WIDTH_THRESHOLD;
+  const legendViewportHeight = Math.max(1, element.height - 16);
+  const legendContentHeight = Math.max(legendViewportHeight, orderedSeriesStates.length * 54 + 8);
   const title = isLegendVisible ? (
-    <g data-testid={`trend-title-${element.id}`}>
+    <foreignObject
+      x={legendX - 8}
+      y={element.y + 8}
+      width={Math.max(1, effectiveLegendWidth)}
+      height={legendViewportHeight}
+      data-testid={`trend-legend-scroll-${element.id}`}
+    >
+      <div
+        xmlns="http://www.w3.org/1999/xhtml"
+        style={{ width: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}
+      >
+        <svg
+          x={0}
+          y={0}
+          width="100%"
+          height={legendContentHeight}
+          viewBox={`${legendX - 8} ${element.y + 8} ${Math.max(1, effectiveLegendWidth)} ${legendContentHeight}`}
+          preserveAspectRatio="none"
+        >
+          <g data-testid={`trend-title-${element.id}`}>
       {orderedSeriesStates.map(({ series, runtimeState }, index) => {
         const key = trendBindingKey(series.binding);
         const data = runtimeState.status === 'success' || runtimeState.status === 'error'
@@ -355,8 +376,11 @@ function getTrendContent(
             </text>
           </g>
         );
-      })}
-    </g>
+          })}
+          </g>
+        </svg>
+      </div>
+    </foreignObject>
   ) : null;
   if (dataSeries.length > 0 && stateSeries.length > 0) {
     return <>{visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} individualScale={visual.scaleMode !== 'single'} legendWidth={effectiveLegendWidth} selectedSeriesKeys={selectedSeriesKeys} /></>;

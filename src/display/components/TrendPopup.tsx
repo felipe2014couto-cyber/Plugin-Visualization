@@ -419,6 +419,8 @@ function PopupChart({
   const showVerticalGrid = visualOptions.gridMode === 'both';
   const dividerX = plot.x + plot.width;
   const legendX = dividerX + 16;
+  const legendViewportHeight = Math.max(1, plot.height);
+  const legendContentHeight = Math.max(legendViewportHeight, scaledSeries.length * POPUP_LEGEND_ITEM_HEIGHT + 8);
   const timeSpan = Math.max(1, domainEnd - domainStart);
   const xFor = (time: number) => plot.x + ((time - domainStart) / timeSpan) * plot.width;
   const yFor = (value: number, scale: ValueScale) => plot.y + ((scale.max - value) / (scale.max - scale.min)) * plot.height;
@@ -550,7 +552,27 @@ function PopupChart({
           </g>
         );
       })}
-      {isLegendVisible && scaledSeries.map(({ configured, key, name, color, data, stateLabels }, index) => {
+      {isLegendVisible && (
+        <foreignObject
+          x={legendX - 8}
+          y={plot.y}
+          width={Math.max(1, effectiveLegendWidth)}
+          height={legendViewportHeight}
+          data-testid="trend-popup-legend-scroll"
+        >
+          <div
+            xmlns="http://www.w3.org/1999/xhtml"
+            style={{ width: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}
+          >
+            <svg
+              x={0}
+              y={0}
+              width="100%"
+              height={legendContentHeight}
+              viewBox={`${legendX - 8} ${plot.y} ${Math.max(1, effectiveLegendWidth)} ${legendContentHeight}`}
+              preserveAspectRatio="none"
+            >
+      {scaledSeries.map(({ configured, key, name, color, data, stateLabels }, index) => {
         const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
         const currentValue = points.at(-1)?.value;
         const states = (data.states ?? []).filter((state) => state.time >= domainStart && state.time <= domainEnd);
@@ -612,6 +634,10 @@ function PopupChart({
           </g>
         );
       })}
+            </svg>
+          </div>
+        </foreignObject>
+      )}
       {isLegendVisible && (
         <TrendLegendResizeHandle
           x={dividerX}
