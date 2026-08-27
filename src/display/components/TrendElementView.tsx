@@ -101,7 +101,7 @@ export function TrendElementView({
     setSelectedSeriesKeys((current) => updateTrendSeriesSelection(current, key, ctrlPressed));
   };
 
-  const isLegendVisible = !visual.hideLegend;
+  const isLegendVisible = !visual.hideLegend && element.width >= 320;
   const effectiveLegendWidth = isLegendVisible
     ? getEffectiveTrendLegendWidth(
         element.width,
@@ -263,7 +263,7 @@ function getTrendContent(
       : undefined;
     return data?.states && data.states.length > 0 ? [{ series, states: data.states }] : [];
   });
-  const isLegendVisible = !visual.hideLegend;
+  const isLegendVisible = !visual.hideLegend && element.width >= 320;
   const title = isLegendVisible ? (
     <g data-testid={`trend-title-${element.id}`}>
       {orderedSeriesStates.map(({ series, runtimeState }, index) => {
@@ -671,7 +671,8 @@ function MixedTrend({
     return plotY + (1 - index / Math.max(1, stateLabels.length - 1)) * plotHeight;
   };
   const stateAxisX = plotX - 48;
-  const numericTicks = [0, 1, 2].map((index) => domainMax - ((domainMax - domainMin) * index) / 2);
+  const numericIntervals = plotHeight < 70 ? 2 : (plotHeight < 140 ? 4 : (plotHeight < 180 ? 5 : (individualScale ? 2 : 5)));
+  const numericTicks = Array.from({ length: numericIntervals + 1 }, (_, index) => index).map((index) => domainMax - ((domainMax - domainMin) * index) / numericIntervals);
   const xTicks = [0, 1, 2].map((index) => domainStart + ((domainEnd - domainStart) * index) / 2);
 
   return (
@@ -931,7 +932,7 @@ export function buildTrendChartForSeries(
   explicitLegendWidth?: number,
 ): TrendChartModel {
   const visual = getTrendVisualOptions(element);
-  const isLegendVisible = !visual.hideLegend;
+  const isLegendVisible = !visual.hideLegend && element.width >= 320;
   const legendWidth = explicitLegendWidth ?? (isLegendVisible
     ? getEffectiveTrendLegendWidth(element.width, visual.legendWidth)
     : 16);
@@ -967,7 +968,16 @@ export function buildTrendChartForSeries(
   const yFor = (value: number) => plotY + ((domainMax - value) / Math.max(1e-12, domainMax - domainMin)) * plotHeight;
   const path = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(point.time)} ${yFor(point.value)}`).join(' ');
 
-  const intervals = getTrendVisualOptions(element).scaleIntervals;
+  const configuredIntervals = visual.scaleIntervals || 10;
+  let intervals: number = configuredIntervals;
+  if (plotHeight < 50) {
+    intervals = Math.min(configuredIntervals, 2);
+  } else if (plotHeight < 110) {
+    intervals = configuredIntervals === 10 ? 4 : Math.min(configuredIntervals, 4);
+  } else if (plotHeight < 160) {
+    intervals = Math.min(configuredIntervals, 5);
+  }
+
   return {
     plotX,
     plotY,
