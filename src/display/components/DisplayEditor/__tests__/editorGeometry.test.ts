@@ -1,4 +1,5 @@
 import {
+  computeAlignmentSnap,
   computeDragGeometry,
   computeResizeGeometry,
   clampSize,
@@ -105,6 +106,30 @@ describe('computeDragGeometry', () => {
   it('delta zero significa nenhuma alteracao', () => {
     const result = computeDragGeometry(startGeometry, startPointer, startPointer);
     expect(result).toEqual(startGeometry);
+  });
+});
+
+describe('computeAlignmentSnap', () => {
+  const moving: ElementGeometry = { x: 20, y: 20, width: 100, height: 60 };
+  const target: ElementGeometry = { x: 180, y: 100, width: 120, height: 90 };
+
+  it('encaixa e mostra uma guia quando os topos ficam próximos', () => {
+    const result = computeAlignmentSnap([moving], [target], 30, 77, 6);
+
+    expect(result.dy).toBe(80);
+    expect(result.guides).toContainEqual({ axis: 'horizontal', position: 100, start: 50, end: 300 });
+  });
+
+  it('encaixa os centros verticalmente e horizontalmente', () => {
+    const result = computeAlignmentSnap([moving], [target], 167, 92, 6);
+
+    expect(result.dx).toBe(170);
+    expect(result.dy).toBe(95);
+    expect(result.guides.map((guide) => guide.axis).sort()).toEqual(['horizontal', 'vertical']);
+  });
+
+  it('não altera o movimento quando nenhum alinhamento está próximo', () => {
+    expect(computeAlignmentSnap([moving], [target], 10, 10, 6)).toEqual({ dx: 10, dy: 10, guides: [] });
   });
 });
 

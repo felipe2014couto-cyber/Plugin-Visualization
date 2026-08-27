@@ -15,6 +15,19 @@ export interface ElementGeometry {
   height: number;
 }
 
+export interface AlignmentGuide {
+  axis: 'horizontal' | 'vertical';
+  position: number;
+  start: number;
+  end: number;
+}
+
+export interface AlignmentSnapResult {
+  dx: number;
+  dy: number;
+  guides: AlignmentGuide[];
+}
+
 export interface CanvasBounds {
   left: number;
   top: number;
@@ -92,6 +105,82 @@ export function computeDragGeometry(
     width: startGeometry.width,
     height: startGeometry.height,
   };
+}
+
+/**
+ * Snaps the outside edges and centres of the moving selection to nearby
+ * elements. One guide per axis is enough to describe the closest match and
+ * keeps the canvas readable when many objects share the same coordinate.
+ */
+export function computeAlignmentSnap(
+  movingGeometries: readonly ElementGeometry[],
+  targetGeometries: readonly ElementGeometry[],
+  rawDx: number,
+  rawDy: number,
+  threshold = 6,
+): AlignmentSnapResult {
+  if (movingGeometries.length === 0 || targetGeometries.length === 0) {
+    return { dx: rawDx, dy: rawDy, guides: [] };
+  }
+
+  const movingBounds = geometryBounds(movingGeometries);
+  const movedBounds = {
+    ...movingBounds,
+    x: movingBounds.x + rawDx,
+    y: movingBounds.y + rawDy,
+  };
+  const movingXAnchors = [movedBounds.x, movedBounds.x + movedBounds.width / 2, movedBounds.x + movedBounds.width];
+  const movingYAnchors = [movedBounds.y, movedBounds.y + movedBounds.height / 2, movedBounds.y + movedBounds.height];
+
+  let closestX: { delta: number; target: ElementGeometry; position: number } | undefined;
+  let closestY: { delta: number; target: ElementGeometry; position: number } | undefined;
+
+  targetGeometries.forEach((target) => {
+    const targetXAnchors = [target.x, target.x + target.width / 2, target.x + target.width];
+    const targetYAnchors = [target.y, target.y + target.height / 2, target.y + target.height];
+    movingXAnchors.forEach((movingAnchor) => targetXAnchors.forEach((targetAnchor) => {
+      const delta = targetAnchor - movingAnchor;
+      if (Math.abs(delta) <= threshold && (!closestX || Math.abs(delta) < Math.abs(closestX.delta))) {
+        closestX = { delta, target, position: targetAnchor };
+      }
+    }));
+    movingYAnchors.forEach((movingAnchor) => targetYAnchors.forEach((targetAnchor) => {
+      const delta = targetAnchor - movingAnchor;
+      if (Math.abs(delta) <= threshold && (!closestY || Math.abs(delta) < Math.abs(closestY.delta))) {
+        closestY = { delta, target, position: targetAnchor };
+      }
+    }));
+  });
+
+  const dx = rawDx + (closestX?.delta ?? 0);
+  const dy = rawDy + (closestY?.delta ?? 0);
+  const snappedBounds = { ...movingBounds, x: movingBounds.x + dx, y: movingBounds.y + dy };
+  const guides: AlignmentGuide[] = [];
+  if (closestX) {
+    guides.push({
+      axis: 'vertical',
+      position: closestX.position,
+      start: Math.min(snappedBounds.y, closestX.target.y),
+      end: Math.max(snappedBounds.y + snappedBounds.height, closestX.target.y + closestX.target.height),
+    });
+  }
+  if (closestY) {
+    guides.push({
+      axis: 'horizontal',
+      position: closestY.position,
+      start: Math.min(snappedBounds.x, closestY.target.x),
+      end: Math.max(snappedBounds.x + snappedBounds.width, closestY.target.x + closestY.target.width),
+    });
+  }
+  return { dx, dy, guides };
+}
+
+function geometryBounds(geometries: readonly ElementGeometry[]): ElementGeometry {
+  const x = Math.min(...geometries.map((geometry) => geometry.x));
+  const y = Math.min(...geometries.map((geometry) => geometry.y));
+  const right = Math.max(...geometries.map((geometry) => geometry.x + geometry.width));
+  const bottom = Math.max(...geometries.map((geometry) => geometry.y + geometry.height));
+  return { x, y, width: right - x, height: bottom - y };
 }
 
 export function computeResizeGeometry(

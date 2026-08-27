@@ -58,6 +58,7 @@ import {
   getResizeHandleRect,
   getHandleCursor,
   svgPointFromEvent,
+  type AlignmentGuide,
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
@@ -130,6 +131,7 @@ export interface DisplaySurfaceProps {
   onStartResize: (elementId: string, handle: ResizeHandle, pointer: Point) => void;
   onPointerMove: (pointer: Point) => void;
   onPointerEnd: () => void;
+  alignmentGuides?: readonly AlignmentGuide[];
   loadValue?: (binding: PiPointBinding) => Promise<PiPointValue>;
   loadPiPointDatabaseLimits?: (binding: PiPointBinding) => Promise<PiPointDatabaseLimits>;
   loadValues?: LoadCurrentValues;
@@ -191,6 +193,7 @@ export function DisplaySurface({
   onStartResize,
   onPointerMove,
   onPointerEnd,
+  alignmentGuides = [],
   loadValue,
   loadPiPointDatabaseLimits,
   loadValues,
@@ -1238,6 +1241,33 @@ export function DisplaySurface({
           />
         );
       })()}
+      {editable && alignmentGuides.map((guide, index) => guide.axis === 'horizontal' ? (
+        <line
+          key={`alignment-guide-${guide.axis}-${index}`}
+          x1={guide.start}
+          x2={guide.end}
+          y1={guide.position}
+          y2={guide.position}
+          stroke="#ff2b9d"
+          strokeWidth={1.5 / Math.max(zoom, 0.1)}
+          strokeDasharray={`${4 / Math.max(zoom, 0.1)} ${2 / Math.max(zoom, 0.1)}`}
+          pointerEvents="none"
+          data-testid="display-alignment-guide-horizontal"
+        />
+      ) : (
+        <line
+          key={`alignment-guide-${guide.axis}-${index}`}
+          x1={guide.position}
+          x2={guide.position}
+          y1={guide.start}
+          y2={guide.end}
+          stroke="#ff2b9d"
+          strokeWidth={1.5 / Math.max(zoom, 0.1)}
+          strokeDasharray={`${4 / Math.max(zoom, 0.1)} ${2 / Math.max(zoom, 0.1)}`}
+          pointerEvents="none"
+          data-testid="display-alignment-guide-vertical"
+        />
+      ))}
       {selectedElementIds.filter((id) => id !== selectedElement?.id).map((id) => {
         const element = getElementById(displayDocument, id);
         if (!element) {

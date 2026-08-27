@@ -126,11 +126,13 @@ import { serializeTableData, type TableDataExportFormat } from '../../tableDataE
 import { editorReducer, initialEditorState, type EditorAction, type EditorState } from './editorState';
 import {
   computeDragGeometry,
+  computeAlignmentSnap,
   computeResizeGeometry,
   getCanvasBounds,
   getElementById,
   svgPointFromEvent,
   updateElementGeometry,
+  type AlignmentGuide,
   type ElementGeometry,
   type Point,
   type ResizeHandle,
@@ -266,8 +268,7 @@ export function DisplayEditor({
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [shapeMenuPosition, setShapeMenuPosition] = useState<{ left: number; top: number } | null>(null);
-  const [alignmentMenuOpen, setAlignmentMenuOpen] = useState(false);
-  const [alignmentMenuPosition, setAlignmentMenuPosition] = useState<{ left: number; top: number } | null>(null);
+  const [alignmentGuides, setAlignmentGuides] = useState<AlignmentGuide[]>([]);
   const [exporting, setExporting] = useState(false);
   const [editingDisplayName, setEditingDisplayName] = useState(false);
   const [displayNameDraft, setDisplayNameDraft] = useState(displayDocument.name);
@@ -489,6 +490,7 @@ export function DisplayEditor({
         return candidate && !isElementLocked(candidate);
       });
       pendingTransactionRef.current = { before: documentRef.current };
+      setAlignmentGuides([]);
       dispatch({
         type: 'START_DRAG',
         elementId,
@@ -547,14 +549,28 @@ export function DisplayEditor({
     }
 
     if (interaction.kind === 'dragging') {
-      const dx = newGeometry.x - interaction.originalGeometry.x;
-      const dy = newGeometry.y - interaction.originalGeometry.y;
+      const rawDx = newGeometry.x - interaction.originalGeometry.x;
+      const rawDy = newGeometry.y - interaction.originalGeometry.y;
+      const movingIds = new Set(Object.keys(interaction.originalGeometries));
+      const targets = documentRef.current.elements
+        .filter((element) => !movingIds.has(element.id))
+        .map(({ x, y, width, height }) => ({ x, y, width, height }));
+      const snap = computeAlignmentSnap(
+        Object.values(interaction.originalGeometries),
+        targets,
+        rawDx,
+        rawDy,
+        6 / Math.max(surfaceZoom, 0.1),
+      );
+      const { dx, dy } = snap;
+      setAlignmentGuides(snap.guides);
       let nextDocument = documentRef.current;
       Object.entries(interaction.originalGeometries).forEach(([id, geometry]) => {
         nextDocument = updateElementGeometry(nextDocument, id, { x: geometry.x + dx, y: geometry.y + dy });
       });
       publishDocument(nextDocument);
     } else {
+      setAlignmentGuides([]);
       const targetEl = getElementById(documentRef.current, interaction.elementId);
       if (targetEl && targetEl.type === TEXT_TYPE) {
         const originalFontSize = typeof interaction.originalProperties?.fontSize === 'number'
@@ -588,13 +604,14 @@ export function DisplayEditor({
         publishDocument(updateElementGeometry(documentRef.current, interaction.elementId, newGeometry));
       }
     }
-  }, [publishDocument]);
+  }, [publishDocument, surfaceZoom]);
 
   const handlePointerEnd = useCallback(() => {
     if (pendingTransactionRef.current) {
       pendingTransactionRef.current = null;
       commitDocument(documentRef.current);
     }
+    setAlignmentGuides([]);
     dispatch({ type: 'END_INTERACTION' });
   }, [commitDocument, dispatch]);
 
@@ -648,41 +665,6 @@ export function DisplayEditor({
     const elements = [...current];
     [elements[index], elements[targetIndex]] = [elements[targetIndex], elements[index]];
     commitDocument({ ...documentRef.current, elements });
-  }, [commitDocument]);
-
-  const alignSelected = useCallback((alignment: 'left' | 'center-horizontal' | 'right' | 'top' | 'center-vertical' | 'bottom') => {
-    const selectedIds = [...new Set(stateRef.current.selectedElementIds)];
-    if (selectedIds.length < 2) {
-      return;
-    }
-    const elements = selectedIds
-      .map((id) => getElementById(documentRef.current, id))
-      .filter((element): element is DisplayElement => Boolean(element));
-    if (elements.length !== selectedIds.length) {
-      return;
-    }
-    const left = Math.min(...elements.map((element) => element.x));
-    const right = Math.max(...elements.map((element) => element.x + element.width));
-    const top = Math.min(...elements.map((element) => element.y));
-    const bottom = Math.max(...elements.map((element) => element.y + element.height));
-    let nextDocument = documentRef.current;
-    selectedIds.forEach((id) => {
-      const element = getElementById(nextDocument, id);
-      if (!element) {
-        return;
-      }
-      const geometry: Partial<ElementGeometry> = {};
-      if (alignment === 'left') geometry.x = left;
-      if (alignment === 'center-horizontal') geometry.x = (left + right - element.width) / 2;
-      if (alignment === 'right') geometry.x = right - element.width;
-      if (alignment === 'top') geometry.y = top;
-      if (alignment === 'center-vertical') geometry.y = (top + bottom - element.height) / 2;
-      if (alignment === 'bottom') geometry.y = bottom - element.height;
-      nextDocument = updateElementGeometry(nextDocument, id, geometry);
-    });
-    commitDocument(nextDocument);
-    setAlignmentMenuOpen(false);
-    setAlignmentMenuPosition(null);
   }, [commitDocument]);
 
   const handleImageFile = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1835,36 +1817,6 @@ export function DisplayEditor({
                 <button type="button" title="Trazer tudo para frente" aria-label="Trazer tudo para frente" className={styles.iconButton} data-testid="display-bring-all-front" disabled={state.selectedElementId === null} onClick={() => reorderSelected('front', true)}><BringAllFrontIcon /></button>
                 <button type="button" title="Enviar tudo para trás" aria-label="Enviar tudo para trás" className={styles.iconButton} data-testid="display-send-all-back" disabled={state.selectedElementId === null} onClick={() => reorderSelected('back', true)}><SendAllBackIcon /></button>
               </div>
-              <span className={styles.toolbarDivider} aria-hidden="true" />
-              <div className={styles.shapeControl}>
-                <button
-                  type="button"
-                  title="Alinhar objetos selecionados"
-                  aria-label="Alinhar objetos selecionados"
-                  aria-haspopup="menu"
-                  aria-expanded={alignmentMenuOpen}
-                  className={styles.shapeMenuButton}
-                  data-testid="display-align-menu-toggle"
-                  disabled={state.selectedElementIds.length < 2}
-                  onClick={(event) => {
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    setAlignmentMenuPosition({ left: rect.left, top: rect.bottom + 5 });
-                    setAlignmentMenuOpen((open) => !open);
-                  }}
-                >
-                  <AlignIcon />
-                </button>
-                {alignmentMenuOpen && alignmentMenuPosition && createPortal(
-                  <div className={styles.shapeMenu} style={alignmentMenuPosition} role="menu" aria-label="Alinhamento">
-                    <AlignmentMenuItem label="Alinhar à esquerda" testId="left" onClick={() => alignSelected('left')} />
-                    <AlignmentMenuItem label="Centralizar horizontalmente" testId="center-horizontal" onClick={() => alignSelected('center-horizontal')} />
-                    <AlignmentMenuItem label="Alinhar à direita" testId="right" onClick={() => alignSelected('right')} />
-                    <AlignmentMenuItem label="Alinhar ao topo" testId="top" onClick={() => alignSelected('top')} />
-                    <AlignmentMenuItem label="Centralizar verticalmente" testId="center-vertical" onClick={() => alignSelected('center-vertical')} />
-                    <AlignmentMenuItem label="Alinhar à base" testId="bottom" onClick={() => alignSelected('bottom')} />
-                  </div>, document.querySelector('[data-testid="pims-vision-home"]') ?? document.body
-                )}
-              </div>
             </div>
           )}
           <div className={styles.transferControls} data-testid="display-transfer-controls">
@@ -1923,6 +1875,7 @@ export function DisplayEditor({
             onStartResize={handleStartResize}
             onPointerMove={handlePointerMove}
             onPointerEnd={handlePointerEnd}
+            alignmentGuides={alignmentGuides}
             loadValue={loadValue}
             loadPiPointDatabaseLimits={loadPiPointDatabaseLimits}
             loadValues={loadValues}
@@ -3088,14 +3041,6 @@ function ValueIcon() {
 
 function ShapeMenuItem({ shape, label, onClick }: { shape: GeometricShape; label: string; onClick: (shape: GeometricShape) => void }) {
   return <button type="button" role="menuitem" data-testid={`display-insert-shape-${shape}`} onClick={() => onClick(shape)}><ShapeIcon shape={shape} /><span>{label}</span></button>;
-}
-
-function AlignmentMenuItem({ label, testId, onClick }: { label: string; testId: string; onClick: () => void }) {
-  return <button type="button" role="menuitem" data-testid={`display-align-${testId}`} onClick={onClick}><AlignIcon /><span>{label}</span></button>;
-}
-
-function AlignIcon() {
-  return <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M5 4v16M8 7h11M8 12h8M8 17h11" /></svg>;
 }
 
 function ShapeIcon({ shape }: { shape: GeometricShape }) {
