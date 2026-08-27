@@ -2117,16 +2117,10 @@ function getDropPoint(
   svg: SVGSVGElement,
   clientX: number,
   clientY: number,
-  document: DisplayDocument,
+  _document: DisplayDocument,
 ): Point | undefined {
   if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
     return undefined;
-  }
-  const bounds = svg.getBoundingClientRect();
-  if (bounds.width > 0 && bounds.height > 0) {
-    if (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) {
-      return undefined;
-    }
   }
   return svgPointFromEvent(svg, clientX, clientY);
 }
@@ -2155,12 +2149,12 @@ function getSvgViewport(svg: SVGSVGElement) {
 function positionElementAt<T extends ElementGeometry>(
   element: T,
   point: Point,
-  document: DisplayDocument,
+  _document: DisplayDocument,
 ): T {
   return {
     ...element,
-    x: Math.max(0, Math.min(document.surface.width - element.width, point.x - element.width / 2)),
-    y: Math.max(0, Math.min(document.surface.height - element.height, point.y - element.height / 2)),
+    x: Math.round(point.x - element.width / 2),
+    y: Math.round(point.y - element.height / 2),
   };
 }
 
@@ -2907,8 +2901,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border-top: 1px solid var(--border-subtle);
 
     & > svg {
-      width: 100%;
-      height: 100%;
+      min-width: 100%;
+      min-height: 100%;
       max-width: none;
       max-height: none;
       margin: auto;
