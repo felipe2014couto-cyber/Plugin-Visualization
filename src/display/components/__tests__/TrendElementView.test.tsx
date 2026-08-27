@@ -545,6 +545,41 @@ describe('TrendElementView', () => {
       expect(lineDigital.parentElement).toHaveAttribute('opacity', '1');
       expect(lineNumeric.parentElement).toHaveAttribute('opacity', '0.2');
     });
+
+    it('oculta a legenda automaticamente quando a largura do elemento é inferior a 320px', () => {
+      const compactTrend = {
+        ...element,
+        id: 'compact-trend',
+        width: 300,
+        height: 200,
+      };
+      render(
+        <svg>
+          <TrendElementView
+            element={compactTrend}
+            runtimeState={{
+              status: 'success',
+              data: { pointName: 'SINUSOID', points: [{ time: 1000, value: 50 }] },
+            }}
+          />
+        </svg>,
+      );
+
+      expect(screen.queryByTestId('trend-title-compact-trend')).toBeNull();
+      expect(screen.queryByTestId('trend-legend-resizer-compact-trend')).toBeNull();
+    });
+
+    it('adapta os intervalos da escala vertical para menos valores quando a altura é reduzida', () => {
+      const shortTrend = {
+        ...element,
+        id: 'short-trend',
+        width: 480,
+        height: 120,
+      };
+      const chart = buildTrendChart(shortTrend, [{ time: 1000, value: 0 }, { time: 2000, value: 80 }]);
+      // Com altura reduzida (< 140px), o número de ticks gerados deve ser reduzido para 4 intervalos (5 valores)
+      expect(chart.yTicks.length).toBe(5);
+    });
   });
 });
 
