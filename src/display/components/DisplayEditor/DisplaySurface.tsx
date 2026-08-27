@@ -808,7 +808,16 @@ export function DisplaySurface({
           return;
         }
         const chart = buildTrendChartForSeries(trendElement, seriesPoints, trendTimeRange);
-        const time = clampTrendCursorTime(points, trendTimeForX(chart, svgPointFromEvent(svg, e.clientX, e.clientY).x));
+        const pointerPoint = svgPointFromEvent(svg, e.clientX, e.clientY);
+        // Match PI Vision: dragging a cursor beyond the left edge removes it.
+        // Keep a small tolerance so the cursor can still be positioned exactly
+        // on the first sample without disappearing unexpectedly.
+        if (pointerPoint.x < chart.plotX - 8) {
+          tryReleasePointerCapture(svg, e.pointerId);
+          removeTrendCursor(cursorDrag.cursorId);
+          return;
+        }
+        const time = clampTrendCursorTime(points, trendTimeForX(chart, pointerPoint.x));
         if (time === undefined) {
           return;
         }
@@ -834,7 +843,7 @@ export function DisplaySurface({
       }
       onPointerMove(svgPointFromEvent(svg, e.clientX, e.clientY));
     },
-    [allElements, allTrendRuntimeStates, cursorDrag, cursorsByTrend, editable, onPointerMove, setSelectionBox, trendTimeRange],
+    [allElements, allTrendRuntimeStates, cursorDrag, cursorsByTrend, editable, onPointerMove, removeTrendCursor, setSelectionBox, trendTimeRange],
   );
 
   const handleSvgPointerEnd = useCallback(

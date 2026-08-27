@@ -147,6 +147,21 @@ describe('DisplayEditor - cursores de Trend', () => {
     expect(loadTrend).toHaveBeenCalledTimes(1);
   });
 
+  it('remove o cursor ao arrastá-lo além do limite esquerdo do plot', async () => {
+    render(<Harness document={makeDocument()} loadTrend={createLoader()} />);
+    await waitFor(() => expect(screen.getByTestId('trend-line-trend-a')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('display-mode-view'));
+    fireEvent.pointerDown(screen.getByTestId('trend-plot-trend-a'), { clientX: 300, clientY: 180, pointerId: 21 });
+    fireEvent.pointerUp(getSurface(), { clientX: 300, clientY: 180, pointerId: 21 });
+    const cursor = screen.getByTestId('trend-cursor-hit-trend-a-cursor-1');
+
+    fireEvent.pointerDown(cursor, { clientX: 300, clientY: 180, pointerId: 22 });
+    fireEvent.pointerMove(getSurface(), { clientX: 0, clientY: 180, pointerId: 22 });
+
+    expect(screen.queryByTestId('trend-cursor-trend-a-cursor-1')).toBeNull();
+  });
+
   it('sincroniza cursores entre Trends e os limpa ao entrar em modo de edição', async () => {
     const loadTrend = createLoader();
     render(<Harness document={makeDocument(true)} loadTrend={loadTrend} />);
