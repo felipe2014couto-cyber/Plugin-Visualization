@@ -36,6 +36,9 @@ const MAX_NAMED_STATE_LABELS = 8;
 const POPUP_AXIS_FONT_SIZE = 15;
 const POPUP_LEGEND_LINE_HEIGHT = 19;
 const POPUP_LEGEND_ITEM_HEIGHT = 46;
+const POPUP_CURSOR_READING_FONT_SIZE = 13;
+const POPUP_CURSOR_READING_LINE_HEIGHT = 16;
+const POPUP_CURSOR_READING_BLOCK_HEIGHT = 34;
 const EMPTY_TREND_CURSORS: readonly TrendCursor[] = [];
 type PopupScaleMode = TrendScaleMode;
 type PopupCustomScales = Record<string, { min: string; max: string }>;
@@ -709,7 +712,7 @@ function PopupChart({
         const labelAnchor = x > plot.x + plot.width * 0.72 ? 'end' : 'start';
         const labelX = x + (labelAnchor === 'end' ? -6 : 6);
         const labelWidth = 158;
-        const labelHeight = 21 + readings.length * 28;
+        const labelHeight = 24 + readings.length * POPUP_CURSOR_READING_BLOCK_HEIGHT;
         const labelBoxX = labelAnchor === 'end' ? labelX - labelWidth : labelX - 4;
         return (
           <g key={cursor.id} data-testid={`trend-popup-cursor-${cursor.id}`}>
@@ -739,7 +742,7 @@ function PopupChart({
                 onRemoveCursor(cursor.id);
               } : undefined}
             />
-            <text x={labelX} y={plot.y + 13} textAnchor={labelAnchor} fill="var(--trend-cursor, #ffffff)" fontSize={10} fontWeight={600} pointerEvents="none" data-testid={`trend-popup-cursor-label-${cursor.id}`}>
+            <text x={labelX} y={plot.y + 14} textAnchor={labelAnchor} fill="var(--trend-cursor, #ffffff)" fontSize={11} fontWeight={600} pointerEvents="none" data-testid={`trend-popup-cursor-label-${cursor.id}`}>
               {formatCursorDate(cursor.time)}
             </text>
             {readings.map((reading, index) => (
@@ -747,13 +750,13 @@ function PopupChart({
                 <circle cx={x} cy={reading.y} r={4} fill={reading.color} stroke="var(--canvas-bg)" strokeWidth={2} />
                 <text
                   x={labelX}
-                  y={plot.y + 27 + index * 28}
+                  y={plot.y + 30 + index * POPUP_CURSOR_READING_BLOCK_HEIGHT}
                   textAnchor={labelAnchor}
                   fill={reading.color}
-                  fontSize={11}
+                  fontSize={POPUP_CURSOR_READING_FONT_SIZE}
                 >
                   <tspan x={labelX}>{reading.name}</tspan>
-                  <tspan x={labelX} dy={13}>{reading.label}</tspan>
+                  <tspan x={labelX} dy={POPUP_CURSOR_READING_LINE_HEIGHT}>{reading.label}</tspan>
                 </text>
               </g>
             ))}
