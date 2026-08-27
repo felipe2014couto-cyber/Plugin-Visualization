@@ -741,6 +741,7 @@ export function App() {
       <div className={styles.workspace}>
         <aside
           className={isAssetsPanelOpen ? styles.assetsPanel : styles.assetsPanelCollapsed}
+          style={{ display: kioskMode && editorMode === 'view' ? 'none' : undefined }}
           data-testid="pims-vision-assets-panel"
           aria-label="Data, Library e Calculation"
         >
