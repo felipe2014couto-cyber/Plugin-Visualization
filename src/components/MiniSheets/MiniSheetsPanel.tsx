@@ -1504,6 +1504,13 @@ export function MiniSheetsPanel({
 
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // The sheet container handles its own shortcuts. Since this listener is
+      // registered on window, ignoring events originating inside the sheet
+      // prevents Ctrl+Z/Ctrl+Y from being executed twice (once by the panel
+      // and once by this global fallback listener).
+      if (e.target instanceof Node && containerRef.current?.contains(e.target)) {
+        return;
+      }
       const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (targetTag === 'input' || targetTag === 'textarea' || targetTag === 'select') {
         return;
