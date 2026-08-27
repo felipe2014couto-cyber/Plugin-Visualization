@@ -305,7 +305,7 @@ describe('TrendElementView', () => {
   it('mantém nome completo quando a legenda tem largura suficiente e trunca com title quando estreita', () => {
     const longName = 'LFS_RB2_MOTOR_PAYOFF_VIB_LA';
     const longNameBinding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: longName };
-    const narrowTrend = createTrend({ binding: longNameBinding, id: 'trend-narrow', x: 0, y: 0, width: 400, height: 200 });
+    const narrowTrend = createTrend({ binding: longNameBinding, id: 'trend-narrow', x: 0, y: 0, width: 550, height: 200 });
     const wideTrend = {
       ...narrowTrend,
       id: 'trend-wide',
@@ -546,12 +546,12 @@ describe('TrendElementView', () => {
       expect(lineNumeric.parentElement).toHaveAttribute('opacity', '0.2');
     });
 
-    it('oculta a legenda automaticamente quando a largura do elemento é inferior a 320px', () => {
+    it('oculta a legenda automaticamente quando a largura do elemento é inferior a 500px (ex: 480px)', () => {
       const compactTrend = {
         ...element,
         id: 'compact-trend',
-        width: 300,
-        height: 200,
+        width: 480,
+        height: 250,
       };
       render(
         <svg>

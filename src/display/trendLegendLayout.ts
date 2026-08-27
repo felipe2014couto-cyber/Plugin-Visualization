@@ -2,6 +2,7 @@ export const MIN_TREND_LEGEND_WIDTH = 100;
 export const MIN_TREND_PLOT_WIDTH = 120;
 export const DEFAULT_TREND_LEGEND_WIDTH = 180;
 export const DEFAULT_POPUP_LEGEND_WIDTH = 320;
+export const AUTO_HIDE_LEGEND_WIDTH_THRESHOLD = 500;
 
 /**
  * Calculates the effective clamped legend width given available container width,

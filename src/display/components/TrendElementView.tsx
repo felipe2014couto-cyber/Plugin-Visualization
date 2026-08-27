@@ -5,6 +5,7 @@ import type { TrendRuntimeState } from '../runtime/trendRuntime';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
 import type { DisplayTimeRange } from '../../time/timeRange';
 import {
+  AUTO_HIDE_LEGEND_WIDTH_THRESHOLD,
   getEffectiveTrendLegendWidth,
   truncateLegendLabel,
   getTrendSeriesOpacity,
@@ -24,13 +25,13 @@ export interface TrendElementViewProps {
   onPlotPointerDown?: (
     event: React.PointerEvent<SVGRectElement>,
     elementId: string,
-    chart: TrendChartModel,
+    chart: any,
   ) => void;
   onCursorPointerDown?: (
     event: React.PointerEvent<SVGLineElement>,
     elementId: string,
     cursor: TrendCursor,
-    chart: TrendChartModel,
+    chart: any,
   ) => void;
   onCursorDoubleClick?: (
     event: React.MouseEvent<SVGLineElement>,
@@ -38,6 +39,8 @@ export interface TrendElementViewProps {
     cursor: TrendCursor,
   ) => void;
   onLegendWidthChange?: (elementId: string, legendWidth: number) => void;
+  selectedSeriesKeys?: ReadonlySet<string>;
+  onSeriesSelectionChange?: (selectedKeys: ReadonlySet<string>) => void;
   timeRange?: DisplayTimeRange;
   onDoubleClick?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
   onContextMenu?: (event: React.MouseEvent<SVGGElement>, elementId: string) => void;
@@ -101,7 +104,7 @@ export function TrendElementView({
     setSelectedSeriesKeys((current) => updateTrendSeriesSelection(current, key, ctrlPressed));
   };
 
-  const isLegendVisible = !visual.hideLegend && element.width >= 320;
+  const isLegendVisible = !visual.hideLegend && element.width >= AUTO_HIDE_LEGEND_WIDTH_THRESHOLD;
   const effectiveLegendWidth = isLegendVisible
     ? getEffectiveTrendLegendWidth(
         element.width,
@@ -263,7 +266,7 @@ function getTrendContent(
       : undefined;
     return data?.states && data.states.length > 0 ? [{ series, states: data.states }] : [];
   });
-  const isLegendVisible = !visual.hideLegend && element.width >= 320;
+  const isLegendVisible = !visual.hideLegend && element.width >= AUTO_HIDE_LEGEND_WIDTH_THRESHOLD;
   const title = isLegendVisible ? (
     <g data-testid={`trend-title-${element.id}`}>
       {orderedSeriesStates.map(({ series, runtimeState }, index) => {
@@ -932,7 +935,7 @@ export function buildTrendChartForSeries(
   explicitLegendWidth?: number,
 ): TrendChartModel {
   const visual = getTrendVisualOptions(element);
-  const isLegendVisible = !visual.hideLegend && element.width >= 320;
+  const isLegendVisible = !visual.hideLegend && element.width >= AUTO_HIDE_LEGEND_WIDTH_THRESHOLD;
   const legendWidth = explicitLegendWidth ?? (isLegendVisible
     ? getEffectiveTrendLegendWidth(element.width, visual.legendWidth)
     : 16);
