@@ -93,18 +93,20 @@ export async function savePimsVisionDashboard(
   folderUid = '',
 ): Promise<SaveDashboardResponse> {
   const title = document.name.trim() || 'Visualization';
-  const firstSave = await getBackendSrv().post<SaveDashboardResponse>('/api/dashboards/db', {
-    dashboard: createDashboardModel(document, title, dashboardUid),
-    folderUid,
-    overwrite: Boolean(dashboardUid),
-  });
-
-  const uid = firstSave.uid;
+  // Gerar o UID no cliente permite incluir o link correto no painel já na
+  // primeira gravação. Antes, toda ação de salvar fazia dois POSTs completos:
+  // um para o Grafana gerar o UID e outro apenas para corrigir esse link.
+  const uid = dashboardUid ?? createDashboardUid();
   return getBackendSrv().post<SaveDashboardResponse>('/api/dashboards/db', {
     dashboard: createDashboardModel(document, title, uid),
     folderUid,
-    overwrite: true,
+    overwrite: Boolean(dashboardUid),
   });
+}
+
+function createDashboardUid(): string {
+  const randomPart = Math.random().toString(36).slice(2, 14);
+  return `pims-${Date.now().toString(36)}-${randomPart}`;
 }
 
 function createDashboardModel(document: DisplayDocument, title: string, uid?: string) {

@@ -277,7 +277,7 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
               onSeriesContextMenu={onSeriesContextMenu}
             />
             </svg>
-            {loading && <span className={styles.loading} data-testid="trend-popup-loading">Carregando tendência...</span>}
+            {loading && !seriesStates.some((s) => s.runtimeState.status === 'success') && <span className={styles.loading} data-testid="trend-popup-loading">Carregando tendência...</span>}
           </div>
           {pointInfo && <PiPointInfoPanel {...pointInfo} />}
         </div>

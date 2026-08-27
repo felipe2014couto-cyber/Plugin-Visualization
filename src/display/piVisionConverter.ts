@@ -124,6 +124,7 @@ export interface PiVisionSymbolConfiguration {
   // Aparencia
   ForeColor?: string;
   BackColor?: string;
+  Background?: string;
   BackgroundColor?: string;
   Fill?: string;
   Stroke?: string;

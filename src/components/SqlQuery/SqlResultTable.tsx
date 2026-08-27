@@ -1,10 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import { css, cx } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, Icon } from '@grafana/ui';
-import { SqlChartRender } from './SqlChartRender';
 import type { OracleQueryResponse } from './oracleApi';
 import type { SqlTableProperties } from '../../display/createSqlTable';
+
+// Recharts representa a maior dependencia do bundle. Ele so e necessario
+// quando uma consulta SQL e exibida como grafico, portanto fica em um chunk
+// separado e nao penaliza a abertura normal dos displays PI.
+const SqlChartRender = React.lazy(async () => {
+  const module = await import('./SqlChartRender');
+  return { default: module.SqlChartRender };
+});
 
 interface SqlResultTableProps {
   result: OracleQueryResponse | null;
@@ -197,13 +204,15 @@ export function SqlResultTable({ result, isLoading, properties }: SqlResultTable
           )}
         </div>
       ) : (
-        <SqlChartRender 
-          data={result.rows}
-          xAxis={xAxis}
-          yAxes={yAxes}
-          type={viewMode}
-          properties={properties}
-        />
+        <Suspense fallback={<div>Carregando gráfico...</div>}>
+          <SqlChartRender
+            data={result.rows}
+            xAxis={xAxis}
+            yAxes={yAxes}
+            type={viewMode}
+            properties={properties}
+          />
+        </Suspense>
       )}
     </div>
   );

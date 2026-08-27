@@ -393,7 +393,7 @@ export function DisplaySurface({
       if (inputSeries.some((result) => !result || result.status !== 'success')) {
         return [element, series, { status: 'error', error: new Error('Não foi possível carregar o histórico do cálculo') } as TrendRuntimeState] as const;
       }
-      const points = calculateHistoricalPoints(calculation, inputSeries.map((result) => result.status === 'success' ? result.series : undefined));
+      const points = calculateHistoricalPoints(calculation, inputSeries.map((result) => result.status === 'success' ? result.series : undefined), trendTimeRange);
       return [element, series, { status: 'success', data: { pointName: calculation.name, points } } as TrendRuntimeState] as const;
     })).then((results) => {
       if (!active) {
@@ -1094,7 +1094,7 @@ export function DisplaySurface({
             const runtimeState = calculation
               ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
               : runtimeStates.get(element.id);
-            const runtimeVal = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
+            const runtimeVal = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
             const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
             const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
             const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
@@ -1178,7 +1178,7 @@ export function DisplaySurface({
             const runtimeState = calculation
               ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
               : runtimeStates.get(element.id);
-            const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
+            const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
             const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
             return (
               <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}>
@@ -1315,8 +1315,12 @@ function getTrendSeriesStates(
 function calculateHistoricalPoints(
   calculation: CalculationDefinition,
   inputSeries: Array<PiTrendSeries | undefined>,
+  timeRange?: DisplayTimeRange,
 ): PiTrendSeries['points'] {
-  const times = [...new Set(inputSeries.flatMap((series) => series?.points.map((point) => point.time) ?? []))].sort((left, right) => left - right);
+  let times = [...new Set(inputSeries.flatMap((series) => series?.points.map((point) => point.time) ?? []))].sort((left, right) => left - right);
+  if (times.length === 0 && calculation.inputs.length === 0 && timeRange) {
+    times = [timeRange.from, timeRange.to];
+  }
   return times.flatMap((time) => {
     const values = new Map<string, unknown>();
     for (const [index, input] of calculation.inputs.entries()) {
@@ -1375,7 +1379,7 @@ function getLibrarySymbolSource(element: LibrarySymbolElement): string {
 
 function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRuntimeState, parentElementId?: string) {
   const baseFill = getElementFill(element);
-  const value = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
+  const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
   const fill = getMultistateColor(value, element.properties.multistate, baseFill);
   const common = {
     key: element.id,

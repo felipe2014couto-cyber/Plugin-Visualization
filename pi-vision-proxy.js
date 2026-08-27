@@ -23,7 +23,7 @@ const DEFAULT_PI_VISION_BASE_URL = 'http://pimsweb/PIVision';
 // Origens permitidas (Grafana local)
 const ALLOWED_ORIGINS = [
   'http://localhost:3000',
-  'http://127.0.0.1:3000',
+  'http://0.0.0.0:3000',
   'http://10.247.140.156:3000',
 ];
 
