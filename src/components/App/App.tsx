@@ -164,6 +164,7 @@ export function App() {
   const [programmingPiPoints, setProgrammingPiPoints] = useState<PiPointSearchResult[]>([]);
   const [programmingPiValues, setProgrammingPiValues] = useState<Record<string, PiPointValue>>({});
   const [isProgrammingPiSearchOpen, setIsProgrammingPiSearchOpen] = useState(true);
+  const [isProgrammingPiFiltersOpen, setIsProgrammingPiFiltersOpen] = useState(false);
   const [editingProgrammingElementId, setEditingProgrammingElementId] = useState<string | null>(null);
   const kioskMode = isGrafanaKioskMode();
 
@@ -925,21 +926,36 @@ export function App() {
                   onAddToDisplay={editingProgrammingElementId ? undefined : handleAddProgrammingToDisplay}
                   beforeEditor={activeModule === 'programming' ? (
                     <div className={styles.programmingPiSearch}>
-                      <button
-                        type="button"
-                        className={styles.sectionCollapseButton}
-                        aria-expanded={isProgrammingPiSearchOpen}
-                        aria-controls="programming-pi-system-search"
-                        data-testid="programming-pi-system-toggle"
-                        onClick={() => setIsProgrammingPiSearchOpen((open) => !open)}
-                      >
-                        <span className={styles.assetsSectionLabel}>PI System</span>
-                        <ChevronIcon expanded={isProgrammingPiSearchOpen} />
-                      </button>
+                      <div className={styles.assetsSectionHeader}>
+                        <button
+                          type="button"
+                          className={styles.sectionCollapseButton}
+                          aria-expanded={isProgrammingPiSearchOpen}
+                          aria-controls="programming-pi-system-search"
+                          data-testid="programming-pi-system-toggle"
+                          onClick={() => setIsProgrammingPiSearchOpen((open) => !open)}
+                        >
+                          <span className={styles.assetsSectionLabel}>PI System</span>
+                          <ChevronIcon expanded={isProgrammingPiSearchOpen} />
+                        </button>
+                        <button
+                          type="button"
+                          className={isProgrammingPiFiltersOpen ? styles.piFilterButtonActive : styles.piFilterButton}
+                          data-testid="programming-pi-point-filter-toggle"
+                          aria-label="Filtros da pesquisa de PI Points"
+                          aria-expanded={isProgrammingPiFiltersOpen}
+                          title="Filtros"
+                          onClick={() => setIsProgrammingPiFiltersOpen((open) => !open)}
+                        >
+                          <FilterIcon />
+                        </button>
+                      </div>
                       {isProgrammingPiSearchOpen && (
                         <div id="programming-pi-system-search" className={styles.piSearchContent}>
                           <PiPointSearch
                             enabled={hasPiConnection}
+                            filtersOpen={isProgrammingPiFiltersOpen}
+                            onCloseFilters={() => setIsProgrammingPiFiltersOpen(false)}
                             onSelect={(point) => {
                               const next = programmingPiPoints.some((candidate) => getProgrammingPiPointKey(candidate) === getProgrammingPiPointKey(point))
                                 ? programmingPiPoints
