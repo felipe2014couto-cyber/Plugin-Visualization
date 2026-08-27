@@ -61,6 +61,16 @@ const TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.82))';
 const LINE_COLOR = '#6e9fff';
 const AXIS_FONT_SIZE = 11;
 
+// Time labels need enough room to remain legible and avoid overlapping the
+// plot/legend when a Trend is rendered at a compact size. Keep the grid and
+// data visible, but hide only the textual time annotations below this size.
+const MIN_TREND_TIME_LABEL_WIDTH = 220;
+const MIN_TREND_TIME_LABEL_HEIGHT = 90;
+
+function shouldShowTrendTimeLabels(width: number, height: number): boolean {
+  return width >= MIN_TREND_TIME_LABEL_WIDTH && height >= MIN_TREND_TIME_LABEL_HEIGHT;
+}
+
 export function TrendElementView({
   element,
   runtimeState,
@@ -399,6 +409,7 @@ function getTrendContent(
       return { value, y: scaleChart.plotY + ((safeDomain.domainMax - value) / (safeDomain.domainMax - safeDomain.domainMin)) * scaleChart.plotHeight };
     }),
   };
+  const showTimeLabels = shouldShowTrendTimeLabels(element.width, element.height);
   const seriesCharts = new Map(drawableSeries.map(({ series, data }) => {
     const baseChart = individualScale ? buildTrendChartForSeries(element, [data.points], timeRange, effectiveLegendWidth) : chart;
     if (visual.scaleMode !== 'configurable') {
@@ -497,18 +508,18 @@ function getTrendContent(
         return (
           <g key={`x-${tick.time}`}>
             {showVerticalGrid && <line x1={tick.x} y1={chart.plotY} x2={tick.x} y2={chart.plotY + chart.plotHeight} stroke={gridColor} strokeWidth={1} pointerEvents="none" />}
-            <text
-              x={xPos}
-              y={chart.plotY + chart.plotHeight + 14}
-              textAnchor={anchor}
-              fill={foreground}
-              fontSize={AXIS_FONT_SIZE}
-              pointerEvents="none"
-            >
-              {isMiddle && chart.domainEnd > chart.domainStart
-                ? formatDuration(chart.domainEnd - chart.domainStart)
-                : formatAxisTime(tick.time, chart.domainEnd - chart.domainStart)}
-            </text>
+            {showTimeLabels && <text
+                x={xPos}
+                y={chart.plotY + chart.plotHeight + 14}
+                textAnchor={anchor}
+                fill={foreground}
+                fontSize={AXIS_FONT_SIZE}
+                pointerEvents="none"
+              >
+                {isMiddle && chart.domainEnd > chart.domainStart
+                  ? formatDuration(chart.domainEnd - chart.domainStart)
+                  : formatAxisTime(tick.time, chart.domainEnd - chart.domainStart)}
+              </text>}
           </g>
         );
       })}
@@ -703,6 +714,7 @@ function MixedTrend({
   const numericIntervals = plotHeight < 50 ? 2 : (plotHeight < 110 ? 4 : (plotHeight < 160 ? 5 : (individualScale ? 2 : 5)));
   const numericTicks = Array.from({ length: numericIntervals + 1 }, (_, index) => index).map((index) => domainMax - ((domainMax - domainMin) * index) / numericIntervals);
   const xTicks = [0, 1, 2].map((index) => domainStart + ((domainEnd - domainStart) * index) / 2);
+  const showTimeLabels = shouldShowTrendTimeLabels(element.width, element.height);
 
   return (
     <>
@@ -736,6 +748,9 @@ function MixedTrend({
         const isMiddle = !isStart && !isEnd;
         const anchor = isStart ? 'start' : isEnd ? 'end' : 'middle';
         const xPos = isStart ? plotX + 2 : isEnd ? plotX + plotWidth - 2 : xFor(time);
+        if (!showTimeLabels) {
+          return null;
+        }
         return (
           <text
             key={time}
@@ -843,6 +858,7 @@ function DigitalTrend({
   const xFor = (time: number) => plotX + ((Math.max(domainStart, Math.min(domainEnd, time)) - domainStart)
     / Math.max(1, domainEnd - domainStart)) * plotWidth;
   const xTicks = [0, 1, 2].map((index) => domainStart + ((domainEnd - domainStart) * index) / 2);
+  const showTimeLabels = shouldShowTrendTimeLabels(element.width, element.height);
   const chart: TrendChartModel = {
     plotX,
     plotY,
@@ -886,6 +902,9 @@ function DigitalTrend({
         const isMiddle = !isStart && !isEnd;
         const anchor = isStart ? 'start' : isEnd ? 'end' : 'middle';
         const xPos = isStart ? plotX + 2 : isEnd ? plotX + plotWidth - 2 : xFor(time);
+        if (!showTimeLabels) {
+          return null;
+        }
         return (
           <text
             key={time}
