@@ -6,6 +6,7 @@ import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCurso
 import type { DisplayTimeRange } from '../../time/timeRange';
 import {
   AUTO_HIDE_LEGEND_WIDTH_THRESHOLD,
+  DEFAULT_TREND_LEGEND_WIDTH,
   getEffectiveTrendLegendWidth,
   truncateLegendLabel,
   getTrendSeriesOpacity,
@@ -108,7 +109,11 @@ export function TrendElementView({
   const effectiveLegendWidth = isLegendVisible
     ? getEffectiveTrendLegendWidth(
         element.width,
-        previewLegendWidth ?? visual.legendWidth,
+        // Keep a compact, predictable legend area by default.  Previously the
+        // fallback was 30% of the Trend width, which left a large unused area
+        // beside the plot on wide elements.  A fixed default lets the plot use
+        // the remaining space while preserving room for the legend.
+        previewLegendWidth ?? visual.legendWidth ?? DEFAULT_TREND_LEGEND_WIDTH,
       )
     : 16;
 
