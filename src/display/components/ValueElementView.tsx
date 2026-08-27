@@ -7,7 +7,7 @@ import {
   type ValueVisualOptions,
 } from '../createValue';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
-import { getMultistateColor } from '../multistate';
+import { evaluateMultistate, getMultistateColor } from '../multistate';
 import { resolveThemeForeground } from '../themeColor';
 
 type ValueLoadState =
@@ -61,6 +61,8 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const responsiveFontSize = element.properties._piVisionPreserveFontSize === true
     ? visual.fontSize
     : getResponsiveFontSize(element, visual.fontSize, lines);
+  const blink = evaluateMultistate(runtimeVal, element.properties.multistate)?.rule.blink === true
+    || evaluateMultistate(runtimeVal, element.properties.backgroundMultistate)?.rule.blink === true;
   return (
     <g
       data-testid={`display-element-${element.id}`}
@@ -68,6 +70,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
       data-element-type={element.type}
       style={{ cursor: 'move' }}
     >
+      {blink && <animate attributeName="opacity" values="1;0.2;1" dur="0.8s" repeatCount="indefinite" />}
       <rect
         x={element.x}
         y={element.y}
