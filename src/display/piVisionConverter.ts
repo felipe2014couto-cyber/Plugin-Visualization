@@ -42,6 +42,7 @@ import {
   type TableProperties,
   type TableDataItem,
   defaultTableColumns,
+  type TableColumnConfig,
 } from './createTable';
 import {
   TEXT_TYPE,
@@ -57,6 +58,7 @@ import {
 } from './createRectangle';
 import { IMAGE_TYPE, type ImageProperties } from './createImage';
 import { LIBRARY_SYMBOL_TYPE, type LibrarySymbolProperties } from './createLibrarySymbol';
+import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../library';
 
 // ---------------------------------------------------------------------------
 // Placeholder de datasource
@@ -133,7 +135,8 @@ export interface PiVisionSymbolConfiguration {
   FontSize?: number;
   FontName?: string;
   FormatType?: string;
-  NameType?: string;
+  Columns?: string[];
+  [key: string]: unknown;
   CustomName?: string;
   Decimals?: number;
   // Visibilidade de campos
@@ -488,19 +491,21 @@ function convertSymbol(
 
     case 'table':
     case 'simpletable':
-      return convertTable(symbol, geo, dataSourceUid, existingIds);
+    case 'assettable':
+    case 'eventtable':
+      return convertTable(symbol, geo, dataSourceUid, existingIds, calculationsByName);
 
     case 'statictext':
     case 'label':
     case 'text':
-      return convertText(symbol, geo, existingIds);
-
+      return convertText(symbol, geo, dataSourceUid, existingIds);
     case 'rectangle':
+    case 'circle':
     case 'ellipse':
     case 'line':
-    case 'arc':
-    case 'triangle':
-    case 'pentagon':
+    case 'polygon':
+    case 'polyline':
+    case 'path':
     case 'shape':
       return convertShape(symbol, geo, dataSourceUid, existingIds);
 
@@ -544,7 +549,7 @@ function convertValue(
 
   const color = normalizeColor(cfg.ForeColor ?? cfg.ValueStroke ?? cfg.Stroke) ?? '#131313';
   const backgroundColor = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill) ?? DEFAULT_VALUE_VISUAL_OPTIONS.backgroundColor;
-  const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize) ?? DEFAULT_VALUE_VISUAL_OPTIONS.fontSize;
+  const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize);
   const textAlign = normalizeTextAlign(cfg.TextAlignment);
 
   const properties: ValueProperties = {
@@ -554,7 +559,7 @@ function convertValue(
       ...DEFAULT_VALUE_VISUAL_OPTIONS,
       color,
       backgroundColor,
-      fontSize,
+      fontSize: fontSize ?? DEFAULT_VALUE_VISUAL_OPTIONS.fontSize,
       textAlign,
       showTagName: cfg.ShowLabel ?? cfg.ShowTagName ?? DEFAULT_VALUE_VISUAL_OPTIONS.showTagName,
       showUnit: cfg.ShowUnit ?? cfg.ShowUOM ?? DEFAULT_VALUE_VISUAL_OPTIONS.showUnit,
@@ -564,7 +569,7 @@ function convertValue(
       labelMode: cfg.NameType === 'C' && typeof cfg.CustomName === 'string' ? 'custom' : 'tag',
       customLabel: typeof cfg.CustomName === 'string' ? cfg.CustomName : '',
     },
-    _piVisionPreserveFontSize: true,
+    _piVisionPreserveFontSize: fontSize !== undefined,
     _piVisionSquareBackground: true,
     ...convertMultistateIfPresent(symbol.Multistate),
   };
@@ -593,7 +598,7 @@ function convertTrend(
   // Se nao ha traces, tenta extrair da lista generica de DataSources
   const paths = getDataSourcePaths(symbol);
   const tracePaths = rawTraces
-    .map((t) => t.Path ?? t.DataSource ?? '')
+    .map((t) => t?.Path ?? t?.DataSource ?? '')
     .filter(Boolean);
   const allPaths = tracePaths.length > 0 ? tracePaths : paths;
 
@@ -764,17 +769,44 @@ function convertTable(
   geo: ElementGeometry,
   dataSourceUid: string,
   existingIds: Set<string>,
+  calculationsByName: ReadonlyMap<string, CalculationDefinition>,
 ): DisplayElement | undefined {
   const cfg = symbol.Configuration ?? {};
   const paths = getDataSourcePaths(symbol);
   const dataItems = Array.isArray(cfg.DataItems) ? cfg.DataItems : [];
-  const allPaths = dataItems.map((d) => d.Path ?? d.DataSource ?? '').filter(Boolean);
+  const allPaths = dataItems.map((d) => d?.Path ?? d?.DataSource ?? '').filter(Boolean);
   const sourcePaths = allPaths.length > 0 ? allPaths : paths;
 
   const items: TableDataItem[] = sourcePaths
-    .map((path) => {
+    .map((path): TableDataItem | undefined => {
+      const calculation = resolveCalculationReference(path, calculationsByName);
+      if (calculation) {
+        return {
+          binding: calculation.inputs[0]?.binding ?? {
+            dataSourceUid,
+            serverPath: 'calc',
+            pointName: calculation.name,
+          },
+          path,
+          customName: calculation.name,
+          nameMode: 'custom' as const,
+        };
+      }
+      if (path.trim().toLowerCase().startsWith('calc:')) {
+        const calcName = path.trim().replace(/^calc:/i, '').replace(/\.value$/i, '').trim();
+        return {
+          binding: {
+            dataSourceUid,
+            serverPath: 'calc',
+            pointName: calcName,
+          },
+          path,
+          customName: calcName,
+          nameMode: 'custom' as const,
+        };
+      }
       const binding = parseDataSourcePath(path, dataSourceUid);
-      return binding ? { binding } : undefined;
+      return binding ? { binding, path } : undefined;
     })
     .filter((item): item is TableDataItem => item !== undefined);
 
@@ -784,7 +816,7 @@ function convertTable(
 
   const properties: TableProperties = {
     items,
-    columns: defaultTableColumns(geo.width),
+    columns: convertTableColumns(cfg.Columns, defaultTableColumns(geo.width), geo.width),
     decimals: normalizeDecimals(cfg.Decimals),
     style: 'dark',
   };
@@ -799,6 +831,7 @@ function convertTable(
 function convertText(
   symbol: PiVisionSymbol,
   geo: ElementGeometry,
+  dataSourceUid: string,
   existingIds: Set<string>,
 ): DisplayElement {
   const cfg = symbol.Configuration ?? {};
@@ -807,6 +840,9 @@ function convertText(
   const backgroundColor = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill) ?? DEFAULT_TEXT_PROPERTIES.backgroundColor;
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize) ?? DEFAULT_TEXT_PROPERTIES.fontSize;
   const textAlign = normalizeTextAlign(cfg.TextAlignment) as TextAlign;
+
+  const multistate = convertMultistateIfPresent(symbol.Multistate);
+  const binding = firstMultistateBinding(symbol, dataSourceUid);
 
   const properties: TextProperties = {
     ...DEFAULT_TEXT_PROPERTIES,
@@ -818,6 +854,7 @@ function convertText(
     rotation: typeof cfg.Rotation === 'number' ? cfg.Rotation : 0,
     ...(typeof cfg.LinkURL === 'string' && cfg.LinkURL.trim() ? { linkUrl: cfg.LinkURL.trim() } : {}),
     ...(typeof cfg.NewTab === 'boolean' ? { openInNewTab: cfg.NewTab } : {}),
+    ...(multistate.multistate ? { ...multistate, binding } : {}),
   };
 
   return makeElement(TEXT_TYPE, geo, properties, existingIds);
@@ -878,14 +915,34 @@ function convertGraphic(
     : createPiVisionGraphicDataUrl(fileKey, normalizeColor(cfg.Fill) ?? '#808080');
   const multistate = convertPiVisionThresholdMultistate(cfg.Multistates);
   const binding = firstMultistateBinding(symbol, dataSourceUid);
-  if (multistate && binding) {
+  
+  const searchKey = `${cfg.DirectoryKey ?? ''}/${fileKey}`.toLowerCase();
+  let localSymbolId: string | undefined;
+  let localName: string | undefined;
+
+  if (searchKey.includes('motor')) {
+    localSymbolId = 'pims-vision:motores:01';
+    localName = 'Motor 01';
+  } else if (searchKey.includes('pump') || searchKey.includes('bomba')) {
+    localSymbolId = 'pims-vision:bombas:01';
+    localName = 'Bomba 01';
+  }
+
+  const flipH = cfg.Flip === 'H' || cfg.Flip === 'Horizontal' || cfg.Flip === 'Both' || cfg.FlipH === true;
+  const flipV = cfg.Flip === 'V' || cfg.Flip === 'Vertical' || cfg.Flip === 'Both' || cfg.FlipV === true;
+
+  if (localSymbolId || (multistate && binding)) {
+    const symbolDefinition = localSymbolId ? findIndustrialSymbol(localSymbolId) : undefined;
+    const finalSrc = symbolDefinition ? getIndustrialSymbolAssetUrl(symbolDefinition) : src;
     const properties: LibrarySymbolProperties = {
-      symbolId: `pi-vision:${cfg.DirectoryKey ?? ''}/${fileKey}`,
-      name: fileKey,
-      src,
+      symbolId: localSymbolId ?? `pi-vision:${cfg.DirectoryKey ?? ''}/${fileKey}`,
+      name: localName ?? fileKey,
+      src: finalSrc,
       viewBox: extractSvgViewBox(officialSource) ?? '0 0 100 100',
       color: normalizeColor(cfg.Fill) ?? '#808080',
       rotation: typeof cfg.Rotation === 'number' ? cfg.Rotation : 0,
+      ...(flipH ? { flipHorizontal: true } : {}),
+      ...(flipV ? { flipVertical: true } : {}),
       binding,
       multistate,
       _piVisionDirectoryKey: cfg.DirectoryKey,
@@ -940,32 +997,40 @@ function convertAttachedImage(
   return makeElement(IMAGE_TYPE, geo, properties, existingIds);
 }
 
-function createPiVisionGraphicDataUrl(fileKey: string, color: string): string {
+function createPiVisionGraphicDataUrl(fileKey: string, _color: string): string {
   const key = fileKey.toLowerCase();
   let body: string;
-  if (key.includes('saw blade')) {
-    body = '<path d="M50 3 57 15 70 9 72 23 87 22 82 36 96 42 85 52 96 63 81 68 86 83 71 81 68 96 56 89 49 100 41 87 28 94 27 79 12 80 18 65 3 58 15 48 4 37 20 31 15 17 30 19 34 5 45 14Z" fill="url(#metal)" stroke="#555" stroke-width="3"/><circle cx="50" cy="50" r="19" fill="#8c9298" stroke="#444" stroke-width="4"/><circle cx="50" cy="50" r="8" fill="#34383c"/>';
-  } else if (key.includes('tank')) {
-    body = '<path d="M16 18Q16 4 50 4T84 18V82Q84 96 50 96T16 82Z" fill="url(#metal)" stroke="#5b5b5b" stroke-width="3"/><ellipse cx="50" cy="18" rx="34" ry="14" fill="#d9dde0" stroke="#666" stroke-width="2"/><path d="M27 96v4m46-4v4" stroke="#333" stroke-width="5"/>';
+  if (key.includes('flowcharting 5') || key.includes('terminator') || key.includes('pill') || key.includes('rounded')) {
+    body = '<rect x="2" y="2" width="96" height="96" rx="28" ry="28" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>';
+  } else if (key.includes('flowcharting 4') || key.includes('decision') || key.includes('diamond')) {
+    body = '<polygon points="50,2 98,50 50,98 2,50" fill="#ffffff"/>';
+  } else if (key.includes('flowcharting 6') || key.includes('hexagon')) {
+    body = '<polygon points="22,2 78,2 98,50 78,98 22,98 2,50" fill="#ffffff"/>';
+  } else if (key.includes('flowcharting 1') || key.includes('process') || key.includes('box') || key.includes('rectangle')) {
+    body = '<rect x="2" y="2" width="96" height="96" rx="4" ry="4" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>';
+  } else if (key.includes('flowchart')) {
+    body = '<rect x="2" y="2" width="96" height="96" rx="20" ry="20" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>';
+  } else if (key.includes('saw blade')) {
+    body = '<path d="M50 3 57 15 70 9 72 23 87 22 82 36 96 42 85 52 96 63 81 68 86 83 71 81 68 96 56 89 49 100 41 87 28 94 27 79 12 80 18 65 3 58 15 48 4 37 20 31 15 17 30 19 34 5 45 14Z" fill="#ffffff"/>';
+  } else if (key.includes('tank') || key.includes('vessel')) {
+    body = '<rect x="10" y="10" width="80" height="80" rx="20" ry="20" fill="#ffffff"/>';
   } else if (key.includes('flame')) {
-    body = `<path d="M55 96C18 91 13 57 35 34c-2 18 9 22 14 6 4-13-2-24 8-38 2 20 29 31 27 60-1 17-11 29-29 34Z" fill="${escapeSvgAttribute(color)}" stroke="#333" stroke-width="2"/><path d="M53 88c-15-4-18-18-7-31 0 10 7 9 10 3 7 10 13 23-3 28Z" fill="#ffd43b"/>`;
+    body = '<path d="M55 96C18 91 13 57 35 34c-2 18 9 22 14 6 4-13-2-24 8-38 2 20 29 31 27 60-1 17-11 29-29 34Z" fill="#ffffff"/>';
   } else if (key.includes('opposite arrows')) {
-    body = `<path d="M8 38 38 8v18h54v24H38v18Zm84 24L62 92V74H8V50h54V32Z" fill="${escapeSvgAttribute(color)}"/>`;
+    body = '<path d="M8 38 38 8v18h54v24H38v18Zm84 24L62 92V74H8V50h54V32Z" fill="#ffffff"/>';
   } else if (key.includes('arrow')) {
-    body = `<path d="M15 80c2-38 20-58 52-60V5l28 28-28 28V45C43 47 31 59 28 83Z" fill="${escapeSvgAttribute(color)}" stroke="#333" stroke-width="2"/>`;
-  } else if (key.includes('rectangular pushbutton')) {
-    body = `<rect x="4" y="18" width="92" height="64" rx="8" fill="url(#metal)" stroke="#555" stroke-width="4"/><rect x="14" y="27" width="72" height="42" rx="5" fill="${escapeSvgAttribute(color)}" stroke="#777" stroke-width="3"/><path d="M18 32h64" stroke="#fff" stroke-opacity=".7" stroke-width="4"/>`;
+    body = '<path d="M15 80c2-38 20-58 52-60V5l28 28-28 28V45C43 47 31 59 28 83Z" fill="#ffffff"/>';
+  } else if (key.includes('pushbutton') || key.includes('button')) {
+    body = '<rect x="4" y="10" width="92" height="80" rx="12" ry="12" fill="#ffffff"/>';
+  } else if (key.includes('circle') || key.includes('lamp') || key.includes('led') || key.includes('indicator')) {
+    body = '<circle cx="50" cy="50" r="46" fill="#ffffff"/>';
   } else {
-    const lampColor = key.includes('green') ? '#7fff00' : key.includes('black') ? '#292929' : color;
-    body = `<ellipse cx="50" cy="82" rx="34" ry="12" fill="#555"/><circle cx="50" cy="48" r="39" fill="url(#metal)" stroke="#555" stroke-width="4"/><circle cx="50" cy="48" r="27" fill="${escapeSvgAttribute(lampColor)}" stroke="#333" stroke-width="3"/><ellipse cx="42" cy="38" rx="10" ry="7" fill="#fff" opacity=".5"/>`;
+    body = '<rect x="2" y="2" width="96" height="96" rx="16" ry="16" fill="#ffffff"/>';
   }
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fafafa"/><stop offset=".45" stop-color="#8c9298"/><stop offset=".7" stop-color="#e7e7e7"/><stop offset="1" stop-color="#666"/></linearGradient></defs>${body}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">${body}</svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-function escapeSvgAttribute(value: string): string {
-  return value.replace(/[&"<>]/g, (character) => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' }[character] ?? character));
-}
 
 // ---------------------------------------------------------------------------
 // Simbolo desconhecido → Rectangle com label
@@ -1034,7 +1099,20 @@ function convertPiVisionThresholdMultistate(
     return undefined;
   }
 
+  const isDigital = converted.length <= 4 && converted.every((s, i) => s.upperValue === i);
+
   const rules: MultistateRule[] = converted.map((state, index) => {
+    if (isDigital) {
+      const digitalName = converted.length === 2 ? (state.upperValue === 0 ? 'Off' : 'On') : undefined;
+      return {
+        id: generateId(),
+        operator: 'eq',
+        value: state.upperValue,
+        digitalStateValue: state.upperValue,
+        ...(digitalName ? { digitalStateName: digitalName } : {}),
+        color: state.color,
+      };
+    }
     if (index === converted.length - 1 && index > 0) {
       return {
         id: generateId(),
@@ -1330,7 +1408,7 @@ function firstBinding(
   const paths = getDataSourcePaths(symbol);
   if (paths.length === 0 && Array.isArray(cfg.DataItems) && cfg.DataItems.length > 0) {
     const first = cfg.DataItems[0];
-    return parseDataSourcePath(first.Path ?? first.DataSource ?? '', dataSourceUid);
+    return parseDataSourcePath(first?.Path ?? first?.DataSource ?? '', dataSourceUid);
   }
   return paths.length > 0 ? parseDataSourcePath(paths[0], dataSourceUid) : undefined;
 }
@@ -1464,4 +1542,23 @@ function normalizeGeometricShape(type: string): GeometricShape {
     default:
       return 'rectangle';
   }
+}
+
+function convertTableColumns(piVisionColumns: unknown, defaultCols: TableColumnConfig[], tableWidth: number): TableColumnConfig[] {
+  if (!Array.isArray(piVisionColumns) || piVisionColumns.length === 0) {
+    return defaultCols;
+  }
+  const cols = piVisionColumns.map(c => String(c).toLowerCase());
+  const updated = defaultCols.map(c => {
+    let piName = c.id.toLowerCase();
+    if (piName === 'units') piName = 'engunits';
+    if (piName === 'trend') piName = 'sparkline';
+    const visible = cols.includes(piName) || cols.includes(c.id.toLowerCase()) || (c.id === 'description' && cols.includes('desc'));
+    return { ...c, visible };
+  });
+  const visibleCount = Math.max(1, updated.filter(c => c.visible).length);
+  return updated.map(c => ({
+    ...c,
+    ...(c.visible ? { width: Math.max(60, tableWidth / visibleCount) } : {}),
+  }));
 }

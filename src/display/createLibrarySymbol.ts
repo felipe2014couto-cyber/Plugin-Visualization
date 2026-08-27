@@ -15,6 +15,8 @@ export interface LibrarySymbolProperties extends Record<string, unknown> {
   viewBox: string;
   color: string;
   rotation: number;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
   binding?: PiPointBinding;
   calculationId?: string;
   multistate?: MultistateConfig;
@@ -30,6 +32,8 @@ export interface CreateLibrarySymbolOptions {
   width?: number;
   height?: number;
   color?: string;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
   binding?: PiPointBinding;
   calculationId?: string;
   multistate?: MultistateConfig;
@@ -68,6 +72,8 @@ export function createLibrarySymbol(options: CreateLibrarySymbolOptions): Librar
       viewBox: symbol.viewBox,
       color: normalizeLibrarySymbolColor(options.color),
       rotation: 0,
+      ...(options.flipHorizontal ? { flipHorizontal: true } : {}),
+      ...(options.flipVertical ? { flipVertical: true } : {}),
       ...(options.binding ? { binding: { ...options.binding } } : {}),
       ...(options.calculationId ? { calculationId: options.calculationId } : {}),
       ...(options.multistate ? { multistate: options.multistate } : {}),
@@ -98,6 +104,8 @@ export function updateLibrarySymbolProperties(
         ...patch,
         color: normalizeLibrarySymbolColor(patch.color ?? properties.color),
         rotation: normalizeRotation(patch.rotation ?? properties.rotation),
+        flipHorizontal: typeof patch.flipHorizontal === 'boolean' ? patch.flipHorizontal : properties.flipHorizontal,
+        flipVertical: typeof patch.flipVertical === 'boolean' ? patch.flipVertical : properties.flipVertical,
       },
     } as LibrarySymbolElement;
   });
