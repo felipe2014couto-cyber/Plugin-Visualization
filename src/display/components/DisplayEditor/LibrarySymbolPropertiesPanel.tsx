@@ -42,6 +42,29 @@ export function LibrarySymbolPropertiesPanel({
       </div>
       <div className={styles.fields}>
         <RotationControl value={properties.rotation} onChange={(rotation) => onChange({ rotation })} testId="library-symbol-rotation" />
+        <div className={styles.mirrorGroup}>
+          <span>Espelhar</span>
+          <div className={styles.mirrorButtons}>
+            <button
+              type="button"
+              className={`${styles.mirrorButton} ${properties.flipHorizontal ? styles.mirrorButtonActive : ''}`}
+              onClick={() => onChange({ flipHorizontal: !properties.flipHorizontal })}
+              title="Espelhar horizontalmente"
+              data-testid="library-symbol-flip-h"
+            >
+              ↔ Horizontal
+            </button>
+            <button
+              type="button"
+              className={`${styles.mirrorButton} ${properties.flipVertical ? styles.mirrorButtonActive : ''}`}
+              onClick={() => onChange({ flipVertical: !properties.flipVertical })}
+              title="Espelhar verticalmente"
+              data-testid="library-symbol-flip-v"
+            >
+              ↕ Vertical
+            </button>
+          </div>
+        </div>
         <LinkField value={typeof properties.linkUrl === 'string' ? properties.linkUrl : undefined} openInNewTab={properties.openInNewTab !== false} onChange={(linkUrl) => onChange({ linkUrl })} onOpenInNewTabChange={(openInNewTab) => onChange({ openInNewTab })} testId="library-symbol-link-url" />
         <label className={styles.field}>
           <span>Cor do símbolo</span>
@@ -144,4 +167,35 @@ const getStyles = (theme: GrafanaTheme2) => ({
     }
   `,
   hint: css`border-top: 1px solid var(--border-color); padding: 10px 12px; color: var(--text-secondary); font-size: 9px; line-height: 1.4;`,
+  mirrorGroup: css`
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    color: var(--text-secondary);
+    font-size: 10px;
+  `,
+  mirrorButtons: css`
+    display: flex;
+    gap: 6px;
+  `,
+  mirrorButton: css`
+    flex: 1;
+    min-height: 27px;
+    padding: 3px 6px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--button-bg);
+    color: var(--text-primary);
+    font-size: 10px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    &:hover {
+      background: var(--button-hover-bg, rgba(255, 255, 255, 0.1));
+    }
+  `,
+  mirrorButtonActive: css`
+    background: var(--accent, #6e9fff) !important;
+    color: #ffffff !important;
+    border-color: var(--accent, #6e9fff) !important;
+  `,
 });

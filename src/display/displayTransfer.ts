@@ -284,6 +284,8 @@ function portableElement(input: unknown): DisplayElement {
           ...portableLink(input.properties),
           ...portableLocked(input.properties),
           rotation: normalizeRotation(input.properties.rotation),
+          ...(typeof input.properties.flipHorizontal === 'boolean' ? { flipHorizontal: input.properties.flipHorizontal } : {}),
+          ...(typeof input.properties.flipVertical === 'boolean' ? { flipVertical: input.properties.flipVertical } : {}),
           ...portableOptionalBinding(input.properties.binding),
           ...portableMultistate(input.properties.multistate),
         },

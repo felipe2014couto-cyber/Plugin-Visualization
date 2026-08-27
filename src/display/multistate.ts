@@ -173,21 +173,31 @@ function matchesRule(rawVal: unknown, rule: MultistateRule): boolean {
     return false;
   }
 
+  const digital = normalizePiDigitalValue(rawVal);
+  const digitalVal = digital?.value !== undefined ? digital.value : undefined;
+  const digitalName = digital?.name?.trim().toLowerCase();
+
   // Equality comparison (supports strings, numbers, booleans, digital states)
   if (rule.operator === 'eq') {
-    const digital = normalizePiDigitalValue(rawVal);
-    if (rule.digitalStateValue !== undefined && digital?.value !== undefined
-      && String(digital.value).trim() === String(rule.digitalStateValue).trim()) {
+    if (rule.digitalStateValue !== undefined && digitalVal !== undefined
+      && String(digitalVal).trim() === String(rule.digitalStateValue).trim()) {
       return true;
     }
-    if (rule.digitalStateName && digital?.name
-      && digital.name.trim().toLocaleLowerCase() === rule.digitalStateName.trim().toLocaleLowerCase()) {
+    if (rule.digitalStateName && digitalName
+      && digitalName === rule.digitalStateName.trim().toLowerCase()) {
       return true;
     }
     const strVal = String(rawVal).trim().toLowerCase();
     const strRule = String(rule.value).trim().toLowerCase();
-    if (strVal === strRule) {
+    if (strVal === strRule || (digitalName && digitalName === strRule)) {
       return true;
+    }
+    if (digitalVal !== undefined) {
+      if (String(digitalVal).trim() === strRule || (typeof rule.value === 'number' && Number(digitalVal) === rule.value)) {
+        return true;
+      }
+      if (Number(digitalVal) === 1 && ['on', 'ligado', 'aberto', 'running', 'true'].includes(strRule)) return true;
+      if (Number(digitalVal) === 0 && ['off', 'desligado', 'fechado', 'stopped', 'false'].includes(strRule)) return true;
     }
     if (typeof rawVal === 'boolean') {
       const isTrue = rawVal === true;
@@ -201,11 +211,21 @@ function matchesRule(rawVal: unknown, rule: MultistateRule): boolean {
         return true;
       }
     }
+    if (['on', 'ligado', 'aberto', 'running', 'true'].includes(strVal) && (strRule === '1' || Number(rule.value) === 1)) return true;
+    if (['off', 'desligado', 'fechado', 'stopped', 'false'].includes(strVal) && (strRule === '0' || Number(rule.value) === 0)) return true;
     return false;
   }
 
   // Numeric comparisons for lt, lte, gt, gte, between
-  const numVal = typeof rawVal === 'number' ? rawVal : Number(rawVal);
+  let numVal = typeof rawVal === 'number' ? rawVal : Number(rawVal);
+  if (Number.isNaN(numVal) && digitalVal !== undefined) {
+    numVal = Number(digitalVal);
+  }
+  if (Number.isNaN(numVal)) {
+    const s = String(rawVal).trim().toLowerCase();
+    if (['on', 'ligado', 'aberto', 'running', 'true'].includes(s)) numVal = 1;
+    else if (['off', 'desligado', 'fechado', 'stopped', 'false'].includes(s)) numVal = 0;
+  }
   const numRule = typeof rule.value === 'number' ? rule.value : Number(rule.value);
 
   if (!Number.isFinite(numVal) || !Number.isFinite(numRule)) {

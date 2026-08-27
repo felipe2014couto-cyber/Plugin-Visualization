@@ -174,8 +174,12 @@ function digitalStateKey(state: PiDigitalState): string {
 
 function getSelectedDigitalStateKey(rule: MultistateRule, states: PiDigitalState[]): string {
   if (rule.digitalStateValue !== undefined) {
+    const byVal = states.find((state) => state.value !== undefined && String(state.value) === String(rule.digitalStateValue));
+    if (byVal) return digitalStateKey(byVal);
     return digitalStateKey({ name: rule.digitalStateName ?? String(rule.digitalStateValue), value: rule.digitalStateValue });
   }
+  const byVal = states.find((state) => state.value !== undefined && String(state.value) === String(rule.value));
+  if (byVal) return digitalStateKey(byVal);
   const byName = states.find((state) => state.name.toLocaleLowerCase() === String(rule.digitalStateName ?? rule.value).trim().toLocaleLowerCase());
   return byName ? digitalStateKey(byName) : '';
 }

@@ -944,7 +944,7 @@ export function DisplaySurface({
           const source = getLibrarySymbolSource(symbol);
           return (
             <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height}>
-              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" />
+              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" />
             </mask>
           );
         })}
@@ -1192,11 +1192,17 @@ export function DisplaySurface({
               : runtimeStates.get(element.id);
             const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
             const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
+            const cx = element.x + element.width / 2;
+            const cy = element.y + element.height / 2;
+            const rotation = symbol.properties.rotation ?? 0;
+            const flipH = symbol.properties.flipHorizontal ? -1 : 1;
+            const flipV = symbol.properties.flipVertical ? -1 : 1;
+            const transform = `translate(${cx} ${cy}) rotate(${rotation}) scale(${flipH} ${flipV}) translate(${-cx} ${-cy})`;
             return (
               <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}>
-                <g transform={`rotate(${symbol.properties.rotation ?? 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`}>
+                <g transform={transform}>
                   <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
-                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
+                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
                 </g>
               </g>
             );
