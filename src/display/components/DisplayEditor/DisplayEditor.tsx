@@ -1143,29 +1143,42 @@ export function DisplayEditor({
     ? selectedElement as ValueElement
     : undefined;
 
-  const handleValueVisualChange = useCallback((patch: Partial<ValueVisualOptions>) => {
-    const selectedId = stateRef.current.selectedElementId;
-    if (!selectedId || !onChangeRef.current) {
+  // A property panel represents the active element, but a right-click on a
+  // homogeneous multi-selection must apply compatible edits to every selected
+  // element. Mixed selections intentionally keep the single-element behavior.
+  const applyToCompatibleSelection = useCallback((update: (document: DisplayDocument, elementId: string) => DisplayDocument) => {
+    const activeId = stateRef.current.selectedElementId;
+    if (!activeId) {
       return;
     }
-    commitDocument(updateValueVisualOptions(documentRef.current, selectedId, patch));
+    const activeElement = getElementById(documentRef.current, activeId);
+    const selectedIds = [...new Set(stateRef.current.selectedElementIds)];
+    const selectedElements = selectedIds
+      .map((id) => getElementById(documentRef.current, id))
+      .filter((element): element is DisplayElement => element !== undefined);
+    const canApplyToAll = selectedIds.length > 1
+      && selectedElements.length === selectedIds.length
+      && activeElement !== undefined
+      && selectedElements.every((element) => element.type === activeElement.type);
+    const targetIds = canApplyToAll ? selectedIds : [activeId];
+    const nextDocument = targetIds.reduce((document, elementId) => update(document, elementId), documentRef.current);
+    commitDocument(nextDocument);
   }, [commitDocument]);
+
+  const handleValueVisualChange = useCallback((patch: Partial<ValueVisualOptions>) => {
+    if (!onChangeRef.current) {
+      return;
+    }
+    applyToCompatibleSelection((document, elementId) => updateValueVisualOptions(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
 
   const handleMultistateChange = useCallback((config: MultistateConfig) => {
-    const selectedId = stateRef.current.selectedElementId;
-    if (!selectedId) {
-      return;
-    }
-    commitDocument(updateMultistateConfig(documentRef.current, selectedId, config));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateMultistateConfig(document, elementId, config));
+  }, [applyToCompatibleSelection]);
 
   const handleBackgroundMultistateChange = useCallback((config: MultistateConfig) => {
-    const selectedId = stateRef.current.selectedElementId;
-    if (!selectedId) {
-      return;
-    }
-    commitDocument(updateBackgroundMultistateConfig(documentRef.current, selectedId, config));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateBackgroundMultistateConfig(document, elementId, config));
+  }, [applyToCompatibleSelection]);
 
   const selectedGauge = selectedElement && selectedElement.type === GAUGE_TYPE
     ? selectedElement as GaugeElement
@@ -1190,30 +1203,26 @@ export function DisplayEditor({
     : undefined;
 
   const handleBarChartChange = useCallback((patch: Partial<BarChartProperties>) => {
-    if (!stateRef.current.selectedElementId) return;
-    commitDocument(updateBarChartProperties(documentRef.current, stateRef.current.selectedElementId, patch));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateBarChartProperties(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
 
   const handleBarChartVisualChange = useCallback((patch: Partial<BarChartVisualOptions>) => {
-    if (!stateRef.current.selectedElementId) return;
-    commitDocument(updateBarChartVisualOptions(documentRef.current, stateRef.current.selectedElementId, patch));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateBarChartVisualOptions(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
 
   const handleTableChange = useCallback((patch: Partial<TableElement['properties']>) => {
-    if (!stateRef.current.selectedElementId) return;
-    commitDocument(updateElementInDocument(documentRef.current, stateRef.current.selectedElementId, (e) => ({
+    applyToCompatibleSelection((document, elementId) => updateElementInDocument(document, elementId, (e) => ({
       ...e,
       properties: { ...e.properties, ...patch },
     })));
-  }, [commitDocument]);
+  }, [applyToCompatibleSelection]);
 
   const handleSqlTableChange = useCallback((patch: Partial<SqlTableElement['properties']>) => {
-    if (!stateRef.current.selectedElementId) return;
-    commitDocument(updateElementInDocument(documentRef.current, stateRef.current.selectedElementId, (e) => ({
+    applyToCompatibleSelection((document, elementId) => updateElementInDocument(document, elementId, (e) => ({
       ...e,
       properties: { ...e.properties, ...patch },
     })));
-  }, [commitDocument]);
+  }, [applyToCompatibleSelection]);
   
   const handleTableColumnsChange = useCallback((elementId: string, columns: TableColumnConfig[]) => {
     commitDocument(updateTableProperties(documentRef.current, elementId, { columns }));
@@ -1231,39 +1240,35 @@ export function DisplayEditor({
     ? (selectedElement && selectedElement.type === TREND_TYPE ? selectedElement as TrendElement : undefined)
     : undefined;
   const handleGaugeChange = useCallback((patch: Parameters<typeof updateGaugeOptions>[2]) => {
-    commitDocument(updateGaugeOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateGaugeOptions(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
   const handleBarChange = useCallback((patch: Parameters<typeof updateBarOptions>[2]) => {
-    commitDocument(updateBarOptions(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateBarOptions(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
   const handleRectangleChange = useCallback((patch: Parameters<typeof updateRectangleProperties>[2]) => {
-    commitDocument(updateRectangleProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateRectangleProperties(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
   const handleTextChange = useCallback((patch: Parameters<typeof updateTextProperties>[2]) => {
-    commitDocument(updateTextProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateTextProperties(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
   const handleImageChange = useCallback((patch: Parameters<typeof updateImageProperties>[2]) => {
-    commitDocument(updateImageProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateImageProperties(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
   const handleLinkChange = useCallback((linkUrl: string) => {
-    const selectedId = stateRef.current.selectedElementId;
-    if (!selectedId) return;
-    commitDocument(updateElementInDocument(documentRef.current, selectedId, (element) => ({
+    applyToCompatibleSelection((document, elementId) => updateElementInDocument(document, elementId, (element) => ({
       ...element,
       properties: { ...element.properties, linkUrl: linkUrl.trim() || undefined },
     })));
-  }, [commitDocument]);
+  }, [applyToCompatibleSelection]);
   const handleLinkOpenInNewTabChange = useCallback((openInNewTab: boolean) => {
-    const selectedId = stateRef.current.selectedElementId;
-    if (!selectedId) return;
-    commitDocument(updateElementInDocument(documentRef.current, selectedId, (element) => ({
+    applyToCompatibleSelection((document, elementId) => updateElementInDocument(document, elementId, (element) => ({
       ...element,
       properties: { ...element.properties, openInNewTab },
     })));
-  }, [commitDocument]);
+  }, [applyToCompatibleSelection]);
   const handleLibrarySymbolChange = useCallback((patch: Partial<LibrarySymbolProperties>) => {
-    commitDocument(updateLibrarySymbolProperties(documentRef.current, stateRef.current.selectedElementId ?? '', patch));
-  }, [commitDocument]);
+    applyToCompatibleSelection((document, elementId) => updateLibrarySymbolProperties(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
   const handleGroupSelected = useCallback(() => {
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length < 2) {

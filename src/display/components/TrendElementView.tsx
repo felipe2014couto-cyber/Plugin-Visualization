@@ -292,10 +292,7 @@ function getTrendContent(
       height={legendViewportHeight}
       data-testid={`trend-legend-scroll-${element.id}`}
     >
-      <div
-        xmlns="http://www.w3.org/1999/xhtml"
-        style={{ width: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}
-      >
+      <div style={{ width: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
         <svg
           x={0}
           y={0}

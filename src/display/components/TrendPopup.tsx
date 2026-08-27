@@ -560,10 +560,7 @@ function PopupChart({
           height={legendViewportHeight}
           data-testid="trend-popup-legend-scroll"
         >
-          <div
-            xmlns="http://www.w3.org/1999/xhtml"
-            style={{ width: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}
-          >
+          <div style={{ width: '100%', height: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
             <svg
               x={0}
               y={0}
