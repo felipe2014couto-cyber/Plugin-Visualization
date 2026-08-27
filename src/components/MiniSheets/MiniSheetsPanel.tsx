@@ -359,6 +359,7 @@ export function MiniSheetsPanel({
     if (onChangeRef.current) {
       const doc = serializeMiniSheets(cellsRef.current, colWidthsRef.current, TOTAL_COLS, TOTAL_ROWS);
       lastEmittedDocRef.current = doc;
+      initialDocRef.current = doc;
       onChangeRef.current(doc);
     }
   }, []);
@@ -1547,9 +1548,14 @@ export function MiniSheetsPanel({
       lastEmittedDocRef.current = initialDocument;
       setHistory(createMiniSheetsHistory(initialDocument));
       const deserialized = deserializeMiniSheets(initialDocument);
-      setCells(deserialized.cells);
       setColWidths(deserialized.colWidths);
-      recomputeAllFormulas(deserialized.cells);
+      const currentSerialized = serializeMiniSheets(cellsRef.current, colWidthsRef.current, TOTAL_COLS, TOTAL_ROWS);
+      const cellsDiffer = JSON.stringify(currentSerialized.cells) !== JSON.stringify(initialDocument.cells);
+      if (cellsDiffer) {
+        setCells(deserialized.cells);
+        cellsRef.current = deserialized.cells;
+        recomputeAllFormulas(deserialized.cells);
+      }
     }
   }, [initialDocument, recomputeAllFormulas]);
 
@@ -1820,8 +1826,7 @@ export function MiniSheetsPanel({
     setColWidths(nextWidths);
     colWidthsRef.current = nextWidths;
     commitStateToHistory(cellsRef.current, nextWidths);
-    notifyDocumentChange();
-  }, [commitStateToHistory, notifyDocumentChange]);
+  }, [commitStateToHistory]);
 
   // Pointer event handlers for Cell Selection & Dragging
   const handleCellPointerDown = (col: number, row: number, e: React.PointerEvent) => {
