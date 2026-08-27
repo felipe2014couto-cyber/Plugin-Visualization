@@ -2901,11 +2901,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border-top: 1px solid var(--border-subtle);
 
     & > svg {
-      min-width: 100%;
-      min-height: 100%;
       max-width: none;
       max-height: none;
-      margin: auto;
+      margin: 0;
     }
 
     @media (max-width: 760px) {
