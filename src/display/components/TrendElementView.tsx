@@ -457,7 +457,9 @@ function getTrendContent(
         .filter(({ series }) => series !== primary?.series && (Number.isFinite(series.scaleMin) || Number.isFinite(series.scaleMax)))
         .map(({ series }, index) => {
           const key = trendBindingKey(series.binding);
-          const labelX = chart.plotX + 28 + index * 32;
+              // Give each secondary scale enough horizontal room for signed
+              // values and decimals when the Trend is rendered small.
+              const labelX = chart.plotX + 28 + index * 44;
           const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
           return (
             <g key={`configured-scale-${key}`} fill={series.color} fontSize={AXIS_FONT_SIZE} pointerEvents="none" opacity={opacity}>

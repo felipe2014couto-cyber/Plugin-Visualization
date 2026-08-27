@@ -34,6 +34,7 @@ const POPUP_HEIGHT = 800;
 const SCALE_INTERVALS = 10;
 const MAX_NAMED_STATE_LABELS = 8;
 const POPUP_AXIS_FONT_SIZE = 15;
+const POPUP_AXIS_COLUMN_WIDTH = 58;
 const POPUP_LEGEND_LINE_HEIGHT = 19;
 const POPUP_LEGEND_ITEM_HEIGHT = 46;
 const POPUP_CURSOR_READING_FONT_SIZE = 13;
@@ -386,7 +387,10 @@ function PopupChart({
   const axisSeries = [scaledSeries.find(({ data }) => data.points.length > 0), ...scaledSeries.filter(({ data }) => data.points.length === 0)]
     .filter((item): item is typeof scaledSeries[number] => item !== undefined)
     .slice(0, 4);
-  const plotX = Math.max(46, 8 + axisSeries.length * 38);
+  // Keep a full column for each independent scale. The previous 38px spacing
+  // caused values such as -1049 and -969 to overlap when the popup was scaled
+  // down to a smaller panel.
+  const plotX = Math.max(46, 8 + axisSeries.length * POPUP_AXIS_COLUMN_WIDTH);
 
   const [popupLegendWidth, setPopupLegendWidth] = useState<number>(() => {
     return typeof visualOptions.legendWidth === 'number' && visualOptions.legendWidth >= 100
@@ -491,7 +495,7 @@ function PopupChart({
                   ? formatValue((stateLabels.length - 1) * (1 - index / visualOptions.scaleIntervals), visualOptions.numberFormat)
                   : undefined;
               return axisValue !== undefined ? (
-                <text key={name} x={8 + seriesIndex * 38} y={y + 5} textAnchor="start" fill={color} fontSize={POPUP_AXIS_FONT_SIZE}>
+                <text key={name} x={8 + seriesIndex * POPUP_AXIS_COLUMN_WIDTH} y={y + 5} textAnchor="start" fill={color} fontSize={POPUP_AXIS_FONT_SIZE}>
                   {axisValue}
                 </text>
               ) : null;
@@ -503,7 +507,7 @@ function PopupChart({
         stateLabels.length <= MAX_NAMED_STATE_LABELS ? stateLabels.map((label) => (
           <text
             key={`${name}-${label}`}
-            x={8 + seriesIndex * 38}
+            x={8 + seriesIndex * POPUP_AXIS_COLUMN_WIDTH}
             y={stateY(label, stateLabels, plot) + 4}
             textAnchor="start"
             fill={color}
