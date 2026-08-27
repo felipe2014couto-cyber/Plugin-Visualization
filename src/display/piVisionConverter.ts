@@ -430,7 +430,8 @@ export function convertPiVisionDisplay(
   const height = typeof display.Height === 'number' && display.Height > 0
     ? display.Height
     : bounds?.height ?? 1080;
-  const backgroundColor = normalizeColor(display.BackgroundColor ?? display.DisplayProperties?.BackgroundColor) ?? '#1f1f1f';
+  const rawBg = normalizeColor(display.BackgroundColor ?? display.DisplayProperties?.BackgroundColor);
+  const backgroundColor = (rawBg && rawBg.toLowerCase() !== '#ffffff' && rawBg.toLowerCase() !== '#fff') ? rawBg : '#1f1f1f';
 
   const existingIds = new Set<string>();
   const elements: DisplayElement[] = [];

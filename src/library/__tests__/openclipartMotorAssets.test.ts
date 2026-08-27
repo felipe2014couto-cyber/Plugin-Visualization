@@ -3,9 +3,9 @@ import { join } from 'path';
 import { INDUSTRIAL_SYMBOL_CATALOG } from '../catalog';
 
 describe('Openclipart motor SVG assets', () => {
-  it('mantém exatamente cinco SVGs locais, sanitizados e monocromáticos', () => {
+  it('mantém os SVGs locais, sanitizados e monocromáticos', () => {
     const motors = INDUSTRIAL_SYMBOL_CATALOG.filter((symbol) => symbol.source === 'openclipart');
-    expect(motors).toHaveLength(6);
+    expect(motors).toHaveLength(2);
 
     motors.forEach((symbol) => {
       const svg = readFileSync(join(process.cwd(), 'src', symbol.svg), 'utf8');

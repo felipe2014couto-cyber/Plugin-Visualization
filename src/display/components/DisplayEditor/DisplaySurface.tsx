@@ -35,7 +35,7 @@ import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { PROGRAMMING_TYPE, type ProgrammingElement } from '../../createProgramming';
 import { ProgrammingDisplayElementView, getProgrammingConsumerId } from '../../../programming/ProgrammingDisplayElementView';
-import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
+import { DEFAULT_LIBRARY_SYMBOL_COLOR, getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
 import { extractAllGroupBindingsAndElements, findTopLevelElementId, getElementAbsoluteGeometry, GROUP_TYPE, type GroupElement } from '../../createGroup';
 import { isElementLocked } from '../../createLocked';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../../../library';
@@ -143,6 +143,7 @@ export interface DisplaySurfaceProps {
   onTrendLegendContextMenu?: (series: TrendSeries, value: string | number | undefined) => void;
   onElementContextMenu?: (element: DisplayElement, event?: React.MouseEvent) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement, event?: React.MouseEvent) => void;
+  onSurfaceContextMenu?: (event?: React.MouseEvent) => void;
   onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
   onTrendLegendWidthChange?: (elementId: string, legendWidth: number) => void;
   zoom?: number;
@@ -170,6 +171,7 @@ function tryReleasePointerCapture(target: Element, pointerId: number): void {
     release.call(target, pointerId);
   }
 }
+
 
 function hasPointerCapture(target: Element, pointerId: number): boolean {
   const check = (target as Element & {
@@ -205,6 +207,7 @@ export function DisplaySurface({
   onTrendLegendContextMenu,
   onElementContextMenu,
   onLibrarySymbolContextMenu,
+  onSurfaceContextMenu,
   onTableColumnsChange,
   onTrendLegendWidthChange,
   zoom = 1,
@@ -495,6 +498,11 @@ export function DisplaySurface({
     const topLevelId = rawId ? (findTopLevelElementId(elements, rawId) ?? rawId) : undefined;
     const element = topLevelId ? elements.find((candidate) => candidate.id === topLevelId) : undefined;
     if (!element) {
+      if (onSurfaceContextMenu) {
+        event.preventDefault();
+        event.stopPropagation();
+        onSurfaceContextMenu(event);
+      }
       return;
     }
     event.preventDefault();
@@ -506,7 +514,7 @@ export function DisplaySurface({
     } else {
       onElementContextMenu?.(element, event);
     }
-  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onTrendContextMenu]);
+  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onSurfaceContextMenu, onTrendContextMenu]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
@@ -908,6 +916,7 @@ export function DisplaySurface({
         height: selectedElementGeom.height,
       })
     : [];
+  const isCanvasEmpty = elements.length === 0;
   const canvasBounds = getCanvasBounds(surface, elements);
 
   return (
@@ -919,7 +928,7 @@ export function DisplaySurface({
       width={canvasBounds.width}
       height={canvasBounds.height}
       viewBox={`${canvasBounds.left} ${canvasBounds.top} ${canvasBounds.width} ${canvasBounds.height}`}
-      style={{ width: canvasBounds.width * zoom, height: canvasBounds.height * zoom, flex: '0 0 auto' }}
+      style={isCanvasEmpty ? { width: '100%', height: '100%', flex: '1 1 auto' } : { width: canvasBounds.width * zoom, height: canvasBounds.height * zoom, flex: '0 0 auto' }}
       xmlns="http://www.w3.org/2000/svg"
       className={css`
         display: block;
@@ -939,12 +948,15 @@ export function DisplaySurface({
         <pattern id="visualization-editor-grid" width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--canvas-dot)" />
         </pattern>
+        <filter id="pims-alpha-mask-filter" colorInterpolationFilters="sRGB">
+          <feColorMatrix type="matrix" values="0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 1 0" />
+        </filter>
         {allElements.filter((element) => element.type === LIBRARY_SYMBOL_TYPE).map((element) => {
           const symbol = element as LibrarySymbolElement;
           const source = getLibrarySymbolSource(symbol);
           return (
             <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height}>
-              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" />
+              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" filter="url(#pims-alpha-mask-filter)" />
             </mask>
           );
         })}
@@ -1198,11 +1210,28 @@ export function DisplaySurface({
             const flipH = symbol.properties.flipHorizontal ? -1 : 1;
             const flipV = symbol.properties.flipVertical ? -1 : 1;
             const transform = `translate(${cx} ${cy}) rotate(${rotation}) scale(${flipH} ${flipV}) translate(${-cx} ${-cy})`;
+            const isCustomColored = Boolean(color && color !== 'transparent' && color !== DEFAULT_LIBRARY_SYMBOL_COLOR);
             return (
               <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}>
                 <g transform={transform}>
                   <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
-                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
+                  <image
+                    href={source}
+                    x={element.x}
+                    y={element.y}
+                    width={element.width}
+                    height={element.height}
+                    preserveAspectRatio="none"
+                    style={{
+                      mixBlendMode: isCustomColored ? 'overlay' : 'normal',
+                      opacity: isCustomColored ? 0.45 : 1,
+                    }}
+                    pointerEvents="all"
+                    data-testid={`display-element-${element.id}`}
+                    data-element-id={element.id}
+                    data-element-type={element.type}
+                    onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)}
+                  />
                 </g>
               </g>
             );

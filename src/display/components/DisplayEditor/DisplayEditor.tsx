@@ -78,6 +78,7 @@ import { RectanglePropertiesPanel } from './RectanglePropertiesPanel';
 import { TextPropertiesPanel } from './TextPropertiesPanel';
 import { ImagePropertiesPanel } from './ImagePropertiesPanel';
 import { LinkPropertiesPanel } from './LinkPropertiesPanel';
+import { CanvasPropertiesPanel } from './CanvasPropertiesPanel';
 import { appendImage, createImage, IMAGE_TYPE, updateImageProperties, type ImageElement } from '../../createImage';
 import { LibrarySymbolPropertiesPanel } from './LibrarySymbolPropertiesPanel';
 import { appendLibrarySymbol, createLibrarySymbol, updateLibrarySymbolProperties, type LibrarySymbolElement, type LibrarySymbolProperties } from '../../createLibrarySymbol';
@@ -1166,6 +1167,16 @@ export function DisplayEditor({
     ? selectedElement as ValueElement
     : undefined;
 
+  const handleSurfaceChange = useCallback((patch: Partial<DisplayDocument['surface']>) => {
+    commitDocument({
+      ...documentRef.current,
+      surface: {
+        ...documentRef.current.surface,
+        ...patch,
+      },
+    });
+  }, [commitDocument]);
+
   // A property panel represents the active element, but a right-click on a
   // homogeneous multi-selection must apply compatible edits to every selected
   // element. Mixed selections intentionally keep the single-element behavior.
@@ -1393,6 +1404,12 @@ export function DisplayEditor({
     });
     setOptionsElementId(null);
     setOptionsTrendId(element.id);
+  }, [dispatch]);
+
+  const handleSurfaceContextMenu = useCallback((_event?: React.MouseEvent) => {
+    dispatch({ type: 'SELECT', elementId: null });
+    setPropertiesPanelOpen(true);
+    setContextMenu(null);
   }, [dispatch]);
 
   const handleElementContextMenu = useCallback((element: DisplayElement, event?: React.MouseEvent) => {
@@ -1825,6 +1842,19 @@ export function DisplayEditor({
               <button type="button" title="Reduzir" aria-label="Reduzir" className={styles.iconButton} data-testid="display-zoom-out" disabled={surfaceZoom <= DISPLAY_ZOOM_MIN} onClick={() => setSurfaceZoom((zoom) => Math.max(DISPLAY_ZOOM_MIN, Number((zoom - DISPLAY_ZOOM_STEP).toFixed(1))))}><ZoomOutIcon /></button>
               <button type="button" title="Ajustar à tela" aria-label="Ajustar à tela" className={styles.iconButton} data-testid="display-zoom-fit" onClick={handleZoomFit}><ZoomFitIcon /></button>
             </div>
+            <button
+              type="button"
+              title="Configurações da Tela / Plano de Fundo"
+              aria-label="Configurações da Tela"
+              className={!state.selectedElementId && propertiesPanelOpen ? styles.symbolModeButtonActive : styles.iconButton}
+              data-testid="display-canvas-settings"
+              onClick={() => {
+                dispatch({ type: 'SELECT', elementId: null });
+                setPropertiesPanelOpen(true);
+              }}
+            >
+              <CanvasIcon />
+            </button>
             <div className={styles.exportControl}>
               <button type="button" title={exporting ? 'Exportando dados PI...' : 'Exportar Display'} aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" disabled={exporting} aria-expanded={exportMenuOpen} onClick={() => setExportMenuOpen((open) => !open)}>
                 <ExportIcon />
@@ -1855,10 +1885,16 @@ export function DisplayEditor({
       )}
       <div className={styles.workspace}>
         <div
-          className={styles.surfaceWrapper}
+          className={`${styles.surfaceWrapper} ${displayDocument.elements.length === 0 ? styles.surfaceWrapperEmpty : ''}`}
           ref={surfaceWrapperRef}
           data-testid="display-editor-surface-wrapper"
           onScroll={handleSurfaceScroll}
+          onContextMenu={(e) => {
+            if (mode === 'edit') {
+              e.preventDefault();
+              handleSurfaceContextMenu(e);
+            }
+          }}
           onDragOver={handlePiPointDragOver}
           onDragLeave={handlePiPointDragLeave}
           onDrop={handlePiPointDrop}
@@ -1887,6 +1923,7 @@ export function DisplayEditor({
             onTrendLegendContextMenu={handleTrendLegendInfo}
             onElementContextMenu={handleElementContextMenu}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
+            onSurfaceContextMenu={handleSurfaceContextMenu}
             onTableColumnsChange={handleTableColumnsChange}
             onTrendLegendWidthChange={handleTrendLegendWidthChange}
             zoom={surfaceZoom}
@@ -2011,6 +2048,13 @@ export function DisplayEditor({
         )}
         {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedBarChart && !selectedTable && !selectedSqlTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !selectedProgramming && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} />}
+        {mode === 'edit' && propertiesPanelOpen && !state.selectedElementId && (
+          <CanvasPropertiesPanel
+            surface={displayDocument.surface}
+            onChange={handleSurfaceChange}
+            onClose={() => setPropertiesPanelOpen(false)}
+          />
+        )}
       </div>
       {trendPopup && (
         <TrendPopup
@@ -2876,6 +2920,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
       min-height: min(62vh, 560px);
     }
   `,
+  surfaceWrapperEmpty: css`
+    overflow: hidden !important;
+  `,
   surfaceWrapperDragOver: css`
     box-shadow: inset 0 0 0 3px var(--accent);
   `,
@@ -3131,6 +3178,17 @@ function PiVisionImportIcon() {
       <path d="M5 13v6h14v-6" />
       <path d="M12 15V8m-4 7 4 4 4-4" />
       <text x="7" y="7" fontSize="6" fontWeight="700" fill="currentColor" stroke="none" fontFamily="monospace">PI</text>
+    </svg>
+  );
+}
+
+function CanvasIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="1.5" y="1.5" width="13" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.2" />
+      <path d="M1.5 5.5H14.5" stroke="currentColor" strokeWidth="1.2" />
+      <circle cx="4" cy="3.5" r="1" fill="currentColor" />
+      <circle cx="7" cy="3.5" r="1" fill="currentColor" />
     </svg>
   );
 }

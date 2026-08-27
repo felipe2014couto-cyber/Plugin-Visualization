@@ -42,6 +42,8 @@ export interface CreateLibrarySymbolOptions {
   generateId?: () => string;
 }
 
+export const MIN_LIBRARY_SYMBOL_SIZE = 180;
+
 export function createLibrarySymbol(options: CreateLibrarySymbolOptions): LibrarySymbolElement {
   const symbol = typeof options.symbol === 'string' ? findIndustrialSymbol(options.symbol) : options.symbol;
   if (!symbol) {
@@ -50,8 +52,21 @@ export function createLibrarySymbol(options: CreateLibrarySymbolOptions): Librar
   if (options.binding !== undefined && !isPiPointBinding(options.binding)) {
     throw new Error('Símbolo da Library requer um binding de PI Point válido');
   }
-  const width = Math.min(options.width ?? symbol.defaultSize.width, options.surface?.width ?? symbol.defaultSize.width);
-  const height = Math.min(options.height ?? symbol.defaultSize.height, options.surface?.height ?? symbol.defaultSize.height);
+  let targetWidth = options.width ?? symbol.defaultSize.width;
+  let targetHeight = options.height ?? symbol.defaultSize.height;
+
+  // Se largura/altura não foram especificadas manualmente, garante tamanho mínimo padrão
+  if (options.width === undefined && options.height === undefined) {
+    const dominant = Math.max(targetWidth, targetHeight);
+    if (dominant < MIN_LIBRARY_SYMBOL_SIZE && dominant > 0) {
+      const scale = MIN_LIBRARY_SYMBOL_SIZE / dominant;
+      targetWidth = Math.round(targetWidth * scale);
+      targetHeight = Math.round(targetHeight * scale);
+    }
+  }
+
+  const width = Math.min(targetWidth, options.surface?.width ?? targetWidth);
+  const height = Math.min(targetHeight, options.surface?.height ?? targetHeight);
   const existing = new Set(options.existingIds ?? []);
   const generate = options.generateId ?? generateId;
   let id = options.id ?? generate();
