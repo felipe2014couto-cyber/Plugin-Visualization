@@ -59,8 +59,9 @@ export function serializeMiniSheets(
   const cellsRecord: Record<string, MiniSheetCell> = {};
 
   cellsMap.forEach((cell, key) => {
-    // Exclude spill-generated cells; only the origin formula cell should be persisted
-    if (cell.spilledFrom) {
+    // Exclude transient formula spill cells (which have no rawValue of their own and no sipOrigin)
+    // Real data cells (including SIP query results, static numbers/strings and manual entries) must always be preserved!
+    if (cell.spilledFrom && !cell.sipOrigin && (!cell.rawValue || cell.rawValue.trim() === '')) {
       return;
     }
 
@@ -72,7 +73,8 @@ export function serializeMiniSheets(
       return;
     }
 
-    const hasRawValue = Boolean(cell.rawValue && cell.rawValue.trim() !== '');
+    const hasRawValue = Boolean(cell.rawValue !== undefined && cell.rawValue !== null && cell.rawValue !== '');
+    const hasDisplayValue = Boolean(cell.displayValue !== undefined && cell.displayValue !== null && cell.displayValue !== '');
     const hasFormat = Boolean(
       cell.format &&
         (cell.format.bold ||
@@ -86,17 +88,22 @@ export function serializeMiniSheets(
 
     const hasSipOrigin = Boolean(cell.sipOrigin);
 
-    if (hasRawValue || hasFormat || hasSipOrigin) {
+    if (hasRawValue || hasDisplayValue || hasFormat || hasSipOrigin) {
       const address = `${colIndexToLetter(colIndex)}${rowIndex + 1}`;
       const savedCell: MiniSheetCell = {};
       if (hasRawValue) {
         savedCell.rawValue = cell.rawValue;
+      } else if (hasDisplayValue) {
+        savedCell.rawValue = cell.displayValue;
       }
       if (hasFormat) {
         savedCell.format = { ...cell.format };
       }
       if (hasSipOrigin) {
         savedCell.sipOrigin = { ...cell.sipOrigin! };
+      }
+      if (cell.spilledFrom) {
+        savedCell.spilledFrom = cell.spilledFrom;
       }
       cellsRecord[address] = savedCell;
     }
@@ -209,6 +216,10 @@ export function deserializeMiniSheets(rawDoc?: unknown): DeserializedMiniSheets 
 
       if (cell.sipOrigin && typeof cell.sipOrigin === 'object') {
         cellData.sipOrigin = { ...cell.sipOrigin };
+      }
+
+      if (cell.spilledFrom && typeof cell.spilledFrom === 'string') {
+        cellData.spilledFrom = cell.spilledFrom;
       }
 
       const key = `${coord.col},${coord.row}`;
