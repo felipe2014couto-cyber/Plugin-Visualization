@@ -54,9 +54,14 @@ describe('DisplayEditor - propriedades em lote', () => {
     });
 
     expect(screen.getByTestId('value-properties-panel')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('value-show-unit'));
+    fireEvent.change(screen.getByTestId('value-color'), { target: { value: '#000000' } });
+    fireEvent.change(screen.getByTestId('value-link-url'), { target: { value: 'https://example.com/display' } });
 
     const updated = JSON.parse(screen.getByTestId('document').textContent ?? '{}') as DisplayDocument;
-    expect(updated.elements.map((element) => (element.properties as { visual?: { showUnit?: boolean } }).visual?.showUnit)).toEqual([true, true]);
+    expect(updated.elements.map((element) => (element.properties as { visual?: { color?: string } }).visual?.color)).toEqual(['#000000', '#000000']);
+    expect(updated.elements.map((element) => (element.properties as { linkUrl?: string }).linkUrl)).toEqual([
+      'https://example.com/display',
+      'https://example.com/display',
+    ]);
   });
 });

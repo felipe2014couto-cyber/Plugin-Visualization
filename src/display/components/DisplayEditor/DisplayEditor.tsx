@@ -277,6 +277,7 @@ export function DisplayEditor({
   const trendPopupRequest = useRef(0);
   const trendPopupRef = useRef<TrendPopupState | null>(null);
   const copiedElementsRef = useRef<DisplayElement[]>([]);
+  const batchEditElementIdsRef = useRef<string[]>([]);
   const pasteCountRef = useRef(0);
   const surfaceWrapperRef = useRef<HTMLDivElement>(null);
   const canvasBounds = useMemo(
@@ -444,6 +445,7 @@ export function DisplayEditor({
 
   const handleSelect = useCallback(
     (elementId: string | null) => {
+      batchEditElementIdsRef.current = [];
       dispatch({ type: 'SELECT', elementId });
       setPropertiesPanelOpen(Boolean(elementId));
       setOptionsElementId(null);
@@ -459,6 +461,7 @@ export function DisplayEditor({
     [dispatch, onCalculationOpen],
   );
   const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
+    batchEditElementIdsRef.current = [];
     dispatch({ type: 'SELECT_MANY', elementIds, additive });
     setPropertiesPanelOpen(elementIds.length === 1);
     setOptionsElementId(null);
@@ -466,6 +469,7 @@ export function DisplayEditor({
   }, [dispatch]);
 
   const handleDoubleClick = useCallback((elementId: string) => {
+    batchEditElementIdsRef.current = [];
     dispatch({ type: 'SELECT', elementId });
     setPropertiesPanelOpen(true);
     setOptionsElementId(null);
@@ -1152,7 +1156,8 @@ export function DisplayEditor({
       return;
     }
     const activeElement = getElementById(documentRef.current, activeId);
-    const selectedIds = [...new Set(stateRef.current.selectedElementIds)];
+    const capturedIds = batchEditElementIdsRef.current;
+    const selectedIds = [...new Set(capturedIds.length > 1 ? capturedIds : stateRef.current.selectedElementIds)];
     const selectedElements = selectedIds
       .map((id) => getElementById(documentRef.current, id))
       .filter((element): element is DisplayElement => element !== undefined);
@@ -1305,6 +1310,10 @@ export function DisplayEditor({
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
+      const isHomogeneousSelection = selectedElements.length === selectedIds.length
+        && selectedElements.every((selected) => selected.type === element.type);
+      batchEditElementIdsRef.current = isHomogeneousSelection ? [...selectedIds] : [];
+      setPropertiesPanelOpen(isHomogeneousSelection);
       const allLocked = selectedElements.length > 0 && selectedElements.every((el) => isElementLocked(el));
       setContextMenu({
         x: event?.clientX ?? 100,
@@ -1317,6 +1326,7 @@ export function DisplayEditor({
       });
       return;
     }
+    batchEditElementIdsRef.current = [];
     dispatch({ type: 'SELECT', elementId: element.id });
     setContextMenu({
       x: event?.clientX ?? 100,
@@ -1335,6 +1345,10 @@ export function DisplayEditor({
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
+      const isHomogeneousSelection = selectedElements.length === selectedIds.length
+        && selectedElements.every((selected) => selected.type === element.type);
+      batchEditElementIdsRef.current = isHomogeneousSelection ? [...selectedIds] : [];
+      setPropertiesPanelOpen(isHomogeneousSelection);
       const allLocked = selectedElements.length > 0 && selectedElements.every((el) => isElementLocked(el));
       setContextMenu({
         x: event?.clientX ?? 100,
@@ -1347,6 +1361,7 @@ export function DisplayEditor({
       });
       return;
     }
+    batchEditElementIdsRef.current = [];
     dispatch({ type: 'SELECT', elementId: element.id });
     setContextMenu({
       x: event?.clientX ?? 100,
@@ -1366,6 +1381,10 @@ export function DisplayEditor({
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
+      const isHomogeneousSelection = selectedElements.length === selectedIds.length
+        && selectedElements.every((selected) => selected.type === element.type);
+      batchEditElementIdsRef.current = isHomogeneousSelection ? [...selectedIds] : [];
+      setPropertiesPanelOpen(isHomogeneousSelection);
       const allLocked = selectedElements.length > 0 && selectedElements.every((el) => isElementLocked(el));
       setContextMenu({
         x: event?.clientX ?? 100,
@@ -1378,6 +1397,7 @@ export function DisplayEditor({
       });
       return;
     }
+    batchEditElementIdsRef.current = [];
     if (element.type === GROUP_TYPE) {
       dispatch({ type: 'SELECT', elementId: element.id });
       setContextMenu({
