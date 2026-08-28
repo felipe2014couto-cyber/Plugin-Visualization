@@ -453,7 +453,9 @@ export function DisplayEditor({
     (elementId: string | null) => {
       batchEditElementIdsRef.current = [];
       dispatch({ type: 'SELECT', elementId });
-      setPropertiesPanelOpen(Boolean(elementId));
+      // Um clique simples apenas seleciona o elemento. As propriedades são
+      // abertas exclusivamente pelo menu de contexto (botão direito).
+      setPropertiesPanelOpen(false);
       setOptionsElementId(null);
       setOptionsTrendId(null);
       const element = elementId ? getElementById(documentRef.current, elementId) : undefined;
@@ -469,7 +471,7 @@ export function DisplayEditor({
   const handleSelectMany = useCallback((elementIds: string[], additive = false) => {
     batchEditElementIdsRef.current = [];
     dispatch({ type: 'SELECT_MANY', elementIds, additive });
-    setPropertiesPanelOpen(elementIds.length === 1);
+    setPropertiesPanelOpen(false);
     setOptionsElementId(null);
     setOptionsTrendId(null);
   }, [dispatch]);
@@ -477,7 +479,7 @@ export function DisplayEditor({
   const handleDoubleClick = useCallback((elementId: string) => {
     batchEditElementIdsRef.current = [];
     dispatch({ type: 'SELECT', elementId });
-    setPropertiesPanelOpen(true);
+    setPropertiesPanelOpen(false);
     setOptionsElementId(null);
     setOptionsTrendId(null);
   }, [dispatch]);
