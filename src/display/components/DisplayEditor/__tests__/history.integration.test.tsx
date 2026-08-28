@@ -46,11 +46,28 @@ function Harness({ initial, loadTrend }: { initial?: DisplayDocument; loadTrend?
   );
 }
 
+function CloningParentHarness() {
+  const [document, setDocument] = useState<DisplayDocument>(() => createDisplayDocument({ name: 'Cloned history' }));
+  return <DisplayEditor document={document} onChange={(next) => setDocument({ ...next, elements: [...next.elements] })} />;
+}
+
 function getSurface(): SVGSVGElement {
   return screen.getByTestId('display-surface') as unknown as SVGSVGElement;
 }
 
 describe('DisplayEditor - histórico de edição', () => {
+  it('preserva vários Undo quando o componente pai recria o documento', () => {
+    render(<CloningParentHarness />);
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(2);
+
+    fireEvent.click(screen.getByTestId('display-undo'));
+    expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('display-undo'));
+    expect(screen.queryByTestId(/^display-element-/)).toBeNull();
+  });
+
   it('cria Rectangle, desfaz e refaz preservando o ID', () => {
     render(<Harness />);
     expect(screen.getByTestId('display-undo')).toBeDisabled();

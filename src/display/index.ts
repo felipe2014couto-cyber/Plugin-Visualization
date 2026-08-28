@@ -17,6 +17,7 @@ export { createDisplayDocument } from './createDisplayDocument';
 export type { CreateDisplayDocumentOptions } from './createDisplayDocument';
 export {
   createDisplayHistory,
+  areDisplayDocumentsEqual,
   DISPLAY_HISTORY_LIMIT,
   hasRedo,
   hasUndo,
