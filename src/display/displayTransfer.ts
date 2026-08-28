@@ -266,21 +266,20 @@ function portableElement(input: unknown): DisplayElement {
         },
       };
     case LIBRARY_SYMBOL_TYPE: {
-      const isPiVision = typeof input.properties.symbolId === 'string' && input.properties.symbolId.startsWith('pi-vision:');
-      const symbol = typeof input.properties.symbolId === 'string' && !isPiVision ? findIndustrialSymbol(input.properties.symbolId) : undefined;
-      
-      if (!symbol && !isPiVision) {
+      if (typeof input.properties?.symbolId !== 'string' || !input.properties.symbolId.trim()) {
         throw new DisplayImportError('Símbolo da Library inválido.');
       }
+      const isPiVision = input.properties.symbolId.startsWith('pi-vision:');
+      const symbol = !isPiVision ? findIndustrialSymbol(input.properties.symbolId) : undefined;
 
       return {
         ...base,
         type: LIBRARY_SYMBOL_TYPE,
         properties: {
           symbolId: symbol ? symbol.id : input.properties.symbolId,
-          name: symbol ? symbol.name : (input.properties.name || 'PI Vision Symbol'),
-          src: symbol ? getIndustrialSymbolAssetUrl(symbol) : input.properties.src,
-          viewBox: symbol ? symbol.viewBox : (input.properties.viewBox || '0 0 100 100'),
+          name: symbol ? symbol.name : (typeof input.properties.name === 'string' ? input.properties.name : 'Símbolo'),
+          src: symbol ? getIndustrialSymbolAssetUrl(symbol) : (typeof input.properties.src === 'string' ? input.properties.src : ''),
+          viewBox: symbol ? symbol.viewBox : (typeof input.properties.viewBox === 'string' ? input.properties.viewBox : '0 0 100 100'),
           color: getLibrarySymbolColor(input.properties),
           ...portableLink(input.properties),
           ...portableLocked(input.properties),

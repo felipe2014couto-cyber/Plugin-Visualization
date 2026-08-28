@@ -1,4 +1,3 @@
-import openclipartMotorCatalog from './assets/openclipartMotorCatalog.json';
 import localSymbolCatalog from './assets/local/catalog.json';
 import { PLUGIN_ASSET_BASE_URL } from '../constants';
 
@@ -56,7 +55,6 @@ export interface IndustrialSymbolDefinition {
 }
 
 const EQUINOR_SOURCE = 'equinor-engineering-symbols' as const;
-const OPENCLIPART_SOURCE = 'openclipart' as const;
 const LICENSE = 'MIT' as const;
 
 const EXISTING_SYMBOL_CATALOG: readonly IndustrialSymbolDefinition[] = [
@@ -86,30 +84,6 @@ const EXISTING_SYMBOL_CATALOG: readonly IndustrialSymbolDefinition[] = [
   },
 ] as const;
 
-const OPENCLIPART_MOTOR_CATALOG: readonly IndustrialSymbolDefinition[] = openclipartMotorCatalog.entries.map((entry) => ({
-  id: entry.id,
-  name: entry.name,
-  category: 'Motores',
-  keywords: entry.keywords,
-  source: OPENCLIPART_SOURCE,
-  license: entry.license,
-  svg: entry.svg,
-  viewBox: entry.viewBox,
-  defaultSize: entry.defaultSize,
-  capabilities: entry.capabilities,
-  originalName: entry.originalName,
-  synonyms: entry.synonyms,
-  library: entry.library,
-  sourceUrl: entry.sourceUrl,
-  downloadUrl: entry.downloadUrl,
-  sourceFile: entry.sourceFile,
-  author: entry.author,
-  sanitized: entry.sanitized,
-  modified: entry.modified,
-  originalAspectRatio: entry.originalAspectRatio,
-  dimensions: entry.dimensions,
-})) as readonly IndustrialSymbolDefinition[];
-
 const LOCAL_SYMBOL_CATALOG: readonly IndustrialSymbolDefinition[] = localSymbolCatalog.entries.map((entry) => ({
   id: entry.id,
   name: entry.name,
@@ -130,7 +104,6 @@ const LOCAL_SYMBOL_CATALOG: readonly IndustrialSymbolDefinition[] = localSymbolC
 
 export const INDUSTRIAL_SYMBOL_CATALOG: readonly IndustrialSymbolDefinition[] = [
   ...EXISTING_SYMBOL_CATALOG,
-  ...OPENCLIPART_MOTOR_CATALOG,
   ...LOCAL_SYMBOL_CATALOG,
 ];
 

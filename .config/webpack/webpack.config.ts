@@ -168,13 +168,14 @@ const config = async (env): Promise<Configuration> => {
       clean: {
         keep: new RegExp(`(.*?_(amd64|arm(64)?)(.exe)?|go_plugin_build_manifest)`),
       },
+      chunkFilename: '[name].[contenthash:8].js',
       filename: '[name].js',
       library: {
         type: 'amd',
       },
       path: path.resolve(process.cwd(), DIST_DIR),
       publicPath: `public/plugins/${pluginJson.id}/`,
-      uniqueName: pluginJson.id,
+      uniqueName: `${pluginJson.id}-${pluginJson.info.version}`,
     },
 
     plugins: [

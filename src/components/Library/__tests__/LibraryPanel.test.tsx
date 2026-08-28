@@ -38,8 +38,8 @@ describe('LibraryPanel', () => {
     render(<LibraryPanel />);
     fireEvent.click(screen.getByTestId('library-category-Motores').querySelector('button') as HTMLButtonElement);
 
-    expect(screen.getByText('Motor elétrico industrial horizontal')).toBeInTheDocument();
-    expect(screen.getByText('Motor elétrico industrial compacto')).toBeInTheDocument();
     expect(screen.getByText('Motor 01')).toBeInTheDocument();
+    expect(screen.queryByText('Motor elétrico industrial horizontal')).toBeNull();
+    expect(screen.queryByText('Motor elétrico industrial compacto')).toBeNull();
   });
 });

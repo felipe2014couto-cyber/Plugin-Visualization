@@ -899,6 +899,10 @@ export function DisplayEditor({
       });
       const positioned = positionElementAt(symbol, point, currentDocument);
       commitDocument(appendLibrarySymbol(currentDocument, positioned));
+      setSurfaceViewCenter({
+        x: positioned.x + positioned.width / 2,
+        y: positioned.y + positioned.height / 2,
+      });
       dispatch({ type: 'SELECT', elementId: positioned.id });
       setPropertiesPanelOpen(true);
       return;
@@ -2167,12 +2171,14 @@ function getSvgViewport(svg: SVGSVGElement) {
 function positionElementAt<T extends ElementGeometry>(
   element: T,
   point: Point,
-  _document: DisplayDocument,
+  document: DisplayDocument,
 ): T {
+  const maxX = Math.max(0, document.surface.width - element.width);
+  const maxY = Math.max(0, document.surface.height - element.height);
   return {
     ...element,
-    x: Math.round(point.x - element.width / 2),
-    y: Math.round(point.y - element.height / 2),
+    x: Math.max(0, Math.min(Math.round(point.x - element.width / 2), maxX)),
+    y: Math.max(0, Math.min(Math.round(point.y - element.height / 2), maxY)),
   };
 }
 
