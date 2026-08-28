@@ -8,6 +8,7 @@ import type { DisplayElement } from '../../displayElement';
 import { generateId } from '../../ids';
 import {
   createDisplayHistory,
+  areDisplayDocumentsEqual,
   hasRedo,
   hasUndo,
   recordDisplayEdit,
@@ -134,7 +135,6 @@ import {
   computeResizeGeometry,
   getCanvasBounds,
   getElementById,
-  svgPointFromEvent,
   updateElementGeometry,
   type AlignmentGuide,
   type ElementGeometry,
@@ -337,11 +337,11 @@ export function DisplayEditor({
 
   useEffect(() => {
     documentRef.current = displayDocument;
-    if (expectedDocumentRef.current === displayDocument) {
+    if (expectedDocumentRef.current && areDisplayDocumentsEqual(expectedDocumentRef.current, displayDocument)) {
       expectedDocumentRef.current = null;
       return;
     }
-    if (historyRef.current.present !== displayDocument) {
+    if (!areDisplayDocumentsEqual(historyRef.current.present, displayDocument)) {
       historyRef.current = createDisplayHistory(displayDocument);
       refreshHistory((version) => version + 1);
     }
@@ -716,7 +716,7 @@ export function DisplayEditor({
     }
     if (Array.from(event.dataTransfer.types).includes(CALCULATION_DRAG_MIME)) {
       event.preventDefault();
-      const svg = event.currentTarget.querySelector('svg');
+      const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
       const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
       const targetTrend = dropSymbolType === 'trend'
         ? resolveTrendDropTarget(documentRef.current, event.target, event.clientX, event.clientY, point)
@@ -751,7 +751,7 @@ export function DisplayEditor({
     }
     event.preventDefault();
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
-    const svg = event.currentTarget.querySelector('svg');
+    const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
     // Trend keeps its explicit insertion mode. Bar Chart and Table, however,
     // always accept a dropped PI Point as another item.
@@ -820,7 +820,7 @@ export function DisplayEditor({
     if (calculationId) {
       const currentDocument = documentRef.current;
       const calculation = currentDocument.calculations?.find((item) => item.id === calculationId);
-      const svg = event.currentTarget.querySelector('svg');
+      const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
       const point = svg ? getDropPoint(svg, event.clientX, event.clientY, currentDocument) : undefined;
       if (!calculation || !point) {
         return;
@@ -888,7 +888,7 @@ export function DisplayEditor({
     }
     const librarySymbolId = parseLibrarySymbolDragData(event.dataTransfer.getData(LIBRARY_SYMBOL_DRAG_MIME));
     if (librarySymbolId) {
-      const svg = event.currentTarget.querySelector('svg');
+      const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
       const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
       if (!point) {
         return;
@@ -949,7 +949,7 @@ export function DisplayEditor({
     }
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
     const binding = pointResult ? createPiPointBinding(pointResult) : undefined;
-    const svg = event.currentTarget.querySelector('svg');
+    const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
     const currentDocument = documentRef.current;
     // A Table and Bar Chart always receive a dropped PI Point as a new item,
@@ -2246,10 +2246,25 @@ function getDropPoint(
     return undefined;
   }
   const bounds = svg.getBoundingClientRect?.();
-  if (bounds && (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom)) {
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0 || clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom) {
     return undefined;
   }
-  return svgPointFromEvent(svg, clientX, clientY);
+  // Use the displayed SVG rectangle rather than getScreenCTM(). In Grafana,
+  // the editor surface can be inside a scrolled/zoomed container and some
+  // browsers keep a stale CTM during HTML drag events. That made the preview
+  // (and the inserted element) appear far away from the pointer.
+  const values = (svg.getAttribute('viewBox') ?? '').trim().split(/[\s,]+/).map(Number);
+  const [viewBoxX = 0, viewBoxY = 0, viewBoxWidth = Number(svg.getAttribute('width')) || bounds.width, viewBoxHeight = Number(svg.getAttribute('height')) || bounds.height] = values;
+  if (!(viewBoxWidth > 0) || !(viewBoxHeight > 0)) return undefined;
+  const scale = Math.min(bounds.width / viewBoxWidth, bounds.height / viewBoxHeight);
+  const renderedWidth = viewBoxWidth * scale;
+  const renderedHeight = viewBoxHeight * scale;
+  const offsetX = bounds.left + (bounds.width - renderedWidth) / 2;
+  const offsetY = bounds.top + (bounds.height - renderedHeight) / 2;
+  return {
+    x: viewBoxX + (clientX - offsetX) / scale,
+    y: viewBoxY + (clientY - offsetY) / scale,
+  };
 }
 
 function getSvgViewport(svg: SVGSVGElement) {
@@ -2276,14 +2291,15 @@ function getSvgViewport(svg: SVGSVGElement) {
 function positionElementAt<T extends ElementGeometry>(
   element: T,
   point: Point,
-  document: DisplayDocument,
+  _document: DisplayDocument,
 ): T {
-  const maxX = Math.max(0, document.surface.width - element.width);
-  const maxY = Math.max(0, document.surface.height - element.height);
   return {
     ...element,
-    x: Math.max(0, Math.min(Math.round(point.x - element.width / 2), maxX)),
-    y: Math.max(0, Math.min(Math.round(point.y - element.height / 2), maxY)),
+    // Keep the element centred below the pointer. The canvas expands to
+    // include elements outside the original surface, so clamping to the
+    // configured surface size would move a drop made in the expanded area.
+    x: Math.round(point.x - element.width / 2),
+    y: Math.round(point.y - element.height / 2),
   };
 }
 

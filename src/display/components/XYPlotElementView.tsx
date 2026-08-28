@@ -6,7 +6,7 @@ import {
   type XYPlotElement,
   type XYPlotYSeries,
 } from '../createXYPlot';
-import { linearRegression, pairXYByPosition, pairXYByTimestamp, pearsonCorrelation, type XYPair } from '../xyPlotMath';
+import { linearRegression, pairXYByPosition, pairXYByTimestamp, pearsonCorrelation } from '../xyPlotMath';
 import type { TrendRuntimeState } from '../runtime/trendRuntime';
 
 export interface XYPlotElementViewProps {
@@ -78,7 +78,7 @@ export function XYPlotElementView({ element, xState, yStates = [], xDatabaseScal
 }
 
 function resolveScale(values: readonly number[], mode: XYPlotYSeries['scaleMode'], customMin?: number, customMax?: number, database?: PiPointDatabaseLimits): ScaleRange {
-  if (mode === 'custom' && validRange(customMin, customMax)) return { min: customMin, max: customMax };
+  if (mode === 'custom' && validRange(customMin, customMax)) return { min: customMin, max: customMax! };
   if (mode === 'database' && database && validRange(database.zero, database.zero + database.span)) return { min: database.zero, max: database.zero + database.span };
   const finite = values.filter(Number.isFinite);
   if (!finite.length) return { min: 0, max: 1 };

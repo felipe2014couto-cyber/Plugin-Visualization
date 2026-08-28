@@ -63,6 +63,7 @@ import {
   redoMiniSheetsHistory,
   canUndoMiniSheetsHistory,
   canRedoMiniSheetsHistory,
+  areMiniSheetsDocsEqual,
 } from './miniSheetsHistory';
 
 export interface SipOriginInfo {
@@ -1457,7 +1458,12 @@ export function MiniSheetsPanel({
         TOTAL_COLS,
         TOTAL_ROWS
       );
-      setHistory((prev) => commitMiniSheetsHistory(prev, doc));
+      // Keep the ref in lockstep with React state. Keyboard shortcuts can be
+      // triggered again before React has rendered, and must use the newest
+      // snapshot rather than the state from the previous render.
+      const nextHistory = commitMiniSheetsHistory(historyRef.current, doc);
+      historyRef.current = nextHistory;
+      setHistory(nextHistory);
       lastEmittedDocRef.current = doc;
       initialDocRef.current = doc;
       onChangeRef.current?.(doc);
@@ -1470,6 +1476,7 @@ export function MiniSheetsPanel({
       return;
     }
     const next = undoMiniSheetsHistory(historyRef.current);
+    historyRef.current = next;
     setHistory(next);
     const deserialized = deserializeMiniSheets(next.present);
     setColWidths(deserialized.colWidths);
@@ -1487,6 +1494,7 @@ export function MiniSheetsPanel({
       return;
     }
     const next = redoMiniSheetsHistory(historyRef.current);
+    historyRef.current = next;
     setHistory(next);
     const deserialized = deserializeMiniSheets(next.present);
     setColWidths(deserialized.colWidths);
@@ -1548,8 +1556,11 @@ export function MiniSheetsPanel({
   useEffect(() => {
     if (
       initialDocument &&
-      initialDocument !== lastEmittedDocRef.current &&
-      initialDocument !== initialDocRef.current
+      // The parent may recreate the document object after every edit. Compare
+      // its contents instead of identity, otherwise the history would be
+      // reinitialized after each change and Ctrl+Z could undo only once.
+      !areMiniSheetsDocsEqual(initialDocument, lastEmittedDocRef.current) &&
+      !areMiniSheetsDocsEqual(initialDocument, initialDocRef.current)
     ) {
       initialDocRef.current = initialDocument;
       lastEmittedDocRef.current = initialDocument;

@@ -16,7 +16,7 @@ export function recordDisplayEdit(
   history: DisplayHistoryState,
   nextDocument: DisplayDocument,
 ): DisplayHistoryState {
-  if (documentsEqual(history.present, nextDocument)) {
+  if (areDisplayDocumentsEqual(history.present, nextDocument)) {
     return history;
   }
   const past = [...history.past, cloneDisplayDocument(history.present)];
@@ -59,7 +59,7 @@ export function hasRedo(history: DisplayHistoryState): boolean {
   return history.future.length > 0;
 }
 
-function documentsEqual(left: DisplayDocument, right: DisplayDocument): boolean {
+export function areDisplayDocumentsEqual(left: DisplayDocument, right: DisplayDocument): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
