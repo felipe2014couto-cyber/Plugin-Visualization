@@ -56,7 +56,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
       data-element-type={element.type}
       style={{ cursor: 'move' }}
     >
-      {blink && <animate attributeName="opacity" values="1;0.2;1" dur="0.8s" repeatCount="indefinite" />}
+      {blink && <animate attributeName="opacity" values="1;0;1" dur="0.8s" repeatCount="indefinite" />}
       <rect
         x={element.x}
         y={element.y}

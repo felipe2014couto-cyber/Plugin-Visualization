@@ -61,8 +61,8 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const responsiveFontSize = element.properties._piVisionPreserveFontSize === true
     ? visual.fontSize
     : getResponsiveFontSize(element, visual.fontSize, lines);
-  const blink = evaluateMultistate(runtimeVal, element.properties.multistate)?.rule.blink === true
-    || evaluateMultistate(runtimeVal, element.properties.backgroundMultistate)?.rule.blink === true;
+  const textBlink = evaluateMultistate(runtimeVal, element.properties.multistate)?.rule.blink === true;
+  const bgBlink = evaluateMultistate(runtimeVal, element.properties.backgroundMultistate)?.rule.blink === true;
   return (
     <g
       data-testid={`display-element-${element.id}`}
@@ -70,7 +70,6 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
       data-element-type={element.type}
       style={{ cursor: 'move' }}
     >
-      {blink && <animate attributeName="opacity" values="1;0.2;1" dur="0.8s" repeatCount="indefinite" />}
       <rect
         x={element.x}
         y={element.y}
@@ -84,7 +83,9 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
         data-element-id={element.id}
         data-element-type={element.type}
         pointerEvents="all"
-      />
+      >
+        {bgBlink && <animate attributeName="opacity" values="1;0;1" dur="0.8s" repeatCount="indefinite" />}
+      </rect>
       <text
         x={textX}
         y={element.y + element.height / 2 - ((lines.length - 1) * responsiveFontSize * 0.6)}
@@ -97,6 +98,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
         data-element-type={element.type}
         pointerEvents="none"
       >
+        {textBlink && <animate attributeName="opacity" values="1;0;1" dur="0.8s" repeatCount="indefinite" />}
         {lines.map((line, index) => <tspan key={`${line}-${index}`} x={textX} dy={index === 0 ? 0 : responsiveFontSize * 1.2}>{line}</tspan>)}
       </text>
     </g>

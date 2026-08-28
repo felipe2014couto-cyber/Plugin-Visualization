@@ -961,7 +961,7 @@ export function DisplaySurface({
       onPointerCancel={handleSvgPointerEnd}
       onKeyDown={handleSurfaceKeyDown}
     >
-      <style>{'@keyframes pimsMultistateBlink{0%,49%{opacity:1}50%,100%{opacity:.2}}'}</style>
+      <style>{'@keyframes pimsMultistateBlink{0%,49%{opacity:1}50%,100%{opacity:0}}'}</style>
       <defs>
         <pattern id="visualization-editor-grid" width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--canvas-dot)" />
@@ -1141,8 +1141,8 @@ export function DisplaySurface({
             const runtimeVal = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
             const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
             const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
-            const blink = evaluateMultistate(runtimeVal, textElement.properties.multistate)?.rule.blink === true
-              || evaluateMultistate(runtimeVal, textElement.properties.backgroundMultistate)?.rule.blink === true;
+            const textBlink = evaluateMultistate(runtimeVal, textElement.properties.multistate)?.rule.blink === true;
+            const bgBlink = evaluateMultistate(runtimeVal, textElement.properties.backgroundMultistate)?.rule.blink === true;
             const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
             const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
             const rotation = textElement.properties.rotation ?? 0;
@@ -1163,7 +1163,7 @@ export function DisplaySurface({
                 data-testid={`display-element-${element.id}`}
                 data-element-id={element.id}
                 data-element-type={element.type}
-                style={{ cursor: isElementLocked(element) ? 'default' : 'move', ...(blink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : {}) }}
+                style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}
               >
                 <rect
                   x={textElement.x}
@@ -1173,6 +1173,7 @@ export function DisplaySurface({
                   fill={bgColor}
                   stroke="none"
                   strokeWidth={0}
+                  style={bgBlink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : undefined}
                   data-testid={`text-background-${element.id}`}
                   data-element-id={element.id}
                   data-element-type={element.type}
@@ -1186,6 +1187,7 @@ export function DisplaySurface({
                   textAnchor={anchor}
                   dominantBaseline={lineCount === 1 ? 'middle' : undefined}
                   pointerEvents="none"
+                  style={textBlink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : undefined}
                 >
                   {lineCount === 1
                     ? lines[0]
