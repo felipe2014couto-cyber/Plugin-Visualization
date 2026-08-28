@@ -230,6 +230,14 @@ export interface PiVisionTrace {
 
 export interface PiVisionMultistateConfig {
   Triggers?: PiVisionMultistateTrigger[];
+  States?: Array<Record<string, unknown>>;
+  Thresholds?: Array<Record<string, unknown>>;
+  Blink?: unknown[];
+  Blinking?: unknown[];
+  BlinkState?: unknown[];
+  IsBlinking?: unknown[];
+  Flash?: unknown[];
+  [key: string]: unknown;
 }
 
 export interface PiVisionMultistateTrigger {
@@ -241,6 +249,7 @@ export interface PiVisionMultistateTrigger {
   Blinking?: boolean | number | string;
   Flash?: boolean | number | string;
   BlinkState?: boolean | number | string;
+  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -581,7 +590,7 @@ function convertValue(
     },
     _piVisionPreserveFontSize: fontSize !== undefined,
     _piVisionSquareBackground: true,
-    ...convertMultistateIfPresent(symbol.Multistate),
+    ...convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg),
   };
 
   return makeElement(VALUE_TYPE, valueGeo, properties, existingIds);
@@ -686,7 +695,7 @@ function convertGauge(
     ? cfg.ValueScaleSettings.MaxValue
     : typeof cfg.MaxValue === 'number' ? cfg.MaxValue : 100;
   const color = normalizeColor(cfg.IndicatorColor ?? cfg.ValueColor ?? cfg.ForeColor) ?? '#00a2e8';
-  const multistate = convertMultistateIfPresent(symbol.Multistate);
+  const multistate = convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
 
   const properties: GaugeProperties = {
     ...(binding ? { binding } : {}),
@@ -743,7 +752,7 @@ function convertBar(
     ? 'horizontal'
     : 'vertical';
   const color = normalizeColor(cfg.Fill ?? cfg.ForeColor) ?? '#6e9fff';
-  const multistate = convertMultistateIfPresent(symbol.Multistate);
+  const multistate = convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
   const isPiVisionCompactGauge = symType === 'verticalgauge' || symType === 'horizontalgauge';
 
   const properties: BarProperties = {
@@ -854,7 +863,7 @@ function convertText(
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize) ?? DEFAULT_TEXT_PROPERTIES.fontSize;
   const textAlign = normalizeTextAlign(cfg.TextAlignment) as TextAlign;
 
-  const multistate = convertMultistateIfPresent(symbol.Multistate);
+  const multistate = convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
   const binding = firstMultistateBinding(symbol, dataSourceUid);
 
   const properties: TextProperties = {
@@ -867,7 +876,7 @@ function convertText(
     rotation: typeof cfg.Rotation === 'number' ? cfg.Rotation : 0,
     ...(typeof cfg.LinkURL === 'string' && cfg.LinkURL.trim() ? { linkUrl: cfg.LinkURL.trim() } : {}),
     ...(typeof cfg.NewTab === 'boolean' ? { openInNewTab: cfg.NewTab } : {}),
-    ...(multistate.multistate ? { ...multistate, binding } : {}),
+    ...(multistate.multistate || multistate.backgroundMultistate ? { ...multistate, binding } : {}),
   };
 
   return makeElement(TEXT_TYPE, geo, properties, existingIds);
@@ -892,7 +901,7 @@ function convertShape(
   const multistateBinding = firstMultistateBinding(symbol, dataSourceUid);
   const multistate = thresholdMultistate
     ? { multistate: thresholdMultistate }
-    : convertMultistateIfPresent(symbol.Multistate);
+    : convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
 
   const properties: RectangleProperties = {
     ...DEFAULT_RECTANGLE_PROPERTIES,
@@ -1106,10 +1115,35 @@ function convertUnknownAsRectangle(
  * Retorna um objeto parcial pronto para ser espalhado nas properties do elemento.
  */
 export function convertMultistate(
-  triggers: PiVisionMultistateTrigger[],
+  multistateInput: PiVisionMultistateConfig | PiVisionMultistateTrigger[],
+  cfg?: PiVisionSymbolConfiguration,
 ): MultistateConfig {
+  const triggers: PiVisionMultistateTrigger[] = Array.isArray(multistateInput)
+    ? multistateInput
+    : Array.isArray(multistateInput?.Triggers)
+      ? multistateInput.Triggers
+      : [];
+
+  const multistate = Array.isArray(multistateInput) ? undefined : multistateInput;
+
+  const parentBlinks = (Array.isArray(multistate?.Blink) ? multistate?.Blink : undefined)
+    ?? (Array.isArray(multistate?.Blinking) ? multistate?.Blinking : undefined)
+    ?? (Array.isArray(multistate?.BlinkState) ? multistate?.BlinkState : undefined)
+    ?? (Array.isArray(multistate?.IsBlinking) ? multistate?.IsBlinking : undefined)
+    ?? (Array.isArray(multistate?.Flash) ? multistate?.Flash : undefined)
+    ?? (Array.isArray(cfg?.Blink) ? cfg?.Blink : undefined)
+    ?? (Array.isArray(cfg?.Blinking) ? cfg?.Blinking : undefined)
+    ?? (Array.isArray(cfg?.BlinkState) ? cfg?.BlinkState : undefined);
+
+  const parentStates = (Array.isArray(multistate?.States) ? multistate?.States : undefined)
+    ?? (Array.isArray(multistate?.Thresholds) ? multistate?.Thresholds : undefined);
+
   const rules: MultistateRule[] = triggers
-    .map((trigger, index) => convertMultistateTrigger(trigger, index))
+    .map((trigger, index) => {
+      const stateObj = parentStates?.[index];
+      const parentBlinkVal = parentBlinks?.[index];
+      return convertMultistateTrigger(trigger, index, stateObj, parentBlinkVal);
+    })
     .filter((rule): rule is MultistateRule => rule !== undefined);
 
   return { enabled: rules.length > 0, rules };
@@ -1117,27 +1151,52 @@ export function convertMultistate(
 
 function convertMultistateIfPresent(
   multistate?: PiVisionMultistateConfig,
+  cfg?: PiVisionSymbolConfiguration,
 ): { multistate?: MultistateConfig; backgroundMultistate?: MultistateConfig } {
   if (!multistate || !Array.isArray(multistate.Triggers) || multistate.Triggers.length === 0) {
     return {};
   }
-  const config = convertMultistate(multistate.Triggers);
+  const config = convertMultistate(multistate, cfg);
 
   const hasBackgroundTriggers = multistate.Triggers.some((t) => typeof t.BackColor === 'string' && t.BackColor.trim() !== '');
   if (hasBackgroundTriggers) {
+    const parentBlinks = (Array.isArray(multistate?.Blink) ? multistate?.Blink : undefined)
+      ?? (Array.isArray(multistate?.Blinking) ? multistate?.Blinking : undefined)
+      ?? (Array.isArray(multistate?.BlinkState) ? multistate?.BlinkState : undefined)
+      ?? (Array.isArray(multistate?.IsBlinking) ? multistate?.IsBlinking : undefined)
+      ?? (Array.isArray(multistate?.Flash) ? multistate?.Flash : undefined)
+      ?? (Array.isArray(cfg?.Blink) ? cfg?.Blink : undefined)
+      ?? (Array.isArray(cfg?.Blinking) ? cfg?.Blinking : undefined)
+      ?? (Array.isArray(cfg?.BlinkState) ? cfg?.BlinkState : undefined);
+
+    const parentStates = (Array.isArray(multistate?.States) ? multistate?.States : undefined)
+      ?? (Array.isArray(multistate?.Thresholds) ? multistate?.Thresholds : undefined);
+
     const bgRules: MultistateRule[] = multistate.Triggers
-      .map((t) => {
+      .map((t, idx) => {
         const expr = (t.Expression ?? '').trim();
         const color = normalizeColor(t.BackColor);
         if (!expr || !color) return undefined;
         const parsed = parseExpression(expr);
         if (!parsed) return undefined;
+        const stateObj = parentStates?.[idx];
+        const stateRec = (stateObj && typeof stateObj === 'object') ? stateObj as Record<string, unknown> : undefined;
+        const parentBlinkVal = parentBlinks?.[idx];
+        const trigRec = t as Record<string, unknown>;
         const isBlink = Boolean(
-          t.Blink === true || t.Blink === 1 || t.Blink === 'true' ||
-          t.IsBlinking === true || t.IsBlinking === 1 || t.IsBlinking === 'true' ||
-          t.Blinking === true || t.Blinking === 1 || t.Blinking === 'true' ||
-          t.Flash === true || t.Flash === 1 || t.Flash === 'true' ||
-          t.BlinkState === true || t.BlinkState === 1 || t.BlinkState === 'true'
+          trigRec.Blink === true || trigRec.Blink === 1 || trigRec.Blink === 'true' ||
+          trigRec.IsBlinking === true || trigRec.IsBlinking === 1 || trigRec.IsBlinking === 'true' ||
+          trigRec.Blinking === true || trigRec.Blinking === 1 || trigRec.Blinking === 'true' ||
+          trigRec.Flash === true || trigRec.Flash === 1 || trigRec.Flash === 'true' ||
+          trigRec.BlinkState === true || trigRec.BlinkState === 1 || trigRec.BlinkState === 'true' ||
+          trigRec.IsBlink === true || trigRec.IsBlink === 1 || trigRec.IsBlink === 'true' ||
+          parentBlinkVal === true || parentBlinkVal === 1 || parentBlinkVal === 'true' ||
+          stateRec?.Blink === true || stateRec?.Blink === 1 || stateRec?.Blink === 'true' ||
+          stateRec?.IsBlinking === true || stateRec?.IsBlinking === 1 || stateRec?.IsBlinking === 'true' ||
+          stateRec?.Blinking === true || stateRec?.Blinking === 1 || stateRec?.Blinking === 'true' ||
+          stateRec?.Flash === true || stateRec?.Flash === 1 || stateRec?.Flash === 'true' ||
+          Boolean(Array.isArray(stateRec?.StateValues) && stateRec?.StateValues?.some((v) => v === true || v === 1 || v === 'true')) ||
+          Boolean(Array.isArray(trigRec?.StateValues) && trigRec?.StateValues?.some((v) => v === true || v === 1 || v === 'true'))
         );
         return {
           id: generateId(),
@@ -1252,9 +1311,11 @@ function normalizeMultistateColor(value: unknown): string | undefined {
 function convertMultistateTrigger(
   trigger: PiVisionMultistateTrigger,
   index: number,
+  stateObj?: unknown,
+  parentBlinkVal?: unknown,
 ): MultistateRule | undefined {
   const expression = (trigger.Expression ?? '').trim();
-  const color = normalizeColor(trigger.ForeColor) ?? '#d32f2f';
+  const color = normalizeColor(trigger.ForeColor ?? (trigger as Record<string, unknown>).Color ?? (trigger as Record<string, unknown>).Fill) ?? '#d32f2f';
 
   if (!expression) {
     return undefined;
@@ -1265,12 +1326,23 @@ function convertMultistateTrigger(
     return undefined;
   }
 
+  const trigRec = trigger as Record<string, unknown>;
+  const stateRec = (stateObj && typeof stateObj === 'object') ? stateObj as Record<string, unknown> : undefined;
+
   const isBlink = Boolean(
-    trigger.Blink === true || trigger.Blink === 1 || trigger.Blink === 'true' ||
-    trigger.IsBlinking === true || trigger.IsBlinking === 1 || trigger.IsBlinking === 'true' ||
-    trigger.Blinking === true || trigger.Blinking === 1 || trigger.Blinking === 'true' ||
-    trigger.Flash === true || trigger.Flash === 1 || trigger.Flash === 'true' ||
-    trigger.BlinkState === true || trigger.BlinkState === 1 || trigger.BlinkState === 'true'
+    trigRec.Blink === true || trigRec.Blink === 1 || trigRec.Blink === 'true' ||
+    trigRec.IsBlinking === true || trigRec.IsBlinking === 1 || trigRec.IsBlinking === 'true' ||
+    trigRec.Blinking === true || trigRec.Blinking === 1 || trigRec.Blinking === 'true' ||
+    trigRec.Flash === true || trigRec.Flash === 1 || trigRec.Flash === 'true' ||
+    trigRec.BlinkState === true || trigRec.BlinkState === 1 || trigRec.BlinkState === 'true' ||
+    trigRec.IsBlink === true || trigRec.IsBlink === 1 || trigRec.IsBlink === 'true' ||
+    parentBlinkVal === true || parentBlinkVal === 1 || parentBlinkVal === 'true' ||
+    stateRec?.Blink === true || stateRec?.Blink === 1 || stateRec?.Blink === 'true' ||
+    stateRec?.IsBlinking === true || stateRec?.IsBlinking === 1 || stateRec?.IsBlinking === 'true' ||
+    stateRec?.Blinking === true || stateRec?.Blinking === 1 || stateRec?.Blinking === 'true' ||
+    stateRec?.Flash === true || stateRec?.Flash === 1 || stateRec?.Flash === 'true' ||
+    Boolean(Array.isArray(stateRec?.StateValues) && stateRec?.StateValues?.some((v) => v === true || v === 1 || v === 'true')) ||
+    Boolean(Array.isArray(trigRec?.StateValues) && trigRec?.StateValues?.some((v) => v === true || v === 1 || v === 'true'))
   );
 
   return {

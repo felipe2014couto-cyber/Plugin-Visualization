@@ -1161,6 +1161,31 @@ describe('Multistate Blink e Background na conversão PI Vision', () => {
     expect(props.backgroundMultistate?.rules[1].blink).toBe(true);
     expect(props.backgroundMultistate?.rules[1].color).toBe('#ff0000');
   });
+
+  it('converte multistate com array Blink no nível raiz do Multistate ou States', () => {
+    const sym: PiVisionSymbol = {
+      SymbolType: 'Value',
+      Configuration: {
+        DataSources: ['pi:\\\\SERVER\\TEMPERATURA_MANCAL_D'],
+      },
+      Multistate: {
+        Triggers: [
+          { Expression: '<= 70', ForeColor: '#00ff00' },
+          { Expression: '<= 80', ForeColor: '#ffff00' },
+          { Expression: '>= 80', ForeColor: '#ff0000' },
+        ],
+        Blink: [false, false, true],
+      },
+    };
+
+    const { elements } = convertPiVisionDisplay({ Symbols: [sym] });
+    const props = elements[0].properties as any;
+    expect(props.multistate?.enabled).toBe(true);
+    expect(props.multistate?.rules[0].blink).toBeUndefined();
+    expect(props.multistate?.rules[1].blink).toBeUndefined();
+    expect(props.multistate?.rules[2].blink).toBe(true);
+  });
 });
+
 
 
