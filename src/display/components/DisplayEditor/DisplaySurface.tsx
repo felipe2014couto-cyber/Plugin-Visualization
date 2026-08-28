@@ -949,6 +949,8 @@ export function DisplaySurface({
         display: block;
         touch-action: none;
         user-select: none;
+        outline: none;
+        border: none;
       `}
       data-testid="display-surface"
       tabIndex={0}
@@ -980,6 +982,7 @@ export function DisplaySurface({
         width={canvasBounds.width}
         height={canvasBounds.height}
         fill={surface.backgroundColor}
+        stroke="none"
         className={surface.backgroundColor.toLowerCase() === DEFAULT_SURFACE_BACKGROUND ? themedDefaultSurface : undefined}
         data-testid="display-surface-background"
       />

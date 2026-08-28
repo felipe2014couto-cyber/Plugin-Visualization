@@ -6,7 +6,7 @@ import {
   type XYPlotElement,
   type XYPlotYSeries,
 } from '../createXYPlot';
-import { linearRegression, pairXYByPosition, pairXYByTimestamp, pearsonCorrelation, type XYPair } from '../xyPlotMath';
+import { linearRegression, pairXYByPosition, pairXYByTimestamp, pearsonCorrelation } from '../xyPlotMath';
 import type { TrendRuntimeState } from '../runtime/trendRuntime';
 
 export interface XYPlotElementViewProps {
@@ -78,8 +78,8 @@ export function XYPlotElementView({ element, xState, yStates = [], xDatabaseScal
 }
 
 function resolveScale(values: readonly number[], mode: XYPlotYSeries['scaleMode'], customMin?: number, customMax?: number, database?: PiPointDatabaseLimits): ScaleRange {
-  if (mode === 'custom' && validRange(customMin, customMax)) return { min: customMin, max: customMax };
-  if (mode === 'database' && database && validRange(database.zero, database.zero + database.span)) return { min: database.zero, max: database.zero + database.span };
+  if (mode === 'custom' && typeof customMin === 'number' && typeof customMax === 'number' && Number.isFinite(customMin) && Number.isFinite(customMax) && customMin < customMax) return { min: customMin, max: customMax };
+  if (mode === 'database' && database && typeof database.zero === 'number' && typeof database.span === 'number' && Number.isFinite(database.zero) && Number.isFinite(database.span) && database.span > 0) return { min: database.zero, max: database.zero + database.span };
   const finite = values.filter(Number.isFinite);
   if (!finite.length) return { min: 0, max: 1 };
   const min = Math.min(...finite); const max = Math.max(...finite);
@@ -87,7 +87,6 @@ function resolveScale(values: readonly number[], mode: XYPlotYSeries['scaleMode'
   return { min, max };
 }
 function combineRanges(ranges: readonly ScaleRange[]): ScaleRange { return ranges.length ? { min: Math.min(...ranges.map((range) => range.min)), max: Math.max(...ranges.map((range) => range.max)) } : { min: 0, max: 1 }; }
-function validRange(min: unknown, max: unknown): min is number { return typeof min === 'number' && typeof max === 'number' && Number.isFinite(min) && Number.isFinite(max) && min < max; }
 function formatNumber(value: number, format: unknown) { return format === 'scientific' ? value.toExponential(2) : Number(value.toPrecision(5)).toString(); }
 
 function Marker({ marker, x, y, color }: { marker: XYMarkerStyle; x: number; y: number; color: string }) {
