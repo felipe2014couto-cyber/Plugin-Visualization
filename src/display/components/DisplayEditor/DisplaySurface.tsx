@@ -37,7 +37,7 @@ import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { PROGRAMMING_TYPE, type ProgrammingElement } from '../../createProgramming';
 import { ProgrammingDisplayElementView, getProgrammingConsumerId } from '../../../programming/ProgrammingDisplayElementView';
-import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
+import { DEFAULT_LIBRARY_SYMBOL_COLOR, getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
 import { extractAllGroupBindingsAndElements, findTopLevelElementId, getElementAbsoluteGeometry, GROUP_TYPE, type GroupElement } from '../../createGroup';
 import { isElementLocked } from '../../createLocked';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../../../library';

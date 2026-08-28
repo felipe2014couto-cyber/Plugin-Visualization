@@ -1,6 +1,6 @@
 {
   "name": "pims-vision-app",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Visualization - Editor de displays industriais para Grafana.",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
