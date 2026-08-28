@@ -36,6 +36,7 @@ const config = async (env): Promise<Configuration> => {
   const baseConfig: Configuration = {
     cache: {
       type: 'filesystem',
+      version: pluginJson.info.version,
       buildDependencies: {
         config: [__filename],
       },
