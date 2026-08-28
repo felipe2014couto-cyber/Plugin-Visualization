@@ -26,8 +26,10 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
     ? undefined
     : getScaleRatio(numericValue, minimum, maximum);
   const cx = element.x + element.width / 2;
-  const cy = element.y + element.height * 0.53;
-  const radius = Math.max(1, Math.min(element.width * 0.37, element.height * 0.39));
+  // Keep a dedicated header area for the label.  Besides avoiding overlap with
+  // the top scale mark, this gives the gauge a stable layout when resized.
+  const cy = element.y + element.height * 0.58;
+  const radius = Math.max(1, Math.min(element.width * 0.37, element.height * 0.33));
   const sweepAngle = options.gaugeAngle;
   const startAngle = 90 + (360 - sweepAngle) / 2;
   const track = arcPath(cx, cy, radius, startAngle, sweepAngle);
@@ -45,7 +47,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const scaleColor = resolveThemeForeground(options.gaugeScaleColor);
   const borderColor = resolveThemeForeground(options.gaugeBorderColor);
   const title = options.title.trim() || label || (binding && isPiPointBinding(binding) ? binding.pointName : '');
-  const titleY = options.labelPosition === 'below' ? element.y + element.height - 52 : element.y + 20;
+  const titleY = options.labelPosition === 'below' ? element.y + element.height - 62 : element.y + Math.max(20, element.height * 0.075);
 
   return (
     <g
@@ -100,12 +102,6 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
       <text x={cx} y={valueY} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
         {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={cx} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
       </text>
-      {showGaugeScale && options.labelPosition !== 'below' && <text x={element.x + 10} y={element.y + element.height - 10} fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-min-${element.id}`} pointerEvents="none">
-        {formatScale(minimum)}
-      </text>}
-      {showGaugeScale && options.labelPosition !== 'below' && <text x={element.x + element.width - 10} y={element.y + element.height - 10} textAnchor="end" fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))} data-testid={`gauge-max-${element.id}`} pointerEvents="none">
-        {formatScale(maximum)}
-      </text>}
       {!isValidScale(minimum, maximum) && (
         <text x={cx} y={element.y + element.height - 28} textAnchor="middle" fill="#f2cc0c" fontSize={10} data-testid={`gauge-invalid-scale-${element.id}`} pointerEvents="none">
           Escala inválida
@@ -171,10 +167,6 @@ function getValueText(
 
 function isValidScale(minimum: number, maximum: number): boolean {
   return Number.isFinite(minimum) && Number.isFinite(maximum) && minimum < maximum;
-}
-
-function formatScale(value: number): string {
-  return Number.isFinite(value) ? String(value) : '--';
 }
 
 function getDetailLines(valueText: string, state: ValueRuntimeState | undefined, showValue: boolean, showUnit: boolean, showTimestamp: boolean): string[] {
