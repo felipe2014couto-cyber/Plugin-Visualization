@@ -925,7 +925,15 @@ export function DisplaySurface({
       width={canvasBounds.width}
       height={canvasBounds.height}
       viewBox={`${canvasBounds.left} ${canvasBounds.top} ${canvasBounds.width} ${canvasBounds.height}`}
-      style={{ width: canvasBounds.width * zoom, height: canvasBounds.height * zoom, flex: '0 0 auto' }}
+      style={isCanvasEmpty ? {
+        width: '100%',
+        height: '100%',
+        flex: '1 1 auto',
+      } : {
+        width: canvasBounds.width * zoom,
+         height: canvasBounds.height * zoom,
+         flex: '0 0 auto',
+       }}
       xmlns="http://www.w3.org/2000/svg"
       className={css`
         display: block;

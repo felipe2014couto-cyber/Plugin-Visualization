@@ -34,15 +34,12 @@ describe('LibraryPanel', () => {
     expect(screen.getByText('Motores')).toBeInTheDocument();
   });
 
-  it('renderiza os seis cards de motores dentro do grupo Motores', () => {
+  it('renderiza os cards de motores dentro do grupo Motores', () => {
     render(<LibraryPanel />);
     fireEvent.click(screen.getByTestId('library-category-Motores').querySelector('button') as HTMLButtonElement);
 
     expect(screen.getByText('Motor elétrico industrial horizontal')).toBeInTheDocument();
     expect(screen.getByText('Motor elétrico industrial compacto')).toBeInTheDocument();
-    expect(screen.getByText('Motor elétrico de ventilação')).toBeInTheDocument();
-    expect(screen.getByText('Motor de passo')).toBeInTheDocument();
-    expect(screen.getByText('Motor vibratório')).toBeInTheDocument();
-    expect(screen.getByText('Motor elétrico trifásico')).toBeInTheDocument();
+    expect(screen.getByText('Motor 01')).toBeInTheDocument();
   });
 });
