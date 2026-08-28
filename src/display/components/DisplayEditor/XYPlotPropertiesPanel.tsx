@@ -1,0 +1,8 @@
+import React from 'react';
+import { css } from '@emotion/css';
+import type { XYPlotElement } from '../../createXYPlot';
+
+export function XYPlotPropertiesPanel({ element, onChange }: { element: XYPlotElement; onChange: (patch: Partial<XYPlotElement['properties']>) => void }) {
+  return <aside className={styles.panel} data-testid="xy-plot-properties-panel"><div className={styles.header}>XY Plot</div><div className={styles.fields}><label>Eixo X<input readOnly value={element.properties.xBinding.pointName} /></label><label>Eixo Y<input readOnly value={element.properties.yBinding?.pointName ?? ''} placeholder="Arraste uma PI Tag sobre o gráfico" /></label><small>Arraste uma PI Tag sobre o XY Plot para definir o eixo Y.</small><label className={styles.checkbox}><input type="checkbox" checked={element.properties.connectPoints === true} onChange={(event) => onChange({ connectPoints: event.target.checked })} data-testid="xy-plot-connect-points" />Conectar pontos</label></div></aside>;
+}
+const styles = { panel: css`flex:0 0 300px;width:300px;min-width:0;min-height:0;max-height:100%;overflow:auto;border-left:1px solid var(--border-color);background:var(--panel-bg);color:var(--text-primary);`, header: css`padding:12px 14px;border-bottom:1px solid var(--border-color);font-size:12px;font-weight:600;`, fields: css`display:flex;flex-direction:column;gap:10px;padding:14px;font-size:10px;color:var(--text-secondary);label{display:flex;flex-direction:column;gap:4px;}input{box-sizing:border-box;min-height:28px;padding:4px 6px;border:1px solid var(--border-color);background:var(--input-bg);color:var(--text-primary);}small{line-height:1.35;color:var(--text-secondary);}`, checkbox: css`flex-direction:row!important;align-items:center;gap:6px!important;font-size:11px;` };

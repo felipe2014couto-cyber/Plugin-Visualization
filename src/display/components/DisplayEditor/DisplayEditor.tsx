@@ -99,6 +99,8 @@ import { TablePropertiesPanel } from './TablePropertiesPanel';
 import { PiPointInfoPanel } from './PiPointInfoPanel';
 import { SqlTablePropertiesPanel } from './SqlTablePropertiesPanel';
 import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
+import { XY_PLOT_TYPE, appendXYPlot, createXYPlot, updateXYPlotProperties, type XYPlotElement } from '../../createXYPlot';
+import { XYPlotPropertiesPanel } from './XYPlotPropertiesPanel';
 import {
   BAR_CHART_TYPE,
   createBarChart,
@@ -140,7 +142,7 @@ import {
 import type { SurfaceViewport } from './viewportZoom';
 
 export type DisplayEditorMode = 'edit' | 'view';
-export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'bar-chart' | 'table';
+export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'bar-chart' | 'table' | 'xy-plot';
 
 export interface DisplayEditorProps {
   document: DisplayDocument;
@@ -926,9 +928,10 @@ export function DisplayEditor({
     );
     const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
     const targetTable = resolveTableDropTarget(currentDocument, event.target, point);
+    const targetXYPlot = resolveXYPlotDropTarget(currentDocument, event.target, point);
     const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
     const targetText = resolveTextDropTarget(currentDocument, event.target, point);
-    if (!binding || (!point && !targetTrend && !targetBarChart && !targetShape && !targetLibrarySymbol && !targetTable && !targetText)) {
+    if (!binding || (!point && !targetTrend && !targetBarChart && !targetShape && !targetLibrarySymbol && !targetTable && !targetXYPlot && !targetText)) {
       return;
     }
     event.preventDefault();
@@ -971,6 +974,13 @@ export function DisplayEditor({
       const item: TableDataItem = { binding, ...(pointResult?.path ? { path: pointResult.path } : {}), ...(pointResult?.description ? { description: pointResult.description } : {}), ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}), ...(pointResult?.pointType ? { pointType: pointResult.pointType } : {}) };
       commitDocument(addTableItem(currentDocument, targetTable.id, item));
       dispatch({ type: 'SELECT', elementId: targetTable.id });
+      return;
+    }
+    if (targetXYPlot) {
+      const patch = targetXYPlot.properties.yBinding ? { yBinding: binding } : { yBinding: binding };
+      commitDocument(updateXYPlotProperties(currentDocument, targetXYPlot.id, patch));
+      dispatch({ type: 'SELECT', elementId: targetXYPlot.id });
+      setPropertiesPanelOpen(true);
       return;
     }
 
@@ -1033,6 +1043,12 @@ export function DisplayEditor({
         const item: TableDataItem = { binding, ...(pointResult?.path ? { path: pointResult.path } : {}), ...(pointResult?.description ? { description: pointResult.description } : {}), ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}), ...(pointResult?.pointType ? { pointType: pointResult.pointType } : {}) };
         const element = positionElementAt(createTable({ item, surface: currentDocument.surface, existingIds: currentDocument.elements.map((candidate) => candidate.id) }), point!, currentDocument);
         commitDocument(appendTable(currentDocument, element));
+        dispatch({ type: 'SELECT', elementId: element.id });
+        break;
+      }
+      case 'xy-plot': {
+        const element = positionElementAt(createXYPlot({ xBinding: binding, surface: currentDocument.surface, existingIds: currentDocument.elements.map((candidate) => candidate.id) }), point!, currentDocument);
+        commitDocument(appendXYPlot(currentDocument, element));
         dispatch({ type: 'SELECT', elementId: element.id });
         break;
       }
@@ -1213,9 +1229,10 @@ export function DisplayEditor({
   const selectedBarChart = selectedElement && selectedElement.type === BAR_CHART_TYPE
     ? selectedElement as BarChartElement
     : undefined;
-  const selectedTable = selectedElement && selectedElement.type === TABLE_TYPE
+    const selectedTable = selectedElement && selectedElement.type === TABLE_TYPE
     ? selectedElement as TableElement
     : undefined;
+  const selectedXYPlot = selectedElement && selectedElement.type === XY_PLOT_TYPE ? selectedElement as XYPlotElement : undefined;
   const selectedSqlTable = selectedElement && selectedElement.type === SQL_TABLE_TYPE
     ? selectedElement as SqlTableElement
     : undefined;
@@ -1228,6 +1245,9 @@ export function DisplayEditor({
 
   const handleBarChartChange = useCallback((patch: Partial<BarChartProperties>) => {
     applyToCompatibleSelection((document, elementId) => updateBarChartProperties(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
+  const handleXYPlotChange = useCallback((patch: Partial<XYPlotElement['properties']>) => {
+    applyToCompatibleSelection((document, elementId) => updateXYPlotProperties(document, elementId, patch));
   }, [applyToCompatibleSelection]);
 
   const handleBarChartVisualChange = useCallback((patch: Partial<BarChartVisualOptions>) => {
@@ -1809,6 +1829,7 @@ export function DisplayEditor({
                 <button type="button" title="Arrastar como Gráfico de Barras" aria-label="Arrastar como Gráfico de Barras" className={dropSymbolType === 'bar-chart' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar-chart" aria-pressed={dropSymbolType === 'bar-chart'} onClick={() => onDropSymbolTypeChange?.('bar-chart')}><BarChartIcon /></button>
                 <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => onDropSymbolTypeChange?.('trend')}><TrendIcon /></button>
                 <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => onDropSymbolTypeChange?.('table')}>▦</button>
+                <button type="button" title="Arrastar como XY Plot" aria-label="Arrastar como XY Plot" className={dropSymbolType === 'xy-plot' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-xy-plot" aria-pressed={dropSymbolType === 'xy-plot'} onClick={() => onDropSymbolTypeChange?.('xy-plot')}>XY</button>
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
@@ -1962,6 +1983,7 @@ export function DisplayEditor({
           />
         )}
         {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} onExport={(format) => void handleTableExport(selectedTable, format)} exporting={exporting} />}
+        {selectedXYPlot && <XYPlotPropertiesPanel element={selectedXYPlot} onChange={handleXYPlotChange} />}
         {selectedSqlTable && <SqlTablePropertiesPanel properties={selectedSqlTable.properties} onChange={handleSqlTableChange} />}
         {selectedRectangle && (
           <RectanglePropertiesPanel
@@ -2395,6 +2417,17 @@ function resolveTableDropTarget(
   return element as TableElement | undefined;
 }
 
+function resolveXYPlotDropTarget(document: DisplayDocument, eventTarget: EventTarget | null, point: Point | undefined): XYPlotElement | undefined {
+  const xyNode = eventTarget instanceof Element ? eventTarget.closest('[data-element-id][data-element-type="xy-plot"]') : null;
+  const elementId = xyNode?.getAttribute('data-element-id');
+  if (elementId) {
+    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === XY_PLOT_TYPE);
+    if (element) return element as XYPlotElement;
+  }
+  if (!point) return undefined;
+  return [...document.elements].reverse().find((candidate) => candidate.type === XY_PLOT_TYPE && point.x >= candidate.x && point.x <= candidate.x + candidate.width && point.y >= candidate.y && point.y <= candidate.y + candidate.height) as XYPlotElement | undefined;
+}
+
 function findTrendAtClientPoint(
   clientX: number,
   clientY: number,
@@ -2547,6 +2580,8 @@ function createDropPreviewElement(
       return createValue(options);
     case 'table':
       return createTable({ item: { binding }, surface: document.surface });
+    case 'xy-plot':
+      return createXYPlot({ xBinding: binding, surface: document.surface });
   }
 }
 
@@ -2570,6 +2605,8 @@ function createCalculationDropPreviewElement(
     case 'value':
       return createValue(options);
     case 'table':
+      return createBar(options);
+    case 'xy-plot':
       return createBar(options);
   }
 }
@@ -3012,6 +3049,8 @@ function DropPreviewIcon({ symbolType }: { symbolType: PiPointDropSymbolType }) 
       return <ValueIcon />;
     case 'table':
       return <span aria-hidden="true">▦</span>;
+    case 'xy-plot':
+      return <span aria-hidden="true">XY</span>;
   }
 }
 

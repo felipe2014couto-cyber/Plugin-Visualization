@@ -124,6 +124,9 @@ export type {
 export { BarChartElementView } from './components/BarChartElementView';
 export type { BarChartElementViewProps } from './components/BarChartElementView';
 
+export { XY_PLOT_TYPE, appendXYPlot, createXYPlot, updateXYPlotProperties } from './createXYPlot';
+export type { XYPlotElement, XYPlotProperties } from './createXYPlot';
+
 export { addTableItem, appendTable, createTable, defaultTableColumns, removeTableItem, moveTableItem, TABLE_COLUMNS, TABLE_COLUMN_LABELS, TABLE_TYPE, updateTableProperties } from './createTable';
 export type { CreateTableOptions, TableColumnAlign, TableColumnConfig, TableColumnId, TableDataItem, TableElement, TableProperties, TableStyle } from './createTable';
 
