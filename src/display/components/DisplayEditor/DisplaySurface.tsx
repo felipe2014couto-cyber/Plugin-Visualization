@@ -261,6 +261,15 @@ export function DisplaySurface({
             }))
           : [];
       }
+      if (element.type === XY_PLOT_TYPE) {
+        const xy = element as XYPlotElement;
+        return [
+          ...(xy.properties.xScaleMode === 'database' ? [{ id: `${xy.id}:xy-x`, binding: xy.properties.xBinding }] : []),
+          ...getXYPlotYSeries(xy.properties).flatMap((series, index) => series.scaleMode === 'database'
+            ? [{ id: `${xy.id}:xy-y-${index}`, binding: series.binding }]
+            : []),
+        ];
+      }
       return [];
     });
     void Promise.all(databaseElements.map(async (item) => {
@@ -1078,7 +1087,7 @@ export function DisplaySurface({
           }
           if (element.type === XY_PLOT_TYPE) {
             const xy = element as XYPlotElement;
-            return <XYPlotElementView key={xy.id} element={xy} xState={allTrendRuntimeStates.get(`${xy.id}:xy-x`)} yStates={getXYPlotYSeries(xy.properties).map((_, index) => allTrendRuntimeStates.get(`${xy.id}:xy-y-${index}`))} />;
+            return <XYPlotElementView key={xy.id} element={xy} xState={allTrendRuntimeStates.get(`${xy.id}:xy-x`)} yStates={getXYPlotYSeries(xy.properties).map((_, index) => allTrendRuntimeStates.get(`${xy.id}:xy-y-${index}`))} xDatabaseScale={databaseScales[`${xy.id}:xy-x`]} yDatabaseScales={getXYPlotYSeries(xy.properties).map((_, index) => databaseScales[`${xy.id}:xy-y-${index}`])} />;
           }
           if (element.type === SQL_TABLE_TYPE) {
             return <SqlTableElementView key={element.id} element={element as unknown as SqlTableElement} selected={selectedElementIds?.includes(element.id)} editable={editable} />;
