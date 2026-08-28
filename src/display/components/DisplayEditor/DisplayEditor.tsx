@@ -2154,14 +2154,14 @@ function createPiPointDragPreview(
   const wrapperBounds = wrapper.getBoundingClientRect();
   const viewport = getSvgViewport(svg);
   if (targetTrend) {
-    const trendLeft = viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale;
-    const trendTop = viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale;
+    const trendLeft = viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetTrend.x * viewport.scale;
+    const trendTop = viewport.top - wrapperBounds.top + wrapper.scrollTop + targetTrend.y * viewport.scale;
     const trendWidth = targetTrend.width * viewport.scale;
     const trendHeight = targetTrend.height * viewport.scale;
     const width = Math.min(320, Math.max(1, trendWidth - 12));
     const height = Math.min(64, Math.max(1, trendHeight - 12));
-    const pointerLeft = clientX - wrapperBounds.left - width / 2;
-    const pointerTop = clientY - wrapperBounds.top - height / 2;
+    const pointerLeft = clientX - wrapperBounds.left + wrapper.scrollLeft - width / 2;
+    const pointerTop = clientY - wrapperBounds.top + wrapper.scrollTop - height / 2;
     return {
       left: Math.max(trendLeft + 6, Math.min(pointerLeft, trendLeft + trendWidth - width - 6)),
       top: Math.max(trendTop + 6, Math.min(pointerTop, trendTop + trendHeight - height - 6)),
@@ -2175,14 +2175,14 @@ function createPiPointDragPreview(
     };
   }
   if (targetBarChart) {
-    const barChartLeft = viewport.left - wrapperBounds.left + targetBarChart.x * viewport.scale;
-    const barChartTop = viewport.top - wrapperBounds.top + targetBarChart.y * viewport.scale;
+    const barChartLeft = viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetBarChart.x * viewport.scale;
+    const barChartTop = viewport.top - wrapperBounds.top + wrapper.scrollTop + targetBarChart.y * viewport.scale;
     const barChartWidth = targetBarChart.width * viewport.scale;
     const barChartHeight = targetBarChart.height * viewport.scale;
     const width = Math.min(320, Math.max(1, barChartWidth - 12));
     const height = Math.min(64, Math.max(1, barChartHeight - 12));
-    const pointerLeft = clientX - wrapperBounds.left - width / 2;
-    const pointerTop = clientY - wrapperBounds.top - height / 2;
+    const pointerLeft = clientX - wrapperBounds.left + wrapper.scrollLeft - width / 2;
+    const pointerTop = clientY - wrapperBounds.top + wrapper.scrollTop - height / 2;
     return {
       left: Math.max(barChartLeft + 6, Math.min(pointerLeft, barChartLeft + barChartWidth - width - 6)),
       top: Math.max(barChartTop + 6, Math.min(pointerTop, barChartTop + barChartHeight - height - 6)),
@@ -2198,8 +2198,8 @@ function createPiPointDragPreview(
   }
   const positioned = positionElementAt(prototype, point!, document);
   return {
-    left: viewport.left - wrapperBounds.left + positioned.x * viewport.scale,
-    top: viewport.top - wrapperBounds.top + positioned.y * viewport.scale,
+    left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + positioned.x * viewport.scale,
+    top: viewport.top - wrapperBounds.top + wrapper.scrollTop + positioned.y * viewport.scale,
     width: positioned.width * viewport.scale,
     height: positioned.height * viewport.scale,
     valid: true,
@@ -2228,8 +2228,8 @@ function createCalculationDragPreview(
     const wrapperBounds = wrapper.getBoundingClientRect();
     const viewport = getSvgViewport(svg);
     return {
-      left: viewport.left - wrapperBounds.left + targetLibrarySymbol.x * viewport.scale,
-      top: viewport.top - wrapperBounds.top + targetLibrarySymbol.y * viewport.scale,
+      left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetLibrarySymbol.x * viewport.scale,
+      top: viewport.top - wrapperBounds.top + wrapper.scrollTop + targetLibrarySymbol.y * viewport.scale,
       width: targetLibrarySymbol.width * viewport.scale,
       height: targetLibrarySymbol.height * viewport.scale,
       valid: true,
@@ -2242,8 +2242,8 @@ function createCalculationDragPreview(
     const wrapperBounds = wrapper.getBoundingClientRect();
     const viewport = getSvgViewport(svg);
     return {
-      left: viewport.left - wrapperBounds.left + targetShape.x * viewport.scale,
-      top: viewport.top - wrapperBounds.top + targetShape.y * viewport.scale,
+      left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetShape.x * viewport.scale,
+      top: viewport.top - wrapperBounds.top + wrapper.scrollTop + targetShape.y * viewport.scale,
       width: targetShape.width * viewport.scale,
       height: targetShape.height * viewport.scale,
       valid: true,
@@ -2256,8 +2256,8 @@ function createCalculationDragPreview(
     const wrapperBounds = wrapper.getBoundingClientRect();
     const viewport = getSvgViewport(svg);
     return {
-      left: viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale,
-      top: viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale,
+      left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetTrend.x * viewport.scale,
+      top: viewport.top - wrapperBounds.top + wrapper.scrollTop + targetTrend.y * viewport.scale,
       width: targetTrend.width * viewport.scale,
       height: targetTrend.height * viewport.scale,
       valid: true,
@@ -2272,8 +2272,8 @@ function createCalculationDragPreview(
   const viewport = getSvgViewport(svg);
   const positioned = positionElementAt(prototype, point, document);
   return {
-    left: viewport.left - wrapperBounds.left + positioned.x * viewport.scale,
-    top: viewport.top - wrapperBounds.top + positioned.y * viewport.scale,
+    left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + positioned.x * viewport.scale,
+    top: viewport.top - wrapperBounds.top + wrapper.scrollTop + positioned.y * viewport.scale,
     width: positioned.width * viewport.scale,
     height: positioned.height * viewport.scale,
     valid: true,
@@ -2511,8 +2511,8 @@ function createInvalidDragPreview(
   const wrapperBounds = wrapper.getBoundingClientRect();
   const width = Math.max(220, Math.min(420, label.length * 8 + 24));
   const height = 48;
-  const x = Number.isFinite(clientX) ? clientX - wrapperBounds.left : 0;
-  const y = Number.isFinite(clientY) ? clientY - wrapperBounds.top : 0;
+  const x = Number.isFinite(clientX) ? clientX - wrapperBounds.left + wrapper.scrollLeft : wrapper.scrollLeft;
+  const y = Number.isFinite(clientY) ? clientY - wrapperBounds.top + wrapper.scrollTop : wrapper.scrollTop;
   return {
     left: Math.max(0, x - width / 2),
     top: Math.max(0, y - height / 2),
