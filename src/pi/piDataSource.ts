@@ -969,10 +969,50 @@ export async function getPiPointsCurrentValues(
 
         const now = Date.now();
         const response = await resolveQueryResponse(instance.query(buildCurrentValuesRequest(batch, now)));
-        Object.assign(results, normalizeCurrentValues(response, batch));
+        const batchResults = normalizeCurrentValues(response, batch);
+        Object.assign(results, batchResults);
+
+        // Se alguma tag dentro do lote falhou, tenta individualmente para ela
+        const failedInBatch = batch.filter((binding) => {
+          const res = batchResults[getBindingKey(binding)];
+          return !res || res.status === 'error';
+        });
+
+        if (failedInBatch.length > 0 && failedInBatch.length < batch.length) {
+          for (const binding of failedInBatch) {
+            try {
+              const singleResponse = await resolveQueryResponse(instance.query(buildCurrentValuesRequest([binding], now)));
+              const singleResult = normalizeCurrentValues(singleResponse, [binding]);
+              if (singleResult[getBindingKey(binding)]?.status === 'success') {
+                results[getBindingKey(binding)] = singleResult[getBindingKey(binding)];
+              }
+            } catch {
+              // Mantém o status original
+            }
+          }
+        }
       } catch (error) {
-        for (const binding of batch) {
-          results[getBindingKey(binding)] = { status: 'error', error: toError(error) };
+        // Se a query em lote falhou por completo, tenta consultar individualmente cada binding
+        try {
+          const instance = await getResolvedPiDataSource(dataSourceSrv, {
+            uid: dataSourceUid,
+            name: '',
+            type: PI_DATASOURCE_TYPE,
+          });
+          const now = Date.now();
+          for (const binding of batch) {
+            try {
+              const singleResponse = await resolveQueryResponse(instance.query(buildCurrentValuesRequest([binding], now)));
+              const singleResult = normalizeCurrentValues(singleResponse, [binding]);
+              results[getBindingKey(binding)] = singleResult[getBindingKey(binding)] ?? { status: 'error', error: toError(error) };
+            } catch (singleError) {
+              results[getBindingKey(binding)] = { status: 'error', error: toError(singleError) };
+            }
+          }
+        } catch {
+          for (const binding of batch) {
+            results[getBindingKey(binding)] = { status: 'error', error: toError(error) };
+          }
         }
       }
     })
@@ -1290,6 +1330,11 @@ function normalizeCurrentValues(
   bindings.forEach((binding, index) => {
     const refId = refIdForIndex(index);
     const frame = framesByRefId.get(refId)
+      ?? frames.find((f) => {
+        const fn = (f.name ?? '').toLowerCase();
+        const pn = binding.pointName.toLowerCase();
+        return fn === pn || f.fields.some((field) => field.name.toLowerCase() === pn);
+      })
       ?? (bindings.length === 1 && frames.length === 1 ? frames[0] : undefined);
     const key = getBindingKey(binding);
 
@@ -1543,7 +1588,7 @@ function formatQueryInterval(intervalMs: number): string {
 function deduplicateBindings(bindings: readonly PiPointBinding[]): PiPointBinding[] {
   const unique = new Map<string, PiPointBinding>();
   for (const binding of bindings) {
-    if (!binding.dataSourceUid || !binding.serverPath || !binding.pointName) {
+    if (!binding.dataSourceUid || !binding.pointName) {
       continue;
     }
     unique.set(getBindingKey(binding), binding);
