@@ -444,10 +444,10 @@ export function convertPiVisionDisplay(
   const bounds = getDisplayBounds(symbols);
   const width = typeof display.Width === 'number' && display.Width > 0
     ? display.Width
-    : bounds?.width ?? 1920;
+    : (bounds?.width ?? 1920);
   const height = typeof display.Height === 'number' && display.Height > 0
     ? display.Height
-    : bounds?.height ?? 1080;
+    : (bounds?.height ?? 1080);
   const rawBg = normalizeColor(display.BackgroundColor ?? display.DisplayProperties?.BackgroundColor);
   const backgroundColor = (rawBg && rawBg.toLowerCase() !== '#ffffff' && rawBg.toLowerCase() !== '#fff') ? rawBg : '#1f1f1f';
 

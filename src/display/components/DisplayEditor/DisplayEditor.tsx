@@ -134,6 +134,7 @@ import {
   computeAlignmentSnap,
   computeResizeGeometry,
   getCanvasBounds,
+  getContentBounds,
   getElementById,
   updateElementGeometry,
   type AlignmentGuide,
@@ -1797,22 +1798,26 @@ export function DisplayEditor({
     const elements = documentRef.current.elements;
     const surface = documentRef.current.surface;
     const wrapper = surfaceWrapperRef.current;
-    const bounds = getCanvasBounds(surface, elements);
+    const bounds = elements.length > 0 ? getContentBounds(elements, surface) : getCanvasBounds(surface, elements);
     if (elements.length === 0 && (!bounds.width || !bounds.height)) {
       setSurfaceZoom(1);
       setSurfaceViewCenter({ x: surface.width / 2, y: surface.height / 2 });
       return;
     }
-    const availableWidth = Math.max(1, (wrapper?.clientWidth || surface.width) - 32);
-    const availableHeight = Math.max(1, (wrapper?.clientHeight || surface.height) - 32);
+    const availableWidth = Math.max(1, (wrapper?.clientWidth || surface.width) - 16);
+    const availableHeight = Math.max(1, (wrapper?.clientHeight || surface.height) - 16);
     const scaleX = availableWidth / bounds.width;
     const scaleY = availableHeight / bounds.height;
     const zoom = Math.max(DISPLAY_ZOOM_MIN, Math.min(DISPLAY_ZOOM_MAX, Math.min(scaleX, scaleY)));
     setSurfaceZoom(Number(zoom.toFixed(2)));
     setSurfaceViewCenter({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 });
     if (wrapper) {
-      wrapper.scrollLeft = Math.max(0, (wrapper.scrollWidth - wrapper.clientWidth) / 2);
-      wrapper.scrollTop = Math.max(0, (wrapper.scrollHeight - wrapper.clientHeight) / 2);
+      setTimeout(() => {
+        if (wrapper) {
+          wrapper.scrollLeft = Math.max(0, (wrapper.scrollWidth - wrapper.clientWidth) / 2);
+          wrapper.scrollTop = Math.max(0, (wrapper.scrollHeight - wrapper.clientHeight) / 2);
+        }
+      }, 10);
     }
   }, []);
 
