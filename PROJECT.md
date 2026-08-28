@@ -14,8 +14,8 @@ PIMS Vision é um Grafana App Plugin para criação e operação de displays ind
 | Grafana máximo usado nos builds locais | `12.0.0` |
 | Node.js | `20.x` |
 | Package manager | npm |
-| Versão do pacote | `0.1.0` |
-| Versão do manifesto | `0.1.1` |
+| Versão do pacote | `0.1.8` |
+| Versão do manifesto | `0.1.8` |
 
 ## Funcionalidades atuais
 
