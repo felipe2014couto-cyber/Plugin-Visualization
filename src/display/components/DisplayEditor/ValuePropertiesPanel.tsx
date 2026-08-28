@@ -85,7 +85,7 @@ export function ValuePropertiesPanel({
             <option value="tag">Nome da tag</option><option value="custom">Personalizado</option>
           </select>
         </label>
-        {visual.labelMode === 'custom' && <label className={styles.field}><span>Rótulo personalizado</span><input value={customLabelDraft} onChange={(event) => { setCustomLabelDraft(event.target.value); onChange({ customLabel: event.target.value }); }} onBlur={() => { if (!customLabelDraft.trim() && pointName) { setCustomLabelDraft(pointName); onChange({ customLabel: pointName }); } }} data-testid="value-custom-label" /></label>}
+        {visual.labelMode === 'custom' && <label className={styles.field}><span>Rótulo personalizado</span><input value={customLabelDraft} onChange={(event) => { setCustomLabelDraft(event.target.value); onChange({ customLabel: event.target.value }); }} data-testid="value-custom-label" /></label>}
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid="value-show-unit" /><span>Unidades</span></label>
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showTimestamp} onChange={(event) => onChange({ showTimestamp: event.target.checked })} data-testid="value-show-timestamp" /><span>Timestamp</span></label>
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid="value-show-value" /><span>Valor</span></label>
