@@ -900,7 +900,47 @@ export function DisplayEditor({
         binding: selectedPiPoint ? createPiPointBinding(selectedPiPoint) : undefined,
       });
       const positioned = positionElementAt(symbol, point, currentDocument);
-      commitDocument(appendLibrarySymbol(currentDocument, positioned));
+      const nextDocument = appendLibrarySymbol(currentDocument, positioned);
+      const viewCenter = {
+        x: positioned.x + positioned.width / 2,
+        y: positioned.y + positioned.height / 2,
+      };
+      const isFirstElement = currentDocument.elements.length === 0;
+      const wrapper = surfaceWrapperRef.current;
+      const availableWidth = Math.max(1, (wrapper?.clientWidth ?? currentDocument.surface.width) - 32);
+      const availableHeight = Math.max(1, (wrapper?.clientHeight ?? currentDocument.surface.height) - 32);
+      const zoom = isFirstElement
+        ? Number(Math.max(
+          DISPLAY_ZOOM_MIN,
+          Math.min(1, availableWidth / currentDocument.surface.width, availableHeight / currentDocument.surface.height),
+        ).toFixed(2))
+        : surfaceZoom;
+      const targetViewCenter = isFirstElement
+        ? { x: currentDocument.surface.width / 2, y: currentDocument.surface.height / 2 }
+        : viewCenter;
+      commitDocument(nextDocument);
+      setSurfaceZoom(zoom);
+      setSurfaceViewCenter(targetViewCenter);
+      const focusInsertedSymbol = () => {
+        const wrapper = surfaceWrapperRef.current;
+        if (!wrapper) {
+          return;
+        }
+        const bounds = getCanvasBounds(nextDocument.surface, nextDocument.elements);
+        wrapper.scrollLeft = Math.max(0, Math.min(
+          (targetViewCenter.x - bounds.left) * zoom - wrapper.clientWidth / 2,
+          wrapper.scrollWidth - wrapper.clientWidth,
+        ));
+        wrapper.scrollTop = Math.max(0, Math.min(
+          (targetViewCenter.y - bounds.top) * zoom - wrapper.clientHeight / 2,
+          wrapper.scrollHeight - wrapper.clientHeight,
+        ));
+      };
+      if (typeof globalThis.requestAnimationFrame === 'function') {
+        globalThis.requestAnimationFrame(focusInsertedSymbol);
+      } else {
+        focusInsertedSymbol();
+      }
       dispatch({ type: 'SELECT', elementId: positioned.id });
       setPropertiesPanelOpen(true);
       return;
@@ -1055,7 +1095,7 @@ export function DisplayEditor({
         break;
       }
     }
-  }, [commitDocument, dispatch, dropSymbolType, mode, selectedPiPoint]);
+  }, [commitDocument, dispatch, dropSymbolType, mode, selectedPiPoint, surfaceZoom]);
 
   const handleModeChange = useCallback(
     (nextMode: DisplayEditorMode) => {
@@ -1942,7 +1982,6 @@ export function DisplayEditor({
             onTrendLegendContextMenu={handleTrendLegendInfo}
             onElementContextMenu={handleElementContextMenu}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
-            onSurfaceContextMenu={handleSurfaceContextMenu}
             onTableColumnsChange={handleTableColumnsChange}
             onTrendLegendWidthChange={handleTrendLegendWidthChange}
             zoom={surfaceZoom}
@@ -2142,6 +2181,10 @@ function getDropPoint(
   if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
     return undefined;
   }
+  const bounds = svg.getBoundingClientRect?.();
+  if (bounds && (clientX < bounds.left || clientX > bounds.right || clientY < bounds.top || clientY > bounds.bottom)) {
+    return undefined;
+  }
   return svgPointFromEvent(svg, clientX, clientY);
 }
 
@@ -2169,12 +2212,14 @@ function getSvgViewport(svg: SVGSVGElement) {
 function positionElementAt<T extends ElementGeometry>(
   element: T,
   point: Point,
-  _document: DisplayDocument,
+  document: DisplayDocument,
 ): T {
+  const maxX = Math.max(0, document.surface.width - element.width);
+  const maxY = Math.max(0, document.surface.height - element.height);
   return {
     ...element,
-    x: Math.round(point.x - element.width / 2),
-    y: Math.round(point.y - element.height / 2),
+    x: Math.max(0, Math.min(Math.round(point.x - element.width / 2), maxX)),
+    y: Math.max(0, Math.min(Math.round(point.y - element.height / 2), maxY)),
   };
 }
 

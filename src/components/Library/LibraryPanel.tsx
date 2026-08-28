@@ -94,7 +94,7 @@ export function LibraryPanel() {
           );
         })}
         {filteredSymbols.length === 0 && <p className={styles.noResults} data-testid="library-symbols-empty">Nenhum símbolo encontrado.</p>}
-        <p className={styles.sourceNote}>Símbolos locais; motores Openclipart em domínio público.</p>
+        <p className={styles.sourceNote}>Símbolos locais incorporados ao projeto.</p>
       </div>
     </section>
   );

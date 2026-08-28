@@ -26,15 +26,15 @@ describe('Library symbols no display', () => {
     expect(imported.elements).toEqual([symbol]);
   });
 
-  it('preserva os motores Openclipart no salvar e restaurar', () => {
-    const motors = INDUSTRIAL_SYMBOL_CATALOG.filter((symbol) => symbol.source === 'openclipart');
+  it('preserva os motores locais no salvar e restaurar', () => {
+    const motors = INDUSTRIAL_SYMBOL_CATALOG.filter((symbol) => symbol.category === 'Motores').slice(0, 2);
     const document = motors.reduce((current, motor, index) => appendLibrarySymbol(current, createLibrarySymbol({
       symbol: motor,
       x: index * 110,
       y: 40,
       existingIds: current.elements.map(({ id }) => id),
-      generateId: () => 'openclipart-motor-' + index,
-    })), createDisplayDocument({ id: 'openclipart-motors', name: 'Openclipart motors' }));
+      generateId: () => 'local-motor-' + index,
+    })), createDisplayDocument({ id: 'local-motors', name: 'Local motors' }));
     const imported = parseImportedDisplay(serializeDisplay(document));
 
     expect(imported.elements).toHaveLength(2);
