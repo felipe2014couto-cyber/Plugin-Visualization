@@ -560,8 +560,8 @@ function convertValue(
   const valueGeo = hasExplicitWidth(symbol)
     ? geo
     : { ...geo, width: estimateCompactValueWidth(cfg) };
-  const binding = firstBinding(symbol, dataSourceUid);
   const calculation = firstCalculation(symbol, calculationsByName);
+  const binding = calculation ? undefined : firstBinding(symbol, dataSourceUid);
   if (!binding && !calculation) {
     return undefined;
   }
@@ -1432,17 +1432,20 @@ export function parseDataSourcePath(
 
   let normalized = path.trim();
 
-  // Remove prefixo de protocolo: "pi:\\" ou "af:\\"
+  // Remove prefixo de protocolo: "pi:\\", "af:\\"
   normalized = normalized.replace(/^[a-z]+:\\+/i, '');
   // Remove barras iniciais extras
-  normalized = normalized.replace(/^\\+/, '');
+  normalized = normalized.replace(/^[\\/]+/, '');
 
   if (!normalized) {
     return undefined;
   }
 
   // Divide no primeiro separador de caminho
-  const firstSep = normalized.indexOf('\\');
+  const firstSep = normalized.indexOf('\\') >= 0
+    ? normalized.indexOf('\\')
+    : normalized.indexOf('/');
+
   if (firstSep < 1) {
     return undefined;
   }
@@ -1456,7 +1459,7 @@ export function parseDataSourcePath(
 
   // Para paths AF com subestrutura (DB\Element|Attribute), o "pointName"
   // e a ultima parte apos o ultimo separador ou pipe
-  const lastSep = Math.max(remainder.lastIndexOf('\\'), remainder.lastIndexOf('|'));
+  const lastSep = Math.max(remainder.lastIndexOf('\\'), remainder.lastIndexOf('/'), remainder.lastIndexOf('|'));
   const rawPointName = lastSep >= 0 ? remainder.slice(lastSep + 1) : remainder;
   const pointName = removePiVisionResourceId(rawPointName);
 

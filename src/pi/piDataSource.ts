@@ -1149,30 +1149,32 @@ function buildCurrentValuesRequest(
   now: number,
 ): DataQueryRequest<DataQuery> {
   const end = dateTime(now);
-  const start = dateTime(now - 60_000);
+  const start = dateTime(now - 24 * 60 * 60 * 1000);
 
   return {
     requestId: nextDataQueryRequestId('values', bindings[0].dataSourceUid),
     interval: '1s',
     intervalMs: 1000,
-    maxDataPoints: 1,
+    maxDataPoints: 100,
     range: { from: start, to: end, raw: { from: start, to: end } },
     scopedVars: {},
     targets: bindings.map((binding, index) => buildCurrentValueTarget(binding, index)),
     timezone: 'browser',
     app: 'app',
-    startTime: now - 60_000,
+    startTime: now - 24 * 60 * 60 * 1000,
     endTime: now,
   };
 }
 
 function buildCurrentValueTarget(binding: PiPointBinding, index: number): DataQuery {
   const pointName = binding.pointName;
+  const target = binding.serverPath ? `${binding.serverPath};${pointName}` : pointName;
+  const segments = binding.serverPath ? [{ label: binding.serverPath, value: { value: binding.serverPath } }] : [];
   return {
     refId: refIdForIndex(index),
-    target: `${binding.serverPath};${pointName}`,
+    target,
     attributes: [{ label: pointName, value: { value: pointName } }],
-    segments: [{ label: binding.serverPath, value: { value: binding.serverPath } }],
+    segments,
     isPiPoint: true,
     useLastValue: { enable: true },
     digitalStates: { enable: true },
@@ -1577,15 +1579,27 @@ function getFirstFieldValue(field: DataFrame['fields'][number] | undefined): unk
   if (!field) {
     return undefined;
   }
-  const values = field.values as unknown as { get?: (index: number) => unknown; toArray?: () => unknown[] } | unknown[];
+  const values = field.values as unknown as { get?: (index: number) => unknown; toArray?: () => unknown[]; length?: number } | unknown[];
   if (Array.isArray(values)) {
+    for (let i = values.length - 1; i >= 0; i--) {
+      if (values[i] !== null && values[i] !== undefined) return values[i];
+    }
     return values[0];
   }
-  if (typeof values.get === 'function') {
-    return values.get(0);
-  }
   if (typeof values.toArray === 'function') {
-    return values.toArray()[0];
+    const arr = values.toArray();
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (arr[i] !== null && arr[i] !== undefined) return arr[i];
+    }
+    return arr[0];
+  }
+  if (typeof values.get === 'function') {
+    const len = typeof values.length === 'number' ? values.length : 1000;
+    for (let i = len - 1; i >= 0; i--) {
+      const val = values.get(i);
+      if (val !== null && val !== undefined) return val;
+    }
+    return values.get(0);
   }
   return undefined;
 }
