@@ -20,7 +20,7 @@ import { GaugeElementView } from '../GaugeElementView';
 import { BarElementView } from '../BarElementView';
 import { BarChartElementView } from '../BarChartElementView';
 import { XYPlotElementView } from '../XYPlotElementView';
-import { XY_PLOT_TYPE, type XYPlotElement } from '../../createXYPlot';
+import { XY_PLOT_TYPE, getXYPlotYSeries, type XYPlotElement } from '../../createXYPlot';
 import {
   TrendElementView,
   buildTrendChartForSeries,
@@ -345,7 +345,7 @@ export function DisplaySurface({
   const trendConsumers: TrendRuntimeConsumer[] = allElements.flatMap((element) => {
     if (element.type === XY_PLOT_TYPE) {
       const xy = element as XYPlotElement;
-      return [xy.properties.xBinding, xy.properties.yBinding].filter(isPiPointBinding).map((binding, index) => ({ elementId: xy.id, consumerId: `xy-${index}`, binding, width: xy.width }));
+      return [{ elementId: xy.id, consumerId: 'xy-x', binding: xy.properties.xBinding, width: xy.width }, ...getXYPlotYSeries(xy.properties).map((series, index) => ({ elementId: xy.id, consumerId: `xy-y-${index}`, binding: series.binding, width: xy.width }))];
     }
     if (element.type === TABLE_TYPE) {
       return (element as TableElement).properties.items.map((item, index) => ({ elementId: element.id, consumerId: getTableTrendConsumerId(element.id, index), binding: item.binding, width: Math.max(80, element.width / 4) }));
@@ -1069,7 +1069,7 @@ export function DisplaySurface({
           }
           if (element.type === XY_PLOT_TYPE) {
             const xy = element as XYPlotElement;
-            return <XYPlotElementView key={xy.id} element={xy} xState={allTrendRuntimeStates.get(`${xy.id}:xy-0`)} yState={allTrendRuntimeStates.get(`${xy.id}:xy-1`)} />;
+            return <XYPlotElementView key={xy.id} element={xy} xState={allTrendRuntimeStates.get(`${xy.id}:xy-x`)} yStates={getXYPlotYSeries(xy.properties).map((_, index) => allTrendRuntimeStates.get(`${xy.id}:xy-y-${index}`))} />;
           }
           if (element.type === SQL_TABLE_TYPE) {
             return <SqlTableElementView key={element.id} element={element as unknown as SqlTableElement} selected={selectedElementIds?.includes(element.id)} editable={editable} />;

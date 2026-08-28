@@ -99,7 +99,7 @@ import { TablePropertiesPanel } from './TablePropertiesPanel';
 import { PiPointInfoPanel } from './PiPointInfoPanel';
 import { SqlTablePropertiesPanel } from './SqlTablePropertiesPanel';
 import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
-import { XY_PLOT_TYPE, appendXYPlot, createXYPlot, updateXYPlotProperties, type XYPlotElement } from '../../createXYPlot';
+import { XY_PLOT_TYPE, addXYPlotYSeries, appendXYPlot, createXYPlot, moveXYPlotYSeries, removeXYPlotYSeries, updateXYPlotProperties, type XYPlotElement } from '../../createXYPlot';
 import { XYPlotPropertiesPanel } from './XYPlotPropertiesPanel';
 import {
   BAR_CHART_TYPE,
@@ -977,8 +977,7 @@ export function DisplayEditor({
       return;
     }
     if (targetXYPlot) {
-      const patch = targetXYPlot.properties.yBinding ? { yBinding: binding } : { yBinding: binding };
-      commitDocument(updateXYPlotProperties(currentDocument, targetXYPlot.id, patch));
+      commitDocument(addXYPlotYSeries(currentDocument, targetXYPlot.id, binding));
       dispatch({ type: 'SELECT', elementId: targetXYPlot.id });
       setPropertiesPanelOpen(true);
       return;
@@ -1249,6 +1248,8 @@ export function DisplayEditor({
   const handleXYPlotChange = useCallback((patch: Partial<XYPlotElement['properties']>) => {
     applyToCompatibleSelection((document, elementId) => updateXYPlotProperties(document, elementId, patch));
   }, [applyToCompatibleSelection]);
+  const handleXYPlotRemoveY = useCallback((index: number) => { if (selectedXYPlot) commitDocument(removeXYPlotYSeries(displayDocument, selectedXYPlot.id, index)); }, [commitDocument, displayDocument, selectedXYPlot]);
+  const handleXYPlotMoveY = useCallback((index: number, offset: -1 | 1) => { if (selectedXYPlot) commitDocument(moveXYPlotYSeries(displayDocument, selectedXYPlot.id, index, offset)); }, [commitDocument, displayDocument, selectedXYPlot]);
 
   const handleBarChartVisualChange = useCallback((patch: Partial<BarChartVisualOptions>) => {
     applyToCompatibleSelection((document, elementId) => updateBarChartVisualOptions(document, elementId, patch));
@@ -1983,7 +1984,7 @@ export function DisplayEditor({
           />
         )}
         {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} onExport={(format) => void handleTableExport(selectedTable, format)} exporting={exporting} />}
-        {selectedXYPlot && <XYPlotPropertiesPanel element={selectedXYPlot} onChange={handleXYPlotChange} />}
+        {selectedXYPlot && <XYPlotPropertiesPanel element={selectedXYPlot} onChange={handleXYPlotChange} onRemoveY={handleXYPlotRemoveY} onMoveY={handleXYPlotMoveY} />}
         {selectedSqlTable && <SqlTablePropertiesPanel properties={selectedSqlTable.properties} onChange={handleSqlTableChange} />}
         {selectedRectangle && (
           <RectanglePropertiesPanel
