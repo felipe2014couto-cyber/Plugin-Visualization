@@ -915,6 +915,7 @@ export function DisplaySurface({
       })
     : [];
   const canvasBounds = getCanvasBounds(surface, elements);
+  const isCanvasEmpty = elements.length === 0;
 
   return (
     <svg
