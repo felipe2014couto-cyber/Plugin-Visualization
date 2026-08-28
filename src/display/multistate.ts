@@ -12,6 +12,8 @@ export interface MultistateRule {
   /** Display name retained for the editor and as compatibility fallback. */
   digitalStateName?: string;
   color: string;
+  /** Blinks the element while this rule is active. */
+  blink?: boolean;
 }
 
 export interface MultistateConfig {
@@ -283,5 +285,6 @@ function normalizeRule(rule: unknown, index: number): MultistateRule | undefined
       ? { digitalStateName: candidate.digitalStateName.trim() }
       : {}),
     color: typeof candidate.color === 'string' && (HEX_COLOR.test(candidate.color) || candidate.color === TRANSPARENT_COLOR) ? candidate.color : DEFAULT_RULE_COLOR,
+    ...(candidate.blink === true ? { blink: true } : {}),
   };
 }

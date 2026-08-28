@@ -100,6 +100,8 @@ import { TablePropertiesPanel } from './TablePropertiesPanel';
 import { PiPointInfoPanel } from './PiPointInfoPanel';
 import { SqlTablePropertiesPanel } from './SqlTablePropertiesPanel';
 import { SQL_TABLE_TYPE, type SqlTableElement } from '../../createSqlTable';
+import { XY_PLOT_TYPE, addXYPlotYSeries, appendXYPlot, createXYPlot, moveXYPlotYSeries, removeXYPlotYSeries, updateXYPlotProperties, type XYPlotElement } from '../../createXYPlot';
+import { XYPlotPropertiesPanel } from './XYPlotPropertiesPanel';
 import {
   BAR_CHART_TYPE,
   createBarChart,
@@ -141,7 +143,7 @@ import {
 import type { SurfaceViewport } from './viewportZoom';
 
 export type DisplayEditorMode = 'edit' | 'view';
-export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'bar-chart' | 'table';
+export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'bar-chart' | 'table' | 'xy-plot';
 
 export interface DisplayEditorProps {
   document: DisplayDocument;
@@ -927,9 +929,10 @@ export function DisplayEditor({
     );
     const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
     const targetTable = resolveTableDropTarget(currentDocument, event.target, point);
+    const targetXYPlot = resolveXYPlotDropTarget(currentDocument, event.target, point);
     const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
     const targetText = resolveTextDropTarget(currentDocument, event.target, point);
-    if (!binding || (!point && !targetTrend && !targetBarChart && !targetShape && !targetLibrarySymbol && !targetTable && !targetText)) {
+    if (!binding || (!point && !targetTrend && !targetBarChart && !targetShape && !targetLibrarySymbol && !targetTable && !targetXYPlot && !targetText)) {
       return;
     }
     event.preventDefault();
@@ -972,6 +975,12 @@ export function DisplayEditor({
       const item: TableDataItem = { binding, ...(pointResult?.path ? { path: pointResult.path } : {}), ...(pointResult?.description ? { description: pointResult.description } : {}), ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}), ...(pointResult?.pointType ? { pointType: pointResult.pointType } : {}) };
       commitDocument(addTableItem(currentDocument, targetTable.id, item));
       dispatch({ type: 'SELECT', elementId: targetTable.id });
+      return;
+    }
+    if (targetXYPlot) {
+      commitDocument(addXYPlotYSeries(currentDocument, targetXYPlot.id, binding));
+      dispatch({ type: 'SELECT', elementId: targetXYPlot.id });
+      setPropertiesPanelOpen(true);
       return;
     }
 
@@ -1034,6 +1043,12 @@ export function DisplayEditor({
         const item: TableDataItem = { binding, ...(pointResult?.path ? { path: pointResult.path } : {}), ...(pointResult?.description ? { description: pointResult.description } : {}), ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}), ...(pointResult?.pointType ? { pointType: pointResult.pointType } : {}) };
         const element = positionElementAt(createTable({ item, surface: currentDocument.surface, existingIds: currentDocument.elements.map((candidate) => candidate.id) }), point!, currentDocument);
         commitDocument(appendTable(currentDocument, element));
+        dispatch({ type: 'SELECT', elementId: element.id });
+        break;
+      }
+      case 'xy-plot': {
+        const element = positionElementAt(createXYPlot({ xBinding: binding, surface: currentDocument.surface, existingIds: currentDocument.elements.map((candidate) => candidate.id) }), point!, currentDocument);
+        commitDocument(appendXYPlot(currentDocument, element));
         dispatch({ type: 'SELECT', elementId: element.id });
         break;
       }
@@ -1224,9 +1239,10 @@ export function DisplayEditor({
   const selectedBarChart = selectedElement && selectedElement.type === BAR_CHART_TYPE
     ? selectedElement as BarChartElement
     : undefined;
-  const selectedTable = selectedElement && selectedElement.type === TABLE_TYPE
+    const selectedTable = selectedElement && selectedElement.type === TABLE_TYPE
     ? selectedElement as TableElement
     : undefined;
+  const selectedXYPlot = selectedElement && selectedElement.type === XY_PLOT_TYPE ? selectedElement as XYPlotElement : undefined;
   const selectedSqlTable = selectedElement && selectedElement.type === SQL_TABLE_TYPE
     ? selectedElement as SqlTableElement
     : undefined;
@@ -1240,6 +1256,11 @@ export function DisplayEditor({
   const handleBarChartChange = useCallback((patch: Partial<BarChartProperties>) => {
     applyToCompatibleSelection((document, elementId) => updateBarChartProperties(document, elementId, patch));
   }, [applyToCompatibleSelection]);
+  const handleXYPlotChange = useCallback((patch: Partial<XYPlotElement['properties']>) => {
+    applyToCompatibleSelection((document, elementId) => updateXYPlotProperties(document, elementId, patch));
+  }, [applyToCompatibleSelection]);
+  const handleXYPlotRemoveY = useCallback((index: number) => { if (selectedXYPlot) commitDocument(removeXYPlotYSeries(displayDocument, selectedXYPlot.id, index)); }, [commitDocument, displayDocument, selectedXYPlot]);
+  const handleXYPlotMoveY = useCallback((index: number, offset: -1 | 1) => { if (selectedXYPlot) commitDocument(moveXYPlotYSeries(displayDocument, selectedXYPlot.id, index, offset)); }, [commitDocument, displayDocument, selectedXYPlot]);
 
   const handleBarChartVisualChange = useCallback((patch: Partial<BarChartVisualOptions>) => {
     applyToCompatibleSelection((document, elementId) => updateBarChartVisualOptions(document, elementId, patch));
@@ -1826,6 +1847,7 @@ export function DisplayEditor({
                 <button type="button" title="Arrastar como Gráfico de Barras" aria-label="Arrastar como Gráfico de Barras" className={dropSymbolType === 'bar-chart' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar-chart" aria-pressed={dropSymbolType === 'bar-chart'} onClick={() => onDropSymbolTypeChange?.('bar-chart')}><BarChartIcon /></button>
                 <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => onDropSymbolTypeChange?.('trend')}><TrendIcon /></button>
                 <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => onDropSymbolTypeChange?.('table')}>▦</button>
+                <button type="button" title="Arrastar como XY Plot" aria-label="Arrastar como XY Plot" className={dropSymbolType === 'xy-plot' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-xy-plot" aria-pressed={dropSymbolType === 'xy-plot'} onClick={() => onDropSymbolTypeChange?.('xy-plot')}>XY</button>
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
@@ -1999,6 +2021,7 @@ export function DisplayEditor({
           />
         )}
         {selectedTable && <TablePropertiesPanel properties={selectedTable.properties} onChange={handleTableChange} onRemoveItem={(index) => commitDocument(removeTableItem(documentRef.current, selectedTable.id, index))} onMoveItem={(index, offset) => commitDocument(moveTableItem(documentRef.current, selectedTable.id, index, offset))} onExport={(format) => void handleTableExport(selectedTable, format)} exporting={exporting} />}
+        {selectedXYPlot && <XYPlotPropertiesPanel element={selectedXYPlot} onChange={handleXYPlotChange} onRemoveY={handleXYPlotRemoveY} onMoveY={handleXYPlotMoveY} />}
         {selectedSqlTable && <SqlTablePropertiesPanel properties={selectedSqlTable.properties} onChange={handleSqlTableChange} />}
         {selectedRectangle && (
           <RectanglePropertiesPanel
@@ -2046,7 +2069,7 @@ export function DisplayEditor({
             onMultistateChange={handleMultistateChange}
           />
         )}
-        {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedBarChart && !selectedTable && !selectedSqlTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !selectedProgramming && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
+        {propertiesOpen && state.selectedElementId && !selectedValue && !selectedGauge && !selectedBar && !selectedBarChart && !selectedTable && !selectedXYPlot && !selectedSqlTable && !selectedRectangle && !selectedImage && !selectedLibrarySymbol && !selectedText && !selectedTrend && !selectedProgramming && !optionsTrend && <LinkPropertiesPanel value={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { linkUrl?: string } | undefined)?.linkUrl} openInNewTab={(displayDocument.elements.find((element) => element.id === state.selectedElementId)?.properties as { openInNewTab?: boolean } | undefined)?.openInNewTab !== false} onChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} />}
         {optionsTrend && <TrendPropertiesPanel element={optionsTrend} onVisualChange={handleTrendVisualChange} onSeriesChange={handleTrendSeriesChange} onSeriesRemove={handleTrendSeriesRemove} />}
         {mode === 'edit' && propertiesPanelOpen && !state.selectedElementId && (
           <CanvasPropertiesPanel
@@ -2198,14 +2221,14 @@ function createPiPointDragPreview(
   const wrapperBounds = wrapper.getBoundingClientRect();
   const viewport = getSvgViewport(svg);
   if (targetTrend) {
-    const trendLeft = viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale;
-    const trendTop = viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale;
+    const trendLeft = viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetTrend.x * viewport.scale;
+    const trendTop = viewport.top - wrapperBounds.top + wrapper.scrollTop + targetTrend.y * viewport.scale;
     const trendWidth = targetTrend.width * viewport.scale;
     const trendHeight = targetTrend.height * viewport.scale;
     const width = Math.min(320, Math.max(1, trendWidth - 12));
     const height = Math.min(64, Math.max(1, trendHeight - 12));
-    const pointerLeft = clientX - wrapperBounds.left - width / 2;
-    const pointerTop = clientY - wrapperBounds.top - height / 2;
+    const pointerLeft = clientX - wrapperBounds.left + wrapper.scrollLeft - width / 2;
+    const pointerTop = clientY - wrapperBounds.top + wrapper.scrollTop - height / 2;
     return {
       left: Math.max(trendLeft + 6, Math.min(pointerLeft, trendLeft + trendWidth - width - 6)),
       top: Math.max(trendTop + 6, Math.min(pointerTop, trendTop + trendHeight - height - 6)),
@@ -2219,14 +2242,14 @@ function createPiPointDragPreview(
     };
   }
   if (targetBarChart) {
-    const barChartLeft = viewport.left - wrapperBounds.left + targetBarChart.x * viewport.scale;
-    const barChartTop = viewport.top - wrapperBounds.top + targetBarChart.y * viewport.scale;
+    const barChartLeft = viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetBarChart.x * viewport.scale;
+    const barChartTop = viewport.top - wrapperBounds.top + wrapper.scrollTop + targetBarChart.y * viewport.scale;
     const barChartWidth = targetBarChart.width * viewport.scale;
     const barChartHeight = targetBarChart.height * viewport.scale;
     const width = Math.min(320, Math.max(1, barChartWidth - 12));
     const height = Math.min(64, Math.max(1, barChartHeight - 12));
-    const pointerLeft = clientX - wrapperBounds.left - width / 2;
-    const pointerTop = clientY - wrapperBounds.top - height / 2;
+    const pointerLeft = clientX - wrapperBounds.left + wrapper.scrollLeft - width / 2;
+    const pointerTop = clientY - wrapperBounds.top + wrapper.scrollTop - height / 2;
     return {
       left: Math.max(barChartLeft + 6, Math.min(pointerLeft, barChartLeft + barChartWidth - width - 6)),
       top: Math.max(barChartTop + 6, Math.min(pointerTop, barChartTop + barChartHeight - height - 6)),
@@ -2242,8 +2265,8 @@ function createPiPointDragPreview(
   }
   const positioned = positionElementAt(prototype, point!, document);
   return {
-    left: viewport.left - wrapperBounds.left + positioned.x * viewport.scale,
-    top: viewport.top - wrapperBounds.top + positioned.y * viewport.scale,
+    left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + positioned.x * viewport.scale,
+    top: viewport.top - wrapperBounds.top + wrapper.scrollTop + positioned.y * viewport.scale,
     width: positioned.width * viewport.scale,
     height: positioned.height * viewport.scale,
     valid: true,
@@ -2272,8 +2295,8 @@ function createCalculationDragPreview(
     const wrapperBounds = wrapper.getBoundingClientRect();
     const viewport = getSvgViewport(svg);
     return {
-      left: viewport.left - wrapperBounds.left + targetLibrarySymbol.x * viewport.scale,
-      top: viewport.top - wrapperBounds.top + targetLibrarySymbol.y * viewport.scale,
+      left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetLibrarySymbol.x * viewport.scale,
+      top: viewport.top - wrapperBounds.top + wrapper.scrollTop + targetLibrarySymbol.y * viewport.scale,
       width: targetLibrarySymbol.width * viewport.scale,
       height: targetLibrarySymbol.height * viewport.scale,
       valid: true,
@@ -2286,8 +2309,8 @@ function createCalculationDragPreview(
     const wrapperBounds = wrapper.getBoundingClientRect();
     const viewport = getSvgViewport(svg);
     return {
-      left: viewport.left - wrapperBounds.left + targetShape.x * viewport.scale,
-      top: viewport.top - wrapperBounds.top + targetShape.y * viewport.scale,
+      left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetShape.x * viewport.scale,
+      top: viewport.top - wrapperBounds.top + wrapper.scrollTop + targetShape.y * viewport.scale,
       width: targetShape.width * viewport.scale,
       height: targetShape.height * viewport.scale,
       valid: true,
@@ -2300,8 +2323,8 @@ function createCalculationDragPreview(
     const wrapperBounds = wrapper.getBoundingClientRect();
     const viewport = getSvgViewport(svg);
     return {
-      left: viewport.left - wrapperBounds.left + targetTrend.x * viewport.scale,
-      top: viewport.top - wrapperBounds.top + targetTrend.y * viewport.scale,
+      left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetTrend.x * viewport.scale,
+      top: viewport.top - wrapperBounds.top + wrapper.scrollTop + targetTrend.y * viewport.scale,
       width: targetTrend.width * viewport.scale,
       height: targetTrend.height * viewport.scale,
       valid: true,
@@ -2316,8 +2339,8 @@ function createCalculationDragPreview(
   const viewport = getSvgViewport(svg);
   const positioned = positionElementAt(prototype, point, document);
   return {
-    left: viewport.left - wrapperBounds.left + positioned.x * viewport.scale,
-    top: viewport.top - wrapperBounds.top + positioned.y * viewport.scale,
+    left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + positioned.x * viewport.scale,
+    top: viewport.top - wrapperBounds.top + wrapper.scrollTop + positioned.y * viewport.scale,
     width: positioned.width * viewport.scale,
     height: positioned.height * viewport.scale,
     valid: true,
@@ -2439,6 +2462,17 @@ function resolveTableDropTarget(
   return element as TableElement | undefined;
 }
 
+function resolveXYPlotDropTarget(document: DisplayDocument, eventTarget: EventTarget | null, point: Point | undefined): XYPlotElement | undefined {
+  const xyNode = eventTarget instanceof Element ? eventTarget.closest('[data-element-id][data-element-type="xy-plot"]') : null;
+  const elementId = xyNode?.getAttribute('data-element-id');
+  if (elementId) {
+    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === XY_PLOT_TYPE);
+    if (element) return element as XYPlotElement;
+  }
+  if (!point) return undefined;
+  return [...document.elements].reverse().find((candidate) => candidate.type === XY_PLOT_TYPE && point.x >= candidate.x && point.x <= candidate.x + candidate.width && point.y >= candidate.y && point.y <= candidate.y + candidate.height) as XYPlotElement | undefined;
+}
+
 function findTrendAtClientPoint(
   clientX: number,
   clientY: number,
@@ -2555,8 +2589,8 @@ function createInvalidDragPreview(
   const wrapperBounds = wrapper.getBoundingClientRect();
   const width = Math.max(220, Math.min(420, label.length * 8 + 24));
   const height = 48;
-  const x = Number.isFinite(clientX) ? clientX - wrapperBounds.left : 0;
-  const y = Number.isFinite(clientY) ? clientY - wrapperBounds.top : 0;
+  const x = Number.isFinite(clientX) ? clientX - wrapperBounds.left + wrapper.scrollLeft : wrapper.scrollLeft;
+  const y = Number.isFinite(clientY) ? clientY - wrapperBounds.top + wrapper.scrollTop : wrapper.scrollTop;
   return {
     left: Math.max(0, x - width / 2),
     top: Math.max(0, y - height / 2),
@@ -2591,6 +2625,8 @@ function createDropPreviewElement(
       return createValue(options);
     case 'table':
       return createTable({ item: { binding }, surface: document.surface });
+    case 'xy-plot':
+      return createXYPlot({ xBinding: binding, surface: document.surface });
   }
 }
 
@@ -2614,6 +2650,8 @@ function createCalculationDropPreviewElement(
     case 'value':
       return createValue(options);
     case 'table':
+      return createBar(options);
+    case 'xy-plot':
       return createBar(options);
   }
 }
@@ -3059,6 +3097,8 @@ function DropPreviewIcon({ symbolType }: { symbolType: PiPointDropSymbolType }) 
       return <ValueIcon />;
     case 'table':
       return <span aria-hidden="true">▦</span>;
+    case 'xy-plot':
+      return <span aria-hidden="true">XY</span>;
   }
 }
 

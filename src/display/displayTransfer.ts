@@ -25,6 +25,7 @@ import { CALCULATION_TYPE } from './createCalculation';
 import { GROUP_TYPE } from './createGroup';
 import { defaultTableColumns, TABLE_COLUMNS, TABLE_TYPE, type TableColumnAlign, type TableColumnConfig, type TableDataItem } from './createTable';
 import { SQL_TABLE_TYPE } from './createSqlTable';
+import { XY_PLOT_TYPE, normalizeXYPlotProperties } from './createXYPlot';
 
 export const DISPLAY_EXPORT_FORMAT = 'pims-vision-display';
 export const DISPLAY_EXPORT_VERSION = 1;
@@ -357,6 +358,17 @@ function portableElement(input: unknown): DisplayElement {
           ...portableLocked(input.properties),
         },
       };
+    case XY_PLOT_TYPE: {
+      const xBinding = portableBinding(input.properties.xBinding);
+      if (!xBinding) throw new DisplayImportError('XY Plot inválido.');
+      const yBinding = input.properties.yBinding === undefined ? undefined : portableBinding(input.properties.yBinding);
+      const ySeries = Array.isArray(input.properties.ySeries) ? input.properties.ySeries.flatMap((value) => {
+        if (!isRecord(value)) return [];
+        const binding = portableBinding(value.binding);
+        return binding ? [{ ...value, binding }] : [];
+      }) : undefined;
+      return { ...base, type: XY_PLOT_TYPE, properties: { ...normalizeXYPlotProperties({ ...input.properties, xBinding, ...(yBinding ? { yBinding } : {}), ...(ySeries ? { ySeries: ySeries as any } : {}) } as any), ...portableLocked(input.properties) } };
+    }
     case TABLE_TYPE:
       return { ...base, type: TABLE_TYPE, properties: { ...portableTable(input.properties), ...portableLocked(input.properties) } };
     case SQL_TABLE_TYPE:

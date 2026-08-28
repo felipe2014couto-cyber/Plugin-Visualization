@@ -54,19 +54,36 @@ export function TransparentColorPicker({ color, fallbackColor, onChange, testId 
       if (!rect) {
         return;
       }
-      const pickerWidth = 236;
-      const pickerHeight = 270;
+      // Measure the rendered popup instead of relying on a fixed height. The
+      // palette contains controls whose height can vary with the active theme
+      // and viewport, so a hard-coded value could leave the lower options
+      // (hex input/transparency) outside the viewport.
+      const pickerWidth = popoverRef.current?.getBoundingClientRect().width ?? 236;
+      const pickerHeight = popoverRef.current?.getBoundingClientRect().height ?? 310;
       const leftOfField = rect.left - pickerWidth - 8;
       const left = leftOfField >= 8
         ? leftOfField
         : Math.max(8, Math.min(rect.right + 8, window.innerWidth - pickerWidth - 8));
-      const top = Math.max(8, Math.min(rect.top, window.innerHeight - pickerHeight - 8));
+      // Prefer opening below the field, but flip above it when the complete
+      // popup would not fit. This keeps every option reachable on short
+      // screens and inside the editor's scrolling sidebars.
+      const belowTop = rect.bottom + 8;
+      const aboveTop = rect.top - pickerHeight - 8;
+      const top = belowTop + pickerHeight <= window.innerHeight - 8
+        ? belowTop
+        : aboveTop >= 8
+          ? aboveTop
+          : Math.max(8, window.innerHeight - pickerHeight - 8);
       setPosition({ left, top });
     };
     updatePosition();
+    // The portal is mounted after this effect's first pass. Measure again on
+    // the next frame so the actual popup dimensions are used for placement.
+    const frame = window.requestAnimationFrame(updatePosition);
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
@@ -178,6 +195,9 @@ const getStyles = (_theme: GrafanaTheme2) => ({
     position: fixed;
     z-index: 30;
     width: 236px;
+    max-height: calc(100vh - 16px);
+    overflow-x: hidden;
+    overflow-y: auto;
     box-sizing: border-box;
     padding: 10px;
     border: 1px solid var(--border-color, #718096);

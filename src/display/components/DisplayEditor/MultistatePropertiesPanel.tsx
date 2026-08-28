@@ -155,6 +155,7 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
             <label className={styles.colorField}>
               <span>Cor</span>
               <TransparentColorPicker color={rule.color} fallbackColor="#d32f2f" testId={`${testIdPrefix}-color-${rule.id}`} onChange={(color) => updateRule(rule.id, { color })} />
+              <span className={styles.blinkOption}><input type="checkbox" checked={rule.blink === true} data-testid={`${testIdPrefix}-blink-${rule.id}`} onChange={(event) => updateRule(rule.id, { blink: event.target.checked })} /> Piscar</span>
             </label>
             <button type="button" className={styles.removeButton} data-testid={`${testIdPrefix}-remove-${rule.id}`} onClick={() => update({ rules: normalized.rules.filter((item) => item.id !== rule.id) })}>
               Remover
@@ -265,6 +266,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-size: 9px;
     input { width: 100%; padding: 2px; }
   `,
+  blinkOption: css`display:flex; flex-direction:row; align-items:center; gap:4px; margin-top:3px; color:var(--text-secondary); font-size:10px; input{width:14px; height:14px; min-height:14px;}`,
   removeButton: css`grid-column: 1 / -1; width: 100%; max-width: 100%; min-height: 24px; padding: 2px 5px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-secondary); font-size: 9px;`,
   invalid: css`grid-column: 1 / -1; color: var(--warning); font-size: 9px;`,
   error: css`margin-top: 7px; color: var(--warning); font-size: 9px; line-height: 1.35;`,

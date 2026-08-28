@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -47,6 +47,8 @@ export function ValuePropertiesPanel({
 }: ValuePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
   const visual = getValueVisualOptions({ visual: options });
+  const [customLabelDraft, setCustomLabelDraft] = useState(visual.customLabel ?? '');
+  useEffect(() => setCustomLabelDraft(visual.customLabel ?? ''), [visual.customLabel]);
 
   return (
     <aside className={styles.panel} data-testid="value-properties-panel" aria-label="Formatação do Value">
@@ -83,7 +85,7 @@ export function ValuePropertiesPanel({
             <option value="tag">Nome da tag</option><option value="custom">Personalizado</option>
           </select>
         </label>
-        {visual.labelMode === 'custom' && <label className={styles.field}><span>Rótulo personalizado</span><input value={visual.customLabel || pointName} onChange={(event) => onChange({ customLabel: event.target.value })} data-testid="value-custom-label" /></label>}
+        {visual.labelMode === 'custom' && <label className={styles.field}><span>Rótulo personalizado</span><input value={customLabelDraft} onChange={(event) => { setCustomLabelDraft(event.target.value); onChange({ customLabel: event.target.value }); }} data-testid="value-custom-label" /><small className={styles.tagHint}>Tag usada: {pointName || '—'}</small></label>}
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid="value-show-unit" /><span>Unidades</span></label>
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showTimestamp} onChange={(event) => onChange({ showTimestamp: event.target.checked })} data-testid="value-show-timestamp" /><span>Timestamp</span></label>
         <label className={styles.checkboxField}><input type="checkbox" checked={visual.showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid="value-show-value" /><span>Valor</span></label>
@@ -191,6 +193,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
       border-radius: 0;
       background: var(--input-bg);
     }
+  `,
+  tagHint: css`
+    color: var(--text-secondary);
+    font-size: 9px;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   `,
   checkboxField: css`
     display: flex;

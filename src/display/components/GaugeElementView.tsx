@@ -3,7 +3,7 @@ import { isPiPointBinding } from '../../pi/piPointBinding';
 import { getGaugeOptions, type GaugeElement, type GaugeStyle } from '../createGauge';
 import { formatScaleValue, getScaleRatio } from '../scaleOptions';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
-import { getMultistateColor } from '../multistate';
+import { evaluateMultistate, getMultistateColor } from '../multistate';
 import type { PiPointDatabaseLimits } from '../../pi/piPointBinding';
 import { resolveThemeForeground } from '../themeColor';
 
@@ -35,6 +35,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const detailLines = getDetailLines(valueText, runtimeState, options.showValue, options.showUnit, false);
   const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
   const activeColor = getMultistateColor(rawValue, element.properties.multistate, options.color);
+  const blink = evaluateMultistate(rawValue, element.properties.multistate)?.rule.blink === true;
   const valueY = options.labelPosition === 'below'
     ? element.y + element.height - 12
     : options.gaugeStyle === 'pointer' || options.gaugeStyle === 'line'
@@ -53,6 +54,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
       data-element-type={element.type}
       style={{ cursor: 'move' }}
     >
+      {blink && <animate attributeName="opacity" values="1;0.2;1" dur="0.8s" repeatCount="indefinite" />}
       <rect
         x={element.x}
         y={element.y}

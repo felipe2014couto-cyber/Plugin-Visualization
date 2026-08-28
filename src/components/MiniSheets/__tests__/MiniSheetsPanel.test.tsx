@@ -30,7 +30,7 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
   runOracleQuery: jest.fn(),
 }));
 
-describe('MiniSheetsPanel', () => {
+  describe('MiniSheetsPanel', () => {
   const searchMock = searchPiPointsWithStatus as jest.MockedFunction<typeof searchPiPointsWithStatus>;
   const currValMock = getPiPointCurrentValue as jest.MockedFunction<typeof getPiPointCurrentValue>;
   const recordedMock = getPiTrendsRecordedHistoryForRange as jest.MockedFunction<
@@ -492,6 +492,23 @@ describe('MiniSheetsPanel', () => {
     await waitFor(() => {
       expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('200');
     });
+  });
+
+  it('desfaz uma única alteração ao pressionar Ctrl+Z na grade', async () => {
+    render(<MiniSheetsPanel />);
+    const input = screen.getByTestId('mini-sheets-formula-input');
+    const panel = screen.getByTestId('mini-sheets-panel');
+
+    fireEvent.change(input, { target: { value: '10' } });
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('10'));
+
+    fireEvent.change(input, { target: { value: '20' } });
+    fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('20'));
+
+    fireEvent.keyDown(panel, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('10'));
   });
 
   describe('Range and Multi-Selection Behaviors', () => {

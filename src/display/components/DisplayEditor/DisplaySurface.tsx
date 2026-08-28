@@ -19,6 +19,8 @@ import { ValueElementView } from '../ValueElementView';
 import { GaugeElementView } from '../GaugeElementView';
 import { BarElementView } from '../BarElementView';
 import { BarChartElementView } from '../BarChartElementView';
+import { XYPlotElementView } from '../XYPlotElementView';
+import { XY_PLOT_TYPE, getXYPlotYSeries, type XYPlotElement } from '../../createXYPlot';
 import {
   TrendElementView,
   buildTrendChartForSeries,
@@ -29,13 +31,13 @@ import type { PiPointValue, PiPointValueResult, PiTrendSeries, PiTrendSeriesResu
 import { isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { DisplayTimeRange } from '../../../time/timeRange';
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
-import { getMultistateColor } from '../../multistate';
+import { evaluateMultistate, getMultistateColor } from '../../multistate';
 import { TEXT_TYPE, type TextElement } from '../../createText';
 import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { PROGRAMMING_TYPE, type ProgrammingElement } from '../../createProgramming';
 import { ProgrammingDisplayElementView, getProgrammingConsumerId } from '../../../programming/ProgrammingDisplayElementView';
-import { DEFAULT_LIBRARY_SYMBOL_COLOR, getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
+import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
 import { extractAllGroupBindingsAndElements, findTopLevelElementId, getElementAbsoluteGeometry, GROUP_TYPE, type GroupElement } from '../../createGroup';
 import { isElementLocked } from '../../createLocked';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../../../library';
@@ -143,7 +145,6 @@ export interface DisplaySurfaceProps {
   onTrendLegendContextMenu?: (series: TrendSeries, value: string | number | undefined) => void;
   onElementContextMenu?: (element: DisplayElement, event?: React.MouseEvent) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement, event?: React.MouseEvent) => void;
-  onSurfaceContextMenu?: (event?: React.MouseEvent) => void;
   onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
   onTrendLegendWidthChange?: (elementId: string, legendWidth: number) => void;
   zoom?: number;
@@ -171,7 +172,6 @@ function tryReleasePointerCapture(target: Element, pointerId: number): void {
     release.call(target, pointerId);
   }
 }
-
 
 function hasPointerCapture(target: Element, pointerId: number): boolean {
   const check = (target as Element & {
@@ -207,7 +207,6 @@ export function DisplaySurface({
   onTrendLegendContextMenu,
   onElementContextMenu,
   onLibrarySymbolContextMenu,
-  onSurfaceContextMenu,
   onTableColumnsChange,
   onTrendLegendWidthChange,
   zoom = 1,
@@ -344,6 +343,10 @@ export function DisplaySurface({
   }, [loadValue]);
   const runtimeStates = useValueRuntime(valueConsumers, loadValues ?? fallbackLoader);
   const trendConsumers: TrendRuntimeConsumer[] = allElements.flatMap((element) => {
+    if (element.type === XY_PLOT_TYPE) {
+      const xy = element as XYPlotElement;
+      return [{ elementId: xy.id, consumerId: 'xy-x', binding: xy.properties.xBinding, width: xy.width }, ...getXYPlotYSeries(xy.properties).map((series, index) => ({ elementId: xy.id, consumerId: `xy-y-${index}`, binding: series.binding, width: xy.width }))];
+    }
     if (element.type === TABLE_TYPE) {
       return (element as TableElement).properties.items.map((item, index) => ({ elementId: element.id, consumerId: getTableTrendConsumerId(element.id, index), binding: item.binding, width: Math.max(80, element.width / 4) }));
     }
@@ -498,11 +501,6 @@ export function DisplaySurface({
     const topLevelId = rawId ? (findTopLevelElementId(elements, rawId) ?? rawId) : undefined;
     const element = topLevelId ? elements.find((candidate) => candidate.id === topLevelId) : undefined;
     if (!element) {
-      if (onSurfaceContextMenu) {
-        event.preventDefault();
-        event.stopPropagation();
-        onSurfaceContextMenu(event);
-      }
       return;
     }
     event.preventDefault();
@@ -514,7 +512,7 @@ export function DisplaySurface({
     } else {
       onElementContextMenu?.(element, event);
     }
-  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onSurfaceContextMenu, onTrendContextMenu]);
+  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onTrendContextMenu]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
@@ -916,7 +914,6 @@ export function DisplaySurface({
         height: selectedElementGeom.height,
       })
     : [];
-  const isCanvasEmpty = elements.length === 0;
   const canvasBounds = getCanvasBounds(surface, elements);
 
   return (
@@ -928,7 +925,7 @@ export function DisplaySurface({
       width={canvasBounds.width}
       height={canvasBounds.height}
       viewBox={`${canvasBounds.left} ${canvasBounds.top} ${canvasBounds.width} ${canvasBounds.height}`}
-      style={isCanvasEmpty ? { width: '100%', height: '100%', flex: '1 1 auto' } : { width: canvasBounds.width * zoom, height: canvasBounds.height * zoom, flex: '0 0 auto' }}
+      style={{ width: canvasBounds.width * zoom, height: canvasBounds.height * zoom, flex: '0 0 auto' }}
       xmlns="http://www.w3.org/2000/svg"
       className={css`
         display: block;
@@ -944,19 +941,17 @@ export function DisplaySurface({
       onPointerCancel={handleSvgPointerEnd}
       onKeyDown={handleSurfaceKeyDown}
     >
+      <style>{'@keyframes pimsMultistateBlink{0%,49%{opacity:1}50%,100%{opacity:.2}}'}</style>
       <defs>
         <pattern id="visualization-editor-grid" width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--canvas-dot)" />
         </pattern>
-        <filter id="pims-alpha-mask-filter" colorInterpolationFilters="sRGB">
-          <feColorMatrix type="matrix" values="0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 1 0" />
-        </filter>
         {allElements.filter((element) => element.type === LIBRARY_SYMBOL_TYPE).map((element) => {
           const symbol = element as LibrarySymbolElement;
           const source = getLibrarySymbolSource(symbol);
           return (
             <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height}>
-              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" filter="url(#pims-alpha-mask-filter)" />
+              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" />
             </mask>
           );
         })}
@@ -1072,6 +1067,10 @@ export function DisplaySurface({
           if (element.type === TABLE_TYPE) {
             return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onColumnsChange={editable ? (columns) => onTableColumnsChange?.(element.id, columns) : undefined} />;
           }
+          if (element.type === XY_PLOT_TYPE) {
+            const xy = element as XYPlotElement;
+            return <XYPlotElementView key={xy.id} element={xy} xState={allTrendRuntimeStates.get(`${xy.id}:xy-x`)} yStates={getXYPlotYSeries(xy.properties).map((_, index) => allTrendRuntimeStates.get(`${xy.id}:xy-y-${index}`))} />;
+          }
           if (element.type === SQL_TABLE_TYPE) {
             return <SqlTableElementView key={element.id} element={element as unknown as SqlTableElement} selected={selectedElementIds?.includes(element.id)} editable={editable} />;
           }
@@ -1121,6 +1120,8 @@ export function DisplaySurface({
             const runtimeVal = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
             const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
             const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
+            const blink = evaluateMultistate(runtimeVal, textElement.properties.multistate)?.rule.blink === true
+              || evaluateMultistate(runtimeVal, textElement.properties.backgroundMultistate)?.rule.blink === true;
             const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
             const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
             const rotation = textElement.properties.rotation ?? 0;
@@ -1141,7 +1142,7 @@ export function DisplaySurface({
                 data-testid={`display-element-${element.id}`}
                 data-element-id={element.id}
                 data-element-type={element.type}
-                style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}
+                style={{ cursor: isElementLocked(element) ? 'default' : 'move', ...(blink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : {}) }}
               >
                 <rect
                   x={textElement.x}
@@ -1162,7 +1163,7 @@ export function DisplaySurface({
                   fill={textColor}
                   fontSize={fontSize}
                   textAnchor={anchor}
-                  dominantBaseline={lineCount === 1 ? 'central' : undefined}
+                  dominantBaseline={lineCount === 1 ? 'middle' : undefined}
                   pointerEvents="none"
                 >
                   {lineCount === 1
@@ -1204,6 +1205,7 @@ export function DisplaySurface({
               : runtimeStates.get(element.id);
             const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
             const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
+            const blink = evaluateMultistate(value, symbol.properties.multistate)?.rule.blink === true;
             const cx = element.x + element.width / 2;
             const cy = element.y + element.height / 2;
             const rotation = symbol.properties.rotation ?? 0;
@@ -1212,26 +1214,10 @@ export function DisplaySurface({
             const transform = `translate(${cx} ${cy}) rotate(${rotation}) scale(${flipH} ${flipV}) translate(${-cx} ${-cy})`;
             const isCustomColored = Boolean(color && color !== 'transparent' && color !== DEFAULT_LIBRARY_SYMBOL_COLOR);
             return (
-              <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}>
+              <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move', ...(blink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : {}) }}>
                 <g transform={transform}>
                   <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
-                  <image
-                    href={source}
-                    x={element.x}
-                    y={element.y}
-                    width={element.width}
-                    height={element.height}
-                    preserveAspectRatio="none"
-                    style={{
-                      mixBlendMode: isCustomColored ? 'overlay' : 'normal',
-                      opacity: isCustomColored ? 0.45 : 1,
-                    }}
-                    pointerEvents="all"
-                    data-testid={`display-element-${element.id}`}
-                    data-element-id={element.id}
-                    data-element-type={element.type}
-                    onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)}
-                  />
+                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" style={{ mixBlendMode: isCustomColored ? 'overlay' : 'normal', opacity: isCustomColored ? 0.45 : 1 }} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
                 </g>
               </g>
             );
@@ -1455,13 +1441,14 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
   const baseFill = getElementFill(element);
   const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
   const fill = getMultistateColor(value, element.properties.multistate, baseFill);
+  const blink = evaluateMultistate(value, element.properties.multistate)?.rule.blink === true;
   const common = {
     key: element.id,
     'data-testid': `display-element-${element.id}`,
     'data-element-id': parentElementId ?? element.id,
     'data-element-type': element.type,
     'data-shape': element.properties.shape ?? 'rectangle',
-    style: { cursor: 'move' },
+    style: { cursor: 'move', ...(blink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : {}) },
     transform: `rotate(${Number(element.properties.rotation) || 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
     stroke: getElementStroke(element),
     strokeWidth: typeof element.properties.strokeWidth === 'number'

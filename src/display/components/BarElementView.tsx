@@ -3,7 +3,7 @@ import { isPiPointBinding } from '../../pi/piPointBinding';
 import { getBarOptions, type BarElement } from '../createBar';
 import { formatScaleValue, getScaleRatio } from '../scaleOptions';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
-import { getMultistateColor } from '../multistate';
+import { evaluateMultistate, getMultistateColor } from '../multistate';
 import type { PiPointDatabaseLimits } from '../../pi/piPointBinding';
 import { resolveThemeForeground } from '../themeColor';
 
@@ -49,6 +49,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const detailLines = getDetailLines(valueText, runtimeState, barOptions.showValue, barOptions.showUnit, false);
   const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
   const activeColor = getMultistateColor(rawValue, options.multistate, barOptions.fillColor);
+  const blink = evaluateMultistate(rawValue, options.multistate)?.rule.blink === true;
   const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
     ? barOptions.customTagName
     : label ?? (binding && isPiPointBinding(binding) ? binding.pointName : '');
@@ -61,6 +62,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
       data-element-type={element.type}
       style={{ cursor: 'move' }}
     >
+      {blink && <animate attributeName="opacity" values="1;0.2;1" dur="0.8s" repeatCount="indefinite" />}
       <rect
         x={element.x}
         y={element.y}
