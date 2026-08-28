@@ -29,7 +29,7 @@ import type { PiPointValue, PiPointValueResult, PiTrendSeries, PiTrendSeriesResu
 import { isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import type { DisplayTimeRange } from '../../../time/timeRange';
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
-import { getMultistateColor } from '../../multistate';
+import { evaluateMultistate, getMultistateColor } from '../../multistate';
 import { TEXT_TYPE, type TextElement } from '../../createText';
 import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
@@ -935,6 +935,7 @@ export function DisplaySurface({
       onPointerCancel={handleSvgPointerEnd}
       onKeyDown={handleSurfaceKeyDown}
     >
+      <style>{'@keyframes pimsMultistateBlink{0%,49%{opacity:1}50%,100%{opacity:.2}}'}</style>
       <defs>
         <pattern id="visualization-editor-grid" width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--canvas-dot)" />
@@ -1109,6 +1110,8 @@ export function DisplaySurface({
             const runtimeVal = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
             const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
             const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
+            const blink = evaluateMultistate(runtimeVal, textElement.properties.multistate)?.rule.blink === true
+              || evaluateMultistate(runtimeVal, textElement.properties.backgroundMultistate)?.rule.blink === true;
             const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
             const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
             const rotation = textElement.properties.rotation ?? 0;
@@ -1129,7 +1132,7 @@ export function DisplaySurface({
                 data-testid={`display-element-${element.id}`}
                 data-element-id={element.id}
                 data-element-type={element.type}
-                style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}
+                style={{ cursor: isElementLocked(element) ? 'default' : 'move', ...(blink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : {}) }}
               >
                 <rect
                   x={textElement.x}
@@ -1192,8 +1195,9 @@ export function DisplaySurface({
               : runtimeStates.get(element.id);
             const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
             const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
+            const blink = evaluateMultistate(value, symbol.properties.multistate)?.rule.blink === true;
             return (
-              <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move' }}>
+              <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move', ...(blink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : {}) }}>
                 <g transform={`rotate(${symbol.properties.rotation ?? 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`}>
                   <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
                   <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" opacity={0} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
@@ -1420,13 +1424,14 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
   const baseFill = getElementFill(element);
   const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
   const fill = getMultistateColor(value, element.properties.multistate, baseFill);
+  const blink = evaluateMultistate(value, element.properties.multistate)?.rule.blink === true;
   const common = {
     key: element.id,
     'data-testid': `display-element-${element.id}`,
     'data-element-id': parentElementId ?? element.id,
     'data-element-type': element.type,
     'data-shape': element.properties.shape ?? 'rectangle',
-    style: { cursor: 'move' },
+    style: { cursor: 'move', ...(blink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : {}) },
     transform: `rotate(${Number(element.properties.rotation) || 0} ${element.x + element.width / 2} ${element.y + element.height / 2})`,
     stroke: getElementStroke(element),
     strokeWidth: typeof element.properties.strokeWidth === 'number'
