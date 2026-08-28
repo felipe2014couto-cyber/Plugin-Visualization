@@ -345,7 +345,7 @@ export function DisplaySurface({
   const trendConsumers: TrendRuntimeConsumer[] = allElements.flatMap((element) => {
     if (element.type === XY_PLOT_TYPE) {
       const xy = element as XYPlotElement;
-      return [{ elementId: xy.id, consumerId: 'xy-x', binding: xy.properties.xBinding, width: xy.width }, ...getXYPlotYSeries(xy.properties).map((series, index) => ({ elementId: xy.id, consumerId: `xy-y-${index}`, binding: series.binding, width: xy.width }))];
+      return [{ elementId: xy.id, consumerId: `${xy.id}:xy-x`, binding: xy.properties.xBinding, width: xy.width }, ...getXYPlotYSeries(xy.properties).map((series, index) => ({ elementId: xy.id, consumerId: `${xy.id}:xy-y-${index}`, binding: series.binding, width: xy.width }))];
     }
     if (element.type === TABLE_TYPE) {
       return (element as TableElement).properties.items.map((item, index) => ({ elementId: element.id, consumerId: getTableTrendConsumerId(element.id, index), binding: item.binding, width: Math.max(80, element.width / 4) }));
