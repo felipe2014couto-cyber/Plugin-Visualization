@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -112,6 +112,10 @@ export function ScalePropertiesPanel({
   onMultistateChange,
 }: ScalePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
+  const [customBarNameDraft, setCustomBarNameDraft] = useState(customTagName ?? '');
+  const [gaugeTitleDraft, setGaugeTitleDraft] = useState(title ?? '');
+  useEffect(() => setCustomBarNameDraft(customTagName ?? ''), [customTagName]);
+  useEffect(() => setGaugeTitleDraft(title ?? ''), [title]);
   return (
     <aside className={styles.panel} data-testid={`${kind.toLowerCase()}-properties-panel`} aria-label={`Configuração do ${kind}`}>
       <div className={styles.header}>
@@ -171,8 +175,8 @@ export function ScalePropertiesPanel({
         )}
         <label className={styles.checkbox}><input type="checkbox" checked={showTagName} onChange={(event) => onChange({ showTagName: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-tag-name`} /><span>Rótulo</span></label>
         {kind === 'Bar' && <label className={styles.field}><span>Nome do rótulo</span><select value={tagNameMode} onChange={(event) => onChange({ tagNameMode: event.target.value as 'tag' | 'custom', ...(event.target.value === 'custom' && !customTagName ? { customTagName: pointName ?? '' } : {}) })} data-testid="bar-tag-name-mode"><option value="tag">Nome da tag</option><option value="custom">Personalizado</option></select></label>}
-        {kind === 'Bar' && tagNameMode === 'custom' && <label className={styles.field}><span>Rótulo personalizado</span><input value={customTagName ?? pointName ?? ''} onChange={(event) => onChange({ customTagName: event.target.value })} data-testid="bar-custom-tag-name" /></label>}
-        {kind === 'Gauge' && <label className={styles.field}><span>Rótulo personalizado</span><input value={title ?? pointName ?? ''} onChange={(event) => onChange({ title: event.target.value })} placeholder="Nome da tag" data-testid="gauge-title" /></label>}
+        {kind === 'Bar' && tagNameMode === 'custom' && <label className={styles.field}><span>Rótulo personalizado</span><input value={customBarNameDraft} onChange={(event) => { setCustomBarNameDraft(event.target.value); onChange({ customTagName: event.target.value }); }} data-testid="bar-custom-tag-name" /></label>}
+        {kind === 'Gauge' && <label className={styles.field}><span>Rótulo personalizado</span><input value={gaugeTitleDraft} onChange={(event) => { setGaugeTitleDraft(event.target.value); onChange({ title: event.target.value }); }} placeholder="Nome da tag" data-testid="gauge-title" /></label>}
         <label className={styles.checkbox}><input type="checkbox" checked={showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-value`} /><span>Valor</span></label>
         {kind === 'Bar' && <label className={styles.checkbox}><input type="checkbox" checked={showScale} onChange={(event) => onChange({ showScale: event.target.checked })} data-testid="bar-show-scale" /><span>Mostrar escala</span></label>}
         <label className={styles.checkbox}><input type="checkbox" checked={showUnit} onChange={(event) => onChange({ showUnit: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-unit`} /><span>Unidades</span></label>
