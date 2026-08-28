@@ -162,6 +162,8 @@ export {
 export type { CreateTrendOptions, TrendElement, TrendProperties, TrendSeries, TrendVisualOptions, TrendLineStyle, TrendMarker, TrendNumberFormat } from './createTrend';
 
 export type { PiPointBinding } from '../pi/piPointBinding';
+export { convertDisplayElementType, getElementPiBindings, symbolConversionTargets } from './symbolConversion';
+export type { SymbolBindingCapability, SymbolConversionType } from './symbolConversion';
 
 export {
   DISPLAY_EXPORT_FORMAT,

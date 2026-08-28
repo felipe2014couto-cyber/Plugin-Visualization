@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -9,6 +9,7 @@ export interface ContextMenuItem {
   testId?: string;
   icon?: React.ReactNode;
   disabled?: boolean;
+  submenu?: ContextMenuItem[];
   onClick: () => void;
 }
 
@@ -29,6 +30,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 }) => {
   const styles = useStyles2(getStyles);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
 
   useEffect(() => {
     const handlePointerDownOutside = (event: MouseEvent | TouchEvent) => {
@@ -74,24 +76,20 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       style={{ left: adjustedX, top: adjustedY }}
       role="menu"
     >
-      {items.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          role="menuitem"
-          className={styles.menuItem}
-          data-testid={item.testId ?? `context-menu-${item.id}`}
-          disabled={item.disabled}
-          onClick={(e) => {
-            e.stopPropagation();
-            item.onClick();
-            onClose();
-          }}
-        >
-          {item.icon && <span className={styles.icon}>{item.icon}</span>}
-          <span>{item.label}</span>
-        </button>
-      ))}
+      {items.map((item) => {
+        const hasSubmenu = Boolean(item.submenu?.length);
+        const showLeft = adjustedX + 400 > window.innerWidth;
+        return <div key={item.id} className={styles.itemWrapper} onMouseEnter={() => hasSubmenu && setOpenSubmenu(item.id)} onMouseLeave={() => hasSubmenu && setOpenSubmenu(null)}>
+          <button type="button" role="menuitem" className={styles.menuItem} data-testid={item.testId ?? `context-menu-${item.id}`} disabled={item.disabled}
+            onClick={(e) => { e.stopPropagation(); if (hasSubmenu) { setOpenSubmenu(item.id); return; } item.onClick(); onClose(); }}>
+            {item.icon && <span className={styles.icon}>{item.icon}</span>}<span>{item.label}</span>{hasSubmenu && <span className={styles.chevron}>▶</span>}
+          </button>
+          {hasSubmenu && openSubmenu === item.id && <div className={styles.submenu} style={showLeft ? { right: '100%' } : { left: '100%' }} role="menu">
+            {item.submenu!.map((child) => <button key={child.id} type="button" role="menuitem" className={styles.menuItem} disabled={child.disabled}
+              onClick={(e) => { e.stopPropagation(); child.onClick(); onClose(); }}>{child.icon && <span className={styles.icon}>{child.icon}</span>}<span>{child.label}</span></button>)}
+          </div>}
+        </div>;
+      })}
     </div>
   );
 };
@@ -108,7 +106,8 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: ${theme.spacing(0.5)} 0;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    /* Submenus are positioned outside the root menu. Do not clip them. */
+    overflow: visible;
   `,
   menuItem: css`
     display: flex;
@@ -135,6 +134,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
       cursor: not-allowed;
     }
   `,
+  itemWrapper: css`position: relative;`,
+  submenu: css`
+    position: absolute; top: -${theme.spacing(0.5)}; min-width: 190px; z-index: 1;
+    background: ${theme.colors.background.primary}; border: 1px solid ${theme.colors.border.strong};
+    border-radius: ${theme.shape.borderRadius(1)}; box-shadow: ${theme.shadows.z3}; padding: ${theme.spacing(0.5)} 0;
+  `,
+  chevron: css`margin-left: auto; font-size: 10px;`,
   icon: css`
     display: flex;
     align-items: center;

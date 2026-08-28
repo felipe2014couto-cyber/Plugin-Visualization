@@ -95,6 +95,7 @@ import {
 } from '../../createGroup';
 import { isElementLocked, updateElementLocked } from '../../createLocked';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
+import { convertDisplayElementType, getElementPiBindings, symbolConversionTargets, type SymbolConversionType } from '../../symbolConversion';
 import { TrendPropertiesPanel } from './TrendPropertiesPanel';
 import { TablePropertiesPanel } from './TablePropertiesPanel';
 import { PiPointInfoPanel } from './PiPointInfoPanel';
@@ -268,6 +269,7 @@ export function DisplayEditor({
     isLocked?: boolean;
     showProgrammingEdit?: boolean;
   } | null>(null);
+  const [pendingSymbolConversion, setPendingSymbolConversion] = useState<{ elementId: string; targetType: SymbolConversionType; bindings: PiPointBinding[]; selectedIndex: number } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [shapeMenuPosition, setShapeMenuPosition] = useState<{ left: number; top: number } | null>(null);
@@ -1398,6 +1400,34 @@ export function DisplayEditor({
     setContextMenu(null);
   }, [commitDocument]);
 
+  const applySymbolConversion = useCallback((elementId: string, targetType: SymbolConversionType, bindings: PiPointBinding[]) => {
+    try {
+      const next = updateElementInDocument(documentRef.current, elementId, (element) => convertDisplayElementType(element, targetType, bindings));
+      commitDocument(next);
+      dispatch({ type: 'SELECT', elementId });
+      setPropertiesPanelOpen(true);
+      setOptionsTrendId(targetType === TREND_TYPE ? elementId : null);
+      setOptionsElementId(targetType === TREND_TYPE ? null : elementId);
+    } finally {
+      setContextMenu(null);
+      setPendingSymbolConversion(null);
+    }
+  }, [commitDocument, dispatch]);
+
+  const handleSymbolConversion = useCallback((elementId: string, targetType: SymbolConversionType) => {
+    const source = getElementById(documentRef.current, elementId);
+    if (!source) return;
+    const bindings = getElementPiBindings(source);
+    if (!bindings.length) return;
+    const capability = symbolConversionTargets.find((target) => target.type === targetType)?.capability;
+    if (capability === 'single' && bindings.length > 1) {
+      setPendingSymbolConversion({ elementId, targetType, bindings, selectedIndex: 0 });
+      setContextMenu(null);
+      return;
+    }
+    applySymbolConversion(elementId, targetType, bindings);
+  }, [applySymbolConversion]);
+
   const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement, event?: React.MouseEvent) => {
     setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
@@ -1561,6 +1591,21 @@ export function DisplayEditor({
       });
     }
     if (targets.length > 0) {
+      const source = targets.length === 1 ? getElementById(documentRef.current, targets[0]) : undefined;
+      const bindings = source ? getElementPiBindings(source) : [];
+      if (source && bindings.length > 0) {
+        items.push({
+          id: 'change-symbol',
+          label: 'Trocar símbolo para',
+          testId: 'context-menu-change-symbol',
+          onClick: () => undefined,
+          submenu: symbolConversionTargets.filter((target) => target.type !== source.type).map((target) => ({
+            id: `change-symbol-${target.type}`,
+            label: target.label,
+            onClick: () => handleSymbolConversion(source.id, target.type),
+          })),
+        });
+      }
       const isLocked = Boolean(contextMenu.isLocked);
       items.push({
         id: isLocked ? 'unlock' : 'lock',
@@ -1570,7 +1615,7 @@ export function DisplayEditor({
       });
     }
     return items;
-  }, [contextMenu, handleGroupSelected, handleToggleLock, handleUngroupSelected, onProgrammingEdit]);
+  }, [contextMenu, handleGroupSelected, handleSymbolConversion, handleToggleLock, handleUngroupSelected, onProgrammingEdit]);
   const optionsTrend = optionsTrendId
     ? (getElementById(displayDocument, optionsTrendId) as TrendElement | undefined)
     : undefined;
@@ -2136,6 +2181,25 @@ export function DisplayEditor({
           items={contextMenuItems}
           onClose={() => setContextMenu(null)}
         />
+      )}
+      {pendingSymbolConversion && (
+        <div className={styles.symbolConversionOverlay} role="dialog" aria-modal="true" aria-label="Selecionar PI Point">
+          <div className={styles.symbolConversionDialog}>
+            <h3>Qual item de dados deve ser utilizado?</h3>
+            <p>O símbolo de destino aceita somente uma PI Point.</p>
+            {pendingSymbolConversion.bindings.map((binding, index) => (
+              <label key={`${binding.dataSourceUid}-${binding.webId ?? binding.pointName}-${index}`} className={styles.symbolConversionOption}>
+                <input type="radio" name="symbol-conversion-binding" checked={pendingSymbolConversion.selectedIndex === index}
+                  onChange={() => setPendingSymbolConversion((current) => current ? { ...current, selectedIndex: index } : current)} />
+                {binding.pointName}
+              </label>
+            ))}
+            <div className={styles.symbolConversionActions}>
+              <button type="button" onClick={() => setPendingSymbolConversion(null)}>Cancelar</button>
+              <button type="button" className={styles.primaryButton} onClick={() => applySymbolConversion(pendingSymbolConversion.elementId, pendingSymbolConversion.targetType, [pendingSymbolConversion.bindings[pendingSymbolConversion.selectedIndex]])}>Converter</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -3091,6 +3155,37 @@ const getStyles = (theme: GrafanaTheme2) => ({
     box-shadow: none;
     backdrop-filter: none;
     pointer-events: none;
+  `,
+  symbolConversionOverlay: css`
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.35);
+  `,
+  symbolConversionDialog: css`
+    width: min(390px, calc(100vw - 32px));
+    box-sizing: border-box;
+    padding: ${theme.spacing(2)};
+    background: ${theme.colors.background.primary};
+    color: ${theme.colors.text.primary};
+    border: 1px solid ${theme.colors.border.strong};
+    border-radius: ${theme.shape.borderRadius(2)};
+    box-shadow: ${theme.shadows.z3};
+    h3 { margin: 0 0 ${theme.spacing(0.5)}; font-size: ${theme.typography.h4.fontSize}; }
+    p { margin: 0 0 ${theme.spacing(1.5)}; color: ${theme.colors.text.secondary}; }
+  `,
+  symbolConversionOption: css`
+    display: flex; align-items: center; gap: ${theme.spacing(1)};
+    padding: ${theme.spacing(0.75)} 0; cursor: pointer;
+  `,
+  symbolConversionActions: css`
+    display: flex; justify-content: flex-end; gap: ${theme.spacing(1)}; margin-top: ${theme.spacing(2)};
+    button { border: 1px solid ${theme.colors.border.medium}; border-radius: ${theme.shape.borderRadius(1)}; padding: ${theme.spacing(0.75, 1.25)}; background: transparent; color: ${theme.colors.text.primary}; cursor: pointer; }
+  `,
+  primaryButton: css`
+    background: ${theme.colors.primary.main} !important; color: ${theme.colors.primary.contrastText} !important; border-color: ${theme.colors.primary.main} !important;
   `,
   workspace: css`
     display: flex;
