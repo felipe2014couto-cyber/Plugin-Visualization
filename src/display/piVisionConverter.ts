@@ -199,6 +199,10 @@ export interface PiVisionThresholdMultistate {
   States?: Array<{
     UpperValue?: number;
     StateValues?: unknown[];
+    Blink?: boolean | number | string;
+    IsBlinking?: boolean | number | string;
+    Blinking?: boolean | number | string;
+    Flash?: boolean | number | string;
   }>;
 }
 
@@ -232,6 +236,11 @@ export interface PiVisionMultistateTrigger {
   Expression?: string;
   ForeColor?: string;
   BackColor?: string;
+  Blink?: boolean | number | string;
+  IsBlinking?: boolean | number | string;
+  Blinking?: boolean | number | string;
+  Flash?: boolean | number | string;
+  BlinkState?: boolean | number | string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1108,11 +1117,43 @@ export function convertMultistate(
 
 function convertMultistateIfPresent(
   multistate?: PiVisionMultistateConfig,
-): { multistate?: MultistateConfig } {
+): { multistate?: MultistateConfig; backgroundMultistate?: MultistateConfig } {
   if (!multistate || !Array.isArray(multistate.Triggers) || multistate.Triggers.length === 0) {
     return {};
   }
   const config = convertMultistate(multistate.Triggers);
+
+  const hasBackgroundTriggers = multistate.Triggers.some((t) => typeof t.BackColor === 'string' && t.BackColor.trim() !== '');
+  if (hasBackgroundTriggers) {
+    const bgRules: MultistateRule[] = multistate.Triggers
+      .map((t) => {
+        const expr = (t.Expression ?? '').trim();
+        const color = normalizeColor(t.BackColor);
+        if (!expr || !color) return undefined;
+        const parsed = parseExpression(expr);
+        if (!parsed) return undefined;
+        const isBlink = Boolean(
+          t.Blink === true || t.Blink === 1 || t.Blink === 'true' ||
+          t.IsBlinking === true || t.IsBlinking === 1 || t.IsBlinking === 'true' ||
+          t.Blinking === true || t.Blinking === 1 || t.Blinking === 'true' ||
+          t.Flash === true || t.Flash === 1 || t.Flash === 'true' ||
+          t.BlinkState === true || t.BlinkState === 1 || t.BlinkState === 'true'
+        );
+        return {
+          id: generateId(),
+          ...parsed,
+          color,
+          ...(isBlink ? { blink: true } : {}),
+        };
+      })
+      .filter((r): r is MultistateRule => r !== undefined);
+
+    return {
+      ...(config.rules.length > 0 ? { multistate: config } : {}),
+      ...(bgRules.length > 0 ? { backgroundMultistate: { enabled: true, rules: bgRules } } : {}),
+    };
+  }
+
   return config.rules.length > 0 ? { multistate: config } : {};
 }
 
@@ -1126,11 +1167,21 @@ function convertPiVisionThresholdMultistate(
   }
 
   const colorIndex = Math.max(0, definition?.StateVariables?.findIndex((name) => /color|fill/i.test(name)) ?? 0);
+  const blinkIndex = definition?.StateVariables?.findIndex((name) => /blink|flash/i.test(name)) ?? -1;
+
   const converted = states.flatMap((state) => {
     const upperValue = state.UpperValue;
     const color = normalizeMultistateColor(state.StateValues?.[colorIndex]);
+    const rawBlink = blinkIndex >= 0 ? state.StateValues?.[blinkIndex] : undefined;
+    const isBlink = Boolean(
+      rawBlink === true || rawBlink === 1 || rawBlink === 'true' ||
+      state.Blink === true || state.Blink === 1 || state.Blink === 'true' ||
+      state.IsBlinking === true || state.IsBlinking === 1 || state.IsBlinking === 'true' ||
+      state.Blinking === true || state.Blinking === 1 || state.Blinking === 'true' ||
+      state.Flash === true || state.Flash === 1 || state.Flash === 'true'
+    );
     return typeof upperValue === 'number' && Number.isFinite(upperValue) && color
-      ? [{ upperValue, color }]
+      ? [{ upperValue, color, blink: isBlink }]
       : [];
   });
   if (converted.length === 0) {
@@ -1140,6 +1191,7 @@ function convertPiVisionThresholdMultistate(
   const isDigital = converted.length <= 4 && converted.every((s, i) => s.upperValue === i);
 
   const rules: MultistateRule[] = converted.map((state, index) => {
+    const blinkProp = state.blink ? { blink: true } : {};
     if (isDigital) {
       const digitalName = converted.length === 2 ? (state.upperValue === 0 ? 'Off' : 'On') : undefined;
       return {
@@ -1149,6 +1201,7 @@ function convertPiVisionThresholdMultistate(
         digitalStateValue: state.upperValue,
         ...(digitalName ? { digitalStateName: digitalName } : {}),
         color: state.color,
+        ...blinkProp,
       };
     }
     if (index === converted.length - 1 && index > 0) {
@@ -1157,9 +1210,10 @@ function convertPiVisionThresholdMultistate(
         operator: 'gte',
         value: converted[index - 1].upperValue,
         color: state.color,
+        ...blinkProp,
       };
     }
-    return { id: generateId(), operator: 'lte', value: state.upperValue, color: state.color };
+    return { id: generateId(), operator: 'lte', value: state.upperValue, color: state.color, ...blinkProp };
   });
   return { enabled: true, rules };
 }
@@ -1211,10 +1265,19 @@ function convertMultistateTrigger(
     return undefined;
   }
 
+  const isBlink = Boolean(
+    trigger.Blink === true || trigger.Blink === 1 || trigger.Blink === 'true' ||
+    trigger.IsBlinking === true || trigger.IsBlinking === 1 || trigger.IsBlinking === 'true' ||
+    trigger.Blinking === true || trigger.Blinking === 1 || trigger.Blinking === 'true' ||
+    trigger.Flash === true || trigger.Flash === 1 || trigger.Flash === 'true' ||
+    trigger.BlinkState === true || trigger.BlinkState === 1 || trigger.BlinkState === 'true'
+  );
+
   return {
     id: generateId(),
     ...parsed,
     color,
+    ...(isBlink ? { blink: true } : {}),
   };
 }
 

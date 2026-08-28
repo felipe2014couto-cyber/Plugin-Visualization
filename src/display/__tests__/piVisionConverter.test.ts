@@ -1118,3 +1118,49 @@ describe('mapPiVisionGraphicToLocalSymbol - De-para de Motores e Conjuntos', () 
   });
 });
 
+describe('Multistate Blink e Background na conversão PI Vision', () => {
+  it('converte triggers com flag de piscar (Blink) no multistate', () => {
+    const sym: PiVisionSymbol = {
+      SymbolType: 'Value',
+      Configuration: {
+        DataSources: ['pi:\\\\SERVER\\TAG_TEMP'],
+      },
+      Multistate: {
+        Triggers: [
+          { Expression: '< 20', ForeColor: '#00ff00', Blink: false },
+          { Expression: '>= 80', ForeColor: '#ff0000', Blink: true },
+        ],
+      },
+    };
+
+    const { elements } = convertPiVisionDisplay({ Symbols: [sym] });
+    const props = elements[0].properties as any;
+    expect(props.multistate?.enabled).toBe(true);
+    expect(props.multistate?.rules[0].blink).toBeUndefined();
+    expect(props.multistate?.rules[1].blink).toBe(true);
+  });
+
+  it('converte triggers com BackColor para backgroundMultistate', () => {
+    const sym: PiVisionSymbol = {
+      SymbolType: 'Value',
+      Configuration: {
+        DataSources: ['pi:\\\\SERVER\\TAG_PRESS'],
+      },
+      Multistate: {
+        Triggers: [
+          { Expression: '< 50', ForeColor: '#ffffff', BackColor: '#008000' },
+          { Expression: '>= 50', ForeColor: '#ffffff', BackColor: '#ff0000', Blink: true },
+        ],
+      },
+    };
+
+    const { elements } = convertPiVisionDisplay({ Symbols: [sym] });
+    const props = elements[0].properties as any;
+    expect(props.multistate?.enabled).toBe(true);
+    expect(props.backgroundMultistate?.enabled).toBe(true);
+    expect(props.backgroundMultistate?.rules[1].blink).toBe(true);
+    expect(props.backgroundMultistate?.rules[1].color).toBe('#ff0000');
+  });
+});
+
+
