@@ -6,6 +6,7 @@ import {
   translatePiVisionExpression,
   PI_VISION_IMPORT_DATASOURCE_UID_PLACEHOLDER,
   PiVisionConvertError,
+  mapPiVisionGraphicToLocalSymbol,
   type PiVisionDisplay,
   type PiVisionSymbol,
 } from '../piVisionConverter';
@@ -1064,3 +1065,56 @@ describe('ids de elementos', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+describe('mapPiVisionGraphicToLocalSymbol - De-para de Motores e Conjuntos', () => {
+  it('mapeia Motor 1 para Motor 01', () => {
+    expect(mapPiVisionGraphicToLocalSymbol('Motors', 'Motor 1')).toEqual({
+      id: 'pims-vision:motores:01',
+      name: 'Motor 01',
+    });
+    expect(mapPiVisionGraphicToLocalSymbol('Motors', 'motor_01.svg')).toEqual({
+      id: 'pims-vision:motores:01',
+      name: 'Motor 01',
+    });
+  });
+
+  it('mapeia Motor 2 para Motor 02', () => {
+    expect(mapPiVisionGraphicToLocalSymbol('Motors', 'Motor 2')).toEqual({
+      id: 'pims-vision:motores:02',
+      name: 'Motor 02',
+    });
+    expect(mapPiVisionGraphicToLocalSymbol('Motors', 'motor-vertical')).toEqual({
+      id: 'pims-vision:motores:02',
+      name: 'Motor 02',
+    });
+  });
+
+  it('mapeia Motor 3 para Motor 03', () => {
+    expect(mapPiVisionGraphicToLocalSymbol('Motors', 'Motor 3')).toEqual({
+      id: 'pims-vision:motores:03',
+      name: 'Motor 03',
+    });
+  });
+
+  it('mapeia Motor 4 para Motor 04', () => {
+    expect(mapPiVisionGraphicToLocalSymbol('Motors', 'Motor 4')).toEqual({
+      id: 'pims-vision:motores:04',
+      name: 'Motor 04',
+    });
+  });
+
+  it('mapeia Motor 5 para Bomba 01 (conjunto motor-bomba centrífuga)', () => {
+    expect(mapPiVisionGraphicToLocalSymbol('Motors', 'Motor 5')).toEqual({
+      id: 'pims-vision:bombas:01',
+      name: 'Bomba 01',
+    });
+  });
+
+  it('mapeia Motor 6 para Bomba 02 (conjunto motor-bomba inline/deslocamento)', () => {
+    expect(mapPiVisionGraphicToLocalSymbol('Motors', 'Motor 6')).toEqual({
+      id: 'pims-vision:bombas:02',
+      name: 'Bomba 02',
+    });
+  });
+});
+

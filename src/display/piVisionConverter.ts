@@ -902,8 +902,50 @@ function convertShape(
 }
 
 // ---------------------------------------------------------------------------
-// Graficos industriais do PI Vision
+// Graficos industriais do PI Vision - De-Para de Símbolos
 // ---------------------------------------------------------------------------
+
+export function mapPiVisionGraphicToLocalSymbol(
+  directoryKey: string | undefined,
+  fileKey: string,
+): { id: string; name: string } | undefined {
+  const searchKey = `${directoryKey ?? ''}/${fileKey}`.toLowerCase();
+
+  // De-para de Motores e Conjuntos PI Vision -> Plugin Grafana:
+  // PI Vision 1 -> Motor 01 (pims-vision:motores:01)
+  // PI Vision 2 -> Motor 02 (pims-vision:motores:02)
+  // PI Vision 3 -> Motor 03 (pims-vision:motores:03)
+  // PI Vision 4 -> Motor 04 (pims-vision:motores:04)
+  // PI Vision 5 -> Bomba 01 (pims-vision:bombas:01 - Conjunto Motor-Bomba Centrífuga)
+  // PI Vision 6 -> Bomba 02 (pims-vision:bombas:02 - Conjunto Motor-Bomba Deslocamento/Inline)
+  if (searchKey.includes('motor') || searchKey.includes('motores')) {
+    if (searchKey.match(/motor[\s_-]*(0?3|3\b)/)) {
+      return { id: 'pims-vision:motores:03', name: 'Motor 03' };
+    }
+    if (searchKey.match(/motor[\s_-]*(0?4|4\b)/)) {
+      return { id: 'pims-vision:motores:04', name: 'Motor 04' };
+    }
+    if (searchKey.match(/motor[\s_-]*(0?5|5\b)/)) {
+      return { id: 'pims-vision:bombas:01', name: 'Bomba 01' };
+    }
+    if (searchKey.match(/motor[\s_-]*(0?6|6\b)/)) {
+      return { id: 'pims-vision:bombas:02', name: 'Bomba 02' };
+    }
+    if (searchKey.match(/motor[\s_-]*(0?2|2\b)/) || searchKey.includes('compact') || searchKey.includes('vertical')) {
+      return { id: 'pims-vision:motores:02', name: 'Motor 02' };
+    }
+    return { id: 'pims-vision:motores:01', name: 'Motor 01' };
+  }
+
+  if (searchKey.includes('pump') || searchKey.includes('bomba')) {
+    if (searchKey.match(/(?:pump|bomba)[\s_-]*(0?2|2\b)/)) {
+      return { id: 'pims-vision:bombas:02', name: 'Bomba 02' };
+    }
+    return { id: 'pims-vision:bombas:01', name: 'Bomba 01' };
+  }
+
+  return undefined;
+}
 
 function convertGraphic(
   symbol: PiVisionSymbol,
@@ -920,17 +962,9 @@ function convertGraphic(
   const multistate = convertPiVisionThresholdMultistate(cfg.Multistates);
   const binding = firstMultistateBinding(symbol, dataSourceUid);
   
-  const searchKey = `${cfg.DirectoryKey ?? ''}/${fileKey}`.toLowerCase();
-  let localSymbolId: string | undefined;
-  let localName: string | undefined;
-
-  if (searchKey.includes('motor')) {
-    localSymbolId = 'pims-vision:motores:01';
-    localName = 'Motor 01';
-  } else if (searchKey.includes('pump') || searchKey.includes('bomba')) {
-    localSymbolId = 'pims-vision:bombas:01';
-    localName = 'Bomba 01';
-  }
+  const mappedSymbol = mapPiVisionGraphicToLocalSymbol(cfg.DirectoryKey, fileKey);
+  const localSymbolId = mappedSymbol?.id;
+  const localName = mappedSymbol?.name;
 
   const flipH = cfg.Flip === 'H' || cfg.Flip === 'Horizontal' || cfg.Flip === 'Both' || cfg.FlipH === true;
   const flipV = cfg.Flip === 'V' || cfg.Flip === 'Vertical' || cfg.Flip === 'Both' || cfg.FlipV === true;
