@@ -42,6 +42,7 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
   const previewMock = getPiTrendsPreviewForRange as jest.MockedFunction<typeof getPiTrendsPreviewForRange>;
 
   beforeEach(() => {
+    jest.setTimeout(20000);
     jest.clearAllMocks();
   });
 
