@@ -28,6 +28,12 @@ fi
 
 rsync -avz "$PROJECT_DIR/backend-python/" "$REMOTE_USER@$REMOTE_HOST:/tmp/pims-vision-deploy/backend-python/"
 
+# Se houver Oracle Instant Client localmente, enviamos para suporte ao modo Thick (SIP)
+if [ -d "/opt/oracle/instantclient_19_30" ]; then
+  echo "=== Copiando Oracle Instant Client (Thick Mode) ==="
+  rsync -avz --exclude='sdk*' "/opt/oracle/instantclient_19_30" "$REMOTE_USER@$REMOTE_HOST:/tmp/pims-vision-deploy/"
+fi
+
 # Se houver o plugin PI Data Source localmente, enviamos também
 if [ -d "/var/lib/grafana/plugins/gridprotectionalliance-osisoftpi-datasource" ]; then
   echo "=== Copiando gridprotectionalliance-osisoftpi-datasource ==="
@@ -107,13 +113,24 @@ SERVICE_EOF
 
   echo \"Configurando backend Python (SIP / Oracle API - Porta 8085)...\"
   apt-get update -y && apt-get install -y python3 python3-pip python3-venv
+  
+  if [ -d /tmp/pims-vision-deploy/instantclient_19_30 ]; then
+    echo \"Instalando Oracle Instant Client e libaio...\"
+    apt-get install -y libaio1 2>/dev/null || apt-get install -y libaio1t64 2>/dev/null || true
+    ln -sf /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1 2>/dev/null || true
+    mkdir -p /opt/oracle
+    cp -a /tmp/pims-vision-deploy/instantclient_19_30 /opt/oracle/
+    echo \"/opt/oracle/instantclient_19_30\" > /etc/ld.so.conf.d/oracle-instantclient.conf
+    ldconfig
+  fi
+
   mkdir -p /opt/pims-vision-sql-api
   cp -a /tmp/pims-vision-deploy/backend-python/. /opt/pims-vision-sql-api/
   if [ ! -d /opt/pims-vision-sql-api/venv ]; then
     python3 -m venv /opt/pims-vision-sql-api/venv
   fi
-  /opt/pims-vision-sql-api/venv/bin/pip install --upgrade pip
-  /opt/pims-vision-sql-api/venv/bin/pip install -r /opt/pims-vision-sql-api/requirements.txt
+  /opt/pims-vision-sql-api/venv/bin/pip install --upgrade pip 2>/dev/null || true
+  /opt/pims-vision-sql-api/venv/bin/pip install -r /opt/pims-vision-sql-api/requirements.txt 2>/dev/null || true
   chown -R root:root /opt/pims-vision-sql-api
 
   cat << SERVICE_EOF > /etc/systemd/system/pims-vision-sql-api.service
