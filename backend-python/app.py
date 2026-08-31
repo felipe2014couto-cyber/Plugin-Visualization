@@ -66,8 +66,8 @@ IDLE_TIMEOUT_SECONDS = int(os.environ.get("SIP_SESSION_IDLE_SECONDS", "1800"))
 ABSOLUTE_TIMEOUT_SECONDS = int(os.environ.get("SIP_SESSION_MAX_SECONDS", "28800"))
 MAX_SESSIONS = int(os.environ.get("SIP_MAX_SESSIONS", "100"))
 RATE_WINDOW_SECONDS = int(os.environ.get("SIP_RATE_WINDOW_SECONDS", "60"))
-CONNECT_RATE_LIMIT = int(os.environ.get("SIP_CONNECT_RATE_LIMIT", "10"))
-QUERY_RATE_LIMIT = int(os.environ.get("SIP_QUERY_RATE_LIMIT", "60"))
+CONNECT_RATE_LIMIT = int(os.environ.get("SIP_CONNECT_RATE_LIMIT", "60"))
+QUERY_RATE_LIMIT = int(os.environ.get("SIP_QUERY_RATE_LIMIT", "120"))
 INSTANTCLIENT_DIR = os.environ.get("ORACLE_CLIENT_DIR", "/opt/oracle/instantclient_19_30")
 
 

@@ -89,10 +89,27 @@ async function parseError(response: Response): Promise<OracleApiError> {
     envelope = await response.json().catch(() => undefined) as SipErrorEnvelope | undefined;
   }
   const detail = envelope?.detail;
-  const code = (typeof detail === 'object' ? detail?.code : envelope?.code) || (response.status === 401 ? 'SIP_SESSION_EXPIRED' : 'SIP_REQUEST_FAILED');
-  const requestId = (typeof detail === 'object' ? detail?.request_id : envelope?.request_id) || response.headers.get('x-request-id') || undefined;
-  const support = requestId ? ` Código de suporte: ${requestId}` : '';
-  return new OracleApiError(`${ERROR_MESSAGES[code] || 'A operação SIP não pôde ser concluída.'}${support}`, code, requestId, response.status);
+  let code: string;
+  let requestId: string | undefined;
+  let rawMsg: string | undefined;
+
+  if (typeof detail === 'object' && detail !== null) {
+    const d = detail as Record<string, unknown>;
+    code = typeof d.code === 'string' ? d.code : (response.status === 401 ? 'SIP_AUTH_FAILED' : response.status === 429 ? 'SIP_RATE_LIMIT' : 'SIP_REQUEST_FAILED');
+    requestId = typeof d.request_id === 'string' ? d.request_id : undefined;
+    if (typeof d.msg === 'string') rawMsg = d.msg;
+  } else if (typeof detail === 'string') {
+    code = response.status === 401 ? 'SIP_AUTH_FAILED' : response.status === 429 ? 'SIP_RATE_LIMIT' : 'SIP_REQUEST_FAILED';
+    rawMsg = detail;
+  } else {
+    code = envelope?.code || (response.status === 401 ? 'SIP_AUTH_FAILED' : response.status === 429 ? 'SIP_RATE_LIMIT' : 'SIP_REQUEST_FAILED');
+    requestId = envelope?.request_id;
+  }
+
+  requestId = requestId || response.headers.get('x-request-id') || undefined;
+  const friendlyMsg = rawMsg || ERROR_MESSAGES[code] || 'A operação SIP não pôde ser concluída.';
+  const support = requestId ? ` (Código de suporte: ${requestId})` : '';
+  return new OracleApiError(`${friendlyMsg}${support}`, code, requestId, response.status);
 }
 
 async function sipFetch(path: string, init: RequestInit, timeoutMs: number): Promise<Response> {

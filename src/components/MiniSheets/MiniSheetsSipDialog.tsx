@@ -154,7 +154,12 @@ export function MiniSheetsSipDialog({
       await createOracleSession({ username: submittedUsername, password: submittedPassword }, requestControllerRef.current.signal);
       if (mountedRef.current) updateConnection(true);
     } catch (err: any) {
-      if (mountedRef.current) setConnectionError(err?.message || 'Falha ao conectar ao banco SIP');
+      if (mountedRef.current) {
+        const msg = typeof err?.message === 'string' && err.message !== '[object Object]'
+          ? err.message
+          : (typeof err === 'string' ? err : 'Falha ao conectar ao banco SIP');
+        setConnectionError(msg);
+      }
     } finally {
       if (mountedRef.current) {
         setIsConnecting(false);

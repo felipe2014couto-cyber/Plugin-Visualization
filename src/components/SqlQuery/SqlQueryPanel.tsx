@@ -56,7 +56,12 @@ export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChan
       await createOracleSession(params, requestControllerRef.current.signal);
       if (mountedRef.current) setIsConnected(true);
     } catch (err: any) {
-      if (mountedRef.current) setConnectionError(err.message || 'Falha ao conectar ao banco de dados');
+      if (mountedRef.current) {
+        const msg = typeof err?.message === 'string' && err.message !== '[object Object]'
+          ? err.message
+          : (typeof err === 'string' ? err : 'Falha ao conectar ao banco de dados');
+        setConnectionError(msg);
+      }
     } finally {
       if (mountedRef.current) setIsConnecting(false);
     }
