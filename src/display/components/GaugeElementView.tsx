@@ -26,23 +26,47 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
     ? undefined
     : getScaleRatio(numericValue, minimum, maximum);
   const isLabelBelow = options.labelPosition === 'below';
+  const isPointerOrLine = options.gaugeStyle === 'pointer' || options.gaugeStyle === 'line';
   const title = options.title.trim() || label || (binding && isPiPointBinding(binding) ? binding.pointName : '');
   const hasTitle = Boolean(title && options.showTagName);
   const cx = element.x + element.width / 2;
 
-  // Position dial center & radius with proper spacing so labels never collide with ticks or values
-  const cy = isLabelBelow
-    ? element.y + element.height * 0.44
-    : hasTitle
-    ? element.y + element.height * 0.58
-    : element.y + element.height * 0.52;
+  // Position dial center, radius, value and title
+  let cy: number;
+  let maxRadiusByHeight: number;
+  let titleY: number;
+  let valueY: number;
+
+  if (isPointerOrLine) {
+    if (isLabelBelow) {
+      // Dial is higher, value is below dial opening, and title is at the bottom
+      cy = element.y + element.height * 0.38;
+      maxRadiusByHeight = element.height * 0.27;
+      valueY = element.y + element.height - (hasTitle ? Math.max(28, element.height * 0.15) : Math.max(12, element.height * 0.07));
+      titleY = element.y + element.height - Math.max(8, element.height * 0.04);
+    } else {
+      // Title is above, dial is centered, and value is below the dial
+      cy = hasTitle ? element.y + element.height * 0.46 : element.y + element.height * 0.42;
+      maxRadiusByHeight = hasTitle ? element.height * 0.25 : element.height * 0.28;
+      titleY = element.y + Math.max(16, element.height * 0.09);
+      valueY = element.y + element.height - Math.max(12, element.height * 0.08);
+    }
+  } else {
+    // Arc and Triangle: value is centered inside the dial
+    if (isLabelBelow) {
+      cy = element.y + element.height * 0.44;
+      maxRadiusByHeight = element.height * 0.33;
+      titleY = element.y + element.height - Math.max(8, element.height * 0.05);
+      valueY = cy + Math.max(4, Math.min(8, element.height * 0.035));
+    } else {
+      cy = hasTitle ? element.y + element.height * 0.58 : element.y + element.height * 0.52;
+      maxRadiusByHeight = hasTitle ? element.height * 0.28 : element.height * 0.33;
+      titleY = element.y + Math.max(16, element.height * 0.09);
+      valueY = cy + Math.max(4, Math.min(8, element.height * 0.035));
+    }
+  }
 
   const maxRadiusByWidth = element.width * 0.35;
-  const maxRadiusByHeight = isLabelBelow
-    ? element.height * 0.33
-    : hasTitle
-    ? element.height * 0.28
-    : element.height * 0.33;
   const radius = Math.max(1, Math.min(maxRadiusByWidth, maxRadiusByHeight));
 
   const sweepAngle = options.gaugeAngle;
@@ -53,16 +77,6 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
   const activeColor = getMultistateColor(rawValue, element.properties.multistate, options.color);
   const blink = evaluateMultistate(rawValue, element.properties.multistate)?.rule.blink === true;
-
-  // Title placement:
-  // When above: positioned comfortably above the top scale ticks
-  // When below: positioned below the arc opening at the bottom
-  const titleY = isLabelBelow
-    ? element.y + element.height - Math.max(8, element.height * 0.05)
-    : element.y + Math.max(16, element.height * 0.09);
-
-  // Central value placement: vertically centered inside the dial
-  const valueY = cy + Math.max(4, Math.min(8, element.height * 0.035));
   const showGaugeScale = element.width >= 180 && element.height >= 160;
   const scaleColor = resolveThemeForeground(options.gaugeScaleColor);
   const borderColor = resolveThemeForeground(options.gaugeBorderColor);
@@ -142,9 +156,9 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         x={cx}
         y={valueY}
         textAnchor="middle"
-        dominantBaseline="central"
+        dominantBaseline={isPointerOrLine ? 'middle' : 'central'}
         fill={scaleColor || DEFAULT_TEXT_COLOR}
-        fontSize={Math.max(14, Math.min(32, element.height * 0.16))}
+        fontSize={isPointerOrLine ? Math.max(13, Math.min(26, element.height * 0.13)) : Math.max(14, Math.min(32, element.height * 0.16))}
         fontWeight={600}
         data-testid={`gauge-value-${element.id}`}
         pointerEvents="none"
@@ -153,8 +167,8 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
           <tspan
             key={`${line}-${index}`}
             x={cx}
-            dy={index === 0 ? 0 : Math.max(12, element.height * 0.08)}
-            fontSize={index === 0 ? undefined : Math.max(10, Math.min(14, element.height * 0.065))}
+            dy={index === 0 ? 0 : Math.max(12, element.height * 0.07)}
+            fontSize={index === 0 ? undefined : Math.max(10, Math.min(13, element.height * 0.06))}
             fontWeight={index === 0 ? 600 : 400}
           >
             {line}
