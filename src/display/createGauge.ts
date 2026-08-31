@@ -9,6 +9,8 @@ import type { MultistateConfig } from './multistate';
 export const GAUGE_TYPE = 'gauge' as const;
 export type GaugeStyle = 'arc' | 'triangle' | 'pointer' | 'line';
 export type GaugeVisualOptions = ScaleVisualOptions & {
+  fillColor?: string;
+  borderColor?: string;
   gaugeStyle: GaugeStyle;
   scaleMode: 'custom' | 'database';
   title: string;
@@ -29,6 +31,9 @@ export interface GaugeProperties extends Record<string, unknown> {
   showValue: boolean;
   showTagName: boolean;
   decimals: number | null;
+  color?: string;
+  fillColor?: string;
+  borderColor?: string;
   gaugeStyle: GaugeStyle;
   scaleMode: 'custom' | 'database';
   title: string;
@@ -124,9 +129,18 @@ export function normalizeGaugeOptions(options?: Partial<GaugeProperties> | null)
   const gaugeStyle = options?.gaugeStyle === 'arc' || options?.gaugeStyle === 'triangle' || options?.gaugeStyle === 'line'
     ? options.gaugeStyle
     : 'pointer';
+  const color = isColor(options?.color)
+    ? options!.color!
+    : (isColor(options?.fillColor) ? options!.fillColor! : '#00a2e8');
+  const gaugeBorderColor = isColor(options?.gaugeBorderColor)
+    ? options!.gaugeBorderColor!
+    : (isColor(options?.borderColor) ? options!.borderColor! : '#ffffff');
+  const gaugeScaleColor = isColor(options?.gaugeScaleColor) ? options!.gaugeScaleColor! : '#ffffff';
+
   return {
     ...scale,
-    color: isColor(options?.color) ? scale.color : '#00a2e8',
+    color,
+    fillColor: color,
     gaugeStyle,
     scaleMode: options?.scaleMode === 'database' ? 'database' : 'custom',
     title: typeof options?.title === 'string' ? options.title : '',
@@ -135,8 +149,9 @@ export function normalizeGaugeOptions(options?: Partial<GaugeProperties> | null)
     gaugeAngle: typeof options?.gaugeAngle === 'number' && Number.isFinite(options.gaugeAngle)
       ? Math.max(180, Math.min(360, options.gaugeAngle))
       : 270,
-    gaugeBorderColor: isColor(options?.gaugeBorderColor) ? options!.gaugeBorderColor! : '#ffffff',
-    gaugeScaleColor: isColor(options?.gaugeScaleColor) ? options!.gaugeScaleColor! : '#ffffff',
+    gaugeBorderColor,
+    borderColor: gaugeBorderColor,
+    gaugeScaleColor,
     showUnit: options?.showUnit === true,
     showTimestamp: options?.showTimestamp === true,
   };

@@ -94,6 +94,27 @@ describe('DisplayEditor - cor do Gauge', () => {
     expect(changes.at(-1)?.elements[0].properties).toMatchObject({ minimum: 0, maximum: 100 });
   });
 
+  it('altera a cor do contorno e da escala do Gauge', async () => {
+    const changes: DisplayDocument[] = [];
+    const initial = appendGauge(
+      createDisplayDocument({ name: 'Cor' }),
+      createGauge({ id: 'gauge', binding }),
+    );
+    const loadValue = jest.fn(async () => ({ value: 50 }));
+    render(<Harness initial={initial} loadValue={loadValue} onChange={(next) => changes.push(next)} />);
+
+    selectElement('gauge');
+    await waitFor(() => expect(screen.getByTestId('gauge-track-gauge')).toHaveAttribute('stroke', 'var(--text-primary, #f8fafc)'));
+
+    fireEvent.change(screen.getByTestId('gauge-border-color'), { target: { value: '#ff5500' } });
+    expect(screen.getByTestId('gauge-track-gauge')).toHaveAttribute('stroke', '#ff5500');
+    expect(changes.at(-1)?.elements[0].properties).toMatchObject({ gaugeBorderColor: '#ff5500' });
+
+    fireEvent.change(screen.getByTestId('gauge-scale-color'), { target: { value: '#00ffcc' } });
+    expect(screen.getByTestId('gauge-value-gauge')).toHaveAttribute('fill', '#00ffcc');
+    expect(changes.at(-1)?.elements[0].properties).toMatchObject({ gaugeScaleColor: '#00ffcc' });
+  });
+
   it('mantém a regra Multistate com precedência sobre a cor base', async () => {
     const changes: DisplayDocument[] = [];
     const initial = appendGauge(
