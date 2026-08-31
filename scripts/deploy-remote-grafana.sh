@@ -68,6 +68,12 @@ ssh -t "$REMOTE_USER@$REMOTE_HOST" "sudo bash -c '
   systemctl daemon-reload
   systemctl restart grafana-server
 
+  echo \"Verificando e instalando nodejs e curl se necessario...\"
+  if ! command -v node >/dev/null 2>&1; then
+    apt-get update -y && apt-get install -y nodejs curl
+  fi
+  NODE_BIN=$(command -v node || echo "/usr/bin/node")
+
   echo \"Configurando pasta e servico do Proxy PI Vision...\"
   mkdir -p /opt/pims-vision-proxy
   cp -a /tmp/pims-vision-deploy/pi-vision-proxy.js /opt/pims-vision-proxy/
@@ -76,7 +82,7 @@ ssh -t "$REMOTE_USER@$REMOTE_HOST" "sudo bash -c '
   fi
   chown -R root:root /opt/pims-vision-proxy
 
-  cat << \"SERVICE_EOF\" > /etc/systemd/system/pims-vision-proxy.service
+  cat << SERVICE_EOF > /etc/systemd/system/pims-vision-proxy.service
 [Unit]
 Description=PIMS Vision Proxy Service
 After=network.target
@@ -84,7 +90,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/pims-vision-proxy
-ExecStart=/usr/bin/node /opt/pims-vision-proxy/pi-vision-proxy.js
+ExecStart=${NODE_BIN} /opt/pims-vision-proxy/pi-vision-proxy.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
