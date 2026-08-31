@@ -25,11 +25,26 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const ratio = numericValue === undefined
     ? undefined
     : getScaleRatio(numericValue, minimum, maximum);
+  const isLabelBelow = options.labelPosition === 'below';
+  const title = options.title.trim() || label || (binding && isPiPointBinding(binding) ? binding.pointName : '');
+  const hasTitle = Boolean(title && options.showTagName);
   const cx = element.x + element.width / 2;
-  // Keep a dedicated header area for the label.  Besides avoiding overlap with
-  // the top scale mark, this gives the gauge a stable layout when resized.
-  const cy = element.y + element.height * 0.58;
-  const radius = Math.max(1, Math.min(element.width * 0.37, element.height * 0.33));
+
+  // Position dial center & radius with proper spacing so labels never collide with ticks or values
+  const cy = isLabelBelow
+    ? element.y + element.height * 0.44
+    : hasTitle
+    ? element.y + element.height * 0.58
+    : element.y + element.height * 0.52;
+
+  const maxRadiusByWidth = element.width * 0.35;
+  const maxRadiusByHeight = isLabelBelow
+    ? element.height * 0.33
+    : hasTitle
+    ? element.height * 0.28
+    : element.height * 0.33;
+  const radius = Math.max(1, Math.min(maxRadiusByWidth, maxRadiusByHeight));
+
   const sweepAngle = options.gaugeAngle;
   const startAngle = 90 + (360 - sweepAngle) / 2;
   const track = arcPath(cx, cy, radius, startAngle, sweepAngle);
@@ -38,16 +53,19 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
   const activeColor = getMultistateColor(rawValue, element.properties.multistate, options.color);
   const blink = evaluateMultistate(rawValue, element.properties.multistate)?.rule.blink === true;
-  const valueY = options.labelPosition === 'below'
-    ? element.y + element.height - 12
-    : options.gaugeStyle === 'pointer' || options.gaugeStyle === 'line'
-    ? element.y + element.height - 42
-    : cy + 28;
+
+  // Title placement:
+  // When above: positioned comfortably above the top scale ticks
+  // When below: positioned below the arc opening at the bottom
+  const titleY = isLabelBelow
+    ? element.y + element.height - Math.max(8, element.height * 0.05)
+    : element.y + Math.max(16, element.height * 0.09);
+
+  // Central value placement: vertically centered inside the dial
+  const valueY = cy + Math.max(4, Math.min(8, element.height * 0.035));
   const showGaugeScale = element.width >= 180 && element.height >= 160;
   const scaleColor = resolveThemeForeground(options.gaugeScaleColor);
   const borderColor = resolveThemeForeground(options.gaugeBorderColor);
-  const title = options.title.trim() || label || (binding && isPiPointBinding(binding) ? binding.pointName : '');
-  const titleY = options.labelPosition === 'below' ? element.y + element.height - 62 : element.y + Math.max(20, element.height * 0.075);
 
   return (
     <g
@@ -70,8 +88,16 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         data-element-id={element.id}
         pointerEvents="all"
       />
-      {title && options.showTagName && (
-        <text x={cx} y={titleY} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(15, Math.min(22, element.height * 0.085))} fontWeight={500} pointerEvents="none">
+      {hasTitle && (
+        <text
+          x={cx}
+          y={titleY}
+          textAnchor="middle"
+          fill={scaleColor || DEFAULT_TEXT_COLOR}
+          fontSize={Math.max(13, Math.min(20, element.height * 0.08))}
+          fontWeight={500}
+          pointerEvents="none"
+        >
           {title}
         </text>
       )}
@@ -95,12 +121,45 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         const angle = startAngle + (sweepAngle * index) / 8;
         const outer = polar(cx, cy, radius + 5, angle);
         const inner = polar(cx, cy, radius - 3, angle);
-        const label = polar(cx, cy, radius + 19, angle);
+        const labelPos = polar(cx, cy, radius + 18, angle);
         const tickValue = minimum + ((maximum - minimum) * index) / 8;
-        return <g key={`gauge-tick-${index}`} pointerEvents="none"><line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={scaleColor} strokeWidth={1} /><text x={label.x} y={label.y + 5} textAnchor="middle" fill={scaleColor} fontSize={Math.max(13, Math.min(18, element.height * 0.07))}>{formatScaleValue(tickValue, options.decimals)}</text></g>;
+        return (
+          <g key={`gauge-tick-${index}`} pointerEvents="none">
+            <line x1={inner.x} y1={inner.y} x2={outer.x} y2={outer.y} stroke={scaleColor} strokeWidth={1} />
+            <text
+              x={labelPos.x}
+              y={labelPos.y + 4}
+              textAnchor="middle"
+              fill={scaleColor}
+              fontSize={Math.max(11, Math.min(16, element.height * 0.065))}
+            >
+              {formatScaleValue(tickValue, options.decimals)}
+            </text>
+          </g>
+        );
       })}
-      <text x={cx} y={valueY} textAnchor="middle" fill={scaleColor || DEFAULT_TEXT_COLOR} fontSize={Math.max(12, Math.min(28, element.height * 0.14))} data-testid={`gauge-value-${element.id}`} pointerEvents="none">
-        {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={cx} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
+      <text
+        x={cx}
+        y={valueY}
+        textAnchor="middle"
+        dominantBaseline="central"
+        fill={scaleColor || DEFAULT_TEXT_COLOR}
+        fontSize={Math.max(14, Math.min(32, element.height * 0.16))}
+        fontWeight={600}
+        data-testid={`gauge-value-${element.id}`}
+        pointerEvents="none"
+      >
+        {detailLines.map((line, index) => (
+          <tspan
+            key={`${line}-${index}`}
+            x={cx}
+            dy={index === 0 ? 0 : Math.max(12, element.height * 0.08)}
+            fontSize={index === 0 ? undefined : Math.max(10, Math.min(14, element.height * 0.065))}
+            fontWeight={index === 0 ? 600 : 400}
+          >
+            {line}
+          </tspan>
+        ))}
       </text>
       {!isValidScale(minimum, maximum) && (
         <text x={cx} y={element.y + element.height - 28} textAnchor="middle" fill="#f2cc0c" fontSize={10} data-testid={`gauge-invalid-scale-${element.id}`} pointerEvents="none">

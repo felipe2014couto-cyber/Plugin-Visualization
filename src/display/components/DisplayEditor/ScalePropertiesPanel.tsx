@@ -158,28 +158,56 @@ export function ScalePropertiesPanel({
                 <option value="line">Linha</option>
               </select>
             </label>
-            <label className={styles.field}>
-              <span>Local do rótulo</span>
-              <select
-                value={labelPosition}
-                onChange={(event) => onChange({ labelPosition: event.target.value as 'above' | 'below' })}
-                data-testid="gauge-label-position"
-              >
-                <option value="above">Acima</option>
-                <option value="below">Abaixo</option>
-              </select>
-            </label>
-            <label className={styles.field}>
-              <span>Escala</span>
-              <select
-                value={scaleDisplay}
-                onChange={(event) => onChange({ scaleDisplay: event.target.value as 'all' | 'endpoints' })}
-                data-testid="gauge-scale-display"
-              >
-                <option value="all">Mostrar tudo</option>
-                <option value="endpoints">Mostrar apenas primeiro e último</option>
-              </select>
-            </label>
+            <div className={styles.radioGroup}>
+              <span className={styles.groupLabel}>Local do rótulo</span>
+              <label className={styles.radioOption}>
+                <input
+                  type="radio"
+                  name="gauge-label-position"
+                  value="above"
+                  checked={labelPosition === 'above'}
+                  onChange={() => onChange({ labelPosition: 'above' })}
+                  data-testid="gauge-label-position-above"
+                />
+                <span>Acima</span>
+              </label>
+              <label className={styles.radioOption}>
+                <input
+                  type="radio"
+                  name="gauge-label-position"
+                  value="below"
+                  checked={labelPosition === 'below'}
+                  onChange={() => onChange({ labelPosition: 'below' })}
+                  data-testid="gauge-label-position-below"
+                />
+                <span>Abaixo</span>
+              </label>
+            </div>
+            <div className={styles.radioGroup}>
+              <span className={styles.groupLabel}>Escala</span>
+              <label className={styles.radioOption}>
+                <input
+                  type="radio"
+                  name="gauge-scale-display"
+                  value="all"
+                  checked={scaleDisplay === 'all'}
+                  onChange={() => onChange({ scaleDisplay: 'all' })}
+                  data-testid="gauge-scale-display-all"
+                />
+                <span>Mostrar tudo</span>
+              </label>
+              <label className={styles.radioOption}>
+                <input
+                  type="radio"
+                  name="gauge-scale-display"
+                  value="endpoints"
+                  checked={scaleDisplay === 'endpoints'}
+                  onChange={() => onChange({ scaleDisplay: 'endpoints' })}
+                  data-testid="gauge-scale-display-endpoints"
+                />
+                <span>Mostrar apenas primeiro e último</span>
+              </label>
+            </div>
             <label className={styles.field}>
               <span>Ângulo ({gaugeAngle}°)</span>
               <input
@@ -350,5 +378,31 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: 6px;
     color: var(--text-secondary);
     font-size: 10px;
+  `,
+  radioGroup: css`
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    border-top: 1px solid var(--border-color);
+  `,
+  groupLabel: css`
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-primary);
+  `,
+  radioOption: css`
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    cursor: pointer;
+
+    input[type='radio'] {
+      margin: 0;
+      cursor: pointer;
+    }
   `,
 });
