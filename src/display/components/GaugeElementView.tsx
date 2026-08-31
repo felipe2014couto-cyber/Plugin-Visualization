@@ -39,11 +39,11 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
 
   if (isPointerOrLine) {
     if (isLabelBelow) {
-      // Dial is larger, value is directly below dial opening, title sits right beneath value
-      cy = element.y + element.height * 0.44;
-      maxRadiusByHeight = element.height * 0.32;
-      valueY = element.y + element.height - (hasTitle ? Math.max(22, element.height * 0.12) : Math.max(10, element.height * 0.06));
-      titleY = element.y + element.height - Math.max(6, element.height * 0.035);
+      // Dial is at top, title is placed right below the dial opening, value is placed below title
+      cy = element.y + element.height * 0.39;
+      maxRadiusByHeight = element.height * 0.28;
+      titleY = element.y + element.height - (hasTitle ? Math.max(32, element.height * 0.17) : 0);
+      valueY = element.y + element.height - (hasTitle ? Math.max(10, element.height * 0.055) : Math.max(12, element.height * 0.08));
     } else {
       // Title is above, dial is centered, value is directly below the dial opening
       cy = hasTitle ? element.y + element.height * 0.50 : element.y + element.height * 0.45;
