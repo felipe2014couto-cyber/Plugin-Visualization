@@ -39,6 +39,14 @@ describe('calculationEngine', () => {
     ]))).toEqual({ status: 'success', value: 16.67 });
   });
 
+  it('avalia comparações com estados digitais do PI', () => {
+    expect(evaluateCalculation({
+      ...calculation,
+      expression: 'IF(Estado == "On", 1, IF(Estado == "Off", 2, 3))',
+      inputs: [{ name: 'Estado', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'Estado' } }],
+    }, new Map([['Estado', 'Off']]))).toEqual({ status: 'success', value: 2 });
+  });
+
   it('rejeita WHILE para preservar a execução limitada', () => {
     expect(evaluateCalculation({ ...calculation, expression: 'WHILE(1, 1)' }, new Map([
       ['Vazao_01', 25],

@@ -1,209 +1,121 @@
-# Plano de implantação do PIMS Vision
+# Plano de Implantação e Checklist de Produção - PIMS Vision
 
-## Objetivo
+## Visão Geral da Arquitetura
 
-Reproduzir a implantação do app plugin `pims-vision-app` em uma nova máquina com Grafana, de forma auditável e sem depender de credenciais compartilhadas.
+O ecossistema do **PIMS Vision** é composto por 3 camadas de serviço integradas:
 
-Este documento descreve a implantação do artefato compilado em `dist/`. O plugin não possui backend nesta fase.
+1. **Frontend App Plugin (`pims-vision-app`):** Plugin nativo do Grafana (porta `3000`), responsável pela interface de edição e visualização de telas sinóticas industriais.
+2. **Proxy PI Vision (`pi-vision-proxy`):** Serviço Node.js (porta `3001`), responsável pela autenticação NTLM e bypass de CORS para busca de displays do PI Vision.
+3. **API Backend SIP / Oracle (`pims-vision-sql-api`):** Serviço Python/FastAPI (porta `8085`), responsável pela conexão e execução de queries SQL somente-leitura no banco Oracle do SIP.
 
-## Pré-requisitos da máquina destino
+---
 
-- Grafana instalado e em execução, compatível com `>=9.3.16`.
-- Usuário técnico para acesso SSH, por exemplo `infra`.
-- Diretório de plugins configurado, normalmente `/var/lib/grafana/plugins`.
-- Diretório de provisioning, normalmente `/etc/grafana/provisioning/plugins`.
-- Permissão administrativa para instalar arquivos nesses diretórios e reiniciar `grafana-server`.
-- Acesso de rede entre a máquina de desenvolvimento e o servidor.
-- Espaço livre suficiente para o conteúdo de `dist/` e uma cópia temporária de staging.
+## Checklist Crítico de Verificação para Produção
 
-Não colocar senhas, chaves privadas ou tokens neste repositório.
+> [!IMPORTANT]
+> **Atenção aos seguintes pontos durante o deploy em novos servidores de produção:**
 
-## Fases do processo
+### 1. Oracle Instant Client e Modo Thick (Autenticação Legada do SIP)
+- **Problema:** O banco Oracle do SIP utiliza um verificador de senhas legado (versão 10g/11g com hash `0x939`). O driver `python-oracledb` em modo Thin **rejeita** essa autenticação gerando o erro `DPY-3015: password verifier type 0x939 is not supported in thin mode`.
+- **Solução Obrigatória:**
+  1. Instalar o **Oracle Instant Client** em `/opt/oracle/instantclient_19_30/`.
+  2. Registrar no carregador dinâmico de bibliotecas:
+     ```bash
+     echo "/opt/oracle/instantclient_19_30" | sudo tee /etc/ld.so.conf.d/oracle-instantclient.conf
+     sudo ldconfig
+     ```
+  3. Instalar a biblioteca nativa `libaio`:
+     - No Ubuntu 20/22: `sudo apt-get install -y libaio1`
+     - No Ubuntu 24 (Noble): `sudo apt-get install -y libaio1t64 && sudo ln -sf /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1`
 
-### 1. Preparar e validar o build
+### 2. Ambiente Isolado e Redes Corporativas sem Acesso ao PyPI
+- **Problema:** Servidores de produção atrás de proxy corporativo / inspeção SSL (ex: Squid) bloqueiam o `pip install` com erro de certificado SSL (`CERTIFICATE_VERIFY_FAILED`).
+- **Solução:**
+  - Transferir as dependências Python empacotadas previamente ou usar mirrors internos confiáveis (`--trusted-host`).
+  - Isolar a aplicação em um virtual environment (`/opt/pims-vision-sql-api/venv`).
 
-No workspace do projeto:
+### 3. Resolução de Nomes e Credenciais do PI Vision
+- **Problema:** O servidor do PI Vision é acessado pela URL interna `http://pimsweb/PIVision`. Se o servidor de produção não possuir o host `pimsweb` no DNS corporativo ou `/etc/hosts`, a busca de displays falha com erro de rota compatível / 404 / host unreachable.
+- **Solução Obrigatória:**
+  1. Garantir o mapeamento do host no `/etc/hosts` do servidor:
+     ```bash
+     echo "10.247.72.34 pimsweb" | sudo tee -a /etc/hosts
+     ```
+  2. Garantir o arquivo `/opt/pims-vision-proxy/.env` com as credenciais válidas de acesso ao PI Vision:
+     ```env
+     PI_VISION_USER=Administrator
+     PI_VISION_PASSWORD=AperamSrvpims
+     PIVISION_PROXY_PORT=3001
+     PIVISION_PROXY_HOST=0.0.0.0
+     ```
 
+### 4. Configuração de CORS no Proxy PI Vision
+- O arquivo `pi-vision-proxy.js` deve conter no `ALLOWED_ORIGINS` (ou permitir dinamicamente via regex / variável de ambiente `ALLOWED_ORIGINS`) o IP/DNS e porta do Grafana de produção (`http://<IP_DO_SERVIDOR>:3000`).
+
+### 5. Permissão de Plugin Unsigned no Grafana
+- Configurar o drop-in do systemd em `/etc/systemd/system/grafana-server.service.d/pims-vision.conf`:
+  ```ini
+  [Service]
+  Environment="GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=pims-vision-app"
+  Environment="GF_LOG_FILTERS=plugin.pims-vision-app:debug"
+  Environment="GF_DATAPROXY_LOGGING=1"
+  ```
+- Sempre executar `sudo systemctl daemon-reload && sudo systemctl restart grafana-server`.
+
+### 6. Injeção do Redirecionador de Dashboards
+- O script `/usr/share/grafana/public/pims-vision-dashboard-redirect.js` deve estar presente e injetado antes da tag `</head>` em `/usr/share/grafana/public/views/index.html`.
+
+---
+
+## Estrutura de Serviços no Servidor de Produção
+
+| Serviço | Porta | Tipo | Diretório de Instalação | Arquivo Systemd |
+|---|---|---|---|---|
+| **Grafana Server** | `3000` | Nativo | `/var/lib/grafana/plugins/pims-vision-app` | `grafana-server.service` |
+| **PI Vision Proxy** | `3001` | Node.js | `/opt/pims-vision-proxy` | `/etc/systemd/system/pims-vision-proxy.service` |
+| **SIP Oracle API** | `8085` | Python | `/opt/pims-vision-sql-api` | `/etc/systemd/system/pims-vision-sql-api.service` |
+
+---
+
+## Passo a Passo de Deploy em Produção
+
+### Passo 1: Build Local
 ```bash
-npm ci
-npm run typecheck
-npm run lint
-npm run test:ci
+cd /PIMS/Plugin_grafana
 npm run build
 ```
 
-Confirmar que o build contém o manifesto e o módulo principal:
+### Passo 2: Executar o Script Automatizado de Deploy
+```bash
+./scripts/deploy-remote-grafana.sh <IP_DO_SERVIDOR> <USUARIO_SSH>
+```
+
+---
+
+## Checklist de Aceite e Homologação
+
+Execute no servidor remoto para validar todas as portas:
 
 ```bash
-test -f dist/plugin.json
-test -f dist/module.js
+# 1. Validar saúde do Grafana (Porta 3000)
+curl --noproxy "*" http://127.0.0.1:3000/api/health
+# Esperado: {"database":"ok","version":"..."}
+
+# 2. Validar Proxy PI Vision (Porta 3001)
+curl --noproxy "*" http://127.0.0.1:3001/health
+# Esperado: {"status":"ok","proxy":"pi-vision-proxy-curl"}
+
+# 3. Validar Backend SIP/Oracle (Porta 8085)
+curl --noproxy "*" http://127.0.0.1:8085/docs
+# Esperado: HTML do Swagger UI
+
+# 4. Validar status dos serviços no Systemd
+sudo systemctl status grafana-server pims-vision-proxy pims-vision-sql-api --no-pager
 ```
 
-O manifesto deve conter o ID `pims-vision-app`.
+### Validações Funcionais na Interface Web:
+- [ ] Abrir `http://<IP>:3000/a/pims-vision-app` e carregar o editor.
+- [ ] Testar **Importar PI Vision** (valida comunicação na porta 3001).
+- [ ] Testar **Conexão SIP** com usuário e senha (valida autenticação Oracle Thick Mode na porta 8085).
+- [ ] Abrir um dashboard salvo e verificar se o redirecionamento `/d/...` -> `/a/pims-vision-app?...` funciona.
 
-Antes de uma implantação produtiva, avaliar a assinatura do plugin com o fluxo definido pela organização. Enquanto o plugin permanecer unsigned, a máquina Grafana precisará permitir explicitamente esse ID.
-
-### 2. Preparar o acesso remoto
-
-1. Criar uma chave SSH dedicada ao deploy.
-2. Instalar somente a chave pública em `~/.ssh/authorized_keys` do usuário técnico.
-3. Usar `IdentitiesOnly=yes` e validação de host conhecida.
-4. Testar o acesso com `hostname`, `id` e `grafana-server -v`.
-
-O acesso administrativo deve ser limitado a um wrapper root-owned específico do Grafana. Não usar `NOPASSWD: ALL`.
-
-Exemplo de permissão recomendada:
-
-```text
-infra ALL=(root) NOPASSWD: /usr/local/sbin/pims-vision-deploy
-```
-
-O wrapper deve ser de propriedade `root:root`, modo `0755`, e não aceitar caminhos ou comandos arbitrários como argumentos.
-
-### 3. Transferir para staging
-
-Transferir o conteúdo de `dist/` para uma área gravável pelo usuário técnico, por exemplo:
-
-```text
-/home/infra/pims-vision-app-deploy/
-```
-
-Também transferir o provisioning versionado no projeto:
-
-```text
-provisioning/plugins/apps.yaml
-```
-
-No staging, ele pode ser mantido como:
-
-```text
-/home/infra/pims-vision-app-deploy/apps.yaml
-```
-
-Validar o manifesto no staging antes da instalação.
-
-### 4. Instalar o plugin e o provisioning
-
-O wrapper de deploy deve realizar, nesta ordem:
-
-1. Criar `/var/lib/grafana/plugins/pims-vision-app` com proprietário `grafana:grafana`.
-2. Sincronizar o conteúdo do staging para esse diretório.
-3. Ajustar o proprietário dos arquivos para `grafana:grafana`.
-4. Instalar `apps.yaml` em `/etc/grafana/provisioning/plugins/apps.yaml` com proprietário `root:root` e modo `0644`.
-5. Garantir que o provisioning contenha:
-
-   ```yaml
-   apiVersion: 1
-
-   apps:
-     - type: 'pims-vision-app'
-       org_id: 1
-       org_name: 'pims'
-       disabled: false
-       jsonData: {}
-   ```
-
-O provisioning é necessário para habilitar o app na organização configurada.
-
-### 5. Permitir plugin unsigned, quando aplicável
-
-Para uma versão unsigned, criar um drop-in persistente do systemd:
-
-```ini
-[Service]
-Environment="GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=pims-vision-app"
-```
-
-Local recomendado:
-
-```text
-/etc/systemd/system/grafana-server.service.d/pims-vision.conf
-```
-
-Após criar ou alterar o drop-in, sempre executar:
-
-```bash
-systemctl daemon-reload
-systemctl restart grafana-server
-```
-
-Sem `daemon-reload`, o serviço pode continuar sem a variável mesmo que o arquivo exista.
-
-Em produção, preferir assinar o plugin e remover essa exceção de unsigned.
-
-### 6. Validar a implantação
-
-Validar o serviço:
-
-```bash
-systemctl is-active grafana-server
-```
-
-Validar os arquivos:
-
-```bash
-test -f /var/lib/grafana/plugins/pims-vision-app/plugin.json
-test -f /var/lib/grafana/plugins/pims-vision-app/module.js
-test -f /etc/grafana/provisioning/plugins/apps.yaml
-```
-
-Validar os assets pelo HTTP local do Grafana:
-
-```bash
-curl -sS -o /dev/null -w '%{http_code}\n' \
-  http://127.0.0.1:3000/public/plugins/pims-vision-app/module.js
-
-curl -sS -o /dev/null -w '%{http_code}\n' \
-  http://127.0.0.1:3000/public/plugins/pims-vision-app/plugin.json
-```
-
-Os dois códigos esperados são `200`.
-
-Verificar rejeições no log:
-
-```bash
-journalctl -u grafana-server --no-pager |
-  grep -Ei 'pims-vision-app|unsigned|signature|Plugin validation failed'
-```
-
-Não deve haver mensagens de `Skipping loading plugin` ou `Plugin validation failed` para `pims-vision-app`.
-
-Por fim, abrir o Grafana e confirmar a página do app em:
-
-```text
-/a/pims-vision-app
-```
-
-### 7. Rollback
-
-Antes de substituir uma versão existente:
-
-1. Registrar a versão atual e o checksum do `plugin.json`.
-2. Fazer backup do diretório atual do plugin.
-3. Restaurar o backup em caso de falha.
-4. Reiniciar o Grafana.
-5. Repetir todas as validações HTTP e de log.
-
-O rollback não deve apagar arquivos sem que o destino exato e o backup estejam confirmados.
-
-## Checklist de aceite
-
-- [ ] `npm run build` concluído.
-- [ ] `dist/plugin.json` contém `id: pims-vision-app`.
-- [ ] Transferência para staging concluída.
-- [ ] Plugin instalado em `/var/lib/grafana/plugins/pims-vision-app`.
-- [ ] `apps.yaml` instalado e habilitado.
-- [ ] Assinatura válida ou exceção unsigned configurada explicitamente.
-- [ ] `systemctl daemon-reload` executado após alteração de drop-in.
-- [ ] Serviço Grafana `active`.
-- [ ] `module.js` e `plugin.json` retornam HTTP `200`.
-- [ ] Não há erro de assinatura ou validação no log.
-- [ ] Página `/a/pims-vision-app` abre no Grafana.
-- [ ] Chave SSH temporária e staging removidos ou revogados conforme a política do ambiente.
-
-## Pontos de atenção
-
-- Manter a compatibilidade com Grafana 9.3.16; não assumir APIs exclusivas do Grafana 12.
-- Não copiar `node_modules`, o workspace completo ou arquivos de credenciais para o servidor.
-- Não usar `rsync --delete` sem um backup e uma confirmação explícita do diretório alvo.
-- Depois de validar uma implantação unsigned, planejar a assinatura do plugin para reduzir a superfície de risco.

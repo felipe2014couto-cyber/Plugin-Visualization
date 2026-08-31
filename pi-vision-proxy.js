@@ -20,11 +20,12 @@ const os = require('os');
 const ENV_PATH = path.join(__dirname, '.env');
 const DEFAULT_PI_VISION_BASE_URL = 'http://pimsweb/PIVision';
 
-// Origens permitidas (Grafana local)
-const ALLOWED_ORIGINS = [
+// Origens permitidas (Grafana local e remoto)
+const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://0.0.0.0:3000',
   'http://10.247.140.156:3000',
+  'http://10.247.72.134:3000',
 ];
 
 // Le arquivo .env simples
@@ -49,9 +50,24 @@ const PORT = process.env.PIVISION_PROXY_PORT || startupEnv.PIVISION_PROXY_PORT |
 // conectar. As origens HTTP continuam restritas por ALLOWED_ORIGINS.
 const HOST = process.env.PIVISION_PROXY_HOST || startupEnv.PIVISION_PROXY_HOST || '0.0.0.0';
 
+function isOriginAllowed(origin) {
+  if (!origin) {
+    return true;
+  }
+  const configured = (process.env.ALLOWED_ORIGINS || startupEnv.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const allowList = configured.length > 0 ? configured : DEFAULT_ALLOWED_ORIGINS;
+  if (allowList.includes(origin) || allowList.includes('*')) {
+    return true;
+  }
+  return /^http:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin);
+}
+
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin || '';
-  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+  if (origin && !isOriginAllowed(origin)) {
     return false;
   }
   if (origin) {

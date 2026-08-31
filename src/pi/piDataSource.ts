@@ -12,6 +12,9 @@ import { getDataSourceSrv, type DataSourceSrv } from '@grafana/runtime';
 import { firstValueFrom, type Observable } from 'rxjs';
 import type { PiPointBinding, PiPointDatabaseLimits } from './piPointBinding';
 import {
+  DATA_QUERY_CURRENT_MAX_CONCURRENT_BATCHES,
+  DATA_QUERY_CURRENT_MAX_TARGETS,
+  DATA_QUERY_CURRENT_TIMEOUT_MS,
   DATA_QUERY_MAX_CONCURRENT_BATCHES,
   DATA_QUERY_MAX_TARGETS,
 } from './dataQueryPolicy';
@@ -956,7 +959,9 @@ export async function getPiPointsCurrentValues(
   const results: Record<string, PiPointValueResult> = {};
 
   const tasks = [...grouped.entries()].flatMap(([dataSourceUid, group]) => (
-    chunkBindings(group).map((batch) => async () => {
+    chunkBindings(group, DATA_QUERY_CURRENT_MAX_TARGETS).map((batch) => async () => {
+      const deadline = Date.now() + DATA_QUERY_CURRENT_TIMEOUT_MS;
+      const now = Date.now();
       try {
         const instance = await getResolvedPiDataSource(dataSourceSrv, {
           uid: dataSourceUid,
@@ -967,17 +972,129 @@ export async function getPiPointsCurrentValues(
           throw new Error('A Data Source PI não expõe consulta de valores');
         }
 
-        const now = Date.now();
-        const response = await resolveQueryResponse(instance.query(buildCurrentValuesRequest(batch, now)));
-        Object.assign(results, normalizeCurrentValues(response, batch));
+        const response = await queryCurrentValues(instance, batch, now, deadline);
+        const batchResults = normalizeCurrentValues(response, batch);
+        Object.assign(results, batchResults);
+
+        // Se alguma tag dentro do lote falhou, tenta individualmente para ela
+        const failedInBatch = batch.filter((binding) => {
+          const res = batchResults[getBindingKey(binding)];
+          return !res || res.status === 'error';
+        });
+
+        // Alguns drivers retornam HTTP 200, mas incluem response.error e não
+        // produzem frames quando uma tag do lote falha. Nessa situação todas
+        // as tags precisam do retry unitário; uma resposta vazia sem erro não
+        // deve multiplicar consultas desnecessariamente.
+        const responseHasError = Boolean(response.error);
+        if (failedInBatch.length > 0 && responseHasError && failedInBatch.length === batch.length && batch.length > 1) {
+          // Quando o driver invalida o lote inteiro, a consulta unitária de
+          // todas as tags fica cara. A divisão binária encontra as tags ruins
+          // mantendo os grupos válidos em lote.
+          const retryFailedBatch = async (failedBatch: readonly PiPointBinding[]): Promise<void> => {
+            try {
+              const retryResponse = await queryCurrentValues(instance, failedBatch, now, deadline);
+              const retryResults = normalizeCurrentValues(retryResponse, failedBatch);
+              Object.assign(results, retryResults);
+              const unresolved = failedBatch.filter((binding) => retryResults[getBindingKey(binding)]?.status !== 'success');
+              if (unresolved.length === 0) {
+                return;
+              }
+              if (unresolved.length < failedBatch.length) {
+                await retryFailedBatch(unresolved);
+                return;
+              }
+            } catch (retryError) {
+              if (isCurrentValueTimeout(retryError)) {
+                markCurrentValueErrors(results, failedBatch, toError(retryError));
+                return;
+              }
+              // Divide o lote abaixo para isolar a falha.
+            }
+            if (failedBatch.length > 1) {
+              const middle = Math.ceil(failedBatch.length / 2);
+              await retryFailedBatch(failedBatch.slice(0, middle));
+              await retryFailedBatch(failedBatch.slice(middle));
+            }
+          };
+          await retryFailedBatch(batch);
+        } else if (failedInBatch.length > 0 && (failedInBatch.length < batch.length || responseHasError)) {
+          for (const binding of failedInBatch) {
+            try {
+              const singleResponse = await queryCurrentValues(instance, [binding], now, deadline);
+              const singleResult = normalizeCurrentValues(singleResponse, [binding]);
+              if (singleResult[getBindingKey(binding)]?.status === 'success') {
+                results[getBindingKey(binding)] = singleResult[getBindingKey(binding)];
+              }
+            } catch (singleError) {
+              if (isCurrentValueTimeout(singleError)) {
+                results[getBindingKey(binding)] = { status: 'error', error: toError(singleError) };
+              }
+              // Mantém o status original para falhas que não sejam timeout.
+            }
+          }
+        }
       } catch (error) {
-        for (const binding of batch) {
-          results[getBindingKey(binding)] = { status: 'error', error: toError(error) };
+        const batchError = toError(error);
+        if (isCurrentValueTimeout(batchError)) {
+          markCurrentValueErrors(results, batch, batchError);
+          return;
+        }
+        // Alguns PI Web APIs rejeitam todo o lote quando apenas uma tag possui
+        // erro. Separamos o lote recursivamente para preservar as leituras
+        // válidas sem depender de uma sequência longa de consultas unitárias.
+        try {
+          const instance = await getResolvedPiDataSource(dataSourceSrv, {
+            uid: dataSourceUid,
+            name: '',
+            type: PI_DATASOURCE_TYPE,
+          });
+          const resolveFailedBatch = async (failedBatch: readonly PiPointBinding[], fallbackError: Error): Promise<void> => {
+            try {
+              const response = await queryCurrentValues(instance, failedBatch, now, deadline);
+              const retryResults = normalizeCurrentValues(response, failedBatch);
+              Object.assign(results, retryResults);
+              const unresolved = failedBatch.filter((binding) => retryResults[getBindingKey(binding)]?.status !== 'success');
+              if (unresolved.length === 0) {
+                return;
+              }
+              if (unresolved.length < failedBatch.length) {
+                await resolveFailedBatch(unresolved, fallbackError);
+                return;
+              }
+            } catch (retryError) {
+              const retryErrorValue = toError(retryError);
+              if (isCurrentValueTimeout(retryErrorValue)) {
+                markCurrentValueErrors(results, failedBatch, retryErrorValue);
+                return;
+              }
+              fallbackError = retryErrorValue;
+            }
+
+            if (failedBatch.length === 1) {
+              results[getBindingKey(failedBatch[0])] = { status: 'error', error: fallbackError };
+              return;
+            }
+            const middle = Math.ceil(failedBatch.length / 2);
+            await resolveFailedBatch(failedBatch.slice(0, middle), fallbackError);
+            await resolveFailedBatch(failedBatch.slice(middle), fallbackError);
+          };
+          if (batch.length === 1) {
+            results[getBindingKey(batch[0])] = { status: 'error', error: batchError };
+          } else {
+            const middle = Math.ceil(batch.length / 2);
+            await resolveFailedBatch(batch.slice(0, middle), batchError);
+            await resolveFailedBatch(batch.slice(middle), batchError);
+          }
+        } catch {
+          for (const binding of batch) {
+            results[getBindingKey(binding)] = { status: 'error', error: toError(error) };
+          }
         }
       }
     })
   ));
-  await runQueryTasks(tasks);
+  await runQueryTasks(tasks, DATA_QUERY_CURRENT_MAX_CONCURRENT_BATCHES);
 
   return results;
 }
@@ -1149,30 +1266,32 @@ function buildCurrentValuesRequest(
   now: number,
 ): DataQueryRequest<DataQuery> {
   const end = dateTime(now);
-  const start = dateTime(now - 60_000);
+  const start = dateTime(now - 24 * 60 * 60 * 1000);
 
   return {
     requestId: nextDataQueryRequestId('values', bindings[0].dataSourceUid),
     interval: '1s',
     intervalMs: 1000,
-    maxDataPoints: 1,
+    maxDataPoints: 100,
     range: { from: start, to: end, raw: { from: start, to: end } },
     scopedVars: {},
     targets: bindings.map((binding, index) => buildCurrentValueTarget(binding, index)),
     timezone: 'browser',
     app: 'app',
-    startTime: now - 60_000,
+    startTime: now - 24 * 60 * 60 * 1000,
     endTime: now,
   };
 }
 
 function buildCurrentValueTarget(binding: PiPointBinding, index: number): DataQuery {
   const pointName = binding.pointName;
+  const target = binding.serverPath ? `${binding.serverPath};${pointName}` : pointName;
+  const segments = binding.serverPath ? [{ label: binding.serverPath, value: { value: binding.serverPath } }] : [];
   return {
     refId: refIdForIndex(index),
-    target: `${binding.serverPath};${pointName}`,
+    target,
     attributes: [{ label: pointName, value: { value: pointName } }],
-    segments: [{ label: binding.serverPath, value: { value: binding.serverPath } }],
+    segments,
     isPiPoint: true,
     useLastValue: { enable: true },
     digitalStates: { enable: true },
@@ -1287,8 +1406,7 @@ function normalizeCurrentValues(
 
   bindings.forEach((binding, index) => {
     const refId = refIdForIndex(index);
-    const frame = framesByRefId.get(refId)
-      ?? (bindings.length === 1 && frames.length === 1 ? frames[0] : undefined);
+    const frame = resolveCurrentValueFrame(frames, framesByRefId, binding.pointName, refId, index, bindings.length);
     const key = getBindingKey(binding);
 
     try {
@@ -1303,6 +1421,32 @@ function normalizeCurrentValues(
   });
 
   return results;
+}
+
+/**
+ * Datasources normalmente devolvem um frame por target, mas nem todos
+ * preservam o refId do target. Nessa situação o plugin ainda pode devolver
+ * os frames na mesma ordem da consulta. Mantemos a resolução por refId e por
+ * nome como prioridades, usando a posição somente como último fallback.
+ */
+function resolveCurrentValueFrame(
+  frames: DataFrame[],
+  framesByRefId: Map<string, DataFrame>,
+  pointName: string,
+  refId: string,
+  index: number,
+  bindingCount: number,
+): DataFrame | undefined {
+  const normalizedPointName = pointName.toLocaleLowerCase();
+  return framesByRefId.get(refId)
+    ?? frames.find((frame) => {
+      const frameName = (frame.name ?? '').toLocaleLowerCase();
+      return frameName === normalizedPointName
+        || frameName.endsWith(`;${normalizedPointName}`)
+        || frame.fields.some((field) => field.name.toLocaleLowerCase() === normalizedPointName);
+    })
+    ?? (frames.length === 1 && bindingCount === 1 ? frames[0] : undefined)
+    ?? (frames.length === bindingCount ? frames[index] : undefined);
 }
 
 function normalizeTrendResponse(
@@ -1504,18 +1648,49 @@ function clampTrendMaxDataPoints(value: number | undefined): number {
   );
 }
 
-function chunkBindings(bindings: readonly PiPointBinding[]): PiPointBinding[][] {
+function chunkBindings(bindings: readonly PiPointBinding[], maxTargets = DATA_QUERY_MAX_TARGETS): PiPointBinding[][] {
   const chunks: PiPointBinding[][] = [];
-  for (let index = 0; index < bindings.length; index += DATA_QUERY_MAX_TARGETS) {
-    chunks.push(bindings.slice(index, index + DATA_QUERY_MAX_TARGETS));
+  for (let index = 0; index < bindings.length; index += maxTargets) {
+    chunks.push(bindings.slice(index, index + maxTargets));
   }
   return chunks;
 }
 
-async function runQueryTasks(tasks: ReadonlyArray<() => Promise<void>>): Promise<void> {
+async function queryCurrentValues(
+  instance: PiDataSourceApi,
+  bindings: readonly PiPointBinding[],
+  now: number,
+  deadline: number,
+): Promise<DataQueryResponse> {
+  const remainingMs = Math.max(1, deadline - Date.now());
+  return withTimeout(
+    resolveQueryResponse(instance.query(buildCurrentValuesRequest(bindings, now))),
+    remainingMs,
+    'Consulta de valores atuais excedeu o limite de 3 segundos',
+  );
+}
+
+function isCurrentValueTimeout(error: unknown): boolean {
+  return error instanceof Error && error.message === 'Consulta de valores atuais excedeu o limite de 3 segundos';
+}
+
+function markCurrentValueErrors(
+  results: Record<string, PiPointValueResult>,
+  bindings: readonly PiPointBinding[],
+  error: Error,
+): void {
+  for (const binding of bindings) {
+    results[getBindingKey(binding)] = { status: 'error', error };
+  }
+}
+
+async function runQueryTasks(
+  tasks: ReadonlyArray<() => Promise<void>>,
+  maxConcurrent = DATA_QUERY_MAX_CONCURRENT_BATCHES,
+): Promise<void> {
   let nextTask = 0;
   const workers = Array.from(
-    { length: Math.min(DATA_QUERY_MAX_CONCURRENT_BATCHES, tasks.length) },
+    { length: Math.min(maxConcurrent, tasks.length) },
     async () => {
       while (nextTask < tasks.length) {
         const task = tasks[nextTask];
@@ -1541,7 +1716,7 @@ function formatQueryInterval(intervalMs: number): string {
 function deduplicateBindings(bindings: readonly PiPointBinding[]): PiPointBinding[] {
   const unique = new Map<string, PiPointBinding>();
   for (const binding of bindings) {
-    if (!binding.dataSourceUid || !binding.serverPath || !binding.pointName) {
+    if (!binding.dataSourceUid || !binding.pointName) {
       continue;
     }
     unique.set(getBindingKey(binding), binding);
@@ -1577,15 +1752,27 @@ function getFirstFieldValue(field: DataFrame['fields'][number] | undefined): unk
   if (!field) {
     return undefined;
   }
-  const values = field.values as unknown as { get?: (index: number) => unknown; toArray?: () => unknown[] } | unknown[];
+  const values = field.values as unknown as { get?: (index: number) => unknown; toArray?: () => unknown[]; length?: number } | unknown[];
   if (Array.isArray(values)) {
+    for (let i = values.length - 1; i >= 0; i--) {
+      if (values[i] !== null && values[i] !== undefined) return values[i];
+    }
     return values[0];
   }
-  if (typeof values.get === 'function') {
-    return values.get(0);
-  }
   if (typeof values.toArray === 'function') {
-    return values.toArray()[0];
+    const arr = values.toArray();
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (arr[i] !== null && arr[i] !== undefined) return arr[i];
+    }
+    return arr[0];
+  }
+  if (typeof values.get === 'function') {
+    const len = typeof values.length === 'number' ? values.length : 1000;
+    for (let i = len - 1; i >= 0; i--) {
+      const val = values.get(i);
+      if (val !== null && val !== undefined) return val;
+    }
+    return values.get(0);
   }
   return undefined;
 }

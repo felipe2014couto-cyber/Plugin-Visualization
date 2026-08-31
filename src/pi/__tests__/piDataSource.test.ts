@@ -488,9 +488,12 @@ describe('PI data source integration', () => {
   });
 
   it('mantém respostas parciais independentes quando um target não retorna frame', async () => {
-    const query = jest.fn(async (_request: unknown) => ({
-      data: [{ refId: 'A', fields: [{ name: 'TAG_A', values: [10.2] }] }],
-    }));
+    const query = jest.fn(async (request: unknown) => {
+      const target = (request as { targets?: Array<{ target?: string }> }).targets?.[0]?.target;
+      return target?.endsWith(';TAG_B')
+        ? { data: [] }
+        : { data: [{ refId: 'A', fields: [{ name: 'TAG_A', values: [10.2] }] }] };
+    });
     const dataSourceSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ isDefault: true })],
       query,
@@ -506,6 +509,95 @@ describe('PI data source integration', () => {
       status: 'error',
       error: expect.any(Error),
     });
+  });
+
+  it('isola tags válidas quando o datasource rejeita o lote inteiro', async () => {
+    const query = jest.fn(async (request: unknown) => {
+      const targets = (request as { targets?: Array<{ target?: string }> }).targets ?? [];
+      if (targets.length > 1) {
+        throw new Error('Uma tag do lote é inválida');
+      }
+      const target = targets[0]?.target;
+      if (target?.endsWith(';TAG_BAD')) {
+        throw new Error('TAG_BAD não disponível');
+      }
+      return { data: [{ refId: 'A', fields: [{ name: 'TAG_OK', values: [10.2] }] }] };
+    });
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      query,
+    });
+    const { getPiPointsCurrentValues } = await import('../piDataSource');
+    const results = await getPiPointsCurrentValues([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_OK' },
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_BAD' },
+    ], dataSourceSrv);
+
+    expect(results['pi-default\u0000pims\u0000TAG_OK']).toMatchObject({
+      status: 'success',
+      value: { value: 10.2 },
+    });
+    expect(results['pi-default\u0000pims\u0000TAG_BAD']).toMatchObject({
+      status: 'error',
+      error: expect.any(Error),
+    });
+  });
+
+  it('repete todos os bindings quando o datasource responde sem frames para o lote', async () => {
+    const query = jest.fn(async (request: unknown) => {
+      const targets = (request as { targets?: Array<{ target?: string }> }).targets ?? [];
+      if (targets.length > 1) {
+        return { data: [], error: { message: 'Uma tag do lote falhou' } };
+      }
+      return targets[0]?.target?.endsWith(';TAG_OK')
+        ? { data: [{ refId: 'A', fields: [{ name: 'TAG_OK', values: [10.2] }] }] }
+        : { data: [] };
+    });
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      query,
+    });
+    const { getPiPointsCurrentValues } = await import('../piDataSource');
+    const results = await getPiPointsCurrentValues([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_OK' },
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_BAD' },
+    ], dataSourceSrv);
+
+    expect(results['pi-default\u0000pims\u0000TAG_OK']).toMatchObject({
+      status: 'success',
+      value: { value: 10.2 },
+    });
+    expect(results['pi-default\u0000pims\u0000TAG_BAD']).toMatchObject({
+      status: 'error',
+      error: expect.any(Error),
+    });
+  });
+
+  it('associa frames posicionais quando o datasource omite refIds e nomes das tags', async () => {
+    const query = jest.fn(async () => ({
+      data: [
+        { fields: [{ name: 'Time', values: ['2026-08-06T12:00:00.000Z'] }, { name: 'Value', values: [10.2] }] },
+        { fields: [{ name: 'Time', values: ['2026-08-06T12:00:00.000Z'] }, { name: 'Value', values: [20.4] }] },
+      ],
+    }));
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      query,
+    });
+    const { getPiPointsCurrentValues } = await import('../piDataSource');
+    const results = await getPiPointsCurrentValues([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_A' },
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_B' },
+    ], dataSourceSrv);
+
+    expect(results['pi-default\u0000pims\u0000TAG_A']).toEqual(expect.objectContaining({
+      status: 'success',
+      value: expect.objectContaining({ value: 10.2 }),
+    }));
+    expect(results['pi-default\u0000pims\u0000TAG_B']).toEqual(expect.objectContaining({
+      status: 'success',
+      value: expect.objectContaining({ value: 20.4 }),
+    }));
   });
 
   it('consulta histórico numérico com Plot e normaliza Time/Value', async () => {
@@ -609,13 +701,13 @@ describe('PI data source integration', () => {
     expect(request.targets.every((target) => target.target.startsWith('pims;TAG_'))).toBe(true);
   });
 
-  it('divide somente lotes acima de vinte targets e mantém refIds únicos em cada chamada', async () => {
+  it('mantém até sessenta valores atuais por lote e preserva refIds únicos', async () => {
     const query = jest.fn(async (_request: unknown) => ({ data: [] }));
     const dataSourceSrv = makeDataSourceSrv({
       dataSources: [makeDataSource({ isDefault: true })],
       query,
     });
-    const bindings = Array.from({ length: 21 }, (_, index) => ({
+    const bindings = Array.from({ length: 61 }, (_, index) => ({
       dataSourceUid: 'pi-default',
       serverPath: 'pims',
       pointName: `TAG_${index + 1}`,
@@ -628,15 +720,15 @@ describe('PI data source integration', () => {
     const targetBatches = query.mock.calls.map(([request]) => (
       request as unknown as { targets: Array<{ refId: string }> }
     ).targets);
-    expect(targetBatches.map((targets) => targets.length)).toEqual([20, 1]);
+    expect(targetBatches.map((targets) => targets.length)).toEqual([60, 1]);
     expect(targetBatches.every((targets) => new Set(targets.map(({ refId }) => refId)).size === targets.length)).toBe(true);
   });
 
-  it('limita a duas chamadas de datasource em paralelo', async () => {
+  it('limita a três lotes de Current Value em paralelo', async () => {
     const resolvers: Array<(response: { data: unknown[] }) => void> = [];
     const query = jest.fn(() => new Promise<{ data: unknown[] }>((resolve) => resolvers.push(resolve)));
     const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
-    const bindings = Array.from({ length: 41 }, (_, index) => ({
+    const bindings = Array.from({ length: 121 }, (_, index) => ({
       dataSourceUid: 'pi-default',
       serverPath: 'pims',
       pointName: `TAG_${index + 1}`,
@@ -646,7 +738,7 @@ describe('PI data source integration', () => {
     const result = getPiPointsCurrentValues(bindings, dataSourceSrv);
     await Promise.resolve();
     await Promise.resolve();
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledTimes(3);
 
     resolvers[0]?.({ data: [] });
     for (let index = 0; index < 6; index += 1) {

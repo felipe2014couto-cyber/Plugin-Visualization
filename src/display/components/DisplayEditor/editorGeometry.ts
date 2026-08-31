@@ -53,6 +53,28 @@ export function getCanvasBounds(
   return { left, top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) };
 }
 
+/** Returns the tight bounding box around the actual elements on the canvas. */
+export function getContentBounds(
+  elements: readonly DisplayElement[],
+  surface?: DisplayDocument['surface'],
+): CanvasBounds {
+  const valid = elements.filter((e) => Number.isFinite(e.x) && Number.isFinite(e.y) && Number.isFinite(e.width) && Number.isFinite(e.height) && e.width > 0 && e.height > 0);
+  if (valid.length === 0) {
+    return { left: 0, top: 0, width: surface?.width || 1920, height: surface?.height || 1080 };
+  }
+  const minX = Math.min(...valid.map((e) => e.x));
+  const minY = Math.min(...valid.map((e) => e.y));
+  const maxX = Math.max(...valid.map((e) => e.x + e.width));
+  const maxY = Math.max(...valid.map((e) => e.y + e.height));
+  
+  const pad = 16;
+  const left = Math.max(0, minX - pad);
+  const top = Math.max(0, minY - pad);
+  const right = maxX + pad;
+  const bottom = maxY + pad;
+  return { left, top, width: Math.max(100, right - left), height: Math.max(100, bottom - top) };
+}
+
 export const MIN_ELEMENT_SIZE = 1;
 
 export function getElementById(

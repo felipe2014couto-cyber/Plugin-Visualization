@@ -1146,7 +1146,7 @@ export function DisplaySurface({
             const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
             const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
             const rotation = textElement.properties.rotation ?? 0;
-            const lines = (textElement.properties.text || '').split('\n');
+            const lines = decodeRenderedText(textElement.properties.text || '').split('\n');
             const lineCount = lines.length;
             const fontSize = textElement.properties.fontSize || 24;
             const lineHeight = fontSize * 1.2;
@@ -1383,6 +1383,19 @@ export function DisplaySurface({
       })()}
     </svg>
   );
+}
+
+function decodeRenderedText(text: string): string {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos);/gi, (entity, token: string) => {
+    const normalized = token.toLocaleLowerCase();
+    if (normalized === 'lt') return '<';
+    if (normalized === 'gt') return '>';
+    if (normalized === 'amp') return '&';
+    if (normalized === 'quot') return '"';
+    if (normalized === 'apos') return "'";
+    const codePoint = normalized.startsWith('#x') ? Number.parseInt(normalized.slice(2), 16) : Number.parseInt(normalized.slice(1), 10);
+    return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : entity;
+  });
 }
 
 function getTrendSeriesStates(

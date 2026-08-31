@@ -444,10 +444,10 @@ export function convertPiVisionDisplay(
   const bounds = getDisplayBounds(symbols);
   const width = typeof display.Width === 'number' && display.Width > 0
     ? display.Width
-    : bounds?.width ?? 1920;
+    : (bounds?.width ?? 1920);
   const height = typeof display.Height === 'number' && display.Height > 0
     ? display.Height
-    : bounds?.height ?? 1080;
+    : (bounds?.height ?? 1080);
   const rawBg = normalizeColor(display.BackgroundColor ?? display.DisplayProperties?.BackgroundColor);
   const backgroundColor = (rawBg && rawBg.toLowerCase() !== '#ffffff' && rawBg.toLowerCase() !== '#fff') ? rawBg : '#1f1f1f';
 
@@ -517,7 +517,7 @@ function convertSymbol(
     case 'statictext':
     case 'label':
     case 'text':
-      return convertText(symbol, geo, dataSourceUid, existingIds);
+      return convertText(symbol, geo, dataSourceUid, existingIds, calculationsByName);
     case 'rectangle':
     case 'circle':
     case 'ellipse':
@@ -526,10 +526,10 @@ function convertSymbol(
     case 'polyline':
     case 'path':
     case 'shape':
-      return convertShape(symbol, geo, dataSourceUid, existingIds);
+      return convertShape(symbol, geo, dataSourceUid, existingIds, calculationsByName);
 
     case 'graphic':
-      return convertGraphic(symbol, geo, dataSourceUid, existingIds);
+      return convertGraphic(symbol, geo, dataSourceUid, existingIds, calculationsByName);
 
     case 'image':
       return convertAttachedImage(symbol, geo, existingIds);
@@ -560,8 +560,8 @@ function convertValue(
   const valueGeo = hasExplicitWidth(symbol)
     ? geo
     : { ...geo, width: estimateCompactValueWidth(cfg) };
-  const binding = firstBinding(symbol, dataSourceUid);
   const calculation = firstCalculation(symbol, calculationsByName);
+  const binding = calculation ? undefined : firstBinding(symbol, dataSourceUid);
   if (!binding && !calculation) {
     return undefined;
   }
@@ -570,6 +570,10 @@ function convertValue(
   const backgroundColor = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill) ?? DEFAULT_VALUE_VISUAL_OPTIONS.backgroundColor;
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize);
   const textAlign = normalizeTextAlign(cfg.TextAlignment);
+  const thresholdMultistate = convertPiVisionThresholdMultistate(cfg.Multistates);
+  const multistate = thresholdMultistate
+    ? { multistate: thresholdMultistate }
+    : convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
 
   const properties: ValueProperties = {
     ...(binding ? { binding } : {}),
@@ -590,7 +594,7 @@ function convertValue(
     },
     _piVisionPreserveFontSize: fontSize !== undefined,
     _piVisionSquareBackground: true,
-    ...convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg),
+    ...multistate,
   };
 
   return makeElement(VALUE_TYPE, valueGeo, properties, existingIds);
@@ -852,9 +856,10 @@ function convertText(
   geo: ElementGeometry,
   dataSourceUid: string,
   existingIds: Set<string>,
+  calculationsByName: ReadonlyMap<string, CalculationDefinition>,
 ): DisplayElement {
   const cfg = symbol.Configuration ?? {};
-  const text = cfg.Content ?? cfg.Text ?? cfg.StaticText ?? '';
+  const text = decodePiVisionText(cfg.Content ?? cfg.Text ?? cfg.StaticText ?? '');
   const rawColor = normalizeColor(cfg.ForeColor ?? cfg.Stroke);
   const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
   const isDefaultWhiteOrTransparent = !rawBg || rawBg.toLowerCase() === '#ffffff' || rawBg.toLowerCase() === '#fff' || rawBg === 'transparent' || cfg.Transparent === true;
@@ -865,6 +870,7 @@ function convertText(
 
   const multistate = convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
   const binding = firstMultistateBinding(symbol, dataSourceUid);
+  const calculation = firstMultistateCalculation(symbol, calculationsByName);
 
   const properties: TextProperties = {
     ...DEFAULT_TEXT_PROPERTIES,
@@ -876,7 +882,9 @@ function convertText(
     rotation: typeof cfg.Rotation === 'number' ? cfg.Rotation : 0,
     ...(typeof cfg.LinkURL === 'string' && cfg.LinkURL.trim() ? { linkUrl: cfg.LinkURL.trim() } : {}),
     ...(typeof cfg.NewTab === 'boolean' ? { openInNewTab: cfg.NewTab } : {}),
-    ...(multistate.multistate || multistate.backgroundMultistate ? { ...multistate, binding } : {}),
+    ...(multistate.multistate || multistate.backgroundMultistate
+      ? { ...multistate, ...(binding ? { binding } : {}), ...(calculation ? { calculationId: calculation.id } : {}) }
+      : {}),
   };
 
   return makeElement(TEXT_TYPE, geo, properties, existingIds);
@@ -891,6 +899,7 @@ function convertShape(
   geo: ElementGeometry,
   dataSourceUid: string,
   existingIds: Set<string>,
+  calculationsByName: ReadonlyMap<string, CalculationDefinition>,
 ): DisplayElement {
   const cfg = symbol.Configuration ?? {};
   const symType = (symbol.SymbolType ?? cfg.ShapeType ?? 'rectangle').toLowerCase();
@@ -899,6 +908,7 @@ function convertShape(
   const stroke = normalizeColor(cfg.ForeColor ?? cfg.Stroke) ?? DEFAULT_RECTANGLE_PROPERTIES.stroke;
   const thresholdMultistate = convertPiVisionThresholdMultistate(cfg.Multistates);
   const multistateBinding = firstMultistateBinding(symbol, dataSourceUid);
+  const calculation = firstMultistateCalculation(symbol, calculationsByName);
   const multistate = thresholdMultistate
     ? { multistate: thresholdMultistate }
     : convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
@@ -913,6 +923,7 @@ function convertShape(
     strokeStyle: cfg.StrokeStyle,
     points: normalizeLinePoints(cfg.Points),
     ...(multistateBinding ? { binding: multistateBinding } : {}),
+    ...(calculation ? { calculationId: calculation.id } : {}),
     ...multistate,
   };
 
@@ -970,6 +981,7 @@ function convertGraphic(
   geo: ElementGeometry,
   dataSourceUid: string,
   existingIds: Set<string>,
+  calculationsByName: ReadonlyMap<string, CalculationDefinition>,
 ): DisplayElement {
   const cfg = symbol.Configuration ?? {};
   const fileKey = cfg.FileKey?.trim() || 'Graphic';
@@ -979,6 +991,7 @@ function convertGraphic(
     : createPiVisionGraphicDataUrl(fileKey, normalizeColor(cfg.Fill) ?? '#808080');
   const multistate = convertPiVisionThresholdMultistate(cfg.Multistates);
   const binding = firstMultistateBinding(symbol, dataSourceUid);
+  const calculation = firstMultistateCalculation(symbol, calculationsByName);
   
   const mappedSymbol = mapPiVisionGraphicToLocalSymbol(cfg.DirectoryKey, fileKey);
   const localSymbolId = mappedSymbol?.id;
@@ -987,7 +1000,7 @@ function convertGraphic(
   const flipH = cfg.Flip === 'H' || cfg.Flip === 'Horizontal' || cfg.Flip === 'Both' || cfg.FlipH === true;
   const flipV = cfg.Flip === 'V' || cfg.Flip === 'Vertical' || cfg.Flip === 'Both' || cfg.FlipV === true;
 
-  if (localSymbolId || (multistate && binding)) {
+  if (localSymbolId || (multistate && (binding || calculation))) {
     const symbolDefinition = localSymbolId ? findIndustrialSymbol(localSymbolId) : undefined;
     const finalSrc = symbolDefinition ? getIndustrialSymbolAssetUrl(symbolDefinition) : src;
     const properties: LibrarySymbolProperties = {
@@ -999,7 +1012,8 @@ function convertGraphic(
       rotation: typeof cfg.Rotation === 'number' ? cfg.Rotation : 0,
       ...(flipH ? { flipHorizontal: true } : {}),
       ...(flipV ? { flipVertical: true } : {}),
-      binding,
+      ...(binding ? { binding } : {}),
+      ...(calculation ? { calculationId: calculation.id } : {}),
       multistate,
       _piVisionDirectoryKey: cfg.DirectoryKey,
       _piVisionFileKey: fileKey,
@@ -1432,17 +1446,20 @@ export function parseDataSourcePath(
 
   let normalized = path.trim();
 
-  // Remove prefixo de protocolo: "pi:\\" ou "af:\\"
+  // Remove prefixo de protocolo: "pi:\\", "af:\\"
   normalized = normalized.replace(/^[a-z]+:\\+/i, '');
   // Remove barras iniciais extras
-  normalized = normalized.replace(/^\\+/, '');
+  normalized = normalized.replace(/^[\\/]+/, '');
 
   if (!normalized) {
     return undefined;
   }
 
   // Divide no primeiro separador de caminho
-  const firstSep = normalized.indexOf('\\');
+  const firstSep = normalized.indexOf('\\') >= 0
+    ? normalized.indexOf('\\')
+    : normalized.indexOf('/');
+
   if (firstSep < 1) {
     return undefined;
   }
@@ -1456,7 +1473,7 @@ export function parseDataSourcePath(
 
   // Para paths AF com subestrutura (DB\Element|Attribute), o "pointName"
   // e a ultima parte apos o ultimo separador ou pipe
-  const lastSep = Math.max(remainder.lastIndexOf('\\'), remainder.lastIndexOf('|'));
+  const lastSep = Math.max(remainder.lastIndexOf('\\'), remainder.lastIndexOf('/'), remainder.lastIndexOf('|'));
   const rawPointName = lastSep >= 0 ? remainder.slice(lastSep + 1) : remainder;
   const pointName = removePiVisionResourceId(rawPointName);
 
@@ -1590,8 +1607,20 @@ function firstMultistateBinding(
   symbol: PiVisionSymbol,
   dataSourceUid: string,
 ): PiPointBinding | undefined {
-  const path = Array.isArray(symbol.MSDataSources) ? symbol.MSDataSources[0] : undefined;
+  const path = Array.isArray(symbol.MSDataSources) && symbol.MSDataSources.length > 0
+    ? symbol.MSDataSources[0]
+    : getDataSourcePaths(symbol)[0];
   return typeof path === 'string' ? parseDataSourcePath(path, dataSourceUid) : undefined;
+}
+
+function firstMultistateCalculation(
+  symbol: PiVisionSymbol,
+  calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+): CalculationDefinition | undefined {
+  const path = Array.isArray(symbol.MSDataSources) && symbol.MSDataSources.length > 0
+    ? symbol.MSDataSources[0]
+    : getDataSourcePaths(symbol)[0];
+  return typeof path === 'string' ? resolveCalculationReference(path, calculationsByName) : undefined;
 }
 
 function getDataSourcePaths(symbol: PiVisionSymbol): string[] {
@@ -1696,6 +1725,20 @@ function normalizeTextAlign(value: unknown): ValueTextAlign {
     return 'right';
   }
   return 'center';
+}
+
+function decodePiVisionText(value: unknown): string {
+  const text = String(value);
+  return text.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos);/gi, (entity, token: string) => {
+    const normalized = token.toLocaleLowerCase();
+    if (normalized === 'lt') return '<';
+    if (normalized === 'gt') return '>';
+    if (normalized === 'amp') return '&';
+    if (normalized === 'quot') return '"';
+    if (normalized === 'apos') return "'";
+    const codePoint = normalized.startsWith('#x') ? Number.parseInt(normalized.slice(2), 16) : Number.parseInt(normalized.slice(1), 10);
+    return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : entity;
+  });
 }
 
 function normalizeGeometricShape(type: string): GeometricShape {

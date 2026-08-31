@@ -252,7 +252,7 @@ describe('ValueRuntime', () => {
     await flushBatch();
 
     expect(states[states.length - 1]?.get('one')).toEqual({ status: 'success', result: { value: 0 } });
-    expect(states[states.length - 1]?.get('two')).toEqual({ status: 'error' });
+    expect(states[states.length - 1]?.get('two')).toEqual({ status: 'loading' });
     runtime.stop();
   });
 

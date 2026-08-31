@@ -37,6 +37,13 @@ export function evaluateCalculation(
     if (value === undefined) {
       return { status: 'loading' };
     }
+    if (typeof value !== 'number') {
+      resolvedExpression = replaceDigitalComparisons(resolvedExpression, input.name, value);
+      if (containsToken(resolvedExpression, input.name)) {
+        return { status: 'error', error: new Error(`O PI Point "${input.name}" não possui um valor numérico.`) };
+      }
+      continue;
+    }
     if (typeof value !== 'number' || !Number.isFinite(value)) {
       return { status: 'error', error: new Error(`O PI Point "${input.name}" não possui um valor numérico.`) };
     }
@@ -49,6 +56,41 @@ export function evaluateCalculation(
   } catch (error) {
     return { status: 'error', error: error instanceof Error ? error : new Error(String(error)) };
   }
+}
+
+function containsToken(expression: string, token: string): boolean {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![A-Za-z0-9_.:-])${escaped}(?![A-Za-z0-9_.:-])`, 'i').test(expression);
+}
+
+/** Replaces PI digital-state comparisons (for example, TAG == "On") with 1 or 0. */
+function replaceDigitalComparisons(expression: string, token: string, value: unknown): string {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const compare = (operator: string, expected: string) => {
+    const actual = getDigitalStateName(value);
+    const equals = actual !== undefined && actual.localeCompare(expected.trim(), undefined, { sensitivity: 'accent' }) === 0;
+    return String((operator === '==' ? equals : !equals) ? 1 : 0);
+  };
+  const tokenFirst = new RegExp(`${escaped}\\s*(==|!=)\\s*(["'])(.*?)\\2`, 'gi');
+  const valueFirst = new RegExp(`(["'])(.*?)\\1\\s*(==|!=)\\s*${escaped}`, 'gi');
+  return expression
+    .replace(tokenFirst, (_match, operator: string, _quote: string, expected: string) => compare(operator, expected))
+    .replace(valueFirst, (_match, _quote: string, expected: string, operator: string) => compare(operator, expected));
+}
+
+function getDigitalStateName(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    for (const candidate of [record.Name, record.name, record.Text, record.text, record.State, record.state]) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+  }
+  return undefined;
 }
 
 function replaceToken(expression: string, token: string, replacement: string): string {
