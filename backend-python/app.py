@@ -31,32 +31,23 @@ app = FastAPI(title="PIMS Vision SIP API")
 
 ENVIRONMENT = os.environ.get("SIP_ENV", "development").strip().lower()
 IS_PRODUCTION = ENVIRONMENT == "production"
-DEV_DEFAULT_ORIGINS = (
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    "http://localhost:8085",
-    "http://127.0.0.1:8085",
-)
 configured_origins = tuple(x.strip().rstrip("/") for x in os.environ.get("SIP_ALLOWED_ORIGINS", "").split(",") if x.strip())
-ALLOWED_ORIGINS = configured_origins if configured_origins else (() if IS_PRODUCTION else DEV_DEFAULT_ORIGINS)
 
-if ALLOWED_ORIGINS:
+if configured_origins:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=list(ALLOWED_ORIGINS),
+        allow_origins=list(configured_origins),
         allow_credentials=True,
-        allow_methods=["POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-Request-ID"],
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
-elif not IS_PRODUCTION:
+else:
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$",
         allow_credentials=True,
-        allow_methods=["POST", "OPTIONS"],
-        allow_headers=["Content-Type", "X-Request-ID"],
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
 SESSION_COOKIE = "__Host-sip-session" if IS_PRODUCTION else "sip-session"
@@ -144,8 +135,8 @@ async def security_middleware(request: Request, call_next):
         allow_missing = not IS_PRODUCTION and os.environ.get("SIP_ALLOW_MISSING_ORIGIN", "true").lower() == "true"
         is_allowed = (
             (not source and allow_missing) or
-            (bool(source) and bool(ALLOWED_ORIGINS) and source.rstrip("/") in ALLOWED_ORIGINS) or
-            (bool(source) and not IS_PRODUCTION and bool(re.match(r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$", source)))
+            (bool(source) and bool(configured_origins) and source.rstrip("/") in configured_origins) or
+            (bool(source) and not configured_origins and bool(re.match(r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$", source)))
         )
         if not is_allowed:
             response = Response(
