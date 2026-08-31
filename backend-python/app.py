@@ -1,213 +1,337 @@
+"""Hardened, read-only SIP/Oracle API.
+
+The browser selects a registered profile; it never supplies a DSN. Security
+authority lives here and in the Oracle grants, not in client-side validation.
+"""
+
+import hashlib
+import json
+import logging
 import os
 import re
+import secrets
+import threading
+import time
 import uuid
-from datetime import datetime
+from collections import defaultdict, deque
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from urllib.parse import quote_plus
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import oracledb
-from sqlalchemy import create_engine, text
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, StrictInt
+from sip_sql_policy import validate_read_only_sql
 
-# =========================
-# CONFIGURAÇÃO GERAL
-# =========================
-app = FastAPI(title="PIMS Vision SQL API")
+logger = logging.getLogger("sip.security")
+logging.basicConfig(level=os.environ.get("SIP_LOG_LEVEL", "INFO"))
+app = FastAPI(title="PIMS Vision SIP API")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], # TODO: Restrict in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+ENVIRONMENT = os.environ.get("SIP_ENV", "production").strip().lower()
+IS_PRODUCTION = ENVIRONMENT == "production"
+ALLOWED_ORIGINS = tuple(x.strip().rstrip("/") for x in os.environ.get("SIP_ALLOWED_ORIGINS", "").split(",") if x.strip())
+if ALLOWED_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(ALLOWED_ORIGINS),
+        allow_credentials=True,
+        allow_methods=["POST"],
+        allow_headers=["Content-Type", "X-Request-ID"],
+    )
 
-# In-memory sessions (Do not use in production without Redis or similar, but fine for temporary sessions)
-SESSIONS: Dict[str, Dict[str, Any]] = {}
-
+SESSION_COOKIE = "__Host-sip-session" if IS_PRODUCTION else "sip-session"
+COOKIE_SECURE = IS_PRODUCTION
+PROFILE_ENV_NAMES = {"sip": "SIP_ORACLE_DSN"}
+DEFAULT_MAX_ROWS = int(os.environ.get("SIP_DEFAULT_MAX_ROWS", "200"))
+HARD_MAX_ROWS = int(os.environ.get("SIP_HARD_MAX_ROWS", "2000"))
+MAX_SQL_BYTES = int(os.environ.get("SIP_MAX_SQL_BYTES", "65536"))
+MAX_COLUMNS = int(os.environ.get("SIP_MAX_COLUMNS", "256"))
+MAX_CELL_BYTES = int(os.environ.get("SIP_MAX_CELL_BYTES", "65536"))
+MAX_RESPONSE_BYTES = int(os.environ.get("SIP_MAX_RESPONSE_BYTES", "8388608"))
+MAX_REQUEST_BYTES = int(os.environ.get("SIP_MAX_REQUEST_BYTES", "1048576"))
+QUERY_TIMEOUT_MS = int(os.environ.get("SIP_QUERY_TIMEOUT_MS", "30000"))
+IDLE_TIMEOUT_SECONDS = int(os.environ.get("SIP_SESSION_IDLE_SECONDS", "1800"))
+ABSOLUTE_TIMEOUT_SECONDS = int(os.environ.get("SIP_SESSION_MAX_SECONDS", "28800"))
+MAX_SESSIONS = int(os.environ.get("SIP_MAX_SESSIONS", "100"))
+RATE_WINDOW_SECONDS = int(os.environ.get("SIP_RATE_WINDOW_SECONDS", "60"))
+CONNECT_RATE_LIMIT = int(os.environ.get("SIP_CONNECT_RATE_LIMIT", "10"))
+QUERY_RATE_LIMIT = int(os.environ.get("SIP_QUERY_RATE_LIMIT", "60"))
 INSTANTCLIENT_DIR = os.environ.get("ORACLE_CLIENT_DIR", "/opt/oracle/instantclient_19_30")
-DEFAULT_MAX_ROWS = int(os.environ.get("ORACLE_DEFAULT_ROW_LIMIT", 200))
-HARD_MAX_ROWS = int(os.environ.get("ORACLE_MAX_ROW_LIMIT", 2000))
 
-_THICK_INIT = False
 
-# =========================
-# MODELOS (Pydantic)
-# =========================
 class ConnectRequest(BaseModel):
-    dsn: str
+    connectionProfile: str = "sip"
     username: str
     password: str
 
+
 class QueryRequest(BaseModel):
-    session_id: str
     sql: str
-    max_rows: Optional[int] = None
+    max_rows: Optional[StrictInt] = None
     params: Optional[Dict[str, Any]] = None
 
-# =========================
-# PROTEÇÃO DE CONSULTAS
-# =========================
-COMMENT_RE = re.compile(r"(--[^\n]*\n)|(/\*.*?\*/)", re.DOTALL)
-LEADING_SPACE_RE = re.compile(r"^\s+", re.DOTALL)
 
-BLOCKED_TOKENS = [
-    "insert", "update", "delete", "merge", "alter", "drop", "create",
-    "truncate", "rename", "grant", "revoke", "commit", "rollback",
-    "savepoint", "call", "execute", "exec", "begin", "declare",
-]
+class SessionData:
+    def __init__(self, connection: Any, username: str) -> None:
+        now = time.monotonic()
+        self.connection = connection
+        self.username = username
+        self.created_at = now
+        self.last_used_at = now
+        self.lock = threading.Lock()
 
-def strip_comments(sql: str) -> str:
-    sql2 = COMMENT_RE.sub("\n", sql)
-    sql2 = LEADING_SPACE_RE.sub("", sql2)
-    return sql2.strip()
 
-def normalize_sql(sql: str) -> str:
-    """Remove one optional terminator while keeping multi-statement SQL blocked."""
-    normalized = sql.strip()
-    if normalized.endswith(";"):
-        normalized = normalized[:-1].rstrip()
-    return normalized
+SESSIONS: Dict[str, SessionData] = {}
+SESSIONS_LOCK = threading.Lock()
+RATE_BUCKETS: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
+RATE_LOCK = threading.Lock()
+_THICK_INIT = False
 
-def is_read_only_sql(sql: str) -> bool:
-    if not sql or not isinstance(sql, str):
-        return False
 
-    normalized = normalize_sql(sql)
-    cleaned = strip_comments(normalized)
+class SipError(HTTPException):
+    def __init__(self, status_code: int, code: str, request_id: str) -> None:
+        super().__init__(status_code=status_code, detail={"code": code, "request_id": request_id})
 
-    if ";" in cleaned:
-        return False
 
-    low = cleaned.lower()
+def request_id_for(request: Request) -> str:
+    supplied = request.headers.get("x-request-id", "")
+    return supplied if re.fullmatch(r"[A-Za-z0-9._-]{8,64}", supplied) else uuid.uuid4().hex
 
-    if not (low.startswith("select") or low.startswith("with")):
-        return False
 
-    for token in BLOCKED_TOKENS:
-        if re.search(rf"\b{re.escape(token)}\b", low):
-            return False
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    request_id = request_id_for(request)
+    request.state.request_id = request_id
+    content_length = request.headers.get("content-length")
+    if content_length and (not content_length.isdigit() or int(content_length) > MAX_REQUEST_BYTES):
+        response = Response(
+            content=json.dumps({"detail": {"code": "SIP_QUERY_LIMIT", "request_id": request_id}}),
+            status_code=413,
+            media_type="application/json",
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Request-ID"] = request_id
+        return response
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        origin = request.headers.get("origin")
+        referer = request.headers.get("referer")
+        source = origin
+        if not source and referer:
+            source = "/".join(referer.split("/", 3)[:3])
+        allow_missing = not IS_PRODUCTION and os.environ.get("SIP_ALLOW_MISSING_ORIGIN", "true").lower() == "true"
+        if (not source and not allow_missing) or (source and source.rstrip("/") not in ALLOWED_ORIGINS):
+            response = Response(
+                content=json.dumps({"detail": {"code": "SIP_ORIGIN_REJECTED", "request_id": request_id}}),
+                status_code=403,
+                media_type="application/json",
+            )
+        else:
+            response = await call_next(request)
+    else:
+        response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Request-ID"] = request_id
+    return response
 
-    return True
 
-def to_jsonable(value: Any) -> Any:
-    if isinstance(value, datetime):
-        return value.isoformat()
-    if isinstance(value, Decimal):
-        return float(value)
-    return value
+def enforce_rate_limit(request: Request, action: str, limit: int) -> None:
+    now = time.monotonic()
+    client = request.client.host if request.client else "unknown"
+    with RATE_LOCK:
+        bucket = RATE_BUCKETS[(client, action)]
+        while bucket and bucket[0] <= now - RATE_WINDOW_SECONDS:
+            bucket.popleft()
+        if len(bucket) >= limit:
+            raise SipError(429, "SIP_RATE_LIMIT", request.state.request_id)
+        bucket.append(now)
 
-# =========================
-# ORACLE CLIENT
-# =========================
+
 def init_thick() -> None:
     global _THICK_INIT
     if _THICK_INIT:
         return
-
-    instant_client_path = Path(INSTANTCLIENT_DIR)
-    if instant_client_path.exists():
+    path = Path(INSTANTCLIENT_DIR)
+    if path.exists():
         try:
-            oracledb.init_oracle_client(lib_dir=str(instant_client_path))
-            _THICK_INIT = True
-        except Exception as e:
-            print(f"Warning: Failed to init thick client: {e}")
-    else:
-        print(f"Warning: Instant Client not found at {instant_client_path}. Falling back to thin client.")
+            oracledb.init_oracle_client(lib_dir=str(path))
+        except Exception:
+            logger.warning("Oracle thick client initialization failed; using thin mode")
+    _THICK_INIT = True
 
 
-def get_engine_for_session(session_data: Dict[str, Any]):
-    if "engine" in session_data:
-        return session_data["engine"]
+def resolve_profile(profile: str, request_id: str) -> str:
+    env_name = PROFILE_ENV_NAMES.get(profile)
+    dsn = os.environ.get(env_name, "") if env_name else ""
+    if not env_name or not dsn:
+        raise SipError(503, "SIP_DATABASE_UNAVAILABLE", request_id)
+    return dsn
 
-    username = session_data["username"]
-    password = session_data["password"]
-    dsn = session_data["dsn"]
-    
-    connection_url = f"oracle+oracledb://{username}:{password}@/?dsn={quote_plus(dsn)}"
-    
-    engine = create_engine(connection_url, pool_pre_ping=True)
-    session_data["engine"] = engine
-    return engine
 
-# =========================
-# ROTAS API
-# =========================
+def close_session(session_id: str) -> None:
+    with SESSIONS_LOCK:
+        session = SESSIONS.pop(session_id, None)
+    if session:
+        try:
+            session.connection.close()
+        except Exception:
+            logger.warning("Failed to close SIP Oracle connection")
+
+
+def cleanup_expired_sessions() -> None:
+    now = time.monotonic()
+    with SESSIONS_LOCK:
+        expired = [token for token, session in SESSIONS.items() if now - session.last_used_at > IDLE_TIMEOUT_SECONDS or now - session.created_at > ABSOLUTE_TIMEOUT_SECONDS]
+    for token in expired:
+        close_session(token)
+
+
+def require_session(request: Request) -> SessionData:
+    cleanup_expired_sessions()
+    token = request.cookies.get(SESSION_COOKIE)
+    with SESSIONS_LOCK:
+        session = SESSIONS.get(token or "")
+    if not token or not session:
+        raise SipError(401, "SIP_SESSION_EXPIRED", request.state.request_id)
+    session.last_used_at = time.monotonic()
+    return session
+
+
+def to_jsonable(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, bytes):
+        raise ValueError("binary values are not supported")
+    if isinstance(value, oracledb.LOB):
+        raise ValueError("LOB values are not supported")
+    if isinstance(value, str) and len(value.encode("utf-8")) > MAX_CELL_BYTES:
+        return value.encode("utf-8")[:MAX_CELL_BYTES].decode("utf-8", errors="ignore")
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)[:MAX_CELL_BYTES]
+
+
+def audit(action: str, request_id: str, started: float, username: str = "", **fields: Any) -> None:
+    safe = {key: value for key, value in fields.items() if key not in {"password", "session", "params", "dsn", "sql"}}
+    logger.info("sip_request %s", json.dumps({"request_id": request_id, "action": action, "username": username, "duration_ms": round((time.monotonic() - started) * 1000), **safe}, default=str))
+
 
 @app.post("/connect")
-def connect(req: ConnectRequest):
-    init_thick()
-    
-    session_id = str(uuid.uuid4())
-    
-    SESSIONS[session_id] = {
-        "username": req.username,
-        "password": req.password,
-        "dsn": req.dsn,
-        "created_at": datetime.now()
-    }
-    
+def connect(req: ConnectRequest, request: Request, response: Response):
+    started = time.monotonic()
+    enforce_rate_limit(request, "connect", CONNECT_RATE_LIMIT)
+    cleanup_expired_sessions()
+    username = req.username.strip()
+    if not username or not req.password or len(username) > 256 or len(req.password) > 1024:
+        raise SipError(400, "SIP_INVALID_PARAMETERS", request.state.request_id)
+    with SESSIONS_LOCK:
+        if len(SESSIONS) >= MAX_SESSIONS:
+            raise SipError(503, "SIP_QUERY_LIMIT", request.state.request_id)
     try:
-        engine = get_engine_for_session(SESSIONS[session_id])
-        with engine.connect() as conn:
-            # Simple ping to test connection
-            conn.execute(text("SELECT 1 FROM DUAL"))
-    except Exception as e:
-        del SESSIONS[session_id]
-        raise HTTPException(status_code=401, detail=f"Database connection failed: {str(e)}")
-        
-    return {"session_id": session_id}
+        init_thick()
+        connection = oracledb.connect(user=username, password=req.password, dsn=resolve_profile(req.connectionProfile, request.state.request_id))
+        connection.call_timeout = QUERY_TIMEOUT_MS
+        cursor = connection.cursor()
+        try:
+            cursor.execute("SET TRANSACTION READ ONLY")
+            cursor.execute("SELECT 1 FROM DUAL")
+            cursor.fetchone()
+        finally:
+            cursor.close()
+    except SipError:
+        raise
+    except Exception:
+        audit("connect", request.state.request_id, started, username, success=False)
+        raise SipError(401, "SIP_AUTH_FAILED", request.state.request_id)
+    token = secrets.token_urlsafe(48)
+    previous_token = request.cookies.get(SESSION_COOKIE)
+    if previous_token:
+        close_session(previous_token)
+    with SESSIONS_LOCK:
+        SESSIONS[token] = SessionData(connection, username)
+    response.set_cookie(SESSION_COOKIE, token, httponly=True, secure=COOKIE_SECURE, samesite="strict", path="/", max_age=ABSOLUTE_TIMEOUT_SECONDS)
+    audit("connect", request.state.request_id, started, username, success=True)
+    return {"connected": True, "request_id": request.state.request_id}
+
 
 @app.post("/disconnect")
-def disconnect(session_id: str):
-    if session_id in SESSIONS:
-        session_data = SESSIONS[session_id]
-        if "engine" in session_data:
-            session_data["engine"].dispose()
-        del SESSIONS[session_id]
-    return {"status": "ok"}
+def disconnect(request: Request, response: Response):
+    started = time.monotonic()
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        close_session(token)
+    response.delete_cookie(SESSION_COOKIE, path="/", secure=COOKIE_SECURE, samesite="strict")
+    audit("disconnect", request.state.request_id, started, success=True)
+    return {"status": "ok", "request_id": request.state.request_id}
+
 
 @app.post("/query")
-def run_query(req: QueryRequest):
-    if req.session_id not in SESSIONS:
-        raise HTTPException(status_code=401, detail="Invalid or expired session")
-        
-    max_rows = req.max_rows or DEFAULT_MAX_ROWS
-    if max_rows < 1: max_rows = 1
-    if max_rows > HARD_MAX_ROWS: max_rows = HARD_MAX_ROWS
-
-    normalized_sql = normalize_sql(req.sql)
-    if not is_read_only_sql(normalized_sql):
-        raise HTTPException(status_code=400, detail="SQL inválido. Permitido apenas SELECT/WITH, com ponto e vírgula final opcional e sem comandos de escrita.")
-
-    engine = get_engine_for_session(SESSIONS[req.session_id])
-    
-    rows: List[Dict[str, Any]] = []
-    
+def run_query(req: QueryRequest, request: Request):
+    started = time.monotonic()
+    enforce_rate_limit(request, "query", QUERY_RATE_LIMIT)
+    session = require_session(request)
     try:
-        with engine.connect() as connection:
-            connection.exec_driver_sql("SET TRANSACTION READ ONLY")
-            
-            result = connection.execute(text(normalized_sql), req.params or {})
-            
-            if result.returns_rows:
-                fetched_rows = result.mappings().fetchmany(max_rows)
-                for row in fetched_rows:
-                    row_dict = dict(row)
-                    rows.append({k: to_jsonable(v) for k, v in row_dict.items()})
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        sql = validate_read_only_sql(req.sql, MAX_SQL_BYTES)
+        requested_rows = DEFAULT_MAX_ROWS if req.max_rows is None else int(req.max_rows)
+        if requested_rows < 1:
+            raise ValueError("invalid row limit")
+        max_rows = min(requested_rows, HARD_MAX_ROWS)
+        params = req.params or {}
+        if not isinstance(params, dict) or len(params) > 256:
+            raise ValueError("invalid binds")
+    except (TypeError, ValueError):
+        raise SipError(400, "SIP_QUERY_REJECTED", request.state.request_id)
+    if not session.lock.acquire(blocking=False):
+        raise SipError(429, "SIP_QUERY_LIMIT", request.state.request_id)
+    query_hash = hashlib.sha256(sql.encode("utf-8")).hexdigest()[:16]
+    cursor = None
+    try:
+        cursor = session.connection.cursor()
+        cursor.arraysize = min(max_rows + 1, 1000)
+        cursor.execute(sql, params)
+        if not cursor.description:
+            raise SipError(400, "SIP_QUERY_REJECTED", request.state.request_id)
+        columns = [description[0] for description in cursor.description]
+        if len(columns) > MAX_COLUMNS:
+            raise SipError(413, "SIP_QUERY_LIMIT", request.state.request_id)
+        fetched = cursor.fetchmany(max_rows + 1)
+        truncated = len(fetched) > max_rows or requested_rows > HARD_MAX_ROWS
+        rows: List[Dict[str, Any]] = []
+        response_size = 0
+        for record in fetched[:max_rows]:
+            row = {name: to_jsonable(value) for name, value in zip(columns, record)}
+            response_size += len(json.dumps(row, ensure_ascii=False, default=str).encode("utf-8"))
+            if response_size > MAX_RESPONSE_BYTES:
+                truncated = True
+                break
+            rows.append(row)
+        audit("query", request.state.request_id, started, session.username, success=True, row_count=len(rows), query_hash=query_hash)
+        return {"rows": rows, "row_count": len(rows), "max_rows": max_rows, "truncated": truncated, "request_id": request.state.request_id}
+    except SipError:
+        raise
+    except oracledb.Error as error:
+        oracle_code = getattr(getattr(error, "args", [None])[0], "code", None)
+        code = "SIP_QUERY_TIMEOUT" if oracle_code in {1013, 3136} else "SIP_QUERY_REJECTED"
+        audit("query", request.state.request_id, started, session.username, success=False, query_hash=query_hash, oracle_code=oracle_code)
+        raise SipError(408 if code == "SIP_QUERY_TIMEOUT" else 400, code, request.state.request_id)
+    except Exception:
+        audit("query", request.state.request_id, started, session.username, success=False, query_hash=query_hash)
+        raise SipError(500, "SIP_DATABASE_UNAVAILABLE", request.state.request_id)
+    finally:
+        if cursor:
+            try:
+                cursor.close()
+            except Exception:
+                pass
+        session.lock.release()
 
-    return {
-        "rows": rows,
-        "row_count": len(rows),
-        "max_rows": max_rows,
-    }
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8085)
+
+    uvicorn.run(app, host=os.environ.get("SIP_BIND_HOST", "127.0.0.1"), port=int(os.environ.get("SIP_PORT", "8085")))

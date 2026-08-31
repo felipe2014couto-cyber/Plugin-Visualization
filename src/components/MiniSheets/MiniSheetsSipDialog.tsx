@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -6,22 +6,13 @@ import {
   createOracleSession,
   closeOracleSession,
   runOracleQuery,
+  OracleApiError,
+  SIP_DEFAULT_MAX_ROWS,
+  SIP_HARD_MAX_ROWS,
   type OracleQueryResponse,
 } from '../SqlQuery/oracleApi';
 import { parseCellAddress, parseRangeAddresses } from './miniSheetFormula';
 
-const DEFAULT_DSN = `(DESCRIPTION =
-  (ADDRESS_LIST =
-    (ADDRESS =
-      (PROTOCOL = TCP)
-      (HOST = 10.247.0.236)
-      (PORT = 1521)
-    )
-  )
-  (CONNECT_DATA =
-    (SERVICE_NAME = po40)
-  )
-)`;
 export const DEFAULT_SQL_TEMPLATE = `SELECT 
   HU.DTH_INIC_PROCE as TS,
   OEE.TEMPO_SETUP as PIVALUE,
@@ -33,8 +24,8 @@ export interface MiniSheetsSipDialogProps {
   embedded?: boolean;
   initialTargetCell: string;
   currentSelectionAddress?: string;
-  sessionId?: string | null;
-  onSessionIdChange?: (sessionId: string | null) => void;
+  isConnected?: boolean;
+  onConnectionChange?: (isConnected: boolean) => void;
   sql?: string;
   onSqlChange?: (sql: string) => void;
   maxRows?: number;
@@ -47,7 +38,7 @@ export interface MiniSheetsSipDialogProps {
     includeHeaders: boolean,
     querySql?: string,
     queryMaxRows?: number
-  ) => void;
+  ) => boolean | void;
   onClose: () => void;
 }
 
@@ -55,8 +46,8 @@ export function MiniSheetsSipDialog({
   embedded = false,
   initialTargetCell,
   currentSelectionAddress,
-  sessionId: externalSessionId,
-  onSessionIdChange,
+  isConnected: externalIsConnected,
+  onConnectionChange,
   sql: externalSql,
   onSqlChange,
   maxRows: externalMaxRows,
@@ -68,9 +59,10 @@ export function MiniSheetsSipDialog({
 }: MiniSheetsSipDialogProps) {
   const styles = useStyles2(getStyles);
 
-  // Session state
-  const [internalSessionId, setInternalSessionId] = useState<string | null>(externalSessionId ?? null);
-  const activeSessionId = externalSessionId !== undefined ? externalSessionId : internalSessionId;
+  const [internalIsConnected, setInternalIsConnected] = useState(externalIsConnected ?? false);
+  const activeIsConnected = externalIsConnected !== undefined ? externalIsConnected : internalIsConnected;
+  const requestControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
 
   // Login form state
   const [username, setUsername] = useState('');
@@ -80,7 +72,7 @@ export function MiniSheetsSipDialog({
 
   // Query editor state
   const [sql, setSql] = useState<string>(externalSql !== undefined ? externalSql : DEFAULT_SQL_TEMPLATE);
-  const [maxRows, setMaxRows] = useState<number>(externalMaxRows !== undefined ? externalMaxRows : 200);
+  const [maxRows, setMaxRows] = useState<number>(externalMaxRows !== undefined ? externalMaxRows : SIP_DEFAULT_MAX_ROWS);
   const [targetCell, setTargetCell] = useState(initialTargetCell || 'A1');
   const [includeHeaders, setIncludeHeaders] = useState<boolean>(externalIncludeHeaders !== undefined ? externalIncludeHeaders : true);
 
@@ -89,10 +81,15 @@ export function MiniSheetsSipDialog({
   const [successMessage, setSuccessMessage] = useState<string>();
 
   useEffect(() => {
-    if (externalSessionId !== undefined) {
-      setInternalSessionId(externalSessionId);
+    if (externalIsConnected !== undefined) {
+      setInternalIsConnected(externalIsConnected);
     }
-  }, [externalSessionId]);
+  }, [externalIsConnected]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    requestControllerRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     if (externalSql !== undefined) {
@@ -133,9 +130,9 @@ export function MiniSheetsSipDialog({
     onIncludeHeadersChange?.(newHeaders);
   };
 
-  const updateSession = (id: string | null) => {
-    setInternalSessionId(id);
-    onSessionIdChange?.(id);
+  const updateConnection = (connected: boolean) => {
+    setInternalIsConnected(connected);
+    onConnectionChange?.(connected);
   };
 
   const handleConnect = async (e: React.FormEvent) => {
@@ -146,32 +143,38 @@ export function MiniSheetsSipDialog({
 
     setIsConnecting(true);
     setConnectionError(undefined);
+    const submittedUsername = username.trim();
+    const submittedPassword = password;
+    setUsername('');
+    setPassword('');
 
     try {
-      const result = await createOracleSession({
-        dsn: DEFAULT_DSN,
-        username: username.trim(),
-        password,
-      });
-      updateSession(result.session_id);
+      requestControllerRef.current?.abort();
+      requestControllerRef.current = new AbortController();
+      await createOracleSession({ username: submittedUsername, password: submittedPassword }, requestControllerRef.current.signal);
+      if (mountedRef.current) updateConnection(true);
     } catch (err: any) {
-      setConnectionError(err?.message || 'Falha ao conectar ao banco SIP');
+      if (mountedRef.current) setConnectionError(err?.message || 'Falha ao conectar ao banco SIP');
     } finally {
-      setIsConnecting(false);
+      if (mountedRef.current) {
+        setIsConnecting(false);
+      }
     }
   };
 
   const handleDisconnect = async () => {
-    if (activeSessionId) {
-      await closeOracleSession(activeSessionId);
+    requestControllerRef.current?.abort();
+    if (activeIsConnected) {
+      await closeOracleSession();
     }
-    updateSession(null);
+    setPassword('');
+    updateConnection(false);
     setExecutionError(undefined);
     setSuccessMessage(undefined);
   };
 
   const handleExecute = async () => {
-    if (!activeSessionId || !sql.trim() || isExecuting) {
+    if (!activeIsConnected || !sql.trim() || isExecuting) {
       return;
     }
 
@@ -180,21 +183,33 @@ export function MiniSheetsSipDialog({
     setSuccessMessage(undefined);
 
     try {
+      requestControllerRef.current?.abort();
+      requestControllerRef.current = new AbortController();
       const result = await runOracleQuery({
-        session_id: activeSessionId,
         sql: sql.trim(),
-        max_rows: Number(maxRows) || 200,
+        max_rows: Number(maxRows) || SIP_DEFAULT_MAX_ROWS,
+        signal: requestControllerRef.current.signal,
       });
+      if (!mountedRef.current) return;
 
       const effectiveTarget = targetCell.trim() || 'A1';
-      onExecuteInsert(result, effectiveTarget, includeHeaders, sql.trim(), Number(maxRows) || 200);
+      const inserted = onExecuteInsert(result, effectiveTarget, includeHeaders, sql.trim(), Number(maxRows) || SIP_DEFAULT_MAX_ROWS);
+      if (inserted === false) {
+        setExecutionError('O resultado não cabe na área disponível da planilha. Escolha outra célula ou reduza o limite.');
+        return;
+      }
       setSuccessMessage(
-        `${result.row_count} ${result.row_count === 1 ? 'linha inserida' : 'linhas inseridas'} a partir de ${effectiveTarget}.`
+        `${result.row_count} ${result.row_count === 1 ? 'linha inserida' : 'linhas inseridas'} a partir de ${effectiveTarget}.` +
+        (result.truncated ? ` Resultado limitado a ${result.max_rows} linhas.` : '')
       );
     } catch (err: any) {
+      if (!mountedRef.current) return;
+      if (err instanceof OracleApiError && err.code === 'SIP_SESSION_EXPIRED') {
+        updateConnection(false);
+      }
       setExecutionError(err?.message || 'Erro ao executar consulta SQL');
     } finally {
-      setIsExecuting(false);
+      if (mountedRef.current) setIsExecuting(false);
     }
   };
 
@@ -228,7 +243,7 @@ export function MiniSheetsSipDialog({
       </header>
 
       <div className={embedded ? styles.embeddedBody : styles.body}>
-        {!activeSessionId ? (
+        {!activeIsConnected ? (
           // LOGIN VIEW
           <form onSubmit={handleConnect} className={styles.loginForm} data-testid="sip-login-form">
             <div className={styles.loginHeader}>
@@ -257,7 +272,7 @@ export function MiniSheetsSipDialog({
                 className={styles.input}
                 value={username}
                 placeholder="usuario"
-                autoComplete="off"
+                autoComplete="username"
                 required
                 data-testid="sip-username-input"
                 onChange={(e) => setUsername(e.target.value)}
@@ -274,7 +289,7 @@ export function MiniSheetsSipDialog({
                 className={styles.input}
                 value={password}
                 placeholder="senha"
-                autoComplete="new-password"
+                autoComplete="current-password"
                 required
                 data-testid="sip-password-input"
                 onChange={(e) => setPassword(e.target.value)}
@@ -349,6 +364,9 @@ export function MiniSheetsSipDialog({
                   }
                 }}
               />
+              <p className={styles.securityNotice}>
+                A consulta SQL pode ser salva com esta planilha. Não coloque senhas ou segredos diretamente no SQL; use parâmetros.
+              </p>
             </div>
 
             {/* Limit Rows & Output Cell */}
@@ -383,7 +401,7 @@ export function MiniSheetsSipDialog({
                 id="sip-max-rows"
                 type="number"
                 min={1}
-                max={50000}
+                max={SIP_HARD_MAX_ROWS}
                 className={styles.input}
                 value={maxRows}
                 data-testid="sip-max-rows"
@@ -414,7 +432,7 @@ export function MiniSheetsSipDialog({
         )}
       </div>
 
-      {activeSessionId && (
+      {activeIsConnected && (
         <footer className={embedded ? styles.embeddedFooter : styles.footer}>
           <button
             type="button"
@@ -659,6 +677,12 @@ const getStyles = (_theme: GrafanaTheme2) => ({
     border: 1px solid var(--success, #73bf69);
     color: var(--success, #73bf69);
     font-size: 12px;
+  `,
+  securityNotice: css`
+    margin: 4px 0 0;
+    color: var(--text-secondary, #aeb3bf);
+    font-size: 11px;
+    line-height: 1.35;
   `,
   formRow: css`
     display: flex;

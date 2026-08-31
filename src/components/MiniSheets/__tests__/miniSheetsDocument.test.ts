@@ -140,4 +140,38 @@ describe('miniSheetsDocument serialization and deserialization', () => {
     expect(cellB2).toBeDefined();
     expect(cellB2?.rawValue).toBe('');
   });
+
+  it('preserves SIP values as literal data across save/load without persisting secrets', () => {
+    const cells = new Map<string, CellData>([
+      ['0,0', {
+        rawValue: '=1+1',
+        displayValue: '=1+1',
+        valueOrigin: 'sip',
+        sipOrigin: {
+          sql: 'SELECT VALUE FROM APPROVED_VIEW',
+          maxRows: 200,
+          targetCell: 'A1',
+          includeHeaders: false,
+          originCoord: { col: 0, row: 0 },
+          password: 'must-not-persist',
+          sessionId: 'must-not-persist',
+          dsn: 'must-not-persist',
+        } as any,
+      }],
+    ]);
+
+    const serialized = serializeMiniSheets(cells);
+    expect(serialized.cells.A1.valueOrigin).toBe('sip');
+    expect(serialized.cells.A1.sipOrigin).toEqual({
+      sql: 'SELECT VALUE FROM APPROVED_VIEW',
+      maxRows: 200,
+      targetCell: 'A1',
+      includeHeaders: false,
+      originCoord: { col: 0, row: 0 },
+    });
+    expect(JSON.stringify(serialized)).not.toContain('must-not-persist');
+
+    const restored = deserializeMiniSheets(serialized).cells.get('0,0');
+    expect(restored).toMatchObject({ rawValue: '=1+1', displayValue: '=1+1', valueOrigin: 'sip' });
+  });
 });

@@ -15,6 +15,7 @@ export interface MiniSheetCell {
   format?: CellFormat;
   sipOrigin?: SipQueryMetadata;
   spilledFrom?: string;
+  valueOrigin?: 'manual' | 'formula' | 'sip' | 'pi';
 }
 
 export interface MiniSheetsDocument {
@@ -100,10 +101,20 @@ export function serializeMiniSheets(
         savedCell.format = { ...cell.format };
       }
       if (hasSipOrigin) {
-        savedCell.sipOrigin = { ...cell.sipOrigin! };
+        const origin = cell.sipOrigin!;
+        savedCell.sipOrigin = {
+          sql: origin.sql,
+          targetCell: origin.targetCell,
+          originCoord: { col: origin.originCoord.col, row: origin.originCoord.row },
+          ...(typeof origin.maxRows === 'number' ? { maxRows: origin.maxRows } : {}),
+          ...(typeof origin.includeHeaders === 'boolean' ? { includeHeaders: origin.includeHeaders } : {}),
+        };
       }
       if (cell.spilledFrom) {
         savedCell.spilledFrom = cell.spilledFrom;
+      }
+      if (cell.valueOrigin) {
+        savedCell.valueOrigin = cell.valueOrigin;
       }
       cellsRecord[address] = savedCell;
     }
@@ -188,9 +199,11 @@ export function deserializeMiniSheets(rawDoc?: unknown): DeserializedMiniSheets 
 
       const cell = rawCell as MiniSheetCell;
       const rawValue = typeof cell.rawValue === 'string' ? cell.rawValue : '';
+      const isSipLiteral = cell.valueOrigin === 'sip' || Boolean(cell.sipOrigin);
       const cellData: CellData = {
         rawValue,
-        displayValue: rawValue.startsWith('=') ? 'Carregando...' : rawValue,
+        displayValue: !isSipLiteral && rawValue.startsWith('=') ? 'Carregando...' : rawValue,
+        valueOrigin: isSipLiteral ? 'sip' : cell.valueOrigin,
       };
 
       if (cell.format && typeof cell.format === 'object') {
@@ -215,7 +228,16 @@ export function deserializeMiniSheets(rawDoc?: unknown): DeserializedMiniSheets 
       }
 
       if (cell.sipOrigin && typeof cell.sipOrigin === 'object') {
-        cellData.sipOrigin = { ...cell.sipOrigin };
+        const origin = cell.sipOrigin as Partial<SipQueryMetadata>;
+        if (typeof origin.sql === 'string' && typeof origin.targetCell === 'string' && origin.originCoord && typeof origin.originCoord.col === 'number' && typeof origin.originCoord.row === 'number') {
+          cellData.sipOrigin = {
+            sql: origin.sql,
+            targetCell: origin.targetCell,
+            originCoord: { col: origin.originCoord.col, row: origin.originCoord.row },
+            ...(typeof origin.maxRows === 'number' ? { maxRows: origin.maxRows } : {}),
+            ...(typeof origin.includeHeaders === 'boolean' ? { includeHeaders: origin.includeHeaders } : {}),
+          };
+        }
       }
 
       if (cell.spilledFrom && typeof cell.spilledFrom === 'string') {

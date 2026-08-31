@@ -26,7 +26,7 @@ import { parsePiTime, formatDateTime } from './miniSheetTime';
 import { PiDataLinkToolbar, type PiDataLinkFunctionType } from './PiDataLinkToolbar';
 import { PiDataLinkFunctionDialog } from './PiDataLinkFunctionDialog';
 import { MiniSheetsSipDialog } from './MiniSheetsSipDialog';
-import type { OracleQueryResponse } from '../SqlQuery/oracleApi';
+import { SIP_DEFAULT_MAX_ROWS, type OracleQueryResponse } from '../SqlQuery/oracleApi';
 import {
   SheetRange,
   formatRangeAddress,
@@ -81,6 +81,7 @@ export interface CellData {
   spillTargetAddresses?: string[]; // If this cell generated a spill across other cell addresses
   format?: CellFormat; // Formatting: bold, italic, textColor, backgroundColor, horizontalAlign, decimalPlaces
   sipOrigin?: SipOriginInfo;
+  valueOrigin?: 'manual' | 'formula' | 'sip' | 'pi';
 }
 
 const TOTAL_COLS = 20; // A to T
@@ -264,7 +265,7 @@ export function MiniSheetsPanel({
   const [activeDataLinkDialog, setActiveDataLinkDialog] = useState<PiDataLinkFunctionType | null>(null);
   const [dataLinkInitialFormula, setDataLinkInitialFormula] = useState<string | undefined>(undefined);
   const [dataLinkTargetCell, setDataLinkTargetCell] = useState<string | undefined>(undefined);
-  const [sipSessionId, setSipSessionId] = useState<string | null>(null);
+  const [sipIsConnected, setSipIsConnected] = useState(false);
   const [sipSql, setSipSql] = useState<string | undefined>(undefined);
   const [sipMaxRows, setSipMaxRows] = useState<number | undefined>(undefined);
   const [sipIncludeHeaders, setSipIncludeHeaders] = useState<boolean | undefined>(undefined);
@@ -494,7 +495,7 @@ export function MiniSheetsPanel({
         return;
       }
       const raw = cellData.rawValue?.trim() ?? '';
-      if (raw.startsWith('=')) {
+      if (cellData.valueOrigin !== 'sip' && raw.startsWith('=')) {
         const parsed = parseFormula(raw);
         if (typeof parsed === 'object' && 'type' in parsed) {
           if (parsed.type === 'math_expression') {
@@ -1442,7 +1443,7 @@ export function MiniSheetsPanel({
         const [colStr, rowStr] = key.split(',');
         const col = parseInt(colStr, 10);
         const row = parseInt(rowStr, 10);
-        if (!isNaN(col) && !isNaN(row) && cell.rawValue && cell.rawValue.trim().startsWith('=')) {
+        if (!isNaN(col) && !isNaN(row) && cell.valueOrigin !== 'sip' && cell.rawValue && cell.rawValue.trim().startsWith('=')) {
           computeCell({ col, row }, cell.rawValue, evaluated);
         }
       }
@@ -1672,6 +1673,7 @@ export function MiniSheetsPanel({
           rawValue: cell?.rawValue ?? '',
           displayValue: cell?.displayValue ?? '',
           format: cell?.format ? { ...cell.format } : undefined,
+          valueOrigin: cell?.valueOrigin,
         });
       }
       matrix.push(rowList);
@@ -1720,14 +1722,15 @@ export function MiniSheetsPanel({
         const deltaCol = baseDeltaCol;
         const deltaRow = baseDeltaRow;
 
-        const rawValue = cell.rawValue.startsWith('=')
+        const rawValue = cell.valueOrigin !== 'sip' && cell.rawValue.startsWith('=')
           ? shiftFormulaReferences(cell.rawValue, deltaCol, deltaRow, TOTAL_COLS, TOTAL_ROWS)
           : cell.rawValue;
 
         next.set(targetKey, {
           rawValue,
-          displayValue: rawValue.startsWith('=') ? 'Carregando...' : cell.displayValue,
+          displayValue: cell.valueOrigin !== 'sip' && rawValue.startsWith('=') ? 'Carregando...' : cell.displayValue,
           format: cell.format ? { ...cell.format } : undefined,
+          valueOrigin: cell.valueOrigin,
         });
       });
     });
@@ -1745,10 +1748,10 @@ export function MiniSheetsPanel({
         if (targetCol >= TOTAL_COLS) return;
         const deltaCol = baseDeltaCol;
         const deltaRow = baseDeltaRow;
-        const rawValue = cell.rawValue.startsWith('=')
+        const rawValue = cell.valueOrigin !== 'sip' && cell.rawValue.startsWith('=')
           ? shiftFormulaReferences(cell.rawValue, deltaCol, deltaRow, TOTAL_COLS, TOTAL_ROWS)
           : cell.rawValue;
-        if (rawValue.startsWith('=')) {
+        if (cell.valueOrigin !== 'sip' && rawValue.startsWith('=')) {
           computeCell({ col: targetCol, row: targetRow }, rawValue);
         }
       });
@@ -2010,6 +2013,7 @@ export function MiniSheetsPanel({
           rawValue: gen.rawValue,
           displayValue: gen.displayValue,
           format: gen.format,
+          valueOrigin: gen.valueOrigin,
         });
       });
       const finalMap = evaluateStaticFormulas(next).nextMap;
@@ -2018,7 +2022,7 @@ export function MiniSheetsPanel({
 
       // Compute formulas for generated cells
       generated.forEach((gen) => {
-        if (gen.rawValue.startsWith('=')) {
+        if (gen.valueOrigin !== 'sip' && gen.rawValue.startsWith('=')) {
           computeCell({ col: gen.col, row: gen.row }, gen.rawValue);
         }
       });
@@ -2411,16 +2415,22 @@ export function MiniSheetsPanel({
       const startRow = startCoord.row;
 
       if (!result.rows || result.rows.length === 0) {
-        return;
+        return true;
       }
 
       const cols = Object.keys(result.rows[0]);
       if (cols.length === 0) {
-        return;
+        return false;
+      }
+
+      const requiredRows = result.rows.length + (includeHeaders ? 1 : 0);
+      if (startCol + cols.length > TOTAL_COLS || startRow + requiredRows > TOTAL_ROWS) {
+        setStatusMessage('O resultado SIP não cabe na área disponível da planilha.');
+        return false;
       }
 
       const effectiveSql = querySql || sipSql || '';
-      const effectiveMaxRows = queryMaxRows || sipMaxRows || 200;
+      const effectiveMaxRows = queryMaxRows || sipMaxRows || SIP_DEFAULT_MAX_ROWS;
       const sipOriginMeta: SipOriginInfo = {
         sql: effectiveSql,
         maxRows: effectiveMaxRows,
@@ -2445,6 +2455,7 @@ export function MiniSheetsPanel({
               displayValue: String(colName),
               format: { bold: true },
               sipOrigin: sipOriginMeta,
+              valueOrigin: 'sip',
               spilledFrom: isOrigin ? undefined : originAddress,
             });
           }
@@ -2469,6 +2480,7 @@ export function MiniSheetsPanel({
                 rawValue: strVal,
                 displayValue: strVal,
                 sipOrigin: sipOriginMeta,
+                valueOrigin: 'sip',
                 spilledFrom: isOrigin ? undefined : originAddress,
               });
             }
@@ -2484,6 +2496,7 @@ export function MiniSheetsPanel({
 
       setActiveCell(startCoord);
       setRanges([rangeFromCells(startCoord, startCoord)]);
+      return true;
     },
     [activeCell, commitStateToHistory, evaluateStaticFormulas, sipSql, sipMaxRows]
   );
@@ -2523,8 +2536,8 @@ export function MiniSheetsPanel({
           embedded
           initialTargetCell={dataLinkTargetCell || formatCellAddress(activeCell)}
           currentSelectionAddress={ranges.length > 0 ? formatRangeAddress(ranges[ranges.length - 1], TOTAL_COLS, TOTAL_ROWS) : undefined}
-          sessionId={sipSessionId}
-          onSessionIdChange={setSipSessionId}
+          isConnected={sipIsConnected}
+          onConnectionChange={setSipIsConnected}
           sql={sipSql}
           onSqlChange={setSipSql}
           maxRows={sipMaxRows}

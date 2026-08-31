@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -9,7 +9,8 @@ import {
   closeOracleSession, 
   runOracleQuery, 
   type OracleConnectParams, 
-  type OracleQueryResponse 
+  type OracleQueryResponse,
+  OracleApiError,
 } from './oracleApi';
 
 interface SqlQueryPanelProps {
@@ -23,7 +24,9 @@ interface SqlQueryPanelProps {
 export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChange, sqlToLoad, initialConfig }: SqlQueryPanelProps) {
   const styles = useStyles2(getStyles);
   
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const requestControllerRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string>();
   
@@ -37,38 +40,37 @@ export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChan
     onConfigChange?.(cfg);
   };
 
-  // Cleanup session on unmount
   useEffect(() => {
     return () => {
-      if (sessionId) {
-        closeOracleSession(sessionId);
-      }
+      mountedRef.current = false;
+      requestControllerRef.current?.abort();
     };
-  }, [sessionId]);
+  }, []);
 
   const handleConnect = async (params: OracleConnectParams) => {
     setIsConnecting(true);
     setConnectionError(undefined);
     try {
-      const result = await createOracleSession(params);
-      setSessionId(result.session_id);
+      requestControllerRef.current?.abort();
+      requestControllerRef.current = new AbortController();
+      await createOracleSession(params, requestControllerRef.current.signal);
+      if (mountedRef.current) setIsConnected(true);
     } catch (err: any) {
-      setConnectionError(err.message || 'Falha ao conectar ao banco de dados');
+      if (mountedRef.current) setConnectionError(err.message || 'Falha ao conectar ao banco de dados');
     } finally {
-      setIsConnecting(false);
+      if (mountedRef.current) setIsConnecting(false);
     }
   };
 
   const handleDisconnect = async () => {
-    if (sessionId) {
-      await closeOracleSession(sessionId);
-    }
-    setSessionId(null);
+    requestControllerRef.current?.abort();
+    await closeOracleSession();
+    setIsConnected(false);
     setExecutionError(undefined);
   };
 
   const handleExecute = async (sql: string, maxRows: number, params?: Record<string, any>) => {
-    if (!sessionId) {
+    if (!isConnected) {
       return null;
     }
     
@@ -76,12 +78,15 @@ export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChan
     setExecutionError(undefined);
     
     try {
+      requestControllerRef.current?.abort();
+      requestControllerRef.current = new AbortController();
       const result = await runOracleQuery({
-        session_id: sessionId,
         sql,
         max_rows: maxRows,
-        params
+        params,
+        signal: requestControllerRef.current.signal,
       });
+      if (!mountedRef.current) return null;
       setLastResult(result);
 
       // Auto-resolve axes from result columns immediately
@@ -115,16 +120,20 @@ export function SqlQueryPanel({ onResultChange, onApplyToDashboard, onConfigChan
       onResultChange?.(result, sql, effectiveConfig);
       return result;
     } catch (err: any) {
+      if (!mountedRef.current) return null;
+      if (err instanceof OracleApiError && err.code === 'SIP_SESSION_EXPIRED') {
+        setIsConnected(false);
+      }
       setExecutionError(err.message || 'Falha ao executar consulta');
       return null;
     } finally {
-      setIsExecuting(false);
+      if (mountedRef.current) setIsExecuting(false);
     }
   };
 
   return (
     <div className={styles.container}>
-      {!sessionId ? (
+      {!isConnected ? (
         <SqlConnectionForm 
           onConnect={handleConnect} 
           isConnecting={isConnecting} 

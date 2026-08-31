@@ -4,6 +4,7 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2, Icon, Input } from '@grafana/ui';
 import { SqlParamsModal } from './SqlParamsModal';
 import type { OracleQueryResponse } from './oracleApi';
+import { SIP_DEFAULT_MAX_ROWS, SIP_HARD_MAX_ROWS } from './oracleApi';
 import type { SqlViewMode } from '../../display/createSqlTable';
 
 export interface SqlConfig {
@@ -146,7 +147,7 @@ export function SqlEditor({
     setSql(val);
   };
 
-  const [maxRows, setMaxRows] = useState(200);
+  const [maxRows, setMaxRows] = useState(SIP_DEFAULT_MAX_ROWS);
   
   const [isParamsModalOpen, setIsParamsModalOpen] = useState(false);
   const [detectedParams, setDetectedParams] = useState<string[]>([]);
@@ -453,6 +454,9 @@ export function SqlEditor({
           spellCheck={false}
           disabled={isExecuting}
         />
+        <p className={styles.securityNotice}>
+          A consulta SQL pode ser salva com este painel. Não coloque senhas ou segredos diretamente no SQL; use parâmetros.
+        </p>
         
         {/* Controls row */}
         <div className={styles.editorControls}>
@@ -461,9 +465,9 @@ export function SqlEditor({
             <Input
               type="number"
               min={1}
-              max={5000}
+              max={SIP_HARD_MAX_ROWS}
               value={maxRows}
-              onChange={(e) => setMaxRows(parseInt(e.currentTarget.value, 10) || 200)}
+              onChange={(e) => setMaxRows(parseInt(e.currentTarget.value, 10) || SIP_DEFAULT_MAX_ROWS)}
               className={styles.limitInput}
               disabled={isExecuting}
             />
@@ -922,6 +926,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
       opacity: 0.6;
       cursor: not-allowed;
     }
+  `,
+  securityNotice: css`
+    margin: -4px 0 2px 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    opacity: 0.85;
   `,
   editorControls: css`
     display: flex;

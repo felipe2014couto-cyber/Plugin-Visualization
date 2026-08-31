@@ -5,23 +5,10 @@ import { useStyles2, Icon, Button, Input, Field, SecretInput } from '@grafana/ui
 import type { OracleConnectParams } from './oracleApi';
 
 interface SqlConnectionFormProps {
-  onConnect: (params: OracleConnectParams) => void;
+  onConnect: (params: OracleConnectParams) => Promise<void>;
   isConnecting: boolean;
   error?: string;
 }
-
-const DEFAULT_DSN = `(DESCRIPTION =
-  (ADDRESS_LIST =
-    (ADDRESS =
-      (PROTOCOL = TCP)
-      (HOST = 10.247.0.236)
-      (PORT = 1521)
-    )
-  )
-  (CONNECT_DATA =
-    (SERVICE_NAME = po40)
-  )
-)`;
 
 export function SqlConnectionForm({ onConnect, isConnecting, error }: SqlConnectionFormProps) {
   const styles = useStyles2(getStyles);
@@ -29,17 +16,17 @@ export function SqlConnectionForm({ onConnect, isConnecting, error }: SqlConnect
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim()) {
       return;
     }
     
-    onConnect({
-      dsn: DEFAULT_DSN,
-      username,
-      password,
-    });
+    const submittedUsername = username.trim();
+    const submittedPassword = password;
+    setUsername('');
+    setPassword('');
+    await onConnect({ username: submittedUsername, password: submittedPassword });
   };
 
   return (
@@ -64,7 +51,7 @@ export function SqlConnectionForm({ onConnect, isConnecting, error }: SqlConnect
             onChange={(e) => setUsername(e.currentTarget.value)}
             placeholder="usuario"
             required
-            autoComplete="off"
+            autoComplete="username"
           />
         </Field>
 
@@ -74,7 +61,7 @@ export function SqlConnectionForm({ onConnect, isConnecting, error }: SqlConnect
             onChange={(e) => setPassword(e.currentTarget.value)}
             placeholder="senha"
             required
-            autoComplete="new-password"
+            autoComplete="current-password"
             isConfigured={false} // Never hide behind "Configured" state
             onReset={() => setPassword('')}
           />

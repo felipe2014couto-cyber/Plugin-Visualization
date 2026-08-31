@@ -25,6 +25,9 @@ jest.mock('../../../pi/piDataSource', () => ({
 }));
 
 jest.mock('../../SqlQuery/oracleApi', () => ({
+  SIP_DEFAULT_MAX_ROWS: 200,
+  SIP_HARD_MAX_ROWS: 2000,
+  OracleApiError: class OracleApiError extends Error {},
   createOracleSession: jest.fn(),
   closeOracleSession: jest.fn(),
   runOracleQuery: jest.fn(),
@@ -1096,7 +1099,7 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
 
     it('abre a ferramenta SIP, efetua login, executa SQL e insere os dados na grade', async () => {
       const { createOracleSession, runOracleQuery } = require('../../SqlQuery/oracleApi');
-      (createOracleSession as jest.Mock).mockResolvedValueOnce({ session_id: 'sess-123' });
+      (createOracleSession as jest.Mock).mockResolvedValueOnce({ connected: true });
       (runOracleQuery as jest.Mock).mockResolvedValueOnce({
         rows: [
           { TAG: 'TEMP_01', VALOR: 85.5 },

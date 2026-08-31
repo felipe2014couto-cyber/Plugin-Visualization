@@ -34,7 +34,14 @@ export function SqlParamsModal({ isOpen, params, onConfirm, onDismiss }: SqlPara
   };
 
   const handleConfirm = () => {
-    onConfirm(values);
+    const submitted = { ...values };
+    setValues({});
+    onConfirm(submitted);
+  };
+
+  const handleDismiss = () => {
+    setValues({});
+    onDismiss();
   };
 
   if (!isOpen) {
@@ -45,8 +52,8 @@ export function SqlParamsModal({ isOpen, params, onConfirm, onDismiss }: SqlPara
     <Modal
       title="Variáveis de Bind Encontradas"
       isOpen={isOpen}
-      onDismiss={onDismiss}
-      onClickBackdrop={onDismiss}
+      onDismiss={handleDismiss}
+      onClickBackdrop={handleDismiss}
       className={styles.modal}
     >
       <div className={styles.container}>
@@ -68,7 +75,7 @@ export function SqlParamsModal({ isOpen, params, onConfirm, onDismiss }: SqlPara
         </div>
 
         <Modal.ButtonRow>
-          <Button variant="secondary" onClick={onDismiss} fill="outline">
+          <Button variant="secondary" onClick={handleDismiss} fill="outline">
             Cancelar
           </Button>
           <Button variant="primary" onClick={handleConfirm}>

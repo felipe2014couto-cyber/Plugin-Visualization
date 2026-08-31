@@ -15,6 +15,7 @@ export interface ClipboardCell {
   rawValue: string;
   displayValue: string;
   format?: CellFormat;
+  valueOrigin?: 'manual' | 'formula' | 'sip' | 'pi';
 }
 
 export interface MiniSheetClipboard {
@@ -112,6 +113,7 @@ export interface AutofillSourceCell {
   rawValue: string;
   displayValue: string;
   format?: CellFormat;
+  valueOrigin?: 'manual' | 'formula' | 'sip' | 'pi';
 }
 
 export interface AutofillGeneratedCell {
@@ -120,6 +122,7 @@ export interface AutofillGeneratedCell {
   rawValue: string;
   displayValue: string;
   format?: CellFormat;
+  valueOrigin?: 'manual' | 'formula' | 'sip' | 'pi';
 }
 
 export type AutofillDirection = 'down' | 'up' | 'right' | 'left';
@@ -127,7 +130,7 @@ export type AutofillDirection = 'down' | 'up' | 'right' | 'left';
 export function calculateAutofillCells(
   sourceRange: SheetRange,
   targetRange: SheetRange,
-  getCell: (col: number, row: number) => { rawValue?: string; displayValue?: string; format?: CellFormat } | undefined,
+  getCell: (col: number, row: number) => { rawValue?: string; displayValue?: string; format?: CellFormat; valueOrigin?: 'manual' | 'formula' | 'sip' | 'pi' } | undefined,
   totalCols = 20,
   totalRows = 50
 ): AutofillGeneratedCell[] {
@@ -163,6 +166,7 @@ export function calculateAutofillCells(
           rawValue: data?.rawValue ?? '',
           displayValue: data?.displayValue ?? '',
           format: data?.format,
+          valueOrigin: data?.valueOrigin,
         });
       }
 
@@ -171,7 +175,7 @@ export function calculateAutofillCells(
       let allNumbers = colCells.length >= 2;
       for (const cell of colCells) {
         const val = parseFloat(cell.rawValue);
-        if (cell.rawValue.startsWith('=') || Number.isNaN(val) || cell.rawValue.trim() === '') {
+        if (cell.valueOrigin === 'sip' || cell.rawValue.startsWith('=') || Number.isNaN(val) || cell.rawValue.trim() === '') {
           allNumbers = false;
           break;
         }
@@ -202,15 +206,17 @@ export function calculateAutofillCells(
           } else {
             const deltaRow = r - templateCell.row;
             const deltaCol = 0;
-            const newRawValue = templateCell.rawValue.startsWith('=')
+            const isFormula = templateCell.valueOrigin !== 'sip' && templateCell.rawValue.startsWith('=');
+            const newRawValue = isFormula
               ? shiftFormulaReferences(templateCell.rawValue, deltaCol, deltaRow, totalCols, totalRows)
               : templateCell.rawValue;
             generated.push({
               col: c,
               row: r,
               rawValue: newRawValue,
-              displayValue: newRawValue.startsWith('=') ? 'Carregando...' : templateCell.displayValue,
+              displayValue: isFormula ? 'Carregando...' : templateCell.displayValue,
               format: templateCell?.format ? { ...templateCell.format } : undefined,
+              valueOrigin: templateCell.valueOrigin,
             });
           }
         }
@@ -237,15 +243,17 @@ export function calculateAutofillCells(
           } else {
             const deltaRow = r - templateCell.row;
             const deltaCol = 0;
-            const newRawValue = templateCell.rawValue.startsWith('=')
+            const isFormula = templateCell.valueOrigin !== 'sip' && templateCell.rawValue.startsWith('=');
+            const newRawValue = isFormula
               ? shiftFormulaReferences(templateCell.rawValue, deltaCol, deltaRow, totalCols, totalRows)
               : templateCell.rawValue;
             generated.push({
               col: c,
               row: r,
               rawValue: newRawValue,
-              displayValue: newRawValue.startsWith('=') ? 'Carregando...' : templateCell.displayValue,
+              displayValue: isFormula ? 'Carregando...' : templateCell.displayValue,
               format: templateCell?.format ? { ...templateCell.format } : undefined,
+              valueOrigin: templateCell.valueOrigin,
             });
           }
         }
@@ -263,6 +271,7 @@ export function calculateAutofillCells(
           rawValue: data?.rawValue ?? '',
           displayValue: data?.displayValue ?? '',
           format: data?.format,
+          valueOrigin: data?.valueOrigin,
         });
       }
 
@@ -270,7 +279,7 @@ export function calculateAutofillCells(
       let allNumbers = rowCells.length >= 2;
       for (const cell of rowCells) {
         const val = parseFloat(cell.rawValue);
-        if (cell.rawValue.startsWith('=') || Number.isNaN(val) || cell.rawValue.trim() === '') {
+        if (cell.valueOrigin === 'sip' || cell.rawValue.startsWith('=') || Number.isNaN(val) || cell.rawValue.trim() === '') {
           allNumbers = false;
           break;
         }
@@ -301,15 +310,17 @@ export function calculateAutofillCells(
           } else {
             const deltaCol = c - templateCell.col;
             const deltaRow = 0;
-            const newRawValue = templateCell.rawValue.startsWith('=')
+            const isFormula = templateCell.valueOrigin !== 'sip' && templateCell.rawValue.startsWith('=');
+            const newRawValue = isFormula
               ? shiftFormulaReferences(templateCell.rawValue, deltaCol, deltaRow, totalCols, totalRows)
               : templateCell.rawValue;
             generated.push({
               col: c,
               row: r,
               rawValue: newRawValue,
-              displayValue: newRawValue.startsWith('=') ? 'Carregando...' : templateCell.displayValue,
+              displayValue: isFormula ? 'Carregando...' : templateCell.displayValue,
               format: templateCell?.format ? { ...templateCell.format } : undefined,
+              valueOrigin: templateCell.valueOrigin,
             });
           }
         }
@@ -336,15 +347,17 @@ export function calculateAutofillCells(
           } else {
             const deltaCol = c - templateCell.col;
             const deltaRow = 0;
-            const newRawValue = templateCell.rawValue.startsWith('=')
+            const isFormula = templateCell.valueOrigin !== 'sip' && templateCell.rawValue.startsWith('=');
+            const newRawValue = isFormula
               ? shiftFormulaReferences(templateCell.rawValue, deltaCol, deltaRow, totalCols, totalRows)
               : templateCell.rawValue;
             generated.push({
               col: c,
               row: r,
               rawValue: newRawValue,
-              displayValue: newRawValue.startsWith('=') ? 'Carregando...' : templateCell.displayValue,
+              displayValue: isFormula ? 'Carregando...' : templateCell.displayValue,
               format: templateCell?.format ? { ...templateCell.format } : undefined,
+              valueOrigin: templateCell.valueOrigin,
             });
           }
         }
@@ -359,7 +372,12 @@ export function calculateAutofillCells(
  * Builds a TSV string from a matrix of cells for OS clipboard paste into Google Sheets / Excel.
  */
 export function matrixToTsv(matrix: ClipboardCell[][]): string {
-  return matrix.map((row) => row.map((cell) => cell.displayValue ?? cell.rawValue ?? '').join('\t')).join('\n');
+  return matrix.map((row) => row.map((cell) => {
+    const value = cell.displayValue ?? cell.rawValue ?? '';
+    // Spreadsheet exports are a different trust boundary. Only untrusted SIP
+    // values are neutralized; legitimate user formulas retain their behavior.
+    return cell.valueOrigin === 'sip' && /^[\t\r\n ]*[=+\-@]/.test(value) ? `'${value}` : value;
+  }).join('\t')).join('\n');
 }
 
 /**

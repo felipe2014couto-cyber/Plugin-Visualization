@@ -68,6 +68,12 @@ export function areMiniSheetsDocsEqual(
     if (rawA !== rawB) {
       return false;
     }
+    if (cellA.valueOrigin !== cellB.valueOrigin) {
+      return false;
+    }
+    if (JSON.stringify(cellA.sipOrigin ?? null) !== JSON.stringify(cellB.sipOrigin ?? null)) {
+      return false;
+    }
 
     const fmtA = cellA.format ?? {};
     const fmtB = cellB.format ?? {};

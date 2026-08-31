@@ -8,6 +8,9 @@ import {
 } from '../../SqlQuery/oracleApi';
 
 jest.mock('../../SqlQuery/oracleApi', () => ({
+  SIP_DEFAULT_MAX_ROWS: 200,
+  SIP_HARD_MAX_ROWS: 2000,
+  OracleApiError: class OracleApiError extends Error {},
   createOracleSession: jest.fn(),
   closeOracleSession: jest.fn(),
   runOracleQuery: jest.fn(),
@@ -39,13 +42,13 @@ describe('MiniSheetsSipDialog', () => {
   });
 
   it('realiza conexão com o SIP com sucesso', async () => {
-    mockCreateOracleSession.mockResolvedValueOnce({ session_id: 'mock-session-123' });
-    const onSessionIdChange = jest.fn();
+    mockCreateOracleSession.mockResolvedValueOnce({ connected: true });
+    const onConnectionChange = jest.fn();
 
     render(
       <MiniSheetsSipDialog
         initialTargetCell="A1"
-        onSessionIdChange={onSessionIdChange}
+        onConnectionChange={onConnectionChange}
         onExecuteInsert={jest.fn()}
         onClose={jest.fn()}
       />
@@ -62,9 +65,10 @@ describe('MiniSheetsSipDialog', () => {
         expect.objectContaining({
           username: 'operador',
           password: 'senha123',
-        })
+        }),
+        expect.anything()
       );
-      expect(onSessionIdChange).toHaveBeenCalledWith('mock-session-123');
+      expect(onConnectionChange).toHaveBeenCalledWith(true);
       expect(screen.getByTestId('sip-status-bar')).toBeInTheDocument();
       expect(screen.getByText('Conectado ao SIP')).toBeInTheDocument();
     });
@@ -87,18 +91,19 @@ describe('MiniSheetsSipDialog', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('sip-connection-error')).toHaveTextContent('Usuário ou senha inválidos');
+      expect(screen.getByTestId('sip-password-input')).toHaveValue('');
     });
   });
 
   it('renderiza o editor SQL e permite desconectar quando conectado', async () => {
-    const onSessionIdChange = jest.fn();
+    const onConnectionChange = jest.fn();
 
     render(
       <MiniSheetsSipDialog
-        sessionId="active-session-abc"
+        isConnected={true}
         initialTargetCell="B2"
         currentSelectionAddress="C5"
-        onSessionIdChange={onSessionIdChange}
+        onConnectionChange={onConnectionChange}
         onExecuteInsert={jest.fn()}
         onClose={jest.fn()}
       />
@@ -117,15 +122,15 @@ describe('MiniSheetsSipDialog', () => {
     // Desconectar
     fireEvent.click(screen.getByTestId('sip-disconnect-button'));
     await waitFor(() => {
-      expect(mockCloseOracleSession).toHaveBeenCalledWith('active-session-abc');
-      expect(onSessionIdChange).toHaveBeenCalledWith(null);
+      expect(mockCloseOracleSession).toHaveBeenCalledWith();
+      expect(onConnectionChange).toHaveBeenCalledWith(false);
     });
   });
 
   it('limpa o SQL ao clicar no botão Limpar', () => {
     render(
       <MiniSheetsSipDialog
-        sessionId="session-1"
+        isConnected={true}
         initialTargetCell="A1"
         onExecuteInsert={jest.fn()}
         onClose={jest.fn()}
@@ -153,7 +158,7 @@ describe('MiniSheetsSipDialog', () => {
 
     render(
       <MiniSheetsSipDialog
-        sessionId="session-xyz"
+        isConnected={true}
         initialTargetCell="A1"
         onExecuteInsert={onExecuteInsert}
         onClose={jest.fn()}
@@ -173,11 +178,10 @@ describe('MiniSheetsSipDialog', () => {
     fireEvent.click(screen.getByTestId('sip-execute-button'));
 
     await waitFor(() => {
-      expect(mockRunOracleQuery).toHaveBeenCalledWith({
-        session_id: 'session-xyz',
+      expect(mockRunOracleQuery).toHaveBeenCalledWith(expect.objectContaining({
         sql: 'SELECT TS, PIVALUE FROM TABLE',
         max_rows: 50,
-      });
+      }));
       expect(onExecuteInsert).toHaveBeenCalledWith(
         mockResponse,
         'B2',
@@ -194,7 +198,7 @@ describe('MiniSheetsSipDialog', () => {
 
     render(
       <MiniSheetsSipDialog
-        sessionId="session-xyz"
+        isConnected={true}
         initialTargetCell="A1"
         onExecuteInsert={jest.fn()}
         onClose={jest.fn()}
@@ -212,7 +216,7 @@ describe('MiniSheetsSipDialog', () => {
     const onSqlChange = jest.fn();
     render(
       <MiniSheetsSipDialog
-        sessionId="session-xyz"
+        isConnected={true}
         initialTargetCell="A1"
         onSqlChange={onSqlChange}
         onExecuteInsert={jest.fn()}

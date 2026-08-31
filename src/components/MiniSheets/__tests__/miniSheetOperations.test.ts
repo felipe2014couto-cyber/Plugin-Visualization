@@ -112,6 +112,20 @@ describe('miniSheetOperations', () => {
       expect(generated[1]).toMatchObject({ col: 3, row: 0, rawValue: '40' });
       expect(generated[2]).toMatchObject({ col: 4, row: 0, rawValue: '50' });
     });
+
+    it('preserves SIP literals during autofill instead of evaluating formula-like values', () => {
+      const getCell = () => ({ rawValue: '=1+1', displayValue: '=1+1', valueOrigin: 'sip' as const });
+      const generated = calculateAutofillCells(
+        { startCol: 0, startRow: 0, endCol: 0, endRow: 0 },
+        { startCol: 0, startRow: 0, endCol: 0, endRow: 2 },
+        getCell
+      );
+
+      expect(generated).toEqual([
+        expect.objectContaining({ row: 1, rawValue: '=1+1', displayValue: '=1+1', valueOrigin: 'sip' }),
+        expect.objectContaining({ row: 2, rawValue: '=1+1', displayValue: '=1+1', valueOrigin: 'sip' }),
+      ]);
+    });
   });
 
   describe('matrixToTsv', () => {
@@ -121,6 +135,16 @@ describe('miniSheetOperations', () => {
         [{ rawValue: 'Motor B', displayValue: 'Motor B' }, { rawValue: '47.1', displayValue: '47.1' }],
       ];
       expect(matrixToTsv(matrix)).toBe('Motor A\t45.2\nMotor B\t47.1');
+    });
+
+    it('neutralizes formula prefixes only for untrusted SIP cells', () => {
+      expect(matrixToTsv([[
+        { rawValue: '=1+1', displayValue: '=1+1', valueOrigin: 'sip' },
+        { rawValue: '+123', displayValue: '+123', valueOrigin: 'sip' },
+        { rawValue: '-123', displayValue: '-123', valueOrigin: 'sip' },
+        { rawValue: '@text', displayValue: '@text', valueOrigin: 'sip' },
+        { rawValue: '=A1+B1', displayValue: '2', valueOrigin: 'formula' },
+      ]])).toBe("'=1+1\t'+123\t'-123\t'@text\t2");
     });
   });
 
