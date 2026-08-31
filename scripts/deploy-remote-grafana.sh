@@ -26,6 +26,8 @@ if [ -f "$PROJECT_DIR/.env" ]; then
   rsync -avz "$PROJECT_DIR/.env" "$REMOTE_USER@$REMOTE_HOST:/tmp/pims-vision-deploy/"
 fi
 
+rsync -avz "$PROJECT_DIR/backend-python/" "$REMOTE_USER@$REMOTE_HOST:/tmp/pims-vision-deploy/backend-python/"
+
 # Se houver o plugin PI Data Source localmente, enviamos também
 if [ -d "/var/lib/grafana/plugins/gridprotectionalliance-osisoftpi-datasource" ]; then
   echo "=== Copiando gridprotectionalliance-osisoftpi-datasource ==="
@@ -103,8 +105,41 @@ SERVICE_EOF
   systemctl enable pims-vision-proxy
   systemctl restart pims-vision-proxy
 
+  echo \"Configurando backend Python (SIP / Oracle API - Porta 8085)...\"
+  apt-get update -y && apt-get install -y python3 python3-pip python3-venv
+  mkdir -p /opt/pims-vision-sql-api
+  cp -a /tmp/pims-vision-deploy/backend-python/. /opt/pims-vision-sql-api/
+  if [ ! -d /opt/pims-vision-sql-api/venv ]; then
+    python3 -m venv /opt/pims-vision-sql-api/venv
+  fi
+  /opt/pims-vision-sql-api/venv/bin/pip install --upgrade pip
+  /opt/pims-vision-sql-api/venv/bin/pip install -r /opt/pims-vision-sql-api/requirements.txt
+  chown -R root:root /opt/pims-vision-sql-api
+
+  cat << SERVICE_EOF > /etc/systemd/system/pims-vision-sql-api.service
+[Unit]
+Description=PIMS Vision SQL API Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/pims-vision-sql-api
+ExecStart=/opt/pims-vision-sql-api/venv/bin/python app.py
+Restart=always
+RestartSec=5
+Environment=ORACLE_DEFAULT_ROW_LIMIT=200
+Environment=ORACLE_MAX_ROW_LIMIT=2000
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_EOF
+
+  systemctl daemon-reload
+  systemctl enable pims-vision-sql-api
+  systemctl restart pims-vision-sql-api
+
   echo \"Limpando temporarios...\"
   rm -rf /tmp/pims-vision-deploy
-'"
+'\"
 
 echo "=== Deploy concluído com sucesso no servidor $REMOTE_HOST! ==="
