@@ -34,10 +34,25 @@ O ecossistema do **PIMS Vision** é composto por 3 camadas de serviço integrada
   - Transferir as dependências Python empacotadas previamente ou usar mirrors internos confiáveis (`--trusted-host`).
   - Isolar a aplicação em um virtual environment (`/opt/pims-vision-sql-api/venv`).
 
-### 3. Configuração de CORS no Proxy PI Vision
+### 3. Resolução de Nomes e Credenciais do PI Vision
+- **Problema:** O servidor do PI Vision é acessado pela URL interna `http://pimsweb/PIVision`. Se o servidor de produção não possuir o host `pimsweb` no DNS corporativo ou `/etc/hosts`, a busca de displays falha com erro de rota compatível / 404 / host unreachable.
+- **Solução Obrigatória:**
+  1. Garantir o mapeamento do host no `/etc/hosts` do servidor:
+     ```bash
+     echo "10.247.72.34 pimsweb" | sudo tee -a /etc/hosts
+     ```
+  2. Garantir o arquivo `/opt/pims-vision-proxy/.env` com as credenciais válidas de acesso ao PI Vision:
+     ```env
+     PI_VISION_USER=Administrator
+     PI_VISION_PASSWORD=AperamSrvpims
+     PIVISION_PROXY_PORT=3001
+     PIVISION_PROXY_HOST=0.0.0.0
+     ```
+
+### 4. Configuração de CORS no Proxy PI Vision
 - O arquivo `pi-vision-proxy.js` deve conter no `ALLOWED_ORIGINS` (ou permitir dinamicamente via regex / variável de ambiente `ALLOWED_ORIGINS`) o IP/DNS e porta do Grafana de produção (`http://<IP_DO_SERVIDOR>:3000`).
 
-### 4. Permissão de Plugin Unsigned no Grafana
+### 5. Permissão de Plugin Unsigned no Grafana
 - Configurar o drop-in do systemd em `/etc/systemd/system/grafana-server.service.d/pims-vision.conf`:
   ```ini
   [Service]
@@ -47,7 +62,7 @@ O ecossistema do **PIMS Vision** é composto por 3 camadas de serviço integrada
   ```
 - Sempre executar `sudo systemctl daemon-reload && sudo systemctl restart grafana-server`.
 
-### 5. Injeção do Redirecionador de Dashboards
+### 6. Injeção do Redirecionador de Dashboards
 - O script `/usr/share/grafana/public/pims-vision-dashboard-redirect.js` deve estar presente e injetado antes da tag `</head>` em `/usr/share/grafana/public/views/index.html`.
 
 ---

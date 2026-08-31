@@ -82,6 +82,11 @@ ssh -t "$REMOTE_USER@$REMOTE_HOST" "sudo bash -c '
   fi
   NODE_BIN=$(command -v node || echo "/usr/bin/node")
 
+  echo \"Garantindo resolucao de host para pimsweb no /etc/hosts...\"
+  if ! grep -q \"pimsweb\" /etc/hosts; then
+    echo \"10.247.72.34 pimsweb\" >> /etc/hosts
+  fi
+
   echo \"Configurando pasta e servico do Proxy PI Vision...\"
   mkdir -p /opt/pims-vision-proxy
   cp -a /tmp/pims-vision-deploy/pi-vision-proxy.js /opt/pims-vision-proxy/
