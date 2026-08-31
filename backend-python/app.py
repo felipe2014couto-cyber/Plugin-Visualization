@@ -29,7 +29,7 @@ logger = logging.getLogger("sip.security")
 logging.basicConfig(level=os.environ.get("SIP_LOG_LEVEL", "INFO"))
 app = FastAPI(title="PIMS Vision SIP API")
 
-ENVIRONMENT = os.environ.get("SIP_ENV", "production").strip().lower()
+ENVIRONMENT = os.environ.get("SIP_ENV", "development").strip().lower()
 IS_PRODUCTION = ENVIRONMENT == "production"
 DEV_DEFAULT_ORIGINS = (
     "http://localhost:3000",
@@ -361,4 +361,4 @@ def run_query(req: QueryRequest, request: Request):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host=os.environ.get("SIP_BIND_HOST", "127.0.0.1"), port=int(os.environ.get("SIP_PORT", "8085")))
+    uvicorn.run(app, host=os.environ.get("SIP_BIND_HOST", "0.0.0.0"), port=int(os.environ.get("SIP_PORT", "8085")))
