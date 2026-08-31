@@ -71,6 +71,7 @@ export type VisualizationTheme = 'dark' | 'light';
 export const VISUALIZATION_THEME_STORAGE_KEY = 'aperam-visualization-theme';
 
 type AuthenticationState = 'checking' | 'authenticated' | 'unauthenticated';
+type DashboardLoadState = 'idle' | 'loading' | 'loaded' | 'not-found' | 'error';
 type ActiveModule = 'visualization' | 'sheets' | 'sql-query' | 'programming';
 type AssetsTab = 'assets' | 'library' | 'calculations';
 
@@ -95,6 +96,39 @@ function isGrafanaKioskMode(): boolean {
     return new URLSearchParams(search).has('kiosk');
   } catch {
     return false;
+  }
+}
+
+function getDashboardUidFromLocation(): string | undefined {
+  const uid = new URLSearchParams(globalThis.location?.search ?? '').get('dashboardUid');
+  return uid?.trim() || undefined;
+}
+
+const DISPLAY_CACHE_KEY_PREFIX = 'aperam-visualization-dashboard:';
+
+function getCachedDashboardDocument(uid: string): DisplayDocument | undefined {
+  try {
+    const raw = globalThis.sessionStorage?.getItem(`${DISPLAY_CACHE_KEY_PREFIX}${encodeURIComponent(uid)}`);
+    if (!raw) {
+      return undefined;
+    }
+    const document = JSON.parse(raw) as Partial<DisplayDocument>;
+    return Array.isArray(document.elements) && document.surface && typeof document.name === 'string'
+      ? document as DisplayDocument
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function cacheDashboardDocument(uid: string, document: DisplayDocument): void {
+  try {
+    globalThis.sessionStorage?.setItem(
+      `${DISPLAY_CACHE_KEY_PREFIX}${encodeURIComponent(uid)}`,
+      JSON.stringify(document),
+    );
+  } catch {
+    // The dashboard API remains the source of truth when session storage is unavailable.
   }
 }
 
@@ -148,9 +182,9 @@ export function App() {
   const loadedModulesRef = useRef(new Set<ActiveModule>(['visualization']));
   loadedModulesRef.current.add(activeModule);
   // Sql tables are now managed within DisplayDocument
-  const [document, setDocument] = useState(() =>
-    createDisplayDocument({ name: 'Visualization' }),
-  );
+  const initialDashboardUid = getDashboardUidFromLocation();
+  const cachedDashboardDocument = initialDashboardUid ? getCachedDashboardDocument(initialDashboardUid) : undefined;
+  const [document, setDocument] = useState(() => cachedDashboardDocument ?? createDisplayDocument({ name: 'Visualization' }));
   const [selectedElementIds, setSelectedElementIds] = useState<string[]>([]);
   const [piConnection, setPiConnection] = useState<PiConnectionState>({ status: 'checking' });
   const [selectedPiPoint, setSelectedPiPoint] = useState<PiPointSearchResult | null>(null);
@@ -262,7 +296,10 @@ export function App() {
   const [isPiPointFiltersOpen, setIsPiPointFiltersOpen] = useState(false);
   const [isPiSearchOpen, setIsPiSearchOpen] = useState(true);
   const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
-  const [dashboardUid, setDashboardUid] = useState<string>();
+  const [dashboardUid, setDashboardUid] = useState<string | undefined>(getDashboardUidFromLocation);
+  const [dashboardLoadState, setDashboardLoadState] = useState<DashboardLoadState>(() => (
+    cachedDashboardDocument ? 'loaded' : getDashboardUidFromLocation() ? 'loading' : 'idle'
+  ));
   const [folders, setFolders] = useState<GrafanaDashboardFolder[]>([]);
   const [selectedFolderUid, setSelectedFolderUid] = useState('');
   const [isSaveDialogOpen, setIsSaveDialogOpen] = useState(false);
@@ -358,32 +395,47 @@ export function App() {
       return;
     }
 
-    const uid = new URLSearchParams(globalThis.location?.search ?? '').get('dashboardUid');
+    const uid = getDashboardUidFromLocation();
     if (!uid) {
+      setDashboardLoadState('idle');
       return;
     }
 
     let active = true;
+    const cachedDocument = getCachedDashboardDocument(uid);
+    if (cachedDocument) {
+      setDashboardLoadState('loaded');
+    } else {
+      setDashboardLoadState('loading');
+    }
     loadPimsVisionDashboard(uid)
       .then((savedDocument) => {
-        if (active && savedDocument) {
-          setDocument(savedDocument.document);
-          const savedProgramming = savedDocument.document.programming;
-          if (savedProgramming) {
-            setProgrammingDraft(savedProgramming);
-            setProgrammingApplied(savedProgramming);
-            setProgrammingPiPoints((savedProgramming.query ?? []).map(queryReferenceToPiPoint));
-          } else {
-            setProgrammingDraft(DEFAULT_PROGRAMMING_DOCUMENT);
-            setProgrammingApplied(DEFAULT_PROGRAMMING_DOCUMENT);
-            setProgrammingPiPoints([]);
-          }
-          setDashboardUid(uid);
-          setSelectedFolderUid(savedDocument.folderUid);
+        if (!active) {
+          return;
         }
+        if (!savedDocument) {
+          setDashboardLoadState('not-found');
+          return;
+        }
+        setDocument(savedDocument.document);
+        cacheDashboardDocument(uid, savedDocument.document);
+        const savedProgramming = savedDocument.document.programming;
+        if (savedProgramming) {
+          setProgrammingDraft(savedProgramming);
+          setProgrammingApplied(savedProgramming);
+          setProgrammingPiPoints((savedProgramming.query ?? []).map(queryReferenceToPiPoint));
+        } else {
+          setProgrammingDraft(DEFAULT_PROGRAMMING_DOCUMENT);
+          setProgrammingApplied(DEFAULT_PROGRAMMING_DOCUMENT);
+          setProgrammingPiPoints([]);
+        }
+        setDashboardUid(uid);
+        setSelectedFolderUid(savedDocument.folderUid);
+        setDashboardLoadState('loaded');
       })
       .catch(() => {
         if (active) {
+          setDashboardLoadState(cachedDocument ? 'loaded' : 'error');
           setSaveState('error');
         }
       });
@@ -582,6 +634,8 @@ export function App() {
       const saved = await savePimsVisionDashboard(documentToSave, dashboardUid, selectedFolderUid);
       setDocument(documentToSave);
       setDashboardUid(saved.uid);
+      cacheDashboardDocument(saved.uid, documentToSave);
+      setDashboardLoadState('loaded');
       setSaveState('saved');
     } catch {
       setSaveState('error');
@@ -608,6 +662,8 @@ export function App() {
       setDocument(documentToSave);
       const saved = await savePimsVisionDashboard(documentToSave, undefined, saveFolderUid);
       setDashboardUid(saved.uid);
+      cacheDashboardDocument(saved.uid, documentToSave);
+      setDashboardLoadState('loaded');
       setSelectedFolderUid(saveFolderUid);
       setIsSaveDialogOpen(false);
       setSaveValidationError('');
@@ -633,6 +689,23 @@ export function App() {
           {authenticationState === 'unauthenticated' && (
             <a className={styles.loginButton} href={loginUrl}>Entrar no Grafana</a>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (dashboardUid && dashboardLoadState !== 'loaded') {
+    const message = dashboardLoadState === 'not-found'
+      ? 'O dashboard não contém um display PIMS Vision.'
+      : dashboardLoadState === 'error'
+        ? 'Não foi possível carregar o display.'
+        : 'Aguarde enquanto o display é carregado...';
+    return (
+      <div className={styles.authGate} data-testid="pims-vision-dashboard-loading">
+        <div className={styles.authCard}>
+          <span className={styles.productMark} role="img" aria-label="Aperam Visualization" />
+          <h1>{dashboardLoadState === 'loading' ? 'Carregando display' : 'Display indisponível'}</h1>
+          <p>{message}</p>
         </div>
       </div>
     );
@@ -898,7 +971,9 @@ export function App() {
                         document={document}
                         onChange={setDocument}
                         resolvePiPoint={resolveCalculationPiPoint}
-                        loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
+                        // O snapshot não precisa esperar o health check do
+                        // datasource; ambos podem ocorrer em paralelo.
+                        loadValue={getPiPointCurrentValue}
                         openCalculationId={openCalculationId}
                         onCalculationOpenHandled={() => setOpenCalculationId(undefined)}
                       /></Suspense>
@@ -1007,10 +1082,13 @@ export function App() {
               onSelectionChange={setSelectedElementIds}
               onModeChange={setEditorMode}
               selectedPiPoint={selectedPiPoint}
-              loadValue={hasPiConnection ? getPiPointCurrentValue : undefined}
+              // Não bloquear o primeiro snapshot pelo teste de conexão. O
+              // loader trata falhas do datasource e o status continua visível
+              // separadamente no cabeçalho.
+              loadValue={getPiPointCurrentValue}
               loadPiPointDatabaseLimits={hasPiConnection ? getPiPointDatabaseLimits : undefined}
               loadDigitalStates={hasPiConnection ? getPiPointDigitalStates : undefined}
-              loadValues={hasPiConnection ? getPiPointsCurrentValues : undefined}
+              loadValues={getPiPointsCurrentValues}
               loadTrend={hasPiConnection ? loadTrend : undefined}
               loadRecordedTrend={hasPiConnection ? loadTrend : undefined}
               loadRecordedData={hasPiConnection ? (bindings, range, options) => getPiTrendsRecordedHistoryForRange(bindings, range, options) : undefined}

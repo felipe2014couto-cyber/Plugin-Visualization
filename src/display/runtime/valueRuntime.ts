@@ -36,6 +36,7 @@ export class ValueRuntime {
   private pendingImmediate = new Map<string, PiPointBinding>();
   private lifecycle = 0;
   private consumerSignature = '';
+  private consecutiveFailures = 0;
   private loader: LoadCurrentValues;
   private nextDelayMs: number;
 
@@ -203,6 +204,11 @@ export class ValueRuntime {
       if (lifecycle !== this.lifecycle) {
         return;
       }
+      const hasSuccess = unique.some((binding) => results[getBindingKey(binding)]?.status === 'success');
+      this.consecutiveFailures = hasSuccess ? 0 : this.consecutiveFailures + 1;
+      this.nextDelayMs = hasSuccess
+        ? this.intervalMs
+        : Math.min(this.intervalMs * (2 ** Math.min(this.consecutiveFailures, 3)), 30_000);
       const nextStates = new Map(this.states);
       for (const [elementId, consumer] of this.consumers) {
         const key = getBindingKey(consumer.binding);
@@ -223,6 +229,8 @@ export class ValueRuntime {
       this.replaceStates(nextStates);
     } catch {
       if (lifecycle === this.lifecycle) {
+        this.consecutiveFailures += 1;
+        this.nextDelayMs = Math.min(this.intervalMs * (2 ** Math.min(this.consecutiveFailures, 3)), 30_000);
         const nextStates = new Map(this.states);
         for (const [elementId, consumer] of this.consumers) {
           if (keys.has(getBindingKey(consumer.binding))) {
@@ -376,6 +384,9 @@ function stateWithValue(previous: ValueRuntimeState | undefined, value: PiPointV
 
 function stateWithError(previous: ValueRuntimeState | undefined): ValueRuntimeState {
   const result = previous?.status === 'success' ? previous.result : previous?.result;
+  if (!result) {
+    return { status: 'loading' };
+  }
   if (previous?.status === 'error' && previous.result === result) {
     return previous;
   }

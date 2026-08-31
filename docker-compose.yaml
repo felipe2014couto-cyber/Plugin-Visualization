@@ -28,4 +28,5 @@ services:
       GF_LOG_FILTERS: plugin.pims-vision-app:debug
       GF_LOG_LEVEL: debug
       GF_DATAPROXY_LOGGING: 1
+      GF_SERVER_ENABLE_GZIP: 'true'
       GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: pims-vision-app

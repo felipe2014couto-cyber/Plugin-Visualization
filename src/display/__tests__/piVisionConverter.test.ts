@@ -627,6 +627,43 @@ describe('convertPiVisionDisplay — documento', () => {
       binding: { dataSourceUid: 'pi-principal', serverPath: 'pims', pointName: 'TEMPERATURA' },
     });
   });
+
+  it('conecta o estado múltiplo de uma forma a um cálculo', () => {
+    const result = convertPiVisionDisplay({
+      Name: 'Estado de cálculo',
+      DisplayProperties: {
+        Calculations: [{ Name: 'STATUS DARMA', Server: 'pims', Expression: "'TAG_STATUS'" }],
+      },
+      Symbols: [{
+        SymbolType: 'rectangle',
+        MSDataSources: ['calc:STATUS DARMA.Value'],
+        Configuration: {
+          Left: 10,
+          Top: 10,
+          Width: 30,
+          Height: 20,
+          Multistates: [{
+            StateVariables: ['Fill', 'Blink'],
+            States: [
+              { StateValues: ['rgba(0,128,0,1)', false], UpperValue: 1 },
+              { StateValues: ['rgba(255,0,0,1)', false], UpperValue: 2 },
+            ],
+          }],
+        },
+      }],
+    }, 'pi-principal');
+
+    const properties = result.elements[0].properties as any;
+    expect(properties.calculationId).toBe(result.calculations?.[0].id);
+    expect(properties.binding).toBeUndefined();
+    expect(properties.multistate).toMatchObject({
+      enabled: true,
+      rules: [
+        { operator: 'lte', value: 1, color: '#008000' },
+        { operator: 'gte', value: 1, color: '#ff0000' },
+      ],
+    });
+  });
 });
 
 describe('conversao de calculos do PI Vision', () => {
@@ -739,6 +776,33 @@ describe('conversao de Value', () => {
     expect(props.multistate).toBeDefined();
     expect(props.multistate.enabled).toBe(true);
     expect(props.multistate.rules).toHaveLength(1);
+  });
+
+  it('converte limites do PI Vision na cor dos valores', () => {
+    const result = convertPiVisionDisplay({
+      Symbols: [{
+        SymbolType: 'value',
+        DataSources: ['pi:\\pims\\LFS_LB2_TEMP_COMUTACAO2'],
+        Configuration: {
+          Left: 10,
+          Top: 10,
+          Width: 80,
+          Height: 30,
+          Multistates: [{
+            StateVariables: ['Fill'],
+            States: [
+              { StateValues: ['rgba(255,0,0,1)'], UpperValue: 150 },
+              { StateValues: ['rgba(255,255,0,1)'], UpperValue: 120 },
+              { StateValues: ['rgba(0,255,0,1)'], UpperValue: 100 },
+            ],
+          }],
+        },
+      }],
+    }, 'pi-uid');
+
+    const props = result.elements[0].properties as any;
+    expect(props.multistate).toMatchObject({ enabled: true, rules: [{ color: '#ff0000' }, { color: '#ffff00' }, { color: '#00ff00' }] });
+    expect(props.backgroundMultistate).toBeUndefined();
   });
 });
 
@@ -983,6 +1047,14 @@ describe('conversao de Text', () => {
     expect(props.text).toBe('Pressao do Sistema');
   });
 
+  it('decodifica entidades HTML em textos estáticos', () => {
+    const { elements } = convertPiVisionDisplay(makeDisplay({
+      ...textSymbol,
+      Configuration: { ...textSymbol.Configuration, Content: '&lt;= 170 &gt; 90' },
+    }));
+    expect((elements[0].properties as any).text).toBe('<= 170 > 90');
+  });
+
   it('converte cor e fontSize', () => {
     const { elements } = convertPiVisionDisplay(makeDisplay(textSymbol));
     const props = elements[0].properties as any;
@@ -1186,6 +1258,3 @@ describe('Multistate Blink e Background na conversão PI Vision', () => {
     expect(props.multistate?.rules[2].blink).toBe(true);
   });
 });
-
-
-
