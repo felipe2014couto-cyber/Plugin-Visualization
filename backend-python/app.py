@@ -31,19 +31,38 @@ app = FastAPI(title="PIMS Vision SIP API")
 
 ENVIRONMENT = os.environ.get("SIP_ENV", "production").strip().lower()
 IS_PRODUCTION = ENVIRONMENT == "production"
-ALLOWED_ORIGINS = tuple(x.strip().rstrip("/") for x in os.environ.get("SIP_ALLOWED_ORIGINS", "").split(",") if x.strip())
+DEV_DEFAULT_ORIGINS = (
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
+    "http://localhost:8085",
+    "http://127.0.0.1:8085",
+)
+configured_origins = tuple(x.strip().rstrip("/") for x in os.environ.get("SIP_ALLOWED_ORIGINS", "").split(",") if x.strip())
+ALLOWED_ORIGINS = configured_origins if configured_origins else (() if IS_PRODUCTION else DEV_DEFAULT_ORIGINS)
+
 if ALLOWED_ORIGINS:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(ALLOWED_ORIGINS),
         allow_credentials=True,
-        allow_methods=["POST"],
+        allow_methods=["POST", "OPTIONS"],
+        allow_headers=["Content-Type", "X-Request-ID"],
+    )
+elif not IS_PRODUCTION:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$",
+        allow_credentials=True,
+        allow_methods=["POST", "OPTIONS"],
         allow_headers=["Content-Type", "X-Request-ID"],
     )
 
 SESSION_COOKIE = "__Host-sip-session" if IS_PRODUCTION else "sip-session"
 COOKIE_SECURE = IS_PRODUCTION
 PROFILE_ENV_NAMES = {"sip": "SIP_ORACLE_DSN"}
+DEFAULT_SIP_DSN = os.environ.get("SIP_ORACLE_DSN") or os.environ.get("DEFAULT_DSN") or "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=10.247.0.236)(PORT=1521)))(CONNECT_DATA=(SERVICE_NAME=po40)))"
 DEFAULT_MAX_ROWS = int(os.environ.get("SIP_DEFAULT_MAX_ROWS", "200"))
 HARD_MAX_ROWS = int(os.environ.get("SIP_HARD_MAX_ROWS", "2000"))
 MAX_SQL_BYTES = int(os.environ.get("SIP_MAX_SQL_BYTES", "65536"))
@@ -63,6 +82,7 @@ INSTANTCLIENT_DIR = os.environ.get("ORACLE_CLIENT_DIR", "/opt/oracle/instantclie
 
 class ConnectRequest(BaseModel):
     connectionProfile: str = "sip"
+    dsn: Optional[str] = None
     username: str
     password: str
 
@@ -122,7 +142,12 @@ async def security_middleware(request: Request, call_next):
         if not source and referer:
             source = "/".join(referer.split("/", 3)[:3])
         allow_missing = not IS_PRODUCTION and os.environ.get("SIP_ALLOW_MISSING_ORIGIN", "true").lower() == "true"
-        if (not source and not allow_missing) or (source and source.rstrip("/") not in ALLOWED_ORIGINS):
+        is_allowed = (
+            (not source and allow_missing) or
+            (bool(source) and bool(ALLOWED_ORIGINS) and source.rstrip("/") in ALLOWED_ORIGINS) or
+            (bool(source) and not IS_PRODUCTION and bool(re.match(r"^https?://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.\d+\.\d+\.\d+)(:\d+)?$", source)))
+        )
+        if not is_allowed:
             response = Response(
                 content=json.dumps({"detail": {"code": "SIP_ORIGIN_REJECTED", "request_id": request_id}}),
                 status_code=403,
@@ -164,6 +189,8 @@ def init_thick() -> None:
 
 
 def resolve_profile(profile: str, request_id: str) -> str:
+    if profile == "sip":
+        return DEFAULT_SIP_DSN
     env_name = PROFILE_ENV_NAMES.get(profile)
     dsn = os.environ.get(env_name, "") if env_name else ""
     if not env_name or not dsn:

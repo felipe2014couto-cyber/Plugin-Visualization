@@ -60,10 +60,16 @@ export class OracleApiError extends Error {
 }
 
 export function getApiBaseUrl(): string {
-  if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && window.__PIMS_SIP_API_BASE_URL__) {
+  if (typeof window !== 'undefined' && window.__PIMS_SIP_API_BASE_URL__) {
     return window.__PIMS_SIP_API_BASE_URL__.replace(/\/$/, '');
   }
-  return process.env.NODE_ENV === 'development' ? 'http://localhost:8085' : '/api/sip';
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const hostname = window.location.hostname;
+    if (process.env.NODE_ENV === 'development' || hostname === 'localhost' || hostname === '127.0.0.1' || /^10\.|^192\.168\.|^172\./.test(hostname)) {
+      return `${window.location.protocol}//${hostname}:8085`;
+    }
+  }
+  return '/api/sip';
 }
 
 function finiteNonNegative(value: unknown): value is number {
