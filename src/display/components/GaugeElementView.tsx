@@ -31,7 +31,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const hasTitle = Boolean(title && options.showTagName);
   const cx = element.x + element.width / 2;
 
-  // Position dial center, radius, value and title
+  // Position dial center, radius, value and title with compact, balanced spacing
   let cy: number;
   let maxRadiusByHeight: number;
   let titleY: number;
@@ -39,34 +39,34 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
 
   if (isPointerOrLine) {
     if (isLabelBelow) {
-      // Dial is higher, value is below dial opening, and title is at the bottom
-      cy = element.y + element.height * 0.38;
-      maxRadiusByHeight = element.height * 0.27;
-      valueY = element.y + element.height - (hasTitle ? Math.max(28, element.height * 0.15) : Math.max(12, element.height * 0.07));
-      titleY = element.y + element.height - Math.max(8, element.height * 0.04);
+      // Dial is larger, value is directly below dial opening, title sits right beneath value
+      cy = element.y + element.height * 0.44;
+      maxRadiusByHeight = element.height * 0.32;
+      valueY = element.y + element.height - (hasTitle ? Math.max(22, element.height * 0.12) : Math.max(10, element.height * 0.06));
+      titleY = element.y + element.height - Math.max(6, element.height * 0.035);
     } else {
-      // Title is above, dial is centered, and value is below the dial
-      cy = hasTitle ? element.y + element.height * 0.46 : element.y + element.height * 0.42;
-      maxRadiusByHeight = hasTitle ? element.height * 0.25 : element.height * 0.28;
-      titleY = element.y + Math.max(16, element.height * 0.09);
-      valueY = element.y + element.height - Math.max(12, element.height * 0.08);
+      // Title is above, dial is centered, value is directly below the dial opening
+      cy = hasTitle ? element.y + element.height * 0.50 : element.y + element.height * 0.45;
+      maxRadiusByHeight = hasTitle ? element.height * 0.28 : element.height * 0.32;
+      titleY = element.y + Math.max(14, element.height * 0.08);
+      valueY = element.y + element.height - Math.max(8, element.height * 0.06);
     }
   } else {
     // Arc and Triangle: value is centered inside the dial
     if (isLabelBelow) {
-      cy = element.y + element.height * 0.44;
-      maxRadiusByHeight = element.height * 0.33;
+      cy = element.y + element.height * 0.46;
+      maxRadiusByHeight = element.height * 0.34;
       titleY = element.y + element.height - Math.max(8, element.height * 0.05);
       valueY = cy + Math.max(4, Math.min(8, element.height * 0.035));
     } else {
-      cy = hasTitle ? element.y + element.height * 0.58 : element.y + element.height * 0.52;
-      maxRadiusByHeight = hasTitle ? element.height * 0.28 : element.height * 0.33;
-      titleY = element.y + Math.max(16, element.height * 0.09);
+      cy = hasTitle ? element.y + element.height * 0.56 : element.y + element.height * 0.50;
+      maxRadiusByHeight = hasTitle ? element.height * 0.29 : element.height * 0.34;
+      titleY = element.y + Math.max(14, element.height * 0.08);
       valueY = cy + Math.max(4, Math.min(8, element.height * 0.035));
     }
   }
 
-  const maxRadiusByWidth = element.width * 0.35;
+  const maxRadiusByWidth = element.width * 0.36;
   const radius = Math.max(1, Math.min(maxRadiusByWidth, maxRadiusByHeight));
 
   const sweepAngle = options.gaugeAngle;
