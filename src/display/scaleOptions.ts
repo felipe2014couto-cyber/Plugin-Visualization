@@ -40,15 +40,36 @@ function isValidHexColor(value: string): boolean {
   return value.trim().toLowerCase() === 'transparent' || /^#[0-9a-f]{3,8}$/i.test(value.trim());
 }
 
+export function isValidScale(minimum: number, maximum: number): boolean {
+  return Number.isFinite(minimum) && Number.isFinite(maximum) && minimum !== maximum;
+}
+
 export function getScaleRatio(value: number, minimum: number, maximum: number): number | undefined {
-  if (![value, minimum, maximum].every(Number.isFinite) || minimum >= maximum) {
+  if (!isValidScale(minimum, maximum) || !Number.isFinite(value)) {
     return undefined;
   }
   return Math.max(0, Math.min(1, (value - minimum) / (maximum - minimum)));
 }
 
-export function formatScaleValue(value: number, decimals: number | null): string {
-  return decimals === null ? String(value) : value.toFixed(decimals);
+export function formatScaleValue(value: number, decimals: number | null, minimum?: number, maximum?: number): string {
+  if (decimals !== null) {
+    return value.toFixed(decimals);
+  }
+  
+  const cleanValue = parseFloat(value.toPrecision(10));
+  
+  if (minimum !== undefined && maximum !== undefined) {
+    const cleanMin = parseFloat(minimum.toPrecision(10));
+    const cleanMax = parseFloat(maximum.toPrecision(10));
+    const minDecimals = (String(cleanMin).split('.')[1] || '').length;
+    const maxDecimals = (String(cleanMax).split('.')[1] || '').length;
+    
+    if (minDecimals <= 2 && maxDecimals <= 2) {
+      return parseFloat(cleanValue.toFixed(2)).toString();
+    }
+  }
+  
+  return String(cleanValue);
 }
 
 function finiteOrDefault(value: number | undefined, fallback: number): number {

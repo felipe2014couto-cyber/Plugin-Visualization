@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -30,9 +30,33 @@ export function BarChartPropertiesPanel({
   onRemoveItem,
   onMoveItem,
 }: BarChartPropertiesPanelProps) {
+  const visual = getBarChartVisualOptions(element);
+
+  const [minText, setMinText] = useState(visual.minimum?.toString() ?? '');
+  const [maxText, setMaxText] = useState(visual.maximum?.toString() ?? '');
+  const [barStartValueText, setBarStartValueText] = useState(visual.barStartValue?.toString() ?? '0');
+
+  useEffect(() => {
+    if (visual.minimum !== undefined && visual.minimum.toString() !== minText) {
+      setMinText(visual.minimum.toString());
+    }
+  }, [visual.minimum]);
+
+  useEffect(() => {
+    if (visual.maximum !== undefined && visual.maximum.toString() !== maxText) {
+      setMaxText(visual.maximum.toString());
+    }
+  }, [visual.maximum]);
+
+  useEffect(() => {
+    if (visual.barStartValue !== undefined && visual.barStartValue.toString() !== barStartValueText) {
+      setBarStartValueText(visual.barStartValue.toString());
+    }
+  }, [visual.barStartValue]);
+
   const styles = useStyles2(getStyles);
   const items = getBarChartItems(element);
-  const visual = getBarChartVisualOptions(element);
+
 
   const [selectedItemIndex, setSelectedItemIndex] = useState(0);
   const selectedItem = items[selectedItemIndex] ?? items[0];
@@ -244,41 +268,80 @@ export function BarChartPropertiesPanel({
             onChange={(e) => onVisualChange({ scaleMode: e.currentTarget.value as BarChartScaleMode })}
             data-testid="bar-chart-scale-mode"
           >
-            <option value="custom">Personalizado</option>
+            <option value="custom">Limites personalizados</option>
             <option value="database">Limites do banco de dados</option>
           </select>
         </label>
 
-        {visual.scaleMode === 'custom' && (
+        {visual.scaleMode !== 'database' && (
           <>
-            <label>
-              Mínimo
-              <input
-                type="number"
-                value={visual.minimum}
-                onChange={(e) => {
-                  const val = Number(e.currentTarget.value);
-                  if (Number.isFinite(val)) {
-                    onVisualChange({ minimum: val });
-                  }
-                }}
-                data-testid="bar-chart-scale-minimum"
-              />
-            </label>
-            <label>
-              Máximo
-              <input
-                type="number"
-                value={visual.maximum}
-                onChange={(e) => {
-                  const val = Number(e.currentTarget.value);
-                  if (Number.isFinite(val)) {
-                    onVisualChange({ maximum: val });
-                  }
-                }}
-                data-testid="bar-chart-scale-maximum"
-              />
-            </label>
+            {visual.orientation === 'vertical' ? (
+              <>
+                <label>
+                  Acima
+                  <input
+                    type="number"
+                    value={maxText}
+                    onChange={(e) => {
+                      setMaxText(e.currentTarget.value);
+                      const val = Number(e.currentTarget.value);
+                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                        onVisualChange({ maximum: val });
+                      }
+                    }}
+                    data-testid="bar-chart-scale-maximum"
+                  />
+                </label>
+                <label>
+                  Abaixo
+                  <input
+                    type="number"
+                    value={minText}
+                    onChange={(e) => {
+                      setMinText(e.currentTarget.value);
+                      const val = Number(e.currentTarget.value);
+                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                        onVisualChange({ minimum: val });
+                      }
+                    }}
+                    data-testid="bar-chart-scale-minimum"
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <label>
+                  Esquerda
+                  <input
+                    type="number"
+                    value={minText}
+                    onChange={(e) => {
+                      setMinText(e.currentTarget.value);
+                      const val = Number(e.currentTarget.value);
+                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                        onVisualChange({ minimum: val });
+                      }
+                    }}
+                    data-testid="bar-chart-scale-minimum"
+                  />
+                </label>
+                <label>
+                  Direita
+                  <input
+                    type="number"
+                    value={maxText}
+                    onChange={(e) => {
+                      setMaxText(e.currentTarget.value);
+                      const val = Number(e.currentTarget.value);
+                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                        onVisualChange({ maximum: val });
+                      }
+                    }}
+                    data-testid="bar-chart-scale-maximum"
+                  />
+                </label>
+              </>
+            )}
           </>
         )}
 
@@ -293,11 +356,12 @@ export function BarChartPropertiesPanel({
         </label>
       </section>
 
+      <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '10px 0' }} />
+
       {/* Início da Barra */}
-      <section className={styles.section}>
-        <strong>Início da barra</strong>
+      <section className={styles.section} style={{ borderBottom: 'none', paddingBottom: 0 }}>
         <label>
-          Início
+          Início da Barra
           <select
             value={visual.barStartMode}
             onChange={(e) => onVisualChange({ barStartMode: e.currentTarget.value as BarChartStartMode })}
@@ -309,13 +373,14 @@ export function BarChartPropertiesPanel({
         </label>
         {visual.barStartMode === 'custom' && (
           <label>
-            Valor inicial
+            Valor
             <input
               type="number"
-              value={visual.barStartValue}
+              value={barStartValueText}
               onChange={(e) => {
+                setBarStartValueText(e.currentTarget.value);
                 const val = Number(e.currentTarget.value);
-                if (Number.isFinite(val)) {
+                if (e.currentTarget.value !== '' && Number.isFinite(val)) {
                   onVisualChange({ barStartValue: val });
                 }
               }}

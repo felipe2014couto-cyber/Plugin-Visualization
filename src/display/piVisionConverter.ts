@@ -785,6 +785,7 @@ function convertBar(
     borderWidth: typeof cfg.StrokeWidth === 'number' ? cfg.StrokeWidth : 1,
     tagNameMode: cfg.NameType === 'C' && typeof cfg.CustomName === 'string' ? 'custom' : 'tag',
     customTagName: typeof cfg.CustomName === 'string' ? cfg.CustomName : '',
+    ...(typeof cfg.BarStart === 'number' ? { barStartMode: 'custom', barStartValue: cfg.BarStart } : typeof cfg.Start === 'number' ? { barStartMode: 'custom', barStartValue: cfg.Start } : {}),
     ...(isPiVisionCompactGauge ? { _piVisionCompactGauge: true } : {}),
     ...multistate,
   };

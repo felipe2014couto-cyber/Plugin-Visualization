@@ -43,8 +43,18 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   // Horizontal scale labels live below the track, so leave enough room for the
   // border stroke plus the tick labels instead of letting the stroke cover them.
   const plotHeight = Math.max(1, element.height - (isPiVisionCompactGauge ? 48 : horizontal ? 104 : 90) - borderClearance * 4);
-  const fillWidth = horizontal && ratio !== undefined ? plotWidth * ratio : horizontal ? 0 : plotWidth;
-  const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
+  const startRatio = options.barStartMode === 'custom' && typeof options.barStartValue === 'number'
+    ? getScaleRatio(options.barStartValue, minimum, maximum) ?? 0
+    : 0;
+  
+  const activeRatio = ratio ?? 0;
+  const minRatio = Math.min(startRatio, activeRatio);
+  const maxRatio = Math.max(startRatio, activeRatio);
+
+  const fillWidth = horizontal && ratio !== undefined ? plotWidth * (maxRatio - minRatio) : horizontal ? 0 : plotWidth;
+  const fillHeight = !horizontal && ratio !== undefined ? plotHeight * (maxRatio - minRatio) : !horizontal ? 0 : plotHeight;
+  const fillX = horizontal ? plotX + plotWidth * minRatio : plotX;
+  const fillY = !horizontal ? plotY + plotHeight - plotHeight * maxRatio : plotY;
   const valueText = getValueText(binding, label, runtimeState, value, options.decimals);
   const detailLines = getDetailLines(valueText, runtimeState, barOptions.showValue, barOptions.showUnit, false);
   const scaleTickCount = getScaleTickCount(horizontal ? plotWidth : plotHeight, horizontal ? 44 : 34);
@@ -112,19 +122,19 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         const denominator = scaleTickCount - 1;
         const valueAtTick = minimum + ((maximum - minimum) * index) / denominator;
         const y = plotY + plotHeight - (plotHeight * index) / denominator;
-        return <g key={`bar-scale-${index}`} pointerEvents="none"><line x1={plotX - 4 - borderClearance / 2} y1={y} x2={plotX - borderClearance / 2} y2={y} stroke={borderColor} style={{ stroke: borderColor }} /><text x={plotX - (isPiVisionCompactGauge ? 5 : 14) - borderClearance} y={y + (isPiVisionCompactGauge ? 3 : 6)} textAnchor="end" fill={borderColor} style={{ fill: borderColor }} fontSize={isPiVisionCompactGauge ? Math.max(6, Math.min(9, element.width * 0.12)) : 18} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
+        return <g key={`bar-scale-${index}`} pointerEvents="none"><line x1={plotX - 4 - borderClearance / 2} y1={y} x2={plotX - borderClearance / 2} y2={y} stroke={borderColor} style={{ stroke: borderColor }} /><text x={plotX - (isPiVisionCompactGauge ? 5 : 14) - borderClearance} y={y + (isPiVisionCompactGauge ? 3 : 6)} textAnchor="end" fill={borderColor} style={{ fill: borderColor }} fontSize={isPiVisionCompactGauge ? Math.max(6, Math.min(9, element.width * 0.12)) : 18} fontWeight={500}>{formatScaleValue(valueAtTick, (options.decimals !== null && options.decimals > 0) ? 0 : options.decimals, minimum, maximum)}</text></g>;
       })}
       {options.showScale !== false && horizontal && isValidScale(minimum, maximum) && Array.from({ length: scaleTickCount }, (_, index) => {
         const denominator = scaleTickCount - 1;
         const valueAtTick = minimum + ((maximum - minimum) * index) / denominator;
         const x = plotX + (plotWidth * index) / denominator;
         const scaleY = plotY + plotHeight + borderClearance / 2 + 4;
-        return <g key={`bar-scale-horizontal-${index}`} pointerEvents="none"><line x1={x} y1={scaleY} x2={x} y2={scaleY + 4} stroke={borderColor} style={{ stroke: borderColor }} /><text x={x} y={scaleY + 18} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={16} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
+        return <g key={`bar-scale-horizontal-${index}`} pointerEvents="none"><line x1={x} y1={scaleY} x2={x} y2={scaleY + 4} stroke={borderColor} style={{ stroke: borderColor }} /><text x={x} y={scaleY + 18} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={16} fontWeight={500}>{formatScaleValue(valueAtTick, (options.decimals !== null && options.decimals > 0) ? 0 : options.decimals, minimum, maximum)}</text></g>;
       })}
       {ratio !== undefined && (
         <rect
-          x={horizontal ? plotX : plotX}
-          y={horizontal ? plotY : plotY + plotHeight - fillHeight}
+          x={fillX}
+          y={fillY}
           width={fillWidth}
           height={fillHeight}
           rx={3}

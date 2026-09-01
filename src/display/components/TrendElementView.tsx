@@ -261,6 +261,7 @@ function getTrendContent(
   onLegendContextMenu?: (event: React.MouseEvent<SVGGElement>, elementId: string, series: TrendSeries, value: string | number | undefined) => void,
 ): React.ReactNode {
   const formatValue = (value: number) => formatNumber(value, visual.numberFormat);
+  const formatScaleTick = (value: number) => formatNumber(value, visual.numberFormat === 'oneDecimal' || visual.numberFormat === 'twoDecimals' ? 'integer' : visual.numberFormat);
   const foreground = visual.foregroundColor || TEXT_COLOR;
   const axisColor = visual.foregroundColor || AXIS_COLOR;
   const gridColor = visual.foregroundColor || GRID_COLOR;
@@ -498,7 +499,7 @@ function getTrendContent(
             fontSize={AXIS_FONT_SIZE}
             fontWeight={500}
           >
-            {formatValue(tick.value)}
+            {formatScaleTick(tick.value)}
           </text>
         </g>
       ))}
@@ -512,8 +513,8 @@ function getTrendContent(
           const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
           return (
             <g key={`configured-scale-${key}`} fill={series.color} fontSize={AXIS_FONT_SIZE} pointerEvents="none" opacity={opacity}>
-              {Number.isFinite(series.scaleMax) && <text x={labelX} y={chart.plotY + 12} textAnchor="start">{formatValue(series.scaleMax as number)}</text>}
-              {Number.isFinite(series.scaleMin) && <text x={labelX} y={chart.plotY + chart.plotHeight - 2} textAnchor="start">{formatValue(series.scaleMin as number)}</text>}
+              {Number.isFinite(series.scaleMax) && <text x={labelX} y={chart.plotY + 12} textAnchor="start">{formatScaleTick(series.scaleMax as number)}</text>}
+              {Number.isFinite(series.scaleMin) && <text x={labelX} y={chart.plotY + chart.plotHeight - 2} textAnchor="start">{formatScaleTick(series.scaleMin as number)}</text>}
             </g>
           );
         })}

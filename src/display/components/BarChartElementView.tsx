@@ -47,10 +47,10 @@ export const BarChartElementView = React.memo(function BarChartElementView({
     }
   }
 
-  const validScale = Number.isFinite(min) && Number.isFinite(max) && min < max;
+  const validScale = Number.isFinite(min) && Number.isFinite(max) && min !== max;
   const scaleMin = validScale ? min : 0;
   const scaleMax = validScale ? max : 100;
-  const scaleSpan = Math.max(1e-9, scaleMax - scaleMin);
+  const scaleSpan = Math.abs(scaleMax - scaleMin) < 1e-9 ? 1e-9 : scaleMax - scaleMin;
 
   // Common unit calculation
   const units = items
@@ -91,7 +91,7 @@ export const BarChartElementView = React.memo(function BarChartElementView({
 
   // Base bar start value
   const rawBaseValue = visual.barStartMode === 'custom' ? visual.barStartValue : scaleMin;
-  const baseValue = Math.max(scaleMin, Math.min(scaleMax, rawBaseValue));
+  const baseValue = Math.max(Math.min(scaleMin, scaleMax), Math.min(Math.max(scaleMin, scaleMax), rawBaseValue));
   const baseRatio = (baseValue - scaleMin) / scaleSpan;
 
   const itemCount = Math.max(1, items.length);
@@ -290,7 +290,7 @@ export const BarChartElementView = React.memo(function BarChartElementView({
           let barW = 0;
 
           if (numValue !== undefined && validScale) {
-            const clamped = Math.max(scaleMin, Math.min(scaleMax, numValue));
+            const clamped = Math.max(Math.min(scaleMin, scaleMax), Math.min(Math.max(scaleMin, scaleMax), numValue));
             const valRatio = (clamped - scaleMin) / scaleSpan;
 
             const effectiveBaseRatio = visual.invertScale ? 1 - baseRatio : baseRatio;
@@ -364,7 +364,7 @@ export const BarChartElementView = React.memo(function BarChartElementView({
         let barH = 0;
 
         if (numValue !== undefined && validScale) {
-          const clamped = Math.max(scaleMin, Math.min(scaleMax, numValue));
+          const clamped = Math.max(Math.min(scaleMin, scaleMax), Math.min(Math.max(scaleMin, scaleMax), numValue));
           const valRatio = (clamped - scaleMin) / scaleSpan;
 
           const effectiveBaseRatio = visual.invertScale ? baseRatio : 1 - baseRatio;

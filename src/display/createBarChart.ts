@@ -253,7 +253,7 @@ export function updateBarChartProperties(
 export function normalizeBarChartVisualOptions(visual?: Partial<BarChartVisualOptions>): BarChartVisualOptions {
   const merged = { ...DEFAULT_BAR_CHART_VISUAL_OPTIONS, ...(visual ?? {}) };
   const minimum = Number.isFinite(merged.minimum) ? merged.minimum : DEFAULT_BAR_CHART_VISUAL_OPTIONS.minimum;
-  const maximum = Number.isFinite(merged.maximum) && merged.maximum > minimum ? merged.maximum : Math.max(minimum + 1, DEFAULT_BAR_CHART_VISUAL_OPTIONS.maximum);
+  const maximum = Number.isFinite(merged.maximum) && merged.maximum !== minimum ? merged.maximum : (minimum === 0 ? 100 : 0);
   const decimals = typeof merged.decimals === 'number' && Number.isFinite(merged.decimals) ? Math.max(0, Math.min(10, Math.round(merged.decimals))) : null;
 
   return {

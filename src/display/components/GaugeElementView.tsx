@@ -42,14 +42,14 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
       // Dial is centered in upper portion, title sits right below arc opening, value right below title
       cy = element.y + element.height * 0.42;
       maxRadiusByHeight = element.height * 0.30;
-      titleY = element.y + element.height - (hasTitle ? Math.max(28, element.height * 0.22) : 0);
-      valueY = element.y + element.height - (hasTitle ? Math.max(10, element.height * 0.09) : Math.max(12, element.height * 0.08));
+      valueY = cy + maxRadiusByHeight + Math.max(20, element.height * 0.08);
+      titleY = valueY + (hasTitle ? Math.max(20, element.height * 0.10) : 0);
     } else {
       // Title is above, dial is centered, value is directly below the dial opening
       cy = hasTitle ? element.y + element.height * 0.50 : element.y + element.height * 0.45;
       maxRadiusByHeight = hasTitle ? element.height * 0.28 : element.height * 0.32;
       titleY = element.y + Math.max(14, element.height * 0.08);
-      valueY = element.y + element.height - Math.max(8, element.height * 0.06);
+      valueY = cy + maxRadiusByHeight + Math.max(20, element.height * 0.08);
     }
   } else {
     // Arc and Triangle: value is centered inside the dial
@@ -147,7 +147,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
               fill={scaleColor}
               fontSize={Math.max(11, Math.min(16, element.height * 0.065))}
             >
-              {formatScaleValue(tickValue, options.decimals)}
+              {formatScaleValue(tickValue, (options.decimals !== null && options.decimals > 0) ? 0 : options.decimals, minimum, maximum)}
             </text>
           </g>
         );

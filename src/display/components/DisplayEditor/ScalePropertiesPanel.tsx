@@ -40,6 +40,8 @@ export interface ScalePropertiesPanelProps {
   labelPosition?: 'above' | 'below';
   scaleDisplay?: 'all' | 'endpoints';
   gaugeAngle?: number;
+  barStartMode?: 'default' | 'custom';
+  barStartValue?: number;
   linkUrl?: string;
   openInNewTab?: boolean;
   onLinkChange?: (value: string) => void;
@@ -69,6 +71,8 @@ export interface ScalePropertiesPanelProps {
     labelPosition?: 'above' | 'below';
     scaleDisplay?: 'all' | 'endpoints';
     gaugeAngle?: number;
+    barStartMode?: 'default' | 'custom';
+    barStartValue?: number;
   }) => void;
   multistate?: MultistateConfig;
   onMultistateChange: (config: MultistateConfig) => void;
@@ -103,6 +107,8 @@ export function ScalePropertiesPanel({
   labelPosition = 'above',
   scaleDisplay = 'all',
   gaugeAngle = 270,
+  barStartMode = 'default',
+  barStartValue = 0,
   linkUrl,
   openInNewTab = true,
   onLinkChange,
@@ -116,6 +122,29 @@ export function ScalePropertiesPanel({
   const [gaugeTitleDraft, setGaugeTitleDraft] = useState(title ?? '');
   useEffect(() => setCustomBarNameDraft(customTagName ?? ''), [customTagName]);
   useEffect(() => setGaugeTitleDraft(title ?? ''), [title]);
+
+  const [minText, setMinText] = useState(minimum?.toString() ?? '');
+  const [maxText, setMaxText] = useState(maximum?.toString() ?? '');
+  const [barStartValueText, setBarStartValueText] = useState(barStartValue?.toString() ?? '0');
+
+  useEffect(() => {
+    if (minimum !== undefined && minimum.toString() !== minText) {
+      setMinText(minimum.toString());
+    }
+  }, [minimum]);
+
+  useEffect(() => {
+    if (maximum !== undefined && maximum.toString() !== maxText) {
+      setMaxText(maximum.toString());
+    }
+  }, [maximum]);
+
+  useEffect(() => {
+    if (barStartValue !== undefined && barStartValue.toString() !== barStartValueText) {
+      setBarStartValueText(barStartValue.toString());
+    }
+  }, [barStartValue]);
+
   return (
     <aside className={styles.panel} data-testid={`${kind.toLowerCase()}-properties-panel`} aria-label={`Configuração do ${kind}`}>
       <div className={styles.header}>
@@ -257,16 +286,6 @@ export function ScalePropertiesPanel({
             </label>
           </>
         )}
-        {(kind !== 'Bar' && kind !== 'Gauge' || scaleMode === 'custom') && <>
-          <label className={styles.field}>
-            <span>Mínimo</span>
-            <input type="number" value={minimum} onChange={(event) => onChange({ minimum: Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-minimum`} />
-          </label>
-          <label className={styles.field}>
-            <span>Máximo</span>
-            <input type="number" value={maximum} onChange={(event) => onChange({ maximum: Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-maximum`} />
-          </label>
-        </>}
         <label className={styles.field}>
           <span>Casas decimais</span>
           <select value={decimals === null ? '' : String(decimals)} onChange={(event) => onChange({ decimals: event.target.value === '' ? null : Number(event.target.value) })} data-testid={`${kind.toLowerCase()}-decimals`}>
@@ -274,15 +293,77 @@ export function ScalePropertiesPanel({
             {[0, 1, 2, 3, 4, 5, 6].map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
         </label>
-        {(kind === 'Bar' || kind === 'Gauge') && (
+        
+        <div className={styles.radioGroup}>
+          <span className={styles.groupLabel}>Intervalo de escala</span>
           <label className={styles.field}>
-            <span>Intervalo de escala</span>
             <select value={scaleMode ?? 'custom'} onChange={(event) => onChange({ scaleMode: event.target.value as 'custom' | 'database' })} data-testid="bar-scale-mode">
-              <option value="custom">Personalizado</option>
+              <option value="custom">Limites personalizados</option>
               <option value="database">Limites do banco de dados</option>
             </select>
           </label>
-        )}
+          {scaleMode !== 'database' && (
+            <>
+              {kind === 'Bar' && orientation === 'vertical' ? (
+                <>
+                  <label className={styles.field}>
+                    <span>Acima</span>
+                    <input type="number" value={maxText} onChange={(event) => { setMaxText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value !== '' && Number.isFinite(val)) onChange({ maximum: val }); }} data-testid={`${kind.toLowerCase()}-maximum`} />
+                  </label>
+                  <label className={styles.field}>
+                    <span>Abaixo</span>
+                    <input type="number" value={minText} onChange={(event) => { setMinText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value !== '' && Number.isFinite(val)) onChange({ minimum: val }); }} data-testid={`${kind.toLowerCase()}-minimum`} />
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label className={styles.field}>
+                    <span>{kind === 'Bar' ? 'Esquerda' : 'Mínimo'}</span>
+                    <input type="number" value={minText} onChange={(event) => { setMinText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value !== '' && Number.isFinite(val)) onChange({ minimum: val }); }} data-testid={`${kind.toLowerCase()}-minimum`} />
+                  </label>
+                  <label className={styles.field}>
+                    <span>{kind === 'Bar' ? 'Direita' : 'Máximo'}</span>
+                    <input type="number" value={maxText} onChange={(event) => { setMaxText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value !== '' && Number.isFinite(val)) onChange({ maximum: val }); }} data-testid={`${kind.toLowerCase()}-maximum`} />
+                  </label>
+                </>
+              )}
+            </>
+          )}
+          
+          {kind === 'Bar' && (
+            <>
+              <div style={{ height: '1px', backgroundColor: 'var(--border-color)', margin: '10px 0' }} />
+              <label className={styles.field}>
+                <span>Início da Barra</span>
+                <select
+                  value={barStartMode}
+                  onChange={(e) => onChange({ barStartMode: e.currentTarget.value as 'default' | 'custom' })}
+                  data-testid="bar-start-mode"
+                >
+                  <option value="default">Padrão</option>
+                  <option value="custom">Personalizado</option>
+                </select>
+              </label>
+              {barStartMode === 'custom' && (
+                <label className={styles.field}>
+                  <span>Valor</span>
+                  <input
+                    type="number"
+                    value={barStartValueText}
+                    onChange={(e) => {
+                      setBarStartValueText(e.currentTarget.value);
+                      const val = Number(e.currentTarget.value);
+                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                        onChange({ barStartValue: val });
+                      }
+                    }}
+                    data-testid="bar-start-value"
+                  />
+                </label>
+              )}
+            </>
+          )}
+        </div>
         {kind === 'Bar' && (
           <label className={styles.field}>
             <span>Orientação</span>

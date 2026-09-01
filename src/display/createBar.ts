@@ -28,6 +28,8 @@ export interface BarProperties extends Record<string, unknown> {
   backgroundColor?: string;
   borderColor?: string;
   borderWidth?: number;
+  barStartMode?: 'default' | 'custom';
+  barStartValue?: number;
 }
 
 export type BarElement = DisplayElement<typeof BAR_TYPE, BarProperties>;
@@ -88,7 +90,7 @@ export function appendBar(document: DisplayDocument, element: BarElement): Displ
   return { ...document, elements: [...document.elements, element] };
 }
 
-export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation; scaleMode: 'custom' | 'database'; showScale: boolean; showUnit: boolean; showTimestamp: boolean; tagNameMode: 'tag' | 'custom'; customTagName: string; fillColor: string; backgroundColor: string; borderColor: string; borderWidth: number } {
+export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOptions & { orientation: BarOrientation; scaleMode: 'custom' | 'database'; showScale: boolean; showUnit: boolean; showTimestamp: boolean; tagNameMode: 'tag' | 'custom'; customTagName: string; fillColor: string; backgroundColor: string; borderColor: string; borderWidth: number; barStartMode: 'default' | 'custom'; barStartValue: number } {
   return {
     ...normalizeScaleOptions(properties),
     orientation: properties.orientation === 'horizontal' ? 'horizontal' : 'vertical',
@@ -102,6 +104,8 @@ export function getBarOptions(properties: Partial<BarProperties>): ScaleVisualOp
     backgroundColor: typeof properties.backgroundColor === 'string' ? properties.backgroundColor : '#2d3b4f',
     borderColor: typeof properties.borderColor === 'string' ? properties.borderColor : '#ffffff',
     borderWidth: typeof properties.borderWidth === 'number' && Number.isFinite(properties.borderWidth) ? Math.max(0, Math.min(8, properties.borderWidth)) : 1,
+    barStartMode: properties.barStartMode === 'custom' ? 'custom' : 'default',
+    barStartValue: typeof properties.barStartValue === 'number' && Number.isFinite(properties.barStartValue) ? properties.barStartValue : 0,
   };
 }
 
@@ -110,7 +114,7 @@ import { updateElementInDocument } from './createGroup';
 export function updateBarOptions(
   document: DisplayDocument,
   elementId: string,
-  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database'; showScale?: boolean; showUnit?: boolean; showTimestamp?: boolean; tagNameMode?: 'tag' | 'custom'; customTagName?: string; fillColor?: string; backgroundColor?: string; borderColor?: string; borderWidth?: number },
+  patch: Partial<ScaleVisualOptions> & { orientation?: BarOrientation; scaleMode?: 'custom' | 'database'; showScale?: boolean; showUnit?: boolean; showTimestamp?: boolean; tagNameMode?: 'tag' | 'custom'; customTagName?: string; fillColor?: string; backgroundColor?: string; borderColor?: string; borderWidth?: number; barStartMode?: 'default' | 'custom'; barStartValue?: number },
 ): DisplayDocument {
   return updateElementInDocument(document, elementId, (element) => {
     if (element.type !== BAR_TYPE) {
@@ -133,6 +137,8 @@ export function updateBarOptions(
         borderColor: typeof patch.borderColor === 'string' ? patch.borderColor : getBarOptions(properties).borderColor,
         borderWidth: typeof patch.borderWidth === 'number' ? Math.max(0, Math.min(8, patch.borderWidth)) : getBarOptions(properties).borderWidth,
         orientation: patch.orientation === 'horizontal' ? 'horizontal' : patch.orientation === 'vertical' ? 'vertical' : getBarOptions(properties).orientation,
+        barStartMode: patch.barStartMode === 'custom' || patch.barStartMode === 'default' ? patch.barStartMode : getBarOptions(properties).barStartMode,
+        barStartValue: typeof patch.barStartValue === 'number' ? patch.barStartValue : getBarOptions(properties).barStartValue,
       },
     } as BarElement;
   });
