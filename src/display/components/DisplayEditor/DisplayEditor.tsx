@@ -1745,6 +1745,37 @@ export function DisplayEditor({
   }, [handleCopySelectedElements, handleDeleteSelectedElement, handlePasteElements, handleRedo, handleUndo, mode]);
 
   useEffect(() => {
+    const handleGlobalHistoryShortcut = (event: KeyboardEvent) => {
+      // An undo can replace the currently focused SVG element. Once that
+      // element unmounts, the next shortcut originates from document.body and
+      // no longer bubbles through the editor container. Handle that case at
+      // window level while leaving text fields and already handled events
+      // untouched.
+      if (event.defaultPrevented || isEditableTarget(event.target)) {
+        return;
+      }
+      const modifier = event.ctrlKey || event.metaKey;
+      if (!modifier) {
+        return;
+      }
+      if (event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      } else if (event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        handleRedo();
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalHistoryShortcut);
+    return () => window.removeEventListener('keydown', handleGlobalHistoryShortcut);
+  }, [handleRedo, handleUndo]);
+
+  useEffect(() => {
     if (state.selectedElementId && !getElementById(displayDocument, state.selectedElementId)) {
       dispatch({ type: 'CLEAR_SELECTION' });
     }

@@ -83,6 +83,22 @@ describe('DisplayEditor - histórico de edição', () => {
     expect(screen.queryByTestId(/^display-element-/)).toBeNull();
   });
 
+  it('executa múltiplos atalhos globais depois que Undo substitui o elemento focado', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(1);
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(screen.queryByTestId(/^display-element-/)).toBeNull();
+
+    fireEvent.keyDown(window, { key: 'y', ctrlKey: true });
+    expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(1);
+    fireEvent.keyDown(window, { key: 'y', ctrlKey: true });
+    expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(2);
+  });
+
   it('cria Rectangle, desfaz e refaz preservando o ID', () => {
     render(<Harness />);
     expect(screen.getByTestId('display-undo')).toBeDisabled();
