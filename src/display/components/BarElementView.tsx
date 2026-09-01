@@ -79,12 +79,12 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         pointerEvents="all"
       />
       {tagLabel && options.showTagName && (
-        <text x={barCenterX} y={element.y + (isPiVisionCompactGauge ? 12 : horizontal ? 16 : 22)} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={isPiVisionCompactGauge ? Math.max(8, Math.min(12, element.width * 0.16)) : horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
+        <text x={barCenterX} y={element.y + (isPiVisionCompactGauge ? 12 : horizontal ? 12 : 22)} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={isPiVisionCompactGauge ? Math.max(8, Math.min(12, element.width * 0.16)) : horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
           {tagLabel}
         </text>
       )}
       {horizontal && (
-        <text x={barCenterX} y={element.y + 27} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
+        <text x={barCenterX} y={element.y + 22} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
           {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={barCenterX} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
         </text>
       )}
