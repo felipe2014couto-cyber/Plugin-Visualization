@@ -56,6 +56,8 @@ describe('BarElementView', () => {
 
     const track = screen.getByTestId('bar-track-bar-horizontal-value');
     const value = screen.getByTestId('bar-horizontal-detail-bar-horizontal-value-0');
+    const title = screen.getByText('SINUSOID');
+    expect(Number(title.getAttribute('y'))).toBeLessThan(Number(value.getAttribute('y')));
     expect(Number(value.getAttribute('y'))).toBeLessThan(Number(track.getAttribute('y')));
   });
 

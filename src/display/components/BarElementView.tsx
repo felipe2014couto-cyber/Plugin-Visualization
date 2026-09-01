@@ -56,10 +56,10 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
     ? barOptions.customTagName
     : label ?? (binding && isPiPointBinding(binding) ? binding.pointName : '');
   const barCenterX = plotX + plotWidth / 2;
-  // Position the horizontal header from the actual track boundary. This keeps
-  // the value visibly outside the bar even when the element is resized.
-  const horizontalValueY = plotY - 18;
-  const horizontalTitleY = horizontalValueY - 18;
+  // Reserve a dedicated header area: the label stays at the top and the value
+  // occupies the gap immediately above the track, without touching either.
+  const horizontalTitleY = element.y + 16;
+  const horizontalValueY = plotY - 8;
   const horizontalDetailLineHeight = Math.max(12, Math.min(16, element.height * 0.1));
 
   return (
@@ -98,7 +98,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
               textAnchor="middle"
               fill={borderColor}
               style={{ fill: borderColor }}
-              fontSize={Math.max(14, Math.min(20, element.height * 0.13))}
+              fontSize={Math.max(12, Math.min(16, element.height * 0.11))}
               fontWeight={500}
               data-testid={`bar-horizontal-detail-${element.id}-${index}`}
             >
