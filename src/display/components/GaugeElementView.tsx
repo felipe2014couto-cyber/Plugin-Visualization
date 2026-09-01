@@ -116,12 +116,12 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
         </text>
       )}
       <path d={track} fill="none" stroke={borderColor} strokeWidth={options.gaugeStyle === 'arc' ? 12 : 3} strokeLinecap="round" data-testid={`gauge-track-${element.id}`} pointerEvents="none" />
-      {ratio !== undefined && (
+      {ratio !== undefined && options.gaugeStyle === 'arc' && (
         <path
           d={track}
           fill="none"
           stroke={activeColor}
-          strokeWidth={options.gaugeStyle === 'arc' ? 12 : 3}
+          strokeWidth={12}
           strokeLinecap="round"
           pathLength={100}
           strokeDasharray={`${ratio * 100} 100`}

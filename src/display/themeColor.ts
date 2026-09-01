@@ -6,8 +6,5 @@
  * light theme. Explicit non-default colors remain untouched.
  */
 export function resolveThemeForeground(color: string | undefined): string {
-  const normalized = color?.trim().toLowerCase();
-  return normalized === '#fff' || normalized === '#ffffff'
-    ? 'var(--text-primary, #f8fafc)'
-    : color || 'var(--text-primary, #f8fafc)';
+  return color || 'var(--text-primary, #f8fafc)';
 }

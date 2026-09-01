@@ -701,6 +701,11 @@ function convertGauge(
   const color = normalizeColor(cfg.IndicatorColor ?? cfg.ValueColor ?? cfg.ForeColor) ?? '#00a2e8';
   const multistate = convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
 
+  const gaugeBorderColorRaw = normalizeColor(cfg.BorderColor ?? cfg.Stroke ?? cfg.ForeColor) ?? '#ffffff';
+  const gaugeScaleColorRaw = normalizeColor(cfg.ScaleColor ?? cfg.ForeColor ?? cfg.Stroke) ?? '#ffffff';
+  const gaugeBorderColor = (gaugeBorderColorRaw.toLowerCase() === '#ffffff' || gaugeBorderColorRaw.toLowerCase() === '#fff') ? '#fefefe' : gaugeBorderColorRaw;
+  const gaugeScaleColor = (gaugeScaleColorRaw.toLowerCase() === '#ffffff' || gaugeScaleColorRaw.toLowerCase() === '#fff') ? '#fefefe' : gaugeScaleColorRaw;
+
   const properties: GaugeProperties = {
     ...(binding ? { binding } : {}),
     ...(calculation ? { calculationId: calculation.id } : {}),
@@ -719,8 +724,8 @@ function convertGauge(
     // PI Vision usa ForeColor como cor geral quando não há uma cor específica
     // para a moldura ou para a escala. Preservar esses fallbacks evita que o
     // Gauge convertido fique branco independentemente do símbolo original.
-    gaugeBorderColor: normalizeColor(cfg.BorderColor ?? cfg.Stroke ?? cfg.ForeColor) ?? '#ffffff',
-    gaugeScaleColor: normalizeColor(cfg.ScaleColor ?? cfg.ForeColor ?? cfg.Stroke) ?? '#ffffff',
+    gaugeBorderColor,
+    gaugeScaleColor,
     showUnit: cfg.ShowUnit === true || cfg.ShowUOM === true,
     showTimestamp: cfg.ShowTimestamp === true || cfg.ShowTime === true,
     color,
