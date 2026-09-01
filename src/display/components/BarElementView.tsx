@@ -84,7 +84,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         </text>
       )}
       {horizontal && (
-        <text x={barCenterX} y={element.y + 34} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
+        <text x={barCenterX} y={element.y + 27} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
           {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={barCenterX} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
         </text>
       )}
