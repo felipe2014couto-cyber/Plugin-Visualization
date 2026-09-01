@@ -984,6 +984,16 @@ describe('conversao de Gauge', () => {
     const props = elements[0].properties as any;
     expect(props.color).toBe('#00a2e8');
   });
+
+  it('usa ForeColor como fallback da escala e do contorno', () => {
+    const { elements } = convertPiVisionDisplay(makeDisplay({
+      ...gaugeSymbol,
+      Configuration: { ...gaugeSymbol.Configuration, ForeColor: '#ff5500' },
+    }));
+    const props = elements[0].properties as any;
+    expect(props.gaugeScaleColor).toBe('#ff5500');
+    expect(props.gaugeBorderColor).toBe('#ff5500');
+  });
 });
 
 // ---------------------------------------------------------------------------

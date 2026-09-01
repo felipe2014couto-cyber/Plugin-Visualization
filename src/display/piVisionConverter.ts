@@ -716,8 +716,11 @@ function convertGauge(
     scaleDisplay: cfg.ScaleLabels?.toLowerCase() === 'all' ? 'all' : 'endpoints',
     showScale: cfg.ShowScale !== false,
     gaugeAngle: typeof cfg.FaceAngle === 'number' ? cfg.FaceAngle : 270,
-    gaugeBorderColor: normalizeColor(cfg.BorderColor) ?? '#ffffff',
-    gaugeScaleColor: normalizeColor(cfg.ScaleColor) ?? '#ffffff',
+    // PI Vision usa ForeColor como cor geral quando não há uma cor específica
+    // para a moldura ou para a escala. Preservar esses fallbacks evita que o
+    // Gauge convertido fique branco independentemente do símbolo original.
+    gaugeBorderColor: normalizeColor(cfg.BorderColor ?? cfg.Stroke ?? cfg.ForeColor) ?? '#ffffff',
+    gaugeScaleColor: normalizeColor(cfg.ScaleColor ?? cfg.ForeColor ?? cfg.Stroke) ?? '#ffffff',
     showUnit: cfg.ShowUnit === true || cfg.ShowUOM === true,
     showTimestamp: cfg.ShowTimestamp === true || cfg.ShowTime === true,
     color,
