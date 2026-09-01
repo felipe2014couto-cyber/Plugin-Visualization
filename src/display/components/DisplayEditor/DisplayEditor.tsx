@@ -2916,8 +2916,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
   modeButton: css`
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    /* A large imported SVG must start at the scroll origin. Centering it
+       creates negative overflow, which native scrollbars cannot reach. The
+       SVG's auto margins still center displays that fit in the workspace. */
+    align-items: flex-start;
+    justify-content: flex-start;
     width: 48px;
     height: 46px;
     padding: 0;
