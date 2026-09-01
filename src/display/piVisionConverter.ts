@@ -1781,16 +1781,20 @@ function normalizeTextAlign(value: unknown): ValueTextAlign {
 
 function decodePiVisionText(value: unknown): string {
   const text = String(value);
-  return text.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos);/gi, (entity, token: string) => {
+  const decoded = text.replace(/&(#x[0-9a-f]+|#\d+|lt|gt|amp|quot|apos|nbsp);/gi, (entity, token: string) => {
     const normalized = token.toLocaleLowerCase();
     if (normalized === 'lt') return '<';
     if (normalized === 'gt') return '>';
     if (normalized === 'amp') return '&';
     if (normalized === 'quot') return '"';
     if (normalized === 'apos') return "'";
+    if (normalized === 'nbsp') return ' ';
     const codePoint = normalized.startsWith('#x') ? Number.parseInt(normalized.slice(2), 16) : Number.parseInt(normalized.slice(1), 10);
     return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : entity;
   });
+  // PI Vision stores line breaks as HTML markup, sometimes escaped as
+  // &lt;br&gt;. Convert both forms to the newline understood by the text view.
+  return decoded.replace(/<br\s*\/?>/gi, '\n').replace(/\r\n?/g, '\n');
 }
 
 function normalizeGeometricShape(type: string): GeometricShape {

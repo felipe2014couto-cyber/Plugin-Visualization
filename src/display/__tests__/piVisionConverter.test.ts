@@ -1093,6 +1093,14 @@ describe('conversao de Text', () => {
     expect((elements[0].properties as any).text).toBe('<= 170 > 90');
   });
 
+  it('converte espaços HTML e quebras de linha do PI Vision', () => {
+    const { elements } = convertPiVisionDisplay(makeDisplay({
+      ...textSymbol,
+      Configuration: { ...textSymbol.Configuration, Content: '&nbsp; &nbsp; Consumo de GN&lt;br&gt;Acumulado Mês atual' },
+    }));
+    expect((elements[0].properties as any).text).toBe('    Consumo de GN\nAcumulado Mês atual');
+  });
+
   it('converte cor e fontSize', () => {
     const { elements } = convertPiVisionDisplay(makeDisplay(textSymbol));
     const props = elements[0].properties as any;
