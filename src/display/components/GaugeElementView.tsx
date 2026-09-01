@@ -77,7 +77,7 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
   const activeColor = getMultistateColor(rawValue, element.properties.multistate, options.color);
   const blink = evaluateMultistate(rawValue, element.properties.multistate)?.rule.blink === true;
-  const showGaugeScale = element.width >= 180 && element.height >= 160;
+  const showGaugeScale = options.showScale && element.width >= 180 && element.height >= 160;
   const scaleColor = resolveThemeForeground(options.gaugeScaleColor);
   const borderColor = resolveThemeForeground(options.gaugeBorderColor);
 

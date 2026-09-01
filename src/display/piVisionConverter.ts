@@ -714,6 +714,7 @@ function convertGauge(
     title: '',
     labelPosition: cfg.LabelLocation?.toLowerCase() === 'bottom' ? 'below' : 'above',
     scaleDisplay: cfg.ScaleLabels?.toLowerCase() === 'all' ? 'all' : 'endpoints',
+    showScale: cfg.ShowScale !== false,
     gaugeAngle: typeof cfg.FaceAngle === 'number' ? cfg.FaceAngle : 270,
     gaugeBorderColor: normalizeColor(cfg.BorderColor) ?? '#ffffff',
     gaugeScaleColor: normalizeColor(cfg.ScaleColor) ?? '#ffffff',

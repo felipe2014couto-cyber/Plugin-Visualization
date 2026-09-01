@@ -9,6 +9,7 @@ import type { MultistateConfig } from './multistate';
 export const GAUGE_TYPE = 'gauge' as const;
 export type GaugeStyle = 'arc' | 'triangle' | 'pointer' | 'line';
 export type GaugeVisualOptions = ScaleVisualOptions & {
+  showScale: boolean;
   fillColor?: string;
   borderColor?: string;
   gaugeStyle: GaugeStyle;
@@ -30,6 +31,7 @@ export interface GaugeProperties extends Record<string, unknown> {
   maximum: number;
   showValue: boolean;
   showTagName: boolean;
+  showScale: boolean;
   decimals: number | null;
   color?: string;
   fillColor?: string;
@@ -61,7 +63,7 @@ export interface CreateGaugeOptions {
   y?: number;
   width?: number;
   height?: number;
-  options?: Partial<ScaleVisualOptions> & { gaugeStyle?: GaugeStyle };
+  options?: Partial<ScaleVisualOptions> & { gaugeStyle?: GaugeStyle; showScale?: boolean };
   surface?: DisplaySurface;
   existingIds?: readonly string[];
   generateId?: () => string;
@@ -139,6 +141,7 @@ export function normalizeGaugeOptions(options?: Partial<GaugeProperties> | null)
 
   return {
     ...scale,
+    showScale: options?.showScale !== false,
     color,
     fillColor: color,
     gaugeStyle,

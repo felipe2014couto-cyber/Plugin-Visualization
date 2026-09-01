@@ -6,13 +6,18 @@ const binding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID'
 describe('GaugeElement', () => {
   it('cria com escala padrão e pode permanecer sem binding', () => {
     const gauge = createGauge({ id: 'gauge-1', binding });
-    expect(gauge).toMatchObject({ id: 'gauge-1', type: GAUGE_TYPE, properties: { binding, minimum: 0, maximum: 100 } });
+    expect(gauge).toMatchObject({ id: 'gauge-1', type: GAUGE_TYPE, properties: { binding, minimum: 0, maximum: 100, showScale: true } });
     expect(createGauge({ id: 'placeholder' }).properties.binding).toBeUndefined();
   });
 
   it('usa a cor base padrão quando ausente', () => {
     const gauge = createGauge({ id: 'gauge-default', binding });
     expect(getGaugeOptions(gauge.properties).color).toBe('#00a2e8');
+  });
+
+  it('permite ocultar a escala', () => {
+    const gauge = createGauge({ id: 'gauge-no-scale', binding, options: { showScale: false } });
+    expect(getGaugeOptions(gauge.properties).showScale).toBe(false);
   });
 
   it('preserva e normaliza a cor base configurada', () => {
