@@ -109,17 +109,6 @@ export function TextPropertiesPanel({
           testId="text-bg-color"
         />
         <label className={styles.field}>
-          Tamanho
-          <input
-            type="number"
-            min="8"
-            max="120"
-            value={properties.fontSize}
-            onChange={(e) => onChange({ fontSize: Math.max(8, Math.min(120, Number(e.target.value) || properties.fontSize)) })}
-            data-testid="text-font-size"
-          />
-        </label>
-        <label className={styles.field}>
           Alinhamento
           <select
             value={properties.textAlign}

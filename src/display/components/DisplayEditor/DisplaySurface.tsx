@@ -1151,12 +1151,17 @@ export function DisplaySurface({
             const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
             const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
             const rotation = textElement.properties.rotation ?? 0;
-            const lines = decodeRenderedText(textElement.properties.text || '').split('\n');
-            const lineCount = lines.length;
+            // PI Vision keeps Text on one line and scales the whole vector to
+            // the symbol bounds. Use a uniform SVG transform so glyphs keep
+            // their aspect ratio while the box is resized.
+            const textValue = decodeRenderedText(textElement.properties.text || '').replace(/[\r\n]+/g, ' ');
             const fontSize = textElement.properties.fontSize || 24;
-            const lineHeight = fontSize * 1.2;
-            const totalHeight = lineCount * lineHeight;
-            const startY = textElement.y + (textElement.height - totalHeight) / 2 + fontSize * 0.9;
+            const estimatedTextWidth = Math.max(fontSize, Array.from(textValue).length * fontSize * 0.58);
+            const textScale = Math.max(0.05, Math.min(20,
+              (textElement.width - 12) / estimatedTextWidth,
+              (textElement.height - 8) / fontSize,
+            ));
+            const textCenterY = textElement.y + textElement.height / 2;
             return (
               <g
                 key={element.id}
@@ -1185,26 +1190,17 @@ export function DisplaySurface({
                   pointerEvents="all"
                 />
                 <text
-                  x={lineCount === 1 ? x : undefined}
-                  y={lineCount === 1 ? textElement.y + textElement.height / 2 : undefined}
+                  x={x}
+                  y={textCenterY}
                   fill={textColor}
                   fontSize={fontSize}
                   textAnchor={anchor}
-                  dominantBaseline={lineCount === 1 ? 'middle' : undefined}
+                  dominantBaseline="middle"
+                  transform={`translate(${x} ${textCenterY}) scale(${textScale}) translate(${-x} ${-textCenterY})`}
                   pointerEvents="none"
                   style={textBlink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : undefined}
                 >
-                  {lineCount === 1
-                    ? lines[0]
-                    : lines.map((line, idx) => (
-                      <tspan
-                        key={idx}
-                        x={x}
-                        y={startY + idx * lineHeight}
-                      >
-                        {line}
-                      </tspan>
-                    ))}
+                  {textValue}
                 </text>
               </g>
             );
