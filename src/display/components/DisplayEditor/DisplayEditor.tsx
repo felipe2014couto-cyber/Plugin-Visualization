@@ -3276,10 +3276,23 @@ const getStyles = (theme: GrafanaTheme2) => ({
     flex: 1;
     min-height: 0;
     min-width: 0;
+    overflow: hidden;
+    align-items: stretch;
+
+    /* Keep long property panels inside the editor viewport. Their own
+       overflow-y handles all controls instead of letting the flex row grow
+       beyond the visible area. */
+    & > aside,
+    & > section {
+      min-height: 0;
+      height: 100%;
+      max-height: none;
+    }
 
     @media (max-width: 760px) {
       flex-direction: column;
       overflow-y: auto;
+      overflow-x: hidden;
 
       & > aside,
       & > section {
