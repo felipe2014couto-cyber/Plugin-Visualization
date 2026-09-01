@@ -47,6 +47,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * ratio : !horizontal ? 0 : plotHeight;
   const valueText = getValueText(binding, label, runtimeState, value, options.decimals);
   const detailLines = getDetailLines(valueText, runtimeState, barOptions.showValue, barOptions.showUnit, false);
+  const scaleTickCount = getScaleTickCount(horizontal ? plotWidth : plotHeight, horizontal ? 44 : 34);
   const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
   const activeColor = getMultistateColor(rawValue, options.multistate, barOptions.fillColor);
   const blink = evaluateMultistate(rawValue, options.multistate)?.rule.blink === true;
@@ -83,19 +84,21 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         </text>
       )}
       {horizontal && (
-        <text x={barCenterX} y={element.y + 42} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
+        <text x={barCenterX} y={element.y + 34} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
           {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={barCenterX} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
         </text>
       )}
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill={trackColor} data-testid={`bar-track-${element.id}`} pointerEvents="none" />
-      {options.showScale !== false && !horizontal && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
-        const valueAtTick = minimum + ((maximum - minimum) * index) / 8;
-        const y = plotY + plotHeight - (plotHeight * index) / 8;
+      {options.showScale !== false && !horizontal && isValidScale(minimum, maximum) && Array.from({ length: scaleTickCount }, (_, index) => {
+        const denominator = scaleTickCount - 1;
+        const valueAtTick = minimum + ((maximum - minimum) * index) / denominator;
+        const y = plotY + plotHeight - (plotHeight * index) / denominator;
         return <g key={`bar-scale-${index}`} pointerEvents="none"><line x1={plotX - 4 - borderClearance / 2} y1={y} x2={plotX - borderClearance / 2} y2={y} stroke={borderColor} style={{ stroke: borderColor }} /><text x={plotX - (isPiVisionCompactGauge ? 5 : 14) - borderClearance} y={y + (isPiVisionCompactGauge ? 3 : 6)} textAnchor="end" fill={borderColor} style={{ fill: borderColor }} fontSize={isPiVisionCompactGauge ? Math.max(6, Math.min(9, element.width * 0.12)) : 18} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
       })}
-      {options.showScale !== false && horizontal && isValidScale(minimum, maximum) && Array.from({ length: 9 }, (_, index) => {
-        const valueAtTick = minimum + ((maximum - minimum) * index) / 8;
-        const x = plotX + (plotWidth * index) / 8;
+      {options.showScale !== false && horizontal && isValidScale(minimum, maximum) && Array.from({ length: scaleTickCount }, (_, index) => {
+        const denominator = scaleTickCount - 1;
+        const valueAtTick = minimum + ((maximum - minimum) * index) / denominator;
+        const x = plotX + (plotWidth * index) / denominator;
         const scaleY = plotY + plotHeight + borderClearance / 2 + 4;
         return <g key={`bar-scale-horizontal-${index}`} pointerEvents="none"><line x1={x} y1={scaleY} x2={x} y2={scaleY + 4} stroke={borderColor} style={{ stroke: borderColor }} /><text x={x} y={scaleY + 18} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={16} fontWeight={500}>{formatScaleValue(valueAtTick, options.decimals)}</text></g>;
       })}
@@ -167,4 +170,12 @@ function formatTimestamp(timestamp: string): string {
 
 function isValidScale(minimum: number, maximum: number): boolean {
   return Number.isFinite(minimum) && Number.isFinite(maximum) && minimum < maximum;
+}
+
+/** Keep scale labels readable by reducing the number of ticks on small bars. */
+function getScaleTickCount(axisLength: number, minimumLabelSpacing: number): number {
+  if (!Number.isFinite(axisLength) || axisLength <= 0) {
+    return 2;
+  }
+  return Math.max(2, Math.min(9, Math.floor(axisLength / minimumLabelSpacing) + 1));
 }
