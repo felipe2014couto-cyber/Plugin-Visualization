@@ -3130,9 +3130,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     /* Imported PI Vision symbols can paint labels/strokes outside their
        declared geometry. Reserve an actual scrollable tail so the native
        bars continue past the document edge and reveal that overflow. */
-    padding: 16px 80px 80px 16px;
-    scroll-padding-right: 80px;
-    scroll-padding-bottom: 80px;
+    padding: 16px 240px 240px 16px;
+    scroll-padding-right: 240px;
+    scroll-padding-bottom: 240px;
     box-sizing: border-box;
     background-color: var(--canvas-bg);
     background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
