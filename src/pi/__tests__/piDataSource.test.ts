@@ -677,6 +677,91 @@ describe('PI data source integration', () => {
     expect(results['pi-default\u0000pims\u0000TAG_B']).toMatchObject({ status: 'success', series: { points: [{ value: 2 }] } });
   });
 
+  it('associa histórico quando o datasource omite refIds e devolve o nome da tag', async () => {
+    const query = jest.fn(async () => ({
+      data: [
+        { name: 'pims;TAG_B', fields: [{ name: 'Time', values: ['2026-08-06T12:00:00.000Z'] }, { name: 'TAG_B', values: [2] }] },
+        { name: 'pims;TAG_A', fields: [{ name: 'Time', values: ['2026-08-06T12:00:00.000Z'] }, { name: 'TAG_A', values: [1] }] },
+      ],
+    }));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const { getPiTrendsHistory } = await import('../piDataSource');
+
+    const results = await getPiTrendsHistory([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_A' },
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_B' },
+    ], dataSourceSrv);
+
+    expect(results['pi-default\u0000pims\u0000TAG_A']).toMatchObject({ status: 'success', series: { points: [{ value: 1 }] } });
+    expect(results['pi-default\u0000pims\u0000TAG_B']).toMatchObject({ status: 'success', series: { points: [{ value: 2 }] } });
+  });
+
+  it('separa o histórico por Data Server para uma origem lenta não bloquear as demais', async () => {
+    const query = jest.fn(async (request: unknown) => {
+      const targets = (request as { targets: Array<{ refId: string; target: string }> }).targets;
+      return {
+        data: targets.map(({ refId, target }) => {
+          const pointName = target.split(';')[1];
+          return {
+            refId,
+            fields: [
+              { name: 'Time', values: ['2026-08-06T12:00:00.000Z'] },
+              { name: pointName, values: [1] },
+            ],
+          };
+        }),
+      };
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const { getPiTrendsHistory } = await import('../piDataSource');
+
+    const results = await getPiTrendsHistory([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_A' },
+      { dataSourceUid: 'pi-default', serverPath: 'SRVPIMS5', pointName: 'TAG_B' },
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_C' },
+    ], dataSourceSrv);
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls.map(([request]) => (
+      (request as unknown as { targets: Array<{ target: string }> }).targets.map(({ target }) => target)
+    ))).toEqual([
+      ['pims;TAG_A', 'pims;TAG_C'],
+      ['SRVPIMS5;TAG_B'],
+    ]);
+    expect(Object.values(results).every((result) => result.status === 'success')).toBe(true);
+  });
+
+  it('isola tags históricas válidas quando o datasource rejeita o lote inteiro', async () => {
+    const query = jest.fn(async (request: unknown) => {
+      const targets = (request as { targets: Array<{ refId: string; target: string }> }).targets;
+      if (targets.length > 1) {
+        throw new Error('Uma tag histórica do lote é inválida');
+      }
+      const target = targets[0];
+      const pointName = target.target.split(';')[1];
+      return {
+        data: [{
+          refId: target.refId,
+          fields: [
+            { name: 'Time', values: ['2026-08-06T12:00:00.000Z'] },
+            { name: pointName, values: [1] },
+          ],
+        }],
+      };
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const { getPiTrendsHistory } = await import('../piDataSource');
+
+    const results = await getPiTrendsHistory([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_A' },
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_B' },
+    ], dataSourceSrv);
+
+    expect(results['pi-default\u0000pims\u0000TAG_A']).toMatchObject({ status: 'success' });
+    expect(results['pi-default\u0000pims\u0000TAG_B']).toMatchObject({ status: 'success' });
+    expect(query).toHaveBeenCalledTimes(3);
+  });
+
   it('envia vinte tags em uma consulta com refIds exclusivos e prévia limitada', async () => {
     const query = jest.fn(async (_request: unknown) => ({ data: [] }));
     const dataSourceSrv = makeDataSourceSrv({
@@ -729,6 +814,25 @@ describe('PI data source integration', () => {
     ).targets);
     expect(targetBatches.map((targets) => targets.length)).toEqual([60, 1]);
     expect(targetBatches.every((targets) => new Set(targets.map(({ refId }) => refId)).size === targets.length)).toBe(true);
+  });
+
+  it('separa Current Values por Data Server dentro do mesmo datasource', async () => {
+    const query = jest.fn(async (_request: unknown) => ({ data: [] }));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const { getPiPointsCurrentValues } = await import('../piDataSource');
+
+    await getPiPointsCurrentValues([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_A' },
+      { dataSourceUid: 'pi-default', serverPath: 'SRVPIMS5', pointName: 'TAG_B' },
+    ], dataSourceSrv);
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls.map(([request]) => (
+      (request as unknown as { targets: Array<{ target: string }> }).targets.map(({ target }) => target)
+    ))).toEqual([
+      ['pims;TAG_A'],
+      ['SRVPIMS5;TAG_B'],
+    ]);
   });
 
   it('limita a três lotes de Current Value em paralelo', async () => {

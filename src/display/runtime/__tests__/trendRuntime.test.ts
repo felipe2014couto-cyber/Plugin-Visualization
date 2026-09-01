@@ -3,7 +3,6 @@ import {
   TrendRuntime,
   TREND_MIN_DATA_POINTS,
   TREND_MAX_DATA_POINTS,
-  TREND_REFRESH_INTERVAL_MS,
   trendMaxDataPointsForWidth,
   type LoadTrendSeries,
   type TrendRuntimeConsumer,
@@ -28,7 +27,7 @@ describe('TrendRuntime', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('faz leitura inicial, ciclos periódicos e mantém um scheduler para vários Trends', async () => {
+  it('faz leitura inicial e usa a chave externa de atualização para vários Trends', async () => {
     const load = jest.fn(async () => ({
       'ds\u0000pims\u0000SINUSOID': { status: 'success' as const, series: { pointName: 'SINUSOID', points: [{ time: 1, value: 1 }] } },
       'ds\u0000pims\u0000OTHER': { status: 'success' as const, series: { pointName: 'OTHER', points: [{ time: 1, value: 2 }] } },
@@ -39,20 +38,28 @@ describe('TrendRuntime', () => {
 
     expect(load).toHaveBeenCalledTimes(1);
     expect(load).toHaveBeenCalledWith([binding, secondBinding], expect.any(Function), { maxDataPoints: 750 });
-    expect(jest.getTimerCount()).toBe(1);
-
-    jest.advanceTimersByTime(TREND_REFRESH_INTERVAL_MS - DATA_QUERY_BATCH_WINDOW_MS - 1);
+    expect(jest.getTimerCount()).toBe(0);
+    jest.advanceTimersByTime(60_000);
     expect(load).toHaveBeenCalledTimes(1);
-    jest.advanceTimersByTime(1);
+    runtime.setConsumers([consumer('one'), consumer('two', secondBinding)], 'refresh-two');
     await flushBatch();
     expect(load).toHaveBeenCalledTimes(2);
-    jest.advanceTimersByTime(TREND_REFRESH_INTERVAL_MS);
-    await flushBatch();
-    expect(load).toHaveBeenCalledTimes(3);
     runtime.stop();
   });
 
-  it('bloqueia sobreposição, retoma após resolução e preserva lastSuccess após erro', async () => {
+  it('mantém carregando quando o loader progressivo ainda não publicou uma tag', async () => {
+    const load = jest.fn(async () => ({}));
+    const states: Array<Map<string, TrendRuntimeState>> = [];
+    const runtime = new TrendRuntime(load, (next) => states.push(next));
+
+    runtime.setConsumers([consumer('one')]);
+    await flushBatch();
+
+    expect(states[states.length - 1]?.get('one')).toEqual({ status: 'loading' });
+    runtime.stop();
+  });
+
+  it('não cria atualização espontânea enquanto uma consulta está pendente', async () => {
     const resolvers: Array<(value: Record<string, { status: 'success'; series: { pointName: string; points: Array<{ time: number; value: number }> } }>) => void> = [];
     const load = jest.fn(() => new Promise<Record<string, { status: 'success'; series: { pointName: string; points: Array<{ time: number; value: number }> } }>>((resolve) => {
       resolvers.push(resolve);
@@ -61,12 +68,13 @@ describe('TrendRuntime', () => {
     const runtime = new TrendRuntime(load, (next) => states.push(next));
     runtime.setConsumers([consumer('one')]);
     await flushBatch();
-    jest.advanceTimersByTime(TREND_REFRESH_INTERVAL_MS * 2);
+    jest.advanceTimersByTime(120_000);
     expect(load).toHaveBeenCalledTimes(1);
 
     resolvers.shift()?.({ 'ds\u0000pims\u0000SINUSOID': { status: 'success', series: { pointName: 'SINUSOID', points: [{ time: 1, value: 5 }] } } });
     await Promise.resolve();
-    jest.advanceTimersByTime(TREND_REFRESH_INTERVAL_MS + DATA_QUERY_BATCH_WINDOW_MS);
+    runtime.setConsumers([consumer('one')], 'refresh-two');
+    await flushBatch();
     expect(load).toHaveBeenCalledTimes(2);
     resolvers.shift()?.({ 'ds\u0000pims\u0000SINUSOID': { status: 'success', series: { pointName: 'SINUSOID', points: [{ time: 2, value: 6 }] } } });
     await Promise.resolve();
@@ -74,14 +82,14 @@ describe('TrendRuntime', () => {
     runtime.stop();
   });
 
-  it('remove o último Trend e limpa o timer', async () => {
+  it('remove o último Trend e limpa o timer de agrupamento', async () => {
     const load = jest.fn(async () => ({
       'ds\u0000pims\u0000SINUSOID': { status: 'success' as const, series: { pointName: 'SINUSOID', points: [] } },
     }));
     const runtime = new TrendRuntime(load, jest.fn());
     runtime.setConsumers([consumer('one')]);
     await flushBatch();
-    expect(jest.getTimerCount()).toBe(1);
+    expect(jest.getTimerCount()).toBe(0);
     runtime.setConsumers([]);
     expect(jest.getTimerCount()).toBe(0);
   });
@@ -356,7 +364,7 @@ describe('TrendRuntime', () => {
 
     expect(load).toHaveBeenCalledTimes(1);
     expect(states[states.length - 1]?.get('trend-series-a')).toMatchObject({ status: 'success' });
-    expect(states[states.length - 1]?.get('trend-series-b')).toMatchObject({ status: 'loading' });
+    expect(states[states.length - 1]?.get('trend-series-b')).toMatchObject({ status: 'error' });
     runtime.stop();
   });
 
@@ -377,7 +385,8 @@ describe('TrendRuntime', () => {
     runtime.setConsumers([consumer('one')]);
     await flushBatch();
 
-    jest.advanceTimersByTime(TREND_REFRESH_INTERVAL_MS + DATA_QUERY_BATCH_WINDOW_MS);
+    runtime.setConsumers([consumer('one')], 'refresh-two');
+    await flushBatch();
     await Promise.resolve();
     await Promise.resolve();
     expect(states[states.length - 1]?.get('one')?.data?.points[0].value).toBe(2);
@@ -392,7 +401,7 @@ describe('TrendRuntime', () => {
     runtime.stop();
   });
 
-  it('mantém o loading inicial quando a consulta falha sem dados anteriores', async () => {
+  it('finaliza com erro quando a consulta falha sem dados anteriores', async () => {
     const states: Array<Map<string, unknown>> = [];
     const load = jest.fn(async () => ({
       'ds\u0000pims\u0000SINUSOID': { status: 'error' as const, error: new Error('temporário') },
@@ -401,7 +410,7 @@ describe('TrendRuntime', () => {
 
     runtime.setConsumers([consumer('one')]);
     await flushBatch();
-    expect(states[states.length - 1]?.get('one')).toMatchObject({ status: 'loading' });
+    expect(states[states.length - 1]?.get('one')).toMatchObject({ status: 'error', error: new Error('temporário') });
     runtime.stop();
   });
 });

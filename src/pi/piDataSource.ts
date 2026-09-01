@@ -956,11 +956,12 @@ export async function getPiPointsCurrentValues(
   if (uniqueBindings.length === 0) {
     return {};
   }
-  const grouped = groupBindingsByDataSource(uniqueBindings);
+  const grouped = groupBindingsByQuerySource(uniqueBindings);
   const results: Record<string, PiPointValueResult> = {};
 
-  const tasks = [...grouped.entries()].flatMap(([dataSourceUid, group]) => (
+  const tasks = [...grouped.values()].flatMap((group) => (
     chunkBindings(group, DATA_QUERY_CURRENT_MAX_TARGETS).map((batch) => async () => {
+      const dataSourceUid = batch[0].dataSourceUid;
       const deadline = Date.now() + DATA_QUERY_CURRENT_TIMEOUT_MS;
       const now = Date.now();
       try {
@@ -1211,7 +1212,7 @@ async function queryPiTrendsHistory(
   options: PiTrendQueryOptions = {},
 ): Promise<Record<string, PiTrendSeriesResult>> {
   const uniqueBindings = deduplicateBindings(bindings);
-  const grouped = groupBindingsByDataSource(uniqueBindings);
+  const grouped = groupBindingsByQuerySource(uniqueBindings);
   const results: Record<string, PiTrendSeriesResult> = {};
 
   if (!Number.isFinite(range.from) || !Number.isFinite(range.to) || range.from >= range.to) {
@@ -1221,8 +1222,9 @@ async function queryPiTrendsHistory(
     ]));
   }
 
-  const tasks = [...grouped.entries()].flatMap(([dataSourceUid, group]) => (
+  const tasks = [...grouped.values()].flatMap((group) => (
     chunkBindings(group).map((batch) => async () => {
+      const dataSourceUid = batch[0].dataSourceUid;
       try {
         const instance = await getResolvedPiDataSource(dataSourceSrv, {
           uid: dataSourceUid,
@@ -1233,12 +1235,48 @@ async function queryPiTrendsHistory(
           throw new Error('A Data Source PI não expõe consulta histórica');
         }
 
-        const response = await withTimeout(
-          resolveQueryResponse(instance.query(buildHistoricalTrendRequest(batch, range, mode, options))),
-          8_000,
-          `Consulta histórica excedeu o tempo limite para ${batch.map(({ pointName }) => pointName).join(', ')}`,
-        );
-        Object.assign(results, normalizeTrendResponse(response, batch));
+        const resolveBatch = async (selected: readonly PiPointBinding[], fallbackError: Error): Promise<void> => {
+          let response: DataQueryResponse;
+          try {
+            response = await withTimeout(
+              resolveQueryResponse(instance.query(buildHistoricalTrendRequest(selected, range, mode, options))),
+              8_000,
+              `Consulta histórica excedeu o tempo limite para ${selected.map(({ pointName }) => pointName).join(', ')}`,
+            );
+          } catch (error) {
+            const queryError = toError(error);
+            if (isHistoricalTrendTimeout(queryError) || selected.length === 1) {
+              markTrendErrors(results, selected, queryError);
+              return;
+            }
+            const middle = Math.ceil(selected.length / 2);
+            await resolveBatch(selected.slice(0, middle), queryError);
+            await resolveBatch(selected.slice(middle), queryError);
+            return;
+          }
+
+          const batchResults = normalizeTrendResponse(response, selected);
+          Object.assign(results, batchResults);
+          const failed = selected.filter((binding) => batchResults[getBindingKey(binding)]?.status === 'error');
+          if (failed.length === 0) {
+            return;
+          }
+          // Alguns drivers rejeitam o lote inteiro por causa de um target.
+          // Reconsulta somente os targets com erro ou divide o lote quando
+          // nenhuma série foi aceita, preservando as tags válidas.
+          if (response.error && failed.length < selected.length) {
+            const firstError = batchResults[getBindingKey(failed[0])];
+            await resolveBatch(failed, firstError?.status === 'error' ? firstError.error : fallbackError);
+            return;
+          }
+          if (response.error && selected.length > 1) {
+            const middle = Math.ceil(selected.length / 2);
+            await resolveBatch(selected.slice(0, middle), fallbackError);
+            await resolveBatch(selected.slice(middle), fallbackError);
+          }
+        };
+
+        await resolveBatch(batch, new Error('Consulta histórica sem resposta'));
       } catch (error) {
         for (const binding of batch) {
           results[getBindingKey(binding)] = { status: 'error', error: toError(error) };
@@ -1466,8 +1504,7 @@ function normalizeTrendResponse(
 
   bindings.forEach((binding, index) => {
     const refId = refIdForIndex(index);
-    const frame = framesByRefId.get(refId)
-      ?? (bindings.length === 1 && frames.length === 1 ? frames[0] : undefined);
+    const frame = resolveTrendFrame(frames, framesByRefId, binding.pointName, refId, index, bindings.length);
     const key = getBindingKey(binding);
 
     try {
@@ -1485,6 +1522,31 @@ function normalizeTrendResponse(
   });
 
   return results;
+}
+
+/**
+ * O datasource PI nem sempre preserva o refId enviado pelo target. Em lotes
+ * maiores ele pode devolver apenas o nome da série ou os frames na mesma
+ * ordem dos targets. Aceitamos essas formas antes de marcar a tag como BAD.
+ */
+function resolveTrendFrame(
+  frames: DataFrame[],
+  framesByRefId: Map<string, DataFrame>,
+  pointName: string,
+  refId: string,
+  index: number,
+  bindingCount: number,
+): DataFrame | undefined {
+  const normalizedPointName = pointName.toLocaleLowerCase();
+  return framesByRefId.get(refId)
+    ?? frames.find((frame) => {
+      const frameName = (frame.name ?? '').toLocaleLowerCase();
+      return frameName === normalizedPointName
+        || frameName.endsWith(`;${normalizedPointName}`)
+        || frame.fields.some((field) => field.name.toLocaleLowerCase() === normalizedPointName);
+    })
+    ?? (frames.length === 1 && bindingCount === 1 ? frames[0] : undefined)
+    ?? (frames.length === bindingCount ? frames[index] : undefined);
 }
 
 function normalizeTrendFrame(frame: DataFrame, pointName: string): PiTrendSeries {
@@ -1573,6 +1635,20 @@ function getTrendResponseError(response: DataQueryResponse, refId: string): Erro
   return new Error(response.error?.message ?? 'PI Point sem histórico numérico');
 }
 
+function isHistoricalTrendTimeout(error: Error): boolean {
+  return error.message.startsWith('Consulta histórica excedeu o tempo limite para ');
+}
+
+function markTrendErrors(
+  results: Record<string, PiTrendSeriesResult>,
+  bindings: readonly PiPointBinding[],
+  error: Error,
+): void {
+  for (const binding of bindings) {
+    results[getBindingKey(binding)] = { status: 'error', error };
+  }
+}
+
 function getFieldValues(field: DataFrame['fields'][number]): unknown[] {
   const values = field.values as unknown as { get?: (index: number) => unknown; toArray?: () => unknown[] } | unknown[];
   if (!values) {
@@ -1620,14 +1696,21 @@ function getResponseError(response: DataQueryResponse, refId: string): Error {
   return new Error(responseError?.message ?? 'PI Point sem valor atual ou resposta sem refId');
 }
 
-function groupBindingsByDataSource(
+/**
+ * A mesma instância do datasource pode consultar mais de um PI Data Server.
+ * Não misture serverPaths no mesmo request: alguns drivers rejeitam o lote
+ * inteiro quando um dos servidores/targets falha, atrasando tags válidas de
+ * outra origem.
+ */
+function groupBindingsByQuerySource(
   bindings: readonly PiPointBinding[],
 ): Map<string, PiPointBinding[]> {
   const groups = new Map<string, PiPointBinding[]>();
   for (const binding of bindings) {
-    const group = groups.get(binding.dataSourceUid) ?? [];
+    const key = `${binding.dataSourceUid}\u0000${binding.serverPath}`;
+    const group = groups.get(key) ?? [];
     group.push(binding);
-    groups.set(binding.dataSourceUid, group);
+    groups.set(key, group);
   }
   return groups;
 }

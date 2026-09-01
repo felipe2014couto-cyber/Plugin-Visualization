@@ -3,7 +3,6 @@ import type { PiPointBinding } from '../../pi/piPointBinding';
 import type { PiTrendSeries, PiTrendSeriesResult } from '../../pi/piDataSource';
 import { DATA_QUERY_BATCH_WINDOW_MS } from '../../pi/dataQueryPolicy';
 
-export const TREND_REFRESH_INTERVAL_MS = 5000;
 export { DATA_QUERY_BATCH_WINDOW_MS } from '../../pi/dataQueryPolicy';
 export const TREND_POINTS_PER_PIXEL = 1.5;
 export const TREND_MIN_DATA_POINTS = 100;
@@ -37,7 +36,6 @@ type TrendRuntimeListener = (states: Map<string, TrendRuntimeState>) => void;
 export class TrendRuntime {
   private consumers = new Map<string, TrendRuntimeConsumer>();
   private states = new Map<string, TrendRuntimeState>();
-  private timer: ReturnType<typeof setTimeout> | undefined;
   private batchTimer: ReturnType<typeof setTimeout> | undefined;
   private activeRequest: { keys: Set<string>; lifecycle: number; refreshKey: string } | undefined;
   private pendingBindings = new Map<string, PiPointBinding>();
@@ -51,7 +49,6 @@ export class TrendRuntime {
   constructor(
     loader: LoadTrendSeries,
     private readonly onChange: TrendRuntimeListener,
-    private readonly intervalMs = TREND_REFRESH_INTERVAL_MS,
   ) {
     this.loader = loader;
   }
@@ -87,7 +84,9 @@ export class TrendRuntime {
           && getTrendBindingKey(previousConsumer.binding) === getTrendBindingKey(consumer.binding);
         return [
           consumerKey,
-          unchanged && previousState ? previousState : { status: 'loading' },
+          unchanged && previousState && !(refreshChanged && previousState.status === 'error')
+            ? previousState
+            : { status: 'loading' },
         ] as [string, TrendRuntimeState];
       }),
     );
@@ -98,13 +97,11 @@ export class TrendRuntime {
     }
 
     if (nextConsumers.size === 0) {
-      this.stopTimer();
       this.stopBatchTimer();
       this.pendingBindings.clear();
       return;
     }
 
-    this.startTimer();
     const addedBindings = uniqueBindings([...nextConsumers.values()]
       .filter((consumer) => {
         const previous = previousConsumers.get(getTrendConsumerKey(consumer));
@@ -126,24 +123,7 @@ export class TrendRuntime {
     this.latestRequestByBinding.clear();
     this.pendingBindings.clear();
     this.activeRequest = undefined;
-    this.stopTimer();
     this.stopBatchTimer();
-  }
-
-  private startTimer(): void {
-    if (!this.timer) {
-      this.timer = setTimeout(() => {
-        this.timer = undefined;
-        void this.tick();
-      }, this.intervalMs);
-    }
-  }
-
-  private stopTimer(): void {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = undefined;
-    }
   }
 
   private stopBatchTimer(): void {
@@ -151,13 +131,6 @@ export class TrendRuntime {
       clearTimeout(this.batchTimer);
       this.batchTimer = undefined;
     }
-  }
-
-  private tick(): void {
-    if (this.consumers.size === 0) {
-      return;
-    }
-    this.request(uniqueBindings([...this.consumers.values()].map(({ binding }) => binding)));
   }
 
   private request(bindings: readonly PiPointBinding[]): void {
@@ -238,17 +211,9 @@ export class TrendRuntime {
           this.pendingBindings.clear();
           if (pending.length > 0) {
             void this.executeRequest(pending);
-          } else {
-            this.scheduleNextTick();
           }
         }
       }
-    }
-  }
-
-  private scheduleNextTick(): void {
-    if (this.consumers.size > 0) {
-      this.startTimer();
     }
   }
 
@@ -275,16 +240,21 @@ export class TrendRuntime {
       }
       const result = results[key];
       const previous = this.states.get(consumerId);
+      // Um loader progressivo pode omitir a tag enquanto a consulta refinada
+      // ainda está em andamento. Ausência de resultado não é uma falha.
+      if (!result) {
+        continue;
+      }
       if (result?.status === 'success') {
         nextStates.set(consumerId, { status: 'success', data: result.series });
       } else {
-        // A primeira resposta pode falhar enquanto a conexão/datasource ainda
-        // está inicializando. Sem uma série anterior, mantenha o placeholder
-        // de carregamento para não exibir BAD antes de existir um diagnóstico
-        // definitivo. Se já houver dados, preserve-os durante a falha de
-        // atualização para que o gráfico não desapareça.
+        // A consulta terminou: sem valor anterior, exponha o erro em vez de
+        // manter a série eternamente como se ainda estivesse carregando.
         if (!previous || (previous.status !== 'success' && previous.status !== 'error')) {
-          nextStates.set(consumerId, { status: 'loading' });
+          nextStates.set(consumerId, {
+            status: 'error',
+            error: result?.error ?? new Error('Trend sem resposta'),
+          });
         } else {
           nextStates.set(consumerId, {
             status: 'error',
