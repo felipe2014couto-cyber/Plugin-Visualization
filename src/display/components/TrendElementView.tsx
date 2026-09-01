@@ -380,7 +380,20 @@ function getTrendContent(
     </foreignObject>
   ) : null;
   if (dataSeries.length > 0 && stateSeries.length > 0) {
-    return <>{visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}<MixedTrend element={element} numericSeries={dataSeries} stateSeries={stateSeries} timeRange={timeRange} individualScale={visual.scaleMode !== 'single'} legendWidth={effectiveLegendWidth} selectedSeriesKeys={selectedSeriesKeys} /></>;
+    return <>{visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}<MixedTrend
+      element={element}
+      numericSeries={dataSeries}
+      stateSeries={stateSeries}
+      cursors={cursors}
+      selectedCursorId={selectedCursorId}
+      onPlotPointerDown={onPlotPointerDown}
+      onCursorPointerDown={onCursorPointerDown}
+      onCursorDoubleClick={onCursorDoubleClick}
+      timeRange={timeRange}
+      individualScale={visual.scaleMode !== 'single'}
+      legendWidth={effectiveLegendWidth}
+      selectedSeriesKeys={selectedSeriesKeys}
+    /></>;
   }
 
   if (dataSeries.length === 0 && stateSeries.length > 0) {
@@ -673,6 +686,11 @@ function MixedTrend({
   element,
   numericSeries,
   stateSeries,
+  cursors,
+  selectedCursorId,
+  onPlotPointerDown,
+  onCursorPointerDown,
+  onCursorDoubleClick,
   timeRange,
   individualScale,
   legendWidth,
@@ -681,6 +699,11 @@ function MixedTrend({
   element: TrendElement;
   numericSeries: Array<{ series: TrendSeries; data: PiTrendSeries }>;
   stateSeries: Array<{ series: TrendSeries; states: TrendStatePoint[] }>;
+  cursors: readonly TrendCursor[];
+  selectedCursorId: string | null;
+  onPlotPointerDown: TrendElementViewProps['onPlotPointerDown'];
+  onCursorPointerDown: TrendElementViewProps['onCursorPointerDown'];
+  onCursorDoubleClick: TrendElementViewProps['onCursorDoubleClick'];
   timeRange: DisplayTimeRange | undefined;
   individualScale: boolean;
   legendWidth: number;
@@ -736,10 +759,32 @@ function MixedTrend({
   const numericTicks = Array.from({ length: numericIntervals + 1 }, (_, index) => index).map((index) => domainMax - ((domainMax - domainMin) * index) / numericIntervals);
   const xTicks = [0, 1, 2].map((index) => domainStart + ((domainEnd - domainStart) * index) / 2);
   const showTimeLabels = shouldShowTrendTimeLabels(element.width, element.height);
+  const chart: TrendChartModel = {
+    plotX,
+    plotY,
+    plotWidth,
+    plotHeight,
+    domainStart,
+    domainEnd,
+    domainMin,
+    domainMax,
+    path: '',
+    yTicks: [],
+    xTicks: xTicks.map((time) => ({ time, x: xFor(time) })),
+  };
 
   return (
     <>
-      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} fill="rgba(0, 0, 0, 0.12)" data-testid={`trend-mixed-plot-${element.id}`} pointerEvents="all" />
+      <rect
+        x={plotX}
+        y={plotY}
+        width={plotWidth}
+        height={plotHeight}
+        fill="rgba(0, 0, 0, 0.12)"
+        data-testid={`trend-mixed-plot-${element.id}`}
+        pointerEvents="all"
+        onPointerDown={onPlotPointerDown ? (event) => onPlotPointerDown(event, element.id, chart) : undefined}
+      />
       {stateLabels.map((label) => {
         const y = stateY(label);
         return (
@@ -822,6 +867,64 @@ function MixedTrend({
               data-testid={index === 0 ? `trend-line-${element.id}` : `trend-line-${element.id}-${index}`}
               pointerEvents="none"
             />
+          </g>
+        );
+      })}
+      {cursors.map((cursor) => {
+        const x = xFor(cursor.time);
+        const selected = cursor.id === selectedCursorId;
+        const labelAnchor = x > plotX + plotWidth / 2 ? 'end' : 'start';
+        const labelX = labelAnchor === 'end' ? x - 4 : x + 4;
+        const values = [
+          ...numericSeries.flatMap(({ series, data }) => {
+            const value = resolveTrendCursorValue(data.points, cursor.time);
+            return value === undefined ? [] : [{ name: series.legendLabel || series.binding.pointName, value: formatNumber(value, visual.numberFormat), color: series.color || LINE_COLOR }];
+          }),
+          ...stateSeries.flatMap(({ series, states: points }) => {
+            const value = resolveTrendCursorState(points, cursor.time);
+            return value === undefined ? [] : [{ name: series.legendLabel || series.binding.pointName, value, color: series.color || LINE_COLOR }];
+          }),
+        ];
+        if (values.length === 0) return null;
+        return (
+          <g key={cursor.id} data-testid={`trend-cursor-${element.id}-${cursor.id}`}>
+            <line
+              x1={x}
+              y1={plotY}
+              x2={x}
+              y2={plotY + plotHeight}
+              stroke="var(--trend-cursor, #ffffff)"
+              strokeWidth={selected ? 2 : 1}
+              pointerEvents="none"
+              data-testid={`trend-cursor-line-${element.id}-${cursor.id}`}
+            />
+            <line
+              x1={x}
+              y1={plotY}
+              x2={x}
+              y2={plotY + plotHeight}
+              stroke="transparent"
+              strokeWidth={18}
+              style={onCursorPointerDown ? { cursor: 'ew-resize' } : undefined}
+              data-testid={`trend-cursor-hit-${element.id}-${cursor.id}`}
+              aria-label={`Selecionar cursor ${formatCursorTime(cursor.time)}`}
+              onPointerDown={onCursorPointerDown ? (event) => onCursorPointerDown(event, element.id, cursor, chart) : undefined}
+              onDoubleClick={onCursorDoubleClick ? (event) => onCursorDoubleClick(event, element.id, cursor) : undefined}
+            />
+            <text
+              x={labelX}
+              y={plotY + 12}
+              textAnchor={labelAnchor}
+              fill="var(--trend-cursor, #ffffff)"
+              fontSize={AXIS_FONT_SIZE}
+              pointerEvents="none"
+              data-testid={`trend-cursor-label-${element.id}-${cursor.id}`}
+            >
+              <tspan x={labelX} y={plotY + 12}>{formatCursorTime(cursor.time)}</tspan>
+              {values.map(({ name, value, color }, index) => (
+                <tspan key={name} x={labelX} y={plotY + 12 + (index + 1) * 18} fill={color}>{value}</tspan>
+              ))}
+            </text>
           </g>
         );
       })}

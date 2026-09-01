@@ -20,6 +20,7 @@ import {
 } from './dataQueryPolicy';
 
 export const PI_DATASOURCE_TYPE = 'gridprotectionalliance-osisoftpi-datasource';
+const CURRENT_VALUE_LOOKBACK_MS = 60 * 1000;
 
 export type PiConnectionStatus = 'checking' | 'connected' | 'error' | 'not-configured';
 
@@ -1266,19 +1267,22 @@ function buildCurrentValuesRequest(
   now: number,
 ): DataQueryRequest<DataQuery> {
   const end = dateTime(now);
-  const start = dateTime(now - 24 * 60 * 60 * 1000);
+  // Current Values use the datasource's last-value path. Keep the requested
+  // range tiny so a snapshot does not make PI scan an unnecessary 24-hour
+  // history before returning the value.
+  const start = dateTime(now - CURRENT_VALUE_LOOKBACK_MS);
 
   return {
     requestId: nextDataQueryRequestId('values', bindings[0].dataSourceUid),
     interval: '1s',
     intervalMs: 1000,
-    maxDataPoints: 100,
+    maxDataPoints: 1,
     range: { from: start, to: end, raw: { from: start, to: end } },
     scopedVars: {},
     targets: bindings.map((binding, index) => buildCurrentValueTarget(binding, index)),
     timezone: 'browser',
     app: 'app',
-    startTime: now - 24 * 60 * 60 * 1000,
+    startTime: now - CURRENT_VALUE_LOOKBACK_MS,
     endTime: now,
   };
 }

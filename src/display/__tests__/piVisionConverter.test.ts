@@ -315,6 +315,44 @@ describe('convertPiVisionDisplay — documento', () => {
     expect((result.elements[1].properties as any).text).toBe('Titulo');
   });
 
+  it('alinha o texto de um botão ao retângulo exportado pelo PI Vision', () => {
+    const result = convertPiVisionDisplay({
+      Width: 400,
+      Height: 200,
+      Symbols: [
+        {
+          SymbolType: 'rectangle',
+          Left: 8,
+          Top: 110,
+          Width: 146,
+          Height: 29,
+          Configuration: {
+            Fill: 'rgba(240,240,240,1)',
+            Stroke: 'rgba(100,100,100,1)',
+          },
+        },
+        {
+          SymbolType: 'statictext',
+          Left: 56,
+          Top: 115,
+          Width: 200,
+          Height: 19,
+          Configuration: {
+            StaticText: 'Voltar',
+            BackColor: 'rgba(240,240,240,1)',
+            ForeColor: 'rgba(0,0,0,1)',
+            LinkURL: 'http://example.test/voltar',
+          },
+        },
+      ],
+    });
+
+    const button = result.elements.find((element) => element.type === 'rectangle');
+    const label = result.elements.find((element) => element.type === 'text');
+    expect(button).toMatchObject({ x: 8, y: 110, width: 146, height: 29 });
+    expect(label).toMatchObject({ x: 8, y: 115, width: 146, height: 19 });
+  });
+
   it('usa Center para calcular a largura de Values e preserva cores rgba', () => {
     const result = convertPiVisionDisplay({
       Symbols: [{

@@ -77,6 +77,7 @@ describe('TrendElementView', () => {
 
   it('mantém a série textual e a numérica com escalas independentes', () => {
     const numericBinding = { ...binding, pointName: 'FLOW' };
+    const onPlotPointerDown = jest.fn();
     const mixedElement = {
       ...element,
       properties: {
@@ -91,6 +92,9 @@ describe('TrendElementView', () => {
         <TrendElementView
           element={mixedElement}
           timeRange={{ from: 1_000, to: 3_000 }}
+          cursors={[{ id: 'cursor-1', time: 1_500 }]}
+          selectedCursorId="cursor-1"
+          onPlotPointerDown={onPlotPointerDown}
           seriesStates={[
             {
               series: mixedElement.properties.series[0],
@@ -112,6 +116,16 @@ describe('TrendElementView', () => {
     expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveTextContent('FLOW');
     expect(screen.getByTestId('trend-legend-trend-1-0')).toHaveAttribute('y', '46');
     expect(screen.getByTestId('trend-legend-trend-1-1')).toHaveAttribute('y', '100');
+    expect(screen.getByTestId('trend-cursor-line-trend-1-cursor-1')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('A');
+    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-1')).toHaveTextContent('1480');
+
+    fireEvent.pointerDown(screen.getByTestId('trend-mixed-plot-trend-1'), { clientX: 250, clientY: 120, pointerId: 1 });
+    expect(onPlotPointerDown).toHaveBeenCalledWith(
+      expect.anything(),
+      'trend-1',
+      expect.objectContaining({ domainStart: 1_000, domainEnd: 3_000 }),
+    );
   });
 
   it('redesenha a geometria do gráfico sem alterar os dados', () => {

@@ -1,5 +1,7 @@
 export const DATA_QUERY_BATCH_WINDOW_MS = 40;
-export const DATA_QUERY_MAX_TARGETS = 20;
+// O datasource PI fica instável quando recebe uma quantidade muito grande de
+// targets ou muitas consultas históricas simultâneas.
+export const DATA_QUERY_MAX_TARGETS = 50;
 export const DATA_QUERY_MAX_CONCURRENT_BATCHES = 2;
 // Snapshot values can be fetched together without the data volume of a trend.
 // Keeping this separate preserves the safer 20-target limit for history.

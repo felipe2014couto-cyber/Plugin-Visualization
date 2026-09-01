@@ -356,7 +356,7 @@ describe('TrendRuntime', () => {
 
     expect(load).toHaveBeenCalledTimes(1);
     expect(states[states.length - 1]?.get('trend-series-a')).toMatchObject({ status: 'success' });
-    expect(states[states.length - 1]?.get('trend-series-b')).toMatchObject({ status: 'error' });
+    expect(states[states.length - 1]?.get('trend-series-b')).toMatchObject({ status: 'loading' });
     runtime.stop();
   });
 
@@ -392,7 +392,7 @@ describe('TrendRuntime', () => {
     runtime.stop();
   });
 
-  it('finaliza o loading inicial individualmente quando a consulta falha', async () => {
+  it('mantém o loading inicial quando a consulta falha sem dados anteriores', async () => {
     const states: Array<Map<string, unknown>> = [];
     const load = jest.fn(async () => ({
       'ds\u0000pims\u0000SINUSOID': { status: 'error' as const, error: new Error('temporário') },
@@ -401,7 +401,7 @@ describe('TrendRuntime', () => {
 
     runtime.setConsumers([consumer('one')]);
     await flushBatch();
-    expect(states[states.length - 1]?.get('one')).toMatchObject({ status: 'error' });
+    expect(states[states.length - 1]?.get('one')).toMatchObject({ status: 'loading' });
     runtime.stop();
   });
 });

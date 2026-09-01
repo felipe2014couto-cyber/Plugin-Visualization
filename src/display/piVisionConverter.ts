@@ -461,7 +461,7 @@ export function convertPiVisionDisplay(
       elements.push(element);
     }
   }
-  const normalizedElements = normalizeImportedTrendLayout(elements);
+  const normalizedElements = normalizeImportedButtonLayout(normalizeImportedTrendLayout(elements));
   applyContextualColors(normalizedElements);
 
   return {
@@ -1574,6 +1574,57 @@ function normalizeImportedTrendLayout(elements: DisplayElement[]): DisplayElemen
       return element;
     }
     return { ...element, width: availableWidth };
+  });
+}
+
+/**
+ * PI Vision can export a navigation label with a text box that is wider than
+ * (and horizontally offset from) the rectangle used as its button. Rendering
+ * both geometries literally leaves the label outside the button in the SVG.
+ * Align linked labels to the matching background rectangle during import.
+ */
+export function normalizeImportedButtonLayout(elements: DisplayElement[]): DisplayElement[] {
+  const backgrounds = elements.filter((element): element is DisplayElement<'rectangle', RectangleProperties> => (
+    element.type === RECTANGLE_TYPE
+      && element.properties.shape === 'rectangle'
+      && typeof element.properties.fill === 'string'
+      && element.properties.fill !== 'transparent'
+      && element.height > 0
+      && element.height <= 80
+  ));
+
+  return elements.map((element) => {
+    if (element.type !== TEXT_TYPE) {
+      return element;
+    }
+
+    const linkUrl = element.properties.linkUrl;
+    const textBackground = element.properties.backgroundColor;
+    if (typeof linkUrl !== 'string' || !linkUrl.trim() || typeof textBackground !== 'string' || textBackground === 'transparent') {
+      return element;
+    }
+
+    const textCenterX = element.x + element.width / 2;
+    const textCenterY = element.y + element.height / 2;
+    const match = backgrounds
+      .filter((background) => background.properties.fill === textBackground)
+      .filter((background) => Math.abs((background.y + background.height / 2) - textCenterY) <= Math.max(18, background.height))
+      .map((background) => ({
+        background,
+        distance: Math.abs(background.x + background.width / 2 - textCenterX),
+      }))
+      .sort((left, right) => left.distance - right.distance)[0]?.background;
+
+    if (!match) {
+      return element;
+    }
+
+    return {
+      ...element,
+      x: match.x,
+      y: match.y + Math.max(0, (match.height - element.height) / 2),
+      width: match.width,
+    };
   });
 }
 

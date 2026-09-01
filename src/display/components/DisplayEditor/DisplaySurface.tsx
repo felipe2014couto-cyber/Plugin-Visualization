@@ -37,6 +37,7 @@ import { resolveThemeForeground } from '../../themeColor';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { PROGRAMMING_TYPE, type ProgrammingElement } from '../../createProgramming';
 import { ProgrammingDisplayElementView, getProgrammingConsumerId } from '../../../programming/ProgrammingDisplayElementView';
+import { normalizeImportedButtonLayout } from '../../piVisionConverter';
 import { DEFAULT_LIBRARY_SYMBOL_COLOR, getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE, type LibrarySymbolElement } from '../../createLibrarySymbol';
 import { extractAllGroupBindingsAndElements, findTopLevelElementId, getElementAbsoluteGeometry, GROUP_TYPE, type GroupElement } from '../../createGroup';
 import { isElementLocked } from '../../createLocked';
@@ -216,7 +217,11 @@ export function DisplaySurface({
   maxZoom = 5,
   wheelZoomFactor = 1.1,
 }: DisplaySurfaceProps) {
-  const { surface, elements } = displayDocument;
+  const { surface } = displayDocument;
+  // Existing dashboards may have been saved before the PI Vision button
+  // geometry fix. Normalize only the rendered copy so they look correct
+  // immediately without rewriting the user's dashboard JSON.
+  const elements = useMemo(() => normalizeImportedButtonLayout(displayDocument.elements), [displayDocument.elements]);
   const cursorEnabled = !editable;
   const svgRef = useRef<SVGSVGElement>(null);
   const viewportRef = useRef<SurfaceViewport>({

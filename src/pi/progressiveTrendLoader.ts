@@ -3,6 +3,10 @@ import type {
   PiTrendSeriesResult,
   PiTrendTimeRange,
 } from './piDataSource';
+import {
+  DATA_QUERY_MAX_CONCURRENT_BATCHES,
+  DATA_QUERY_MAX_TARGETS,
+} from './dataQueryPolicy';
 import { getTrendPersistentCache, type TrendPersistentCache } from './trendPersistentCache';
 
 export const TREND_PREVIEW_DURATION_MS = 8 * 60 * 60 * 1000;
@@ -66,6 +70,7 @@ export function createProgressiveTrendLoader(
       bindings,
       previewRange,
       queryPreview,
+      publishComplete,
     );
     void loadRecordedBatch(entries, bindings, range, maxDataPoints, queryRecorded, persistentCache)
       .then((recorded) => publishComplete?.(recorded))
@@ -96,6 +101,7 @@ async function loadPreviewBatch(
   bindings: readonly PiPointBinding[],
   queryRange: PiTrendTimeRange,
   queryPreview: QueryTrendRange,
+  publishUpdate?: PublishTrendResults,
 ): Promise<Record<string, PiTrendSeriesResult>> {
   const unique = deduplicateBindings(bindings);
   const missing: Array<{ binding: PiPointBinding; entry: TrendCacheEntry; deferred: Deferred<PiTrendSeriesResult> }> = [];
@@ -116,32 +122,75 @@ async function loadPreviewBatch(
   });
 
   if (missing.length > 0) {
-    void queryPreview(
-      missing.map(({ binding }) => binding),
-      queryRange,
-      { maxDataPoints: TREND_PREVIEW_MAX_DATA_POINTS },
-    ).then((results) => {
-      for (const item of missing) {
+    const batches = chunkItems(missing, DATA_QUERY_MAX_TARGETS);
+    void runPreviewBatches(batches, queryRange, queryPreview, publishUpdate)
+      .finally(() => {
+        for (const item of missing) {
+          item.entry.previewRequest = undefined;
+        }
+      });
+  }
+
+  const results = await Promise.all(requests);
+  return Object.fromEntries(unique.map((binding, index) => [bindingResultKey(binding), results[index]]));
+}
+
+async function runPreviewBatches(
+  batches: ReadonlyArray<ReadonlyArray<{ binding: PiPointBinding; entry: TrendCacheEntry; deferred: Deferred<PiTrendSeriesResult> }>>,
+  queryRange: PiTrendTimeRange,
+  queryPreview: QueryTrendRange,
+  publishUpdate?: PublishTrendResults,
+): Promise<void> {
+  let nextBatch = 0;
+  const workerCount = Math.min(DATA_QUERY_MAX_CONCURRENT_BATCHES, batches.length);
+
+  const worker = async (): Promise<void> => {
+    while (nextBatch < batches.length) {
+      const batch = batches[nextBatch];
+      nextBatch += 1;
+      let results: Record<string, PiTrendSeriesResult>;
+      try {
+        results = await queryPreview(
+          batch.map(({ binding }) => binding),
+          queryRange,
+          { maxDataPoints: TREND_PREVIEW_MAX_DATA_POINTS },
+        );
+      } catch (error) {
+        results = Object.fromEntries(batch.map(({ binding }) => [
+          bindingResultKey(binding), trendError(error),
+        ]));
+      }
+
+      const published: Record<string, PiTrendSeriesResult> = {};
+      for (const item of batch) {
         const result = results[bindingResultKey(item.binding)] ?? trendError('Trend sem resposta de prévia');
         if (result.status === 'success') {
           item.entry.preview = result;
           item.entry.previewStoredAt = Date.now();
         }
         item.deferred.resolve(result);
+        if (result.status === 'success') {
+          published[bindingResultKey(item.binding)] = result;
+        }
       }
-    }).catch((error) => {
-      for (const item of missing) {
-        item.deferred.resolve(trendError(error));
+      // Não transforma uma resposta parcial de erro em BAD. Enquanto a
+      // consulta principal ainda estiver pendente, o componente permanece em
+      // "Carregando..." e só recebe erro quando a fase terminar.
+      if (batches.length > 1 && Object.keys(published).length > 0) {
+        publishUpdate?.(published);
       }
-    }).finally(() => {
-      for (const item of missing) {
-        item.entry.previewRequest = undefined;
-      }
-    });
-  }
+    }
+  };
 
-  const results = await Promise.all(requests);
-  return Object.fromEntries(unique.map((binding, index) => [bindingResultKey(binding), results[index]]));
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+}
+
+function chunkItems<T>(items: readonly T[], maxItems: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += maxItems) {
+    chunks.push(items.slice(index, index + maxItems));
+  }
+  return chunks;
 }
 
 async function loadRecordedBatch(

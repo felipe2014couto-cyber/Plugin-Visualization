@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PiPointBinding } from '../../pi/piPointBinding';
 import type { PiPointValue, PiPointValueResult } from '../../pi/piDataSource';
-import { DATA_QUERY_BATCH_WINDOW_MS } from '../../pi/dataQueryPolicy';
+import {
+  DATA_QUERY_BATCH_WINDOW_MS,
+  DATA_QUERY_CURRENT_MAX_CONCURRENT_BATCHES,
+  DATA_QUERY_CURRENT_MAX_TARGETS,
+} from '../../pi/dataQueryPolicy';
 
 export const VALUE_REFRESH_INTERVAL_MS = 5000;
 // Four seconds keeps a re-added symbol responsive without extending beyond the
@@ -153,6 +157,14 @@ export class ValueRuntime {
       this.request(bindings);
       return;
     }
+    const pending = [...this.pendingImmediate.values()]
+      .filter((binding) => hasBindingConsumer(this.consumers, getBindingKey(binding)));
+    if (pending.length > 0) {
+      this.pendingImmediate.clear();
+      this.stopBatchTimer();
+      await this.executeRequest(pending);
+      return;
+    }
     await this.executeRequest(bindings);
   }
 
@@ -200,33 +212,64 @@ export class ValueRuntime {
     this.activeRequest = request;
 
     try {
-      const results = await this.loader(unique);
+      // Keep the first batch independent from the rest of the display. The
+      // PI loader may receive hundreds of tags and historically returned only
+      // after every batch had finished, leaving the whole canvas in loading
+      // state even when the first response was already available.
+      const batches = chunkBindings(unique, DATA_QUERY_CURRENT_MAX_TARGETS);
+      const applyBatchResults = (
+        batch: readonly PiPointBinding[],
+        results: Record<string, PiPointValueResult>,
+      ): boolean => {
+        if (lifecycle !== this.lifecycle) {
+          return false;
+        }
+        const batchKeys = new Set(batch.map(getBindingKey));
+        const hasSuccess = batch.some((binding) => results[getBindingKey(binding)]?.status === 'success');
+        const nextStates = new Map(this.states);
+        for (const [elementId, consumer] of this.consumers) {
+          const key = getBindingKey(consumer.binding);
+          if (!batchKeys.has(key)) {
+            continue;
+          }
+          const result = results[key];
+          const previous = this.states.get(consumer.elementId);
+          if (result?.status === 'success') {
+            this.putCacheValue(key, result.value);
+            nextStates.set(elementId, stateWithValue(previous, result.value));
+          } else {
+            nextStates.set(elementId, stateWithError(previous));
+          }
+        }
+        this.replaceStates(nextStates);
+        return hasSuccess;
+      };
+
+      const loadBatch = async (batch: readonly PiPointBinding[]): Promise<boolean> => {
+        try {
+          const results = await this.loader(batch);
+          return applyBatchResults(batch, results);
+        } catch {
+          const results = Object.fromEntries(batch.map((binding) => [
+            getBindingKey(binding), { status: 'error' as const, error: new Error('Consulta de valores atuais indisponível') },
+          ]));
+          applyBatchResults(batch, results);
+          return false;
+        }
+      };
+      // Preserve the lightweight single-request path used by most displays;
+      // only multi-batch displays need the progressive fan-out.
+      const batchSuccesses = batches.length === 1
+        ? [await loadBatch(batches[0])]
+        : await runBatchLoads(batches, loadBatch);
+      const hasSuccess = batchSuccesses.some(Boolean);
       if (lifecycle !== this.lifecycle) {
         return;
       }
-      const hasSuccess = unique.some((binding) => results[getBindingKey(binding)]?.status === 'success');
       this.consecutiveFailures = hasSuccess ? 0 : this.consecutiveFailures + 1;
       this.nextDelayMs = hasSuccess
         ? this.intervalMs
         : Math.min(this.intervalMs * (2 ** Math.min(this.consecutiveFailures, 3)), 30_000);
-      const nextStates = new Map(this.states);
-      for (const [elementId, consumer] of this.consumers) {
-        const key = getBindingKey(consumer.binding);
-        if (!keys.has(key)) {
-          continue;
-        }
-        const result = results[key];
-        const previous = this.states.get(consumer.elementId);
-        if (result?.status === 'success') {
-          this.putCacheValue(key, result.value);
-          nextStates.set(elementId, stateWithValue(previous, result.value));
-        } else if (result?.status === 'error') {
-          nextStates.set(elementId, stateWithError(previous));
-        } else {
-          nextStates.set(elementId, stateWithError(previous));
-        }
-      }
-      this.replaceStates(nextStates);
     } catch {
       if (lifecycle === this.lifecycle) {
         this.consecutiveFailures += 1;
@@ -310,11 +353,9 @@ export function useValueRuntime(
   const [states, setStates] = useState<Map<string, ValueRuntimeState>>(new Map());
   const runtimeRef = useRef<ValueRuntime>();
   if (!runtimeRef.current) {
-    // Espalha a primeira atualizacao dos navegadores por um segundo. Quando
-    // muitos operadores abrem a mesma tela juntos, isso evita uma rajada de
-    // consultas PI exatamente no mesmo instante sem alterar a cadencia normal.
-    const initialDelayMs = VALUE_REFRESH_INTERVAL_MS + Math.floor(Math.random() * 1000);
-    runtimeRef.current = new ValueRuntime(loader, setStates, VALUE_REFRESH_INTERVAL_MS, initialDelayMs);
+    // Current Values are the first paint of a converted display. Start them
+    // immediately; the loader still batches requests and controls concurrency.
+    runtimeRef.current = new ValueRuntime(loader, setStates, VALUE_REFRESH_INTERVAL_MS, 0);
   }
 
   const runtime = runtimeRef.current;
@@ -353,6 +394,34 @@ function uniqueBindings(bindings: readonly PiPointBinding[]): PiPointBinding[] {
     unique.set(getBindingKey(binding), binding);
   }
   return [...unique.values()];
+}
+
+function chunkBindings(bindings: readonly PiPointBinding[], maxTargets: number): PiPointBinding[][] {
+  const chunks: PiPointBinding[][] = [];
+  for (let index = 0; index < bindings.length; index += maxTargets) {
+    chunks.push(bindings.slice(index, index + maxTargets));
+  }
+  return chunks;
+}
+
+async function runBatchLoads(
+  batches: readonly PiPointBinding[][],
+  loadBatch: (batch: readonly PiPointBinding[]) => Promise<boolean>,
+): Promise<boolean[]> {
+  const results = new Array<boolean>(batches.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(DATA_QUERY_CURRENT_MAX_CONCURRENT_BATCHES, batches.length);
+
+  const worker = async (): Promise<void> => {
+    while (nextIndex < batches.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await loadBatch(batches[index]);
+    }
+  };
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return results;
 }
 
 function findStateForBinding(

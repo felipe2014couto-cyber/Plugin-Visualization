@@ -10,6 +10,7 @@ import {
   VALUE_REFRESH_INTERVAL_MS,
   type LoadCurrentValues,
   type ValueRuntimeConsumer,
+  type ValueRuntimeState,
 } from '../valueRuntime';
 
 const firstBinding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'TAG_A' };
@@ -52,14 +53,17 @@ describe('ValueRuntime', () => {
 
     jest.advanceTimersByTime(1);
     await Promise.resolve();
+    await Promise.resolve();
     expect(loadValues).toHaveBeenCalledTimes(2);
 
     jest.advanceTimersByTime(VALUE_REFRESH_INTERVAL_MS);
+    await Promise.resolve();
     await Promise.resolve();
     expect(loadValues).toHaveBeenCalledTimes(3);
 
     for (let cycle = 0; cycle < 3; cycle += 1) {
       jest.advanceTimersByTime(VALUE_REFRESH_INTERVAL_MS);
+      await Promise.resolve();
       await Promise.resolve();
     }
     expect(loadValues).toHaveBeenCalledTimes(6);
@@ -144,6 +148,45 @@ describe('ValueRuntime', () => {
 
     expect(loadValues).toHaveBeenCalledTimes(1);
     expect(loadValues.mock.calls[0][0]).toEqual(bindings);
+    runtime.stop();
+  });
+
+  it('publica o primeiro lote sem esperar os lotes restantes', async () => {
+    const bindings = Array.from({ length: 61 }, (_, index) => ({
+      dataSourceUid: 'ds',
+      serverPath: 'pims',
+      pointName: `TAG_${index + 1}`,
+    }));
+    const resolvers: Array<(result: Record<string, PiPointValueResult>) => void> = [];
+    const loadValues = jest.fn((selected: ReadonlyArray<typeof firstBinding>) => new Promise<Record<string, PiPointValueResult>>((resolve) => {
+      resolvers.push(resolve);
+      // Keep the selected argument observable so this test also protects the
+      // runtime batch size without depending on the datasource implementation.
+      void selected;
+    }));
+    const states: Array<Map<string, ValueRuntimeState>> = [];
+    const runtime = new ValueRuntime(loadValues, (next) => states.push(next));
+
+    runtime.setConsumers(bindings.map((binding, index) => consumer(`element-${index}`, binding)));
+    await flushBatch();
+    expect(loadValues).toHaveBeenCalledTimes(2);
+
+    resolvers[0](Object.fromEntries(bindings.slice(0, 60).map((binding) => [
+      `ds\u0000pims\u0000${binding.pointName}`,
+      { status: 'success' as const, value: { value: 1 } },
+    ])));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(states.at(-1)?.get('element-0')).toEqual({ status: 'success', result: { value: 1 } });
+    expect(states.at(-1)?.get('element-60')).toEqual({ status: 'loading' });
+
+    resolvers[1](Object.fromEntries(bindings.slice(60).map((binding) => [
+      `ds\u0000pims\u0000${binding.pointName}`,
+      { status: 'success' as const, value: { value: 2 } },
+    ])));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(states.at(-1)?.get('element-60')).toEqual({ status: 'success', result: { value: 2 } });
     runtime.stop();
   });
 
@@ -233,6 +276,7 @@ describe('ValueRuntime', () => {
     runtime.setConsumers([consumer('one', secondBinding)]);
     resolvers[0]?.({ 'ds\u0000pims\u0000TAG_A': { status: 'success', value: { value: 99 } } });
     await Promise.resolve();
+    await Promise.resolve();
     expect(loadValues).toHaveBeenCalledTimes(2);
     expect(states[states.length - 1]?.get('one')).toEqual({ status: 'loading' });
 
@@ -309,6 +353,7 @@ describe('ValueRuntime', () => {
     expect(loadValues).toHaveBeenCalledTimes(1);
     resolvers.shift()?.();
     await Promise.resolve();
+    await Promise.resolve();
 
     jest.advanceTimersByTime(VALUE_REFRESH_INTERVAL_MS - 1);
     expect(loadValues).toHaveBeenCalledTimes(1);
@@ -334,8 +379,8 @@ describe('ValueRuntime', () => {
 
     expect(loadValues).toHaveBeenCalledTimes(1);
     await act(async () => {
-      // O hook distribui a primeira atualização por uma janela de até 1 s
-      // para evitar que muitos clientes consultem o PI simultaneamente.
+      // A primeira consulta é disparada imediatamente; os ciclos seguintes
+      // continuam respeitando a cadência de cinco segundos.
       jest.advanceTimersByTime(VALUE_REFRESH_INTERVAL_MS + 1000);
       await Promise.resolve();
     });

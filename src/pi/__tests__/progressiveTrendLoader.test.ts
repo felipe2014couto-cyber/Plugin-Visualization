@@ -180,6 +180,27 @@ describe('progressive trend loader', () => {
     expect(publishComplete).toHaveBeenCalledTimes(1);
   });
 
+  it('envia até cinquenta targets da prévia em um único lote', async () => {
+    const bindings = Array.from({ length: 21 }, (_, index) => ({
+      dataSourceUid: 'ds',
+      serverPath: 'pims',
+      pointName: `TAG_${index + 1}`,
+    }));
+    const resultFor = (selectedBindings: readonly PiPointBinding[]) => Object.fromEntries(selectedBindings.map((selectedBinding) => [
+      `${selectedBinding.dataSourceUid}\u0000${selectedBinding.serverPath}\u0000${selectedBinding.pointName}`,
+      { status: 'success' as const, series: { pointName: selectedBinding.pointName, points: [] } },
+    ]));
+    const queryPreview = jest.fn(async (selectedBindings: readonly PiPointBinding[]) => resultFor(selectedBindings));
+    const publishUpdate = jest.fn();
+    const loader = createProgressiveTrendLoader(jest.fn(async () => ({})), queryPreview);
+    const previews = await loader(bindings, { from: 0, to: TREND_PREVIEW_DURATION_MS }, publishUpdate);
+
+    expect(queryPreview).toHaveBeenCalledTimes(1);
+    expect(queryPreview.mock.calls[0][0]).toHaveLength(21);
+    expect(Object.keys(previews)).toHaveLength(21);
+    expect(publishUpdate).not.toHaveBeenCalled();
+  });
+
   it.each([1, 3, 10, 20])('mede uma chamada por fase para %i tag(s) compatíveis', async (count) => {
     const bindings = Array.from({ length: count }, (_, index) => ({
       dataSourceUid: 'ds',

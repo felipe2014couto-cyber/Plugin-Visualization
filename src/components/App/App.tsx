@@ -1089,10 +1089,13 @@ export function App() {
               loadPiPointDatabaseLimits={hasPiConnection ? getPiPointDatabaseLimits : undefined}
               loadDigitalStates={hasPiConnection ? getPiPointDigitalStates : undefined}
               loadValues={getPiPointsCurrentValues}
-              loadTrend={hasPiConnection ? loadTrend : undefined}
-              loadRecordedTrend={hasPiConnection ? loadTrend : undefined}
-              loadRecordedData={hasPiConnection ? (bindings, range, options) => getPiTrendsRecordedHistoryForRange(bindings, range, options) : undefined}
-              loadInterpolatedData={hasPiConnection ? (bindings, range, options) => getPiTrendsPreviewForRange(bindings, range, options) : undefined}
+              // Não bloquear a primeira prévia pela checagem de conexão. O
+              // loader consulta o datasource e mantém a tendência carregando
+              // até haver resposta, em vez de exibir BAD durante o handshake.
+              loadTrend={loadTrend}
+              loadRecordedTrend={loadTrend}
+              loadRecordedData={(bindings, range, options) => getPiTrendsRecordedHistoryForRange(bindings, range, options)}
+              loadInterpolatedData={(bindings, range, options) => getPiTrendsPreviewForRange(bindings, range, options)}
               showToolbar={isAssetsPanelOpen}
               symbolModeOnly={assetsTab === 'calculations'}
               dropSymbolType={dropSymbolType}

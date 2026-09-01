@@ -367,7 +367,12 @@ describe('PI data source integration', () => {
       timestamp: '2026-08-06T12:00:00.000Z',
     });
 
-    const request = query.mock.calls[0][0] as { targets: Array<Record<string, unknown>> };
+    const request = query.mock.calls[0][0] as {
+      targets: Array<Record<string, unknown>>;
+      startTime: number;
+      endTime: number;
+      maxDataPoints: number;
+    };
     expect(request.targets[0]).toMatchObject({
       target: 'pims;LFI_A268SV_TEMPERATURA_AMBIENTE',
       isPiPoint: true,
@@ -375,6 +380,8 @@ describe('PI data source integration', () => {
       digitalStates: { enable: true },
     });
     expect(request.targets[0]).not.toHaveProperty('recordedValues.enable', true);
+    expect(request.endTime - request.startTime).toBe(60 * 1000);
+    expect(request.maxDataPoints).toBe(1);
     expect(dataSourceSrv.get).toHaveBeenCalledWith({ uid: 'pi-default', type: PI_DATASOURCE_TYPE });
   });
 

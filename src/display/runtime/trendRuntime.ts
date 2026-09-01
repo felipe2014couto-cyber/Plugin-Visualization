@@ -278,11 +278,20 @@ export class TrendRuntime {
       if (result?.status === 'success') {
         nextStates.set(consumerId, { status: 'success', data: result.series });
       } else {
-        nextStates.set(consumerId, {
-          status: 'error',
-          data: previous?.data,
-          error: result?.error ?? new Error('Trend sem resposta'),
-        });
+        // A primeira resposta pode falhar enquanto a conexão/datasource ainda
+        // está inicializando. Sem uma série anterior, mantenha o placeholder
+        // de carregamento para não exibir BAD antes de existir um diagnóstico
+        // definitivo. Se já houver dados, preserve-os durante a falha de
+        // atualização para que o gráfico não desapareça.
+        if (!previous || (previous.status !== 'success' && previous.status !== 'error')) {
+          nextStates.set(consumerId, { status: 'loading' });
+        } else {
+          nextStates.set(consumerId, {
+            status: 'error',
+            data: previous.data,
+            error: result?.error ?? new Error('Trend sem resposta'),
+          });
+        }
       }
     }
     this.states = nextStates;
