@@ -139,6 +139,21 @@ describe('DisplayEditor - cor do Gauge', () => {
 });
 
 describe('DisplayEditor - cor do Bar', () => {
+  it('aplica a cor do contorno à escala, rótulos e valor', async () => {
+    const changes: DisplayDocument[] = [];
+    const initial = appendBar(createDisplayDocument({ name: 'Cor' }), createBar({ id: 'bar', binding }));
+    render(<Harness initial={initial} loadValue={async () => ({ value: 25 })} onChange={(next) => changes.push(next)} />);
+
+    selectElement('bar');
+    await waitFor(() => expect(screen.getByTestId('bar-border-bar')).toHaveAttribute('stroke', 'var(--text-primary, #f8fafc)'));
+    fireEvent.change(screen.getByTestId('bar-border-color'), { target: { value: '#ff5500' } });
+
+    expect(screen.getByTestId('bar-border-bar')).toHaveAttribute('stroke', '#ff5500');
+    expect(screen.getByTestId('bar-value-bar')).toHaveAttribute('fill', '#ff5500');
+    expect(screen.getByText('SINUSOID')).toHaveAttribute('fill', '#ff5500');
+    expect(changes.at(-1)?.elements[0].properties).toMatchObject({ borderColor: '#ff5500' });
+  });
+
   it('altera a cor base sem tocar orientation nem geometria', async () => {
     const changes: DisplayDocument[] = [];
     const initial = appendBar(
