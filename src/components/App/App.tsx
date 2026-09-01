@@ -4,6 +4,7 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import { createDisplayDocument } from '../../display';
 import type { DisplayDocument } from '../../display/displayDocument';
+import { collectDisplayDataBindings } from '../../display/displayDataExport';
 import { appendProgramming, createProgramming, PROGRAMMING_TYPE, type ProgrammingElement } from '../../display/createProgramming';
 import { DisplayEditor } from '../../display/components/DisplayEditor';
 import {
@@ -201,6 +202,7 @@ export function App() {
   const [isProgrammingPiFiltersOpen, setIsProgrammingPiFiltersOpen] = useState(false);
   const [editingProgrammingElementId, setEditingProgrammingElementId] = useState<string | null>(null);
   const kioskMode = isGrafanaKioskMode();
+  const displayPiPointCount = useMemo(() => collectDisplayDataBindings(document).length, [document]);
 
   const commitProgrammingDraft = useCallback((next: ProgrammingDocument) => {
     setProgrammingDraft(next);
@@ -269,13 +271,15 @@ export function App() {
     let ms = getRefreshIntervalMs(refreshInterval);
     
     if (refreshInterval === 'adaptativa') {
-      const pointsCount = programmingPiPoints.length;
+      const pointsCount = Math.max(displayPiPointCount, programmingPiPoints.length);
       if (pointsCount <= 20) {
         ms = 5000;
       } else if (pointsCount <= 50) {
         ms = 10000;
-      } else {
+      } else if (pointsCount <= 100) {
         ms = 25000;
+      } else {
+        ms = 60000;
       }
     }
 
@@ -287,7 +291,7 @@ export function App() {
       setRefreshCount((count) => count + 1);
     }, ms);
     return () => clearInterval(timer);
-  }, [refreshInterval, programmingPiPoints.length]);
+  }, [displayPiPointCount, refreshInterval, programmingPiPoints.length]);
   const [isAssetsPanelOpen, setIsAssetsPanelOpen] = useState(true);
   const [assetsTab, setAssetsTab] = useState<AssetsTab>('assets');
   const loadedAssetsTabsRef = useRef(new Set<AssetsTab>(['assets']));
@@ -469,7 +473,20 @@ export function App() {
         return { ...plotDataResults, ...stateResults };
       }
       const fallbackResults = await progressiveTrendLoader(failedBindings, range, publishUpdate, options);
-      return { ...plotDataResults, ...stateResults, ...fallbackResults };
+      const results = { ...plotDataResults, ...stateResults };
+      // PlotData é apenas a primeira tentativa para tags sem WebID. Os erros
+      // dessa fase são provisórios: o loader progressivo ainda consultará a
+      // série por query e publicará o resultado final depois.
+      failedBindings.forEach((binding) => {
+        const key = `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
+        const fallback = fallbackResults[key];
+        if (fallback?.status === 'success') {
+          results[key] = fallback;
+        } else {
+          delete results[key];
+        }
+      });
+      return results;
     },
     [progressiveTrendLoader, rangeFrom, rangeTo],
   );

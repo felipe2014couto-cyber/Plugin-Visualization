@@ -311,7 +311,11 @@ function getTrendContent(
         const currentState = data?.states?.at(-1)?.value;
         const value = currentValue !== undefined
           ? formatValue(currentValue)
-          : currentState !== undefined ? currentState : '--';
+          : currentState !== undefined
+            ? currentState
+            : runtimeState.status === 'loading'
+              ? '...'
+              : runtimeState.status === 'error' ? 'BAD' : '--';
         const legendY = element.y + 26 + index * 54;
         const fullName = series.legendLabel || series.binding.pointName;
         const displayLabel = truncateLegendLabel(fullName, effectiveLegendWidth, visual.fontSize);
