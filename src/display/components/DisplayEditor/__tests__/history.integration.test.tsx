@@ -99,6 +99,21 @@ describe('DisplayEditor - histórico de edição', () => {
     expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(2);
   });
 
+  it('mantém os atalhos após a importação quando o input de arquivo continua focado', () => {
+    render(<Harness />);
+    const importInput = screen.getByTestId('display-import-input');
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+
+    fireEvent.keyDown(importInput, { key: 'z', ctrlKey: true });
+    fireEvent.keyDown(importInput, { key: 'z', ctrlKey: true });
+    expect(screen.queryByTestId(/^display-element-/)).toBeNull();
+
+    fireEvent.keyDown(importInput, { key: 'y', ctrlKey: true });
+    fireEvent.keyDown(importInput, { key: 'y', ctrlKey: true });
+    expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(2);
+  });
+
   it('cria Rectangle, desfaz e refaz preservando o ID', () => {
     render(<Harness />);
     expect(screen.getByTestId('display-undo')).toBeDisabled();

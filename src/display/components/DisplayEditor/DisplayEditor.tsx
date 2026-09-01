@@ -289,6 +289,7 @@ export function DisplayEditor({
   const batchEditElementIdsRef = useRef<string[]>([]);
   const pasteCountRef = useRef(0);
   const surfaceWrapperRef = useRef<HTMLDivElement>(null);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
   const canvasBounds = useMemo(
     () => getCanvasBounds(displayDocument.surface, displayDocument.elements),
     [displayDocument.elements, displayDocument.surface],
@@ -1754,6 +1755,11 @@ export function DisplayEditor({
       if (event.defaultPrevented || isEditableTarget(event.target)) {
         return;
       }
+      // Events originating inside the editor are handled by the React
+      // capture handler below. Avoid processing them twice (capture + bubble).
+      if (event.target instanceof Node && editorContainerRef.current?.contains(event.target)) {
+        return;
+      }
       const modifier = event.ctrlKey || event.metaKey;
       if (!modifier) {
         return;
@@ -1771,8 +1777,11 @@ export function DisplayEditor({
       }
     };
 
-    window.addEventListener('keydown', handleGlobalHistoryShortcut);
-    return () => window.removeEventListener('keydown', handleGlobalHistoryShortcut);
+    // Capture the event before canvas children (including imported PI Vision
+    // symbols) can stop propagation. Those symbols may own the focused node
+    // and otherwise prevent the editor's history shortcut from being seen.
+    window.addEventListener('keydown', handleGlobalHistoryShortcut, true);
+    return () => window.removeEventListener('keydown', handleGlobalHistoryShortcut, true);
   }, [handleRedo, handleUndo]);
 
   useEffect(() => {
@@ -1880,7 +1889,7 @@ export function DisplayEditor({
   }, [displayDocument.elements, handleTrendOpen, trendRefreshKey]);
 
   return (
-    <div className={styles.container} data-testid="display-editor" onKeyDown={handleEditorKeyDown}>
+    <div ref={editorContainerRef} className={styles.container} data-testid="display-editor" onKeyDownCapture={handleEditorKeyDown}>
       <div className={styles.header}>
         <div className={styles.headerPrimary}>
           <div className={styles.displayLabel}>
@@ -2276,7 +2285,11 @@ function isEditableTarget(target: EventTarget | null): boolean {
     return false;
   }
   const tagName = element.tagName?.toLowerCase();
-  return tagName === 'input'
+  // The hidden file input used by the import button keeps focus after an
+  // import. It is not an editable field, so history shortcuts must still be
+  // handled there. Preserve native undo/redo in actual text controls.
+  const inputType = tagName === 'input' ? (element as HTMLInputElement).type?.toLowerCase() : undefined;
+  return (tagName === 'input' && inputType !== 'file' && inputType !== 'button' && inputType !== 'submit')
     || tagName === 'textarea'
     || tagName === 'select'
     || element.isContentEditable;
