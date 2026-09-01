@@ -290,6 +290,7 @@ export function DisplayEditor({
   const pasteCountRef = useRef(0);
   const surfaceWrapperRef = useRef<HTMLDivElement>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
+  const autoFittedPiVisionDocumentRef = useRef<string | null>(null);
   const canvasBounds = useMemo(
     () => getCanvasBounds(displayDocument.surface, displayDocument.elements),
     [displayDocument.elements, displayDocument.surface],
@@ -1881,6 +1882,18 @@ export function DisplayEditor({
   }, []);
 
   useEffect(() => {
+    if (autoFittedPiVisionDocumentRef.current === displayDocument.id || !hasPiVisionImportMetadata(displayDocument.elements)) {
+      return;
+    }
+    autoFittedPiVisionDocumentRef.current = displayDocument.id;
+    // Wait for the imported SVG and the editor workspace to receive their
+    // final dimensions before applying the same calculation as “Ajustar à
+    // tela”. This makes the complete PI Vision display visible immediately.
+    const timeout = setTimeout(handleZoomFit, 0);
+    return () => clearTimeout(timeout);
+  }, [displayDocument.elements, displayDocument.id, handleZoomFit]);
+
+  useEffect(() => {
     const current = trendPopupRef.current;
     if (!current) {
       return;
@@ -2300,6 +2313,19 @@ function isEditableTarget(target: EventTarget | null): boolean {
     || tagName === 'textarea'
     || tagName === 'select'
     || element.isContentEditable;
+}
+
+function hasPiVisionImportMetadata(elements: readonly DisplayElement[]): boolean {
+  return elements.some((element) => {
+    if (Object.keys(element.properties).some((key) => key.startsWith('_piVision'))) {
+      return true;
+    }
+    if (element.type !== GROUP_TYPE) {
+      return false;
+    }
+    const children = (element.properties as { elements?: unknown }).elements;
+    return Array.isArray(children) && hasPiVisionImportMetadata(children as DisplayElement[]);
+  });
 }
 
 function getDropPoint(
@@ -3130,9 +3156,9 @@ const getStyles = (theme: GrafanaTheme2) => ({
     /* Imported PI Vision symbols can paint labels/strokes outside their
        declared geometry. Reserve an actual scrollable tail so the native
        bars continue past the document edge and reveal that overflow. */
-    padding: 16px 240px 240px 16px;
-    scroll-padding-right: 240px;
-    scroll-padding-bottom: 240px;
+    padding: 16px 32px 32px 16px;
+    scroll-padding-right: 32px;
+    scroll-padding-bottom: 32px;
     box-sizing: border-box;
     background-color: var(--canvas-bg);
     background-image: radial-gradient(circle, var(--canvas-dot) 1px, transparent 1px);
