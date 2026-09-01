@@ -49,4 +49,14 @@ describe('BarElementView', () => {
     const tagEl = screen.getByText('SINUSOID');
     expect(Number(tagEl.getAttribute('x'))).toBeCloseTo(expectedCenterX, 1);
   });
+
+  it('usa a cor do contorno na escala e nos rótulos', () => {
+    const element = createBar({ id: 'bar-border-color', binding });
+    element.properties.borderColor = '#ff0000';
+    render(<svg><BarElementView element={element} runtimeState={{ status: 'success', result: { value: 50 } }} /></svg>);
+
+    expect(screen.getByText('SINUSOID')).toHaveAttribute('fill', '#ff0000');
+    expect(screen.getByTestId('bar-border-bar-border-color')).toHaveAttribute('stroke', '#ff0000');
+    expect(screen.getAllByText('50')[0]).toHaveAttribute('fill', '#ff0000');
+  });
 });
