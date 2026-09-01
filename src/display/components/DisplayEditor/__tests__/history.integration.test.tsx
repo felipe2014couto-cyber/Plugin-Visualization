@@ -83,6 +83,32 @@ describe('DisplayEditor - histórico de edição', () => {
     expect(screen.queryByTestId(/^display-element-/)).toBeNull();
   });
 
+  it('preserva o histórico quando o host confirma publicações locais em sequência', () => {
+    const initial = createDisplayDocument({ name: 'PI Vision importado' });
+    const onChange = jest.fn<void, [DisplayDocument]>();
+    const { rerender } = render(<DisplayEditor document={initial} onChange={onChange} />);
+
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    const firstPublished = onChange.mock.calls[0][0];
+    const secondPublished = onChange.mock.calls[1][0];
+
+    rerender(<DisplayEditor document={firstPublished} onChange={onChange} />);
+    rerender(<DisplayEditor document={secondPublished} onChange={onChange} />);
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    rerender(<DisplayEditor document={onChange.mock.calls[2][0]} onChange={onChange} />);
+    expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(1);
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    rerender(<DisplayEditor document={onChange.mock.calls[3][0]} onChange={onChange} />);
+    expect(screen.queryByTestId(/^display-element-/)).toBeNull();
+    fireEvent.keyDown(window, { key: 'y', ctrlKey: true });
+    rerender(<DisplayEditor document={onChange.mock.calls[4][0]} onChange={onChange} />);
+    fireEvent.keyDown(window, { key: 'y', ctrlKey: true });
+    rerender(<DisplayEditor document={onChange.mock.calls[5][0]} onChange={onChange} />);
+    expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(2);
+  });
+
   it('executa múltiplos atalhos globais depois que Undo substitui o elemento focado', () => {
     render(<Harness />);
     fireEvent.click(screen.getByTestId('display-insert-rectangle'));

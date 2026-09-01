@@ -246,7 +246,7 @@ export function DisplayEditor({
   const documentRef = useRef<DisplayDocument>(displayDocument);
   const onChangeRef = useRef<((document: DisplayDocument) => void) | undefined>(onChange);
   const historyRef = useRef(createDisplayHistory(displayDocument));
-  const expectedDocumentRef = useRef<DisplayDocument | null>(null);
+  const expectedDocumentsRef = useRef<DisplayDocument[]>([]);
   const pendingTransactionRef = useRef<PendingDocumentTransaction | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -338,23 +338,30 @@ export function DisplayEditor({
   }, [optionsElementId, state.selectedElementId]);
 
   useEffect(() => {
-    documentRef.current = displayDocument;
-    if (expectedDocumentRef.current) {
-      if (areDisplayDocumentsEqual(expectedDocumentRef.current, displayDocument)) {
-        expectedDocumentRef.current = null;
+    const expectedDocuments = expectedDocumentsRef.current;
+    if (expectedDocuments.length > 0) {
+      const acknowledgedIndex = expectedDocuments.findIndex((expected) => areDisplayDocumentsEqual(expected, displayDocument));
+      if (acknowledgedIndex >= 0) {
+        expectedDocuments.splice(0, acknowledgedIndex + 1);
+        documentRef.current = expectedDocuments.at(-1) ?? displayDocument;
         return;
       }
       // Some hosts normalize/clone imported PI Vision documents before
-      // returning them through onChange. Keep the local edit stack in that
-      // case; resetting it here made Undo/Redo work only once after import.
-      historyRef.current = {
-        ...historyRef.current,
-        present: displayDocument,
-      };
-      expectedDocumentRef.current = null;
-      refreshHistory((version) => version + 1);
+      // returning them through onChange. Consume one pending publication,
+      // but preserve newer local publications and the complete edit stack.
+      expectedDocuments.shift();
+      const latestPendingDocument = expectedDocuments.at(-1);
+      documentRef.current = latestPendingDocument ?? displayDocument;
+      if (!latestPendingDocument) {
+        historyRef.current = {
+          ...historyRef.current,
+          present: displayDocument,
+        };
+        refreshHistory((version) => version + 1);
+      }
       return;
     }
+    documentRef.current = displayDocument;
     if (!areDisplayDocumentsEqual(historyRef.current.present, displayDocument)) {
       historyRef.current = createDisplayHistory(displayDocument);
       refreshHistory((version) => version + 1);
@@ -382,7 +389,7 @@ export function DisplayEditor({
 
   const publishDocument = useCallback((nextDocument: DisplayDocument) => {
     documentRef.current = nextDocument;
-    expectedDocumentRef.current = nextDocument;
+    expectedDocumentsRef.current.push(nextDocument);
     onChangeRef.current?.(nextDocument);
   }, []);
 
