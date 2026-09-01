@@ -3113,7 +3113,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
     position: relative;
     align-items: center;
     justify-content: center;
-    flex: 1 1 auto;
+    /* Do not let an imported PI Vision SVG's intrinsic width push the
+       properties panel outside the editor. The SVG remains scrollable inside
+       this flex item when it is larger than the available space. */
+    flex: 1 1 0;
+    width: 0;
     min-width: 0;
     min-height: 0;
     /* Keep the full display reachable when its surface is larger than the
@@ -3138,6 +3142,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
 
     @media (max-width: 760px) {
       flex: 0 0 auto;
+      width: 100%;
       width: 100%;
       min-height: min(62vh, 560px);
     }
