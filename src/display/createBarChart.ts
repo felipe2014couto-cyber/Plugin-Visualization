@@ -58,7 +58,7 @@ export const DEFAULT_BAR_CHART_VISUAL_OPTIONS: BarChartVisualOptions = {
   numberFormat: 'database',
   decimals: null,
   useThousandsSeparator: false,
-  labelMode: 'default',
+  labelMode: 'tag',
   orientation: 'vertical',
   gridMode: 'lines',
   showLabel: true,
@@ -285,11 +285,11 @@ export function normalizeBarChartVisualOptions(visual?: Partial<BarChartVisualOp
 function copyBarChartItem(item: BarChartItem): BarChartItem {
   return {
     binding: { ...item.binding },
-    ...(item.label ? { label: item.label } : {}),
-    ...(item.description ? { description: item.description } : {}),
-    ...(item.engineeringUnit ? { engineeringUnit: item.engineeringUnit } : {}),
+    ...(typeof item.label === 'string' ? { label: item.label } : {}),
+    ...(typeof item.description === 'string' ? { description: item.description } : {}),
+    ...(typeof item.engineeringUnit === 'string' ? { engineeringUnit: item.engineeringUnit } : {}),
     ...(item.nameMode ? { nameMode: item.nameMode } : {}),
-    ...(item.customName ? { customName: item.customName } : {}),
+    ...(typeof item.customName === 'string' ? { customName: item.customName } : {}),
   };
 }
 

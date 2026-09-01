@@ -57,7 +57,6 @@ export function BarChartPropertiesPanel({
   const styles = useStyles2(getStyles);
   const items = getBarChartItems(element);
 
-
   const [selectedItemIndex, setSelectedItemIndex] = useState(0);
   const selectedItem = items[selectedItemIndex] ?? items[0];
   const effectiveIndex = selectedItem ? items.indexOf(selectedItem) : -1;
@@ -70,7 +69,6 @@ export function BarChartPropertiesPanel({
       ),
     });
   };
-
   return (
     <aside className={styles.panel} data-testid="bar-chart-properties-panel" aria-label="Opções do Gráfico de Barras">
       {/* Header */}
@@ -210,7 +208,6 @@ export function BarChartPropertiesPanel({
           >
             <option value="default">Nome da tag</option>
             <option value="description">Descrição</option>
-            <option value="custom">Personalizado</option>
           </select>
         </label>
         <label className={styles.check}>
@@ -463,6 +460,8 @@ export function BarChartPropertiesPanel({
             )}
           </div>
         )}
+
+
       </section>
     </aside>
   );
