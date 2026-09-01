@@ -50,6 +50,15 @@ describe('BarElementView', () => {
     expect(Number(tagEl.getAttribute('x'))).toBeCloseTo(expectedCenterX, 1);
   });
 
+  it('mantém o valor horizontal acima da barra', () => {
+    const element = createBar({ id: 'bar-horizontal-value', binding, orientation: 'horizontal' });
+    render(<svg><BarElementView element={element} runtimeState={{ status: 'success', result: { value: 21 } }} /></svg>);
+
+    const track = screen.getByTestId('bar-track-bar-horizontal-value');
+    const value = screen.getByTestId('bar-horizontal-detail-bar-horizontal-value-0');
+    expect(Number(value.getAttribute('y'))).toBeLessThan(Number(track.getAttribute('y')));
+  });
+
   it('usa a cor do contorno na escala e nos rótulos', () => {
     const element = createBar({ id: 'bar-border-color', binding });
     element.properties.borderColor = '#ff0000';

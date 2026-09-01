@@ -56,6 +56,11 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
     ? barOptions.customTagName
     : label ?? (binding && isPiPointBinding(binding) ? binding.pointName : '');
   const barCenterX = plotX + plotWidth / 2;
+  // Position the horizontal header from the actual track boundary. This keeps
+  // the value visibly outside the bar even when the element is resized.
+  const horizontalValueY = plotY - 18;
+  const horizontalTitleY = horizontalValueY - 18;
+  const horizontalDetailLineHeight = Math.max(12, Math.min(16, element.height * 0.1));
 
   return (
     <g
@@ -79,14 +84,28 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         pointerEvents="all"
       />
       {tagLabel && options.showTagName && (
-        <text x={barCenterX} y={element.y + (isPiVisionCompactGauge ? 12 : horizontal ? 12 : 22)} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={isPiVisionCompactGauge ? Math.max(8, Math.min(12, element.width * 0.16)) : horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
+        <text x={barCenterX} y={isPiVisionCompactGauge ? element.y + 12 : horizontal ? horizontalTitleY : element.y + 22} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={isPiVisionCompactGauge ? Math.max(8, Math.min(12, element.width * 0.16)) : horizontal ? Math.max(16, Math.min(22, element.height * 0.16)) : 18} fontWeight={500} pointerEvents="none">
           {tagLabel}
         </text>
       )}
       {horizontal && (
-        <text x={barCenterX} y={element.y + 22} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={Math.max(14, Math.min(20, element.height * 0.13))} fontWeight={500} pointerEvents="none">
-          {detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={barCenterX} dy={index === 0 ? 0 : 16}>{line}</tspan>)}
-        </text>
+        <g pointerEvents="none">
+          {detailLines.map((line, index) => (
+            <text
+              key={`${line}-${index}`}
+              x={barCenterX}
+              y={horizontalValueY - ((detailLines.length - index - 1) * horizontalDetailLineHeight)}
+              textAnchor="middle"
+              fill={borderColor}
+              style={{ fill: borderColor }}
+              fontSize={Math.max(14, Math.min(20, element.height * 0.13))}
+              fontWeight={500}
+              data-testid={`bar-horizontal-detail-${element.id}-${index}`}
+            >
+              {line}
+            </text>
+          ))}
+        </g>
       )}
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill={trackColor} data-testid={`bar-track-${element.id}`} pointerEvents="none" />
       {options.showScale !== false && !horizontal && isValidScale(minimum, maximum) && Array.from({ length: scaleTickCount }, (_, index) => {
