@@ -338,8 +338,20 @@ export function DisplayEditor({
 
   useEffect(() => {
     documentRef.current = displayDocument;
-    if (expectedDocumentRef.current && areDisplayDocumentsEqual(expectedDocumentRef.current, displayDocument)) {
+    if (expectedDocumentRef.current) {
+      if (areDisplayDocumentsEqual(expectedDocumentRef.current, displayDocument)) {
+        expectedDocumentRef.current = null;
+        return;
+      }
+      // Some hosts normalize/clone imported PI Vision documents before
+      // returning them through onChange. Keep the local edit stack in that
+      // case; resetting it here made Undo/Redo work only once after import.
+      historyRef.current = {
+        ...historyRef.current,
+        present: displayDocument,
+      };
       expectedDocumentRef.current = null;
+      refreshHistory((version) => version + 1);
       return;
     }
     if (!areDisplayDocumentsEqual(historyRef.current.present, displayDocument)) {

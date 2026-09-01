@@ -51,6 +51,11 @@ function CloningParentHarness() {
   return <DisplayEditor document={document} onChange={(next) => setDocument({ ...next, elements: [...next.elements] })} />;
 }
 
+function NormalizingParentHarness() {
+  const [document, setDocument] = useState<DisplayDocument>(() => createDisplayDocument({ name: 'Normalized history' }));
+  return <DisplayEditor document={document} onChange={(next) => setDocument({ ...next, name: next.name.trim() })} />;
+}
+
 function getSurface(): SVGSVGElement {
   return screen.getByTestId('display-surface') as unknown as SVGSVGElement;
 }
@@ -62,6 +67,16 @@ describe('DisplayEditor - histórico de edição', () => {
     fireEvent.click(screen.getByTestId('display-insert-rectangle'));
     expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(2);
 
+    fireEvent.click(screen.getByTestId('display-undo'));
+    expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('display-undo'));
+    expect(screen.queryByTestId(/^display-element-/)).toBeNull();
+  });
+
+  it('preserva vários Undo quando o host normaliza o documento após cada edição', () => {
+    render(<NormalizingParentHarness />);
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
+    fireEvent.click(screen.getByTestId('display-insert-rectangle'));
     fireEvent.click(screen.getByTestId('display-undo'));
     expect(screen.getAllByTestId(/^display-element-/)).toHaveLength(1);
     fireEvent.click(screen.getByTestId('display-undo'));
