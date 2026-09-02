@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatValue } from './ValueElementView';
 import { isPiPointBinding } from '../../pi/piPointBinding';
 import { getBarOptions, type BarElement } from '../createBar';
 import { formatScaleValue, getScaleRatio } from '../scaleOptions';
@@ -176,6 +177,11 @@ function getValueText(
   }
   if (value !== undefined) {
     return formatScaleValue(value, decimals);
+  }
+  // Valor textual (Calc Failed, Shutdown, estado digital, etc.)
+  const rawValue = state?.result?.value;
+  if (rawValue !== undefined && rawValue !== null) {
+    return formatValue(rawValue);
   }
   return state?.status === 'error' ? 'BAD' : '--';
 }

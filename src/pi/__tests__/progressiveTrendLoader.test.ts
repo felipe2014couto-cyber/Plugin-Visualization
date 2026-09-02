@@ -87,6 +87,29 @@ describe('progressive trend loader', () => {
     expect(queryRange).toHaveBeenCalledTimes(1);
   });
 
+  it('inicia o refinamento sem esperar uma prévia lenta terminar', async () => {
+    let resolvePreview: ((value: Record<string, PiTrendSeriesResult>) => void) | undefined;
+    const queryPreview = jest.fn(() => new Promise<Record<string, PiTrendSeriesResult>>((resolve) => {
+      resolvePreview = resolve;
+    }));
+    const recorded = {
+      [resultKey]: { status: 'success' as const, series: { pointName: 'SINUSOID', points: [{ time: 2, value: 2 }] } },
+    };
+    const queryRecorded = jest.fn(async () => recorded);
+    const publishComplete = jest.fn();
+    const loader = createProgressiveTrendLoader(queryRecorded, queryPreview);
+    const range = { from: 0, to: TREND_PREVIEW_DURATION_MS };
+
+    const resultPromise = loader([binding], range, publishComplete);
+    await flushAsyncWork();
+
+    expect(queryPreview).toHaveBeenCalledTimes(1);
+    expect(queryRecorded).toHaveBeenCalledTimes(1);
+    resolvePreview?.({ [resultKey]: { status: 'error', error: new Error('prévia lenta') } });
+    await expect(resultPromise).resolves.toStrictEqual(recorded);
+    expect(publishComplete).toHaveBeenCalledWith(recorded);
+  });
+
   it('revalida preview e refinamento depois do TTL sem reutilizar dados indefinidamente', async () => {
     let now = 1_000;
     const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => now);

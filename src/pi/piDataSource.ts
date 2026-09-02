@@ -15,12 +15,14 @@ import {
   DATA_QUERY_CURRENT_MAX_CONCURRENT_BATCHES,
   DATA_QUERY_CURRENT_MAX_TARGETS,
   DATA_QUERY_CURRENT_TIMEOUT_MS,
+  DATA_QUERY_HISTORICAL_TIMEOUT_MS,
   DATA_QUERY_MAX_CONCURRENT_BATCHES,
   DATA_QUERY_MAX_TARGETS,
 } from './dataQueryPolicy';
 
 export const PI_DATASOURCE_TYPE = 'gridprotectionalliance-osisoftpi-datasource';
 const CURRENT_VALUE_LOOKBACK_MS = 60 * 1000;
+const runHistoricalQuery = createAsyncLimiter(DATA_QUERY_MAX_CONCURRENT_BATCHES);
 
 export type PiConnectionStatus = 'checking' | 'connected' | 'error' | 'not-configured';
 
@@ -1238,11 +1240,11 @@ async function queryPiTrendsHistory(
         const resolveBatch = async (selected: readonly PiPointBinding[], fallbackError: Error): Promise<void> => {
           let response: DataQueryResponse;
           try {
-            response = await withTimeout(
+            response = await runHistoricalQuery(() => withTimeout(
               resolveQueryResponse(instance.query(buildHistoricalTrendRequest(selected, range, mode, options))),
-              8_000,
+              DATA_QUERY_HISTORICAL_TIMEOUT_MS,
               `Consulta histórica excedeu o tempo limite para ${selected.map(({ pointName }) => pointName).join(', ')}`,
-            );
+            ));
           } catch (error) {
             const queryError = toError(error);
             if (isHistoricalTrendTimeout(queryError) || selected.length === 1) {
@@ -1250,8 +1252,10 @@ async function queryPiTrendsHistory(
               return;
             }
             const middle = Math.ceil(selected.length / 2);
-            await resolveBatch(selected.slice(0, middle), queryError);
-            await resolveBatch(selected.slice(middle), queryError);
+            await Promise.all([
+              resolveBatch(selected.slice(0, middle), queryError),
+              resolveBatch(selected.slice(middle), queryError),
+            ]);
             return;
           }
 
@@ -1271,8 +1275,10 @@ async function queryPiTrendsHistory(
           }
           if (response.error && selected.length > 1) {
             const middle = Math.ceil(selected.length / 2);
-            await resolveBatch(selected.slice(0, middle), fallbackError);
-            await resolveBatch(selected.slice(middle), fallbackError);
+            await Promise.all([
+              resolveBatch(selected.slice(0, middle), fallbackError),
+              resolveBatch(selected.slice(middle), fallbackError),
+            ]);
           }
         };
 
@@ -1787,6 +1793,29 @@ async function runQueryTasks(
     },
   );
   await Promise.all(workers);
+}
+
+function createAsyncLimiter(maxConcurrent: number) {
+  let active = 0;
+  const waiting: Array<() => void> = [];
+
+  return async function runLimited<T>(task: () => Promise<T>): Promise<T> {
+    if (active >= maxConcurrent) {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    } else {
+      active += 1;
+    }
+    try {
+      return await task();
+    } finally {
+      const next = waiting.shift();
+      if (next) {
+        next();
+      } else {
+        active -= 1;
+      }
+    }
+  };
 }
 
 function formatQueryInterval(intervalMs: number): string {

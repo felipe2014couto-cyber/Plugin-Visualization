@@ -566,8 +566,10 @@ function convertValue(
     return undefined;
   }
 
-  const color = normalizeColor(cfg.ForeColor ?? cfg.ValueStroke ?? cfg.Stroke) ?? '#131313';
-  const backgroundColor = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill) ?? DEFAULT_VALUE_VISUAL_OPTIONS.backgroundColor;
+  const color = normalizeColor(cfg.ForeColor ?? cfg.ValueStroke ?? cfg.Stroke) ?? DEFAULT_VALUE_VISUAL_OPTIONS.color;
+  const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
+  const isDefaultWhiteOrTransparent = !rawBg || rawBg.toLowerCase() === '#ffffff' || rawBg.toLowerCase() === '#fff' || rawBg === 'transparent' || cfg.Transparent === true;
+  const backgroundColor = isDefaultWhiteOrTransparent ? 'transparent' : rawBg;
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize);
   const textAlign = normalizeTextAlign(cfg.TextAlignment);
   const thresholdMultistate = convertPiVisionThresholdMultistate(cfg.Multistates);
@@ -874,7 +876,7 @@ function convertText(
   const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
   const isDefaultWhiteOrTransparent = !rawBg || rawBg.toLowerCase() === '#ffffff' || rawBg.toLowerCase() === '#fff' || rawBg === 'transparent' || cfg.Transparent === true;
   const backgroundColor = isDefaultWhiteOrTransparent ? 'transparent' : rawBg;
-  const color = rawColor ?? '#131313';
+  const color = rawColor ?? DEFAULT_TEXT_PROPERTIES.color;
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize) ?? DEFAULT_TEXT_PROPERTIES.fontSize;
   const textAlign = normalizeTextAlign(cfg.TextAlignment) as TextAlign;
 
@@ -1474,7 +1476,6 @@ export function parseDataSourcePath(
     return undefined;
   }
 
-  const serverPath = removePiVisionResourceId(normalized.slice(0, firstSep));
   const remainder = normalized.slice(firstSep + 1);
 
   if (!remainder) {
@@ -1487,11 +1488,18 @@ export function parseDataSourcePath(
   const rawPointName = lastSep >= 0 ? remainder.slice(lastSep + 1) : remainder;
   const pointName = removePiVisionResourceId(rawPointName);
 
-  if (!serverPath || !pointName) {
+  // O serverPath deve ser tudo antes do pointName para nao perder subestruturas (ex: DB\Element)
+  const pointNameIndex = normalized.lastIndexOf(rawPointName);
+  let newServerPath = pointNameIndex > 0 ? normalized.slice(0, pointNameIndex) : normalized;
+  // Limpar pipes ou barras no final do serverPath
+  newServerPath = newServerPath.replace(/[\\/|]+$/, '');
+  newServerPath = removePiVisionResourceId(newServerPath);
+
+  if (!newServerPath || !pointName) {
     return undefined;
   }
 
-  return { dataSourceUid, serverPath, pointName };
+  return { dataSourceUid, serverPath: newServerPath, pointName };
 }
 
 // ---------------------------------------------------------------------------

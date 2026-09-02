@@ -26,8 +26,13 @@ import {
   type PiConnectionState,
   type PiPointSearchResult,
   type PiPointValue,
+  type PiTrendSeries,
+  type PiTrendSeriesResult,
+  type PiTrendTimeRange,
+  TREND_PREVIEW_DURATION_MS,
   type ProgressiveTrendLoader,
 } from '../../pi';
+import { appendTrendSnapshot, canAppendTrendSnapshot } from '../../pi/incrementalTrend';
 import { PiPointSearch } from '../../pi/PiPointSearch';
 import { createPiPointBinding, isStatePiPointBinding } from '../../pi/piPointBinding';
 import type { LoadTrendSeries } from '../../display/runtime/trendRuntime';
@@ -326,6 +331,7 @@ export function App() {
   }, [activeModule]);
   // sqlTableIdRef is no longer needed
   const progressiveTrendLoaderRef = useRef<ProgressiveTrendLoader>();
+  const trendSeriesCacheRef = useRef(new Map<string, { range: PiTrendTimeRange; series: PiTrendSeries }>());
   if (!progressiveTrendLoaderRef.current) {
     progressiveTrendLoaderRef.current = createProgressiveTrendLoader(
       (bindings, range, options) => getPiTrendsHistoryForRange(bindings, range, options),
@@ -462,33 +468,94 @@ export function App() {
   const loadTrend = useCallback<LoadTrendSeries>(
     async (bindings, publishUpdate, options) => {
       const range = { from: rangeFrom, to: rangeTo };
-      const stateBindings = bindings.filter(isStatePiPointBinding);
-      const numericBindings = bindings.filter((binding) => !isStatePiPointBinding(binding));
-      const [plotDataResults, stateResults] = await Promise.all([
-        getPiTrendsPlotDataForRange(numericBindings, range, options),
-        getPiTrendsRecordedHistoryForRange(stateBindings, range, options),
-      ]);
-      const failedBindings = numericBindings.filter((binding) => plotDataResults[`${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`]?.status === 'error');
-      if (failedBindings.length === 0) {
-        return { ...plotDataResults, ...stateResults };
-      }
-      const fallbackResults = await progressiveTrendLoader(failedBindings, range, publishUpdate, options);
-      const results = { ...plotDataResults, ...stateResults };
-      // PlotData é apenas a primeira tentativa para tags sem WebID. Os erros
-      // dessa fase são provisórios: o loader progressivo ainda consultará a
-      // série por query e publicará o resultado final depois.
-      failedBindings.forEach((binding) => {
-        const key = `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
-        const fallback = fallbackResults[key];
-        if (fallback?.status === 'success') {
-          results[key] = fallback;
-        } else {
-          delete results[key];
+      const automaticRefresh = refreshInterval !== '' && timeSelection.endExpression === '*';
+      const incrementalBindings = automaticRefresh
+        ? bindings.filter((binding) => {
+          const cached = trendSeriesCacheRef.current.get(getTrendBindingCacheKey(binding));
+          return cached ? canAppendTrendSnapshot(cached.range, range) : false;
+        })
+        : [];
+      const incrementalKeys = new Set(incrementalBindings.map(getTrendBindingCacheKey));
+      const fullBindings = bindings.filter((binding) => !incrementalKeys.has(getTrendBindingCacheKey(binding)));
+      const results: Record<string, PiTrendSeriesResult> = {};
+
+      const storeSuccessfulResults = (next: Record<string, PiTrendSeriesResult>) => {
+        Object.entries(next).forEach(([key, result]) => {
+          if (result.status === 'success') {
+            trendSeriesCacheRef.current.set(key, { range, series: result.series });
+          }
+        });
+      };
+
+      const loadFullHistory = async () => {
+        if (fullBindings.length === 0) {
+          return;
         }
-      });
+        const stateBindings = fullBindings.filter(isStatePiPointBinding);
+        const numericBindings = fullBindings.filter((binding) => !isStatePiPointBinding(binding));
+        const cacheAndPublish = (next: Record<string, PiTrendSeriesResult>) => {
+          storeSuccessfulResults(next);
+          publishUpdate?.(next);
+        };
+        const plotBindings = numericBindings.filter((binding) => Boolean(binding.webId));
+        const [plotDataResults, stateResults] = await Promise.all([
+          getPiTrendsPlotDataForRange(plotBindings, range, options),
+          getPiTrendsRecordedHistoryForRange(stateBindings, range, options),
+        ]);
+        const failedBindings = numericBindings.filter((binding) => (
+          !binding.webId || plotDataResults[getTrendBindingCacheKey(binding)]?.status === 'error'
+        ));
+        const fullResults: Record<string, PiTrendSeriesResult> = { ...plotDataResults, ...stateResults };
+        if (failedBindings.length > 0) {
+          // Para janelas maiores que a prévia (por exemplo, 1 dia), uma
+          // prévia de baixa resolução e o refinamento consultariam o mesmo
+          // histórico duas vezes. A consulta gravada única é mais rápida e
+          // já entrega a resolução necessária para esse período.
+          const fallbackResults = range.to - range.from > TREND_PREVIEW_DURATION_MS
+            ? await getPiTrendsRecordedHistoryForRange(failedBindings, range, options)
+            : await progressiveTrendLoader(failedBindings, range, cacheAndPublish, options);
+          // PlotData é apenas a primeira tentativa para tags sem WebID. Os
+          // erros dessa fase são provisórios enquanto o fallback está ativo.
+          failedBindings.forEach((binding) => {
+            const key = getTrendBindingCacheKey(binding);
+            const fallback = fallbackResults[key];
+            if (fallback?.status === 'success') {
+              fullResults[key] = fallback;
+            } else {
+              delete fullResults[key];
+            }
+          });
+        }
+        storeSuccessfulResults(fullResults);
+        Object.assign(results, fullResults);
+      };
+
+      const appendCurrentValues = async () => {
+        if (incrementalBindings.length === 0) {
+          return;
+        }
+        const currentValues = await getPiPointsCurrentValues(incrementalBindings);
+        incrementalBindings.forEach((binding) => {
+          const key = getTrendBindingCacheKey(binding);
+          const cached = trendSeriesCacheRef.current.get(key);
+          if (!cached) {
+            return;
+          }
+          const current = currentValues[key];
+          const series = appendTrendSnapshot(
+            cached.series,
+            current?.status === 'success' ? current.value : undefined,
+            range,
+          );
+          trendSeriesCacheRef.current.set(key, { range, series });
+          results[key] = { status: 'success', series };
+        });
+      };
+
+      await Promise.all([loadFullHistory(), appendCurrentValues()]);
       return results;
     },
-    [progressiveTrendLoader, rangeFrom, rangeTo],
+    [progressiveTrendLoader, rangeFrom, rangeTo, refreshInterval, timeSelection.endExpression],
   );
   const hasPiConnection = piConnection.status === 'connected';
 
@@ -2190,6 +2257,10 @@ function getConnectionLabel(connection: PiConnectionState): string {
     case 'not-configured':
       return 'PI System: Data Source não configurada';
   }
+}
+
+function getTrendBindingCacheKey(binding: { dataSourceUid: string; serverPath: string; pointName: string }): string {
+  return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
 }
 
 function RefreshIcon() {

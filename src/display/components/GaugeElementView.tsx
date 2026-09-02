@@ -6,6 +6,7 @@ import type { ValueRuntimeState } from '../runtime/valueRuntime';
 import { evaluateMultistate, getMultistateColor } from '../multistate';
 import type { PiPointDatabaseLimits } from '../../pi/piPointBinding';
 import { resolveThemeForeground } from '../themeColor';
+import { formatValue } from './ValueElementView';
 
 export interface GaugeElementViewProps {
   element: GaugeElement;
@@ -234,6 +235,11 @@ function getValueText(
   }
   if (value !== undefined) {
     return formatScaleValue(value, decimals);
+  }
+  // Valor textual (Calc Failed, Shutdown, estado digital, etc.)
+  const rawValue = state?.result?.value;
+  if (rawValue !== undefined && rawValue !== null) {
+    return formatValue(rawValue);
   }
   return state?.status === 'error' ? 'BAD' : '--';
 }

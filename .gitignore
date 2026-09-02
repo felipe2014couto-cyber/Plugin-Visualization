@@ -46,6 +46,7 @@ relatorio sprint 11 parcial.md
 sprint5_parcial.md
 __pycache__/
 *.py[cod]
+.venv/
 
 *.env
 .env
