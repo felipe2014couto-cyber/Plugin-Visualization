@@ -1495,6 +1495,19 @@ export function DisplayEditor({
     setContextMenu(null);
   }, [dispatch]);
 
+  const handleViewElementContextMenu = useCallback((element: DisplayElement, event?: React.MouseEvent) => {
+    if (!hasElementDataSource(element)) {
+      return;
+    }
+    setContextMenu({
+      x: event?.clientX ?? 100,
+      y: event?.clientY ?? 100,
+      elementId: element.id,
+      elementIds: [element.id],
+      showDataDetails: true,
+    });
+  }, []);
+
   const handleElementContextMenu = useCallback((element: DisplayElement, event?: React.MouseEvent) => {
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
@@ -2121,6 +2134,7 @@ export function DisplayEditor({
             onTrendContextMenu={handleTrendContextMenu}
             onTrendLegendContextMenu={handleTrendLegendInfo}
             onElementContextMenu={handleElementContextMenu}
+            onViewElementContextMenu={handleViewElementContextMenu}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
             onTableLayoutChange={handleTableLayoutChange}
             onTrendLegendWidthChange={handleTrendLegendWidthChange}

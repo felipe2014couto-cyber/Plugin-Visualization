@@ -145,6 +145,7 @@ export interface DisplaySurfaceProps {
   onTrendContextMenu?: (element: TrendElement, event?: React.MouseEvent) => void;
   onTrendLegendContextMenu?: (series: TrendSeries, value: string | number | undefined) => void;
   onElementContextMenu?: (element: DisplayElement, event?: React.MouseEvent) => void;
+  onViewElementContextMenu?: (element: DisplayElement, event?: React.MouseEvent) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement, event?: React.MouseEvent) => void;
   onTableLayoutChange?: (elementId: string, columns: TableColumnConfig[], tableWidth: number) => void;
   onTrendLegendWidthChange?: (elementId: string, legendWidth: number) => void;
@@ -214,6 +215,7 @@ export function DisplaySurface({
   onTrendContextMenu,
   onTrendLegendContextMenu,
   onElementContextMenu,
+  onViewElementContextMenu,
   onLibrarySymbolContextMenu,
   onTableLayoutChange,
   onTrendLegendWidthChange,
@@ -468,6 +470,12 @@ export function DisplaySurface({
   }, [allElements, allTrendRuntimeStates, cursorsByTrend, editable, elements, onTrendOpen]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
     if (!editable) {
+      const element = elements.find((candidate) => candidate.id === elementId);
+      if (element) {
+        event.preventDefault();
+        event.stopPropagation();
+        onViewElementContextMenu?.(element, event);
+      }
       return;
     }
     const topLevelId = findTopLevelElementId(elements, elementId) ?? elementId;
@@ -484,7 +492,7 @@ export function DisplaySurface({
     } else {
       onElementContextMenu?.(topLevelElement, event);
     }
-  }, [editable, elements, onElementContextMenu, onTrendContextMenu]);
+  }, [editable, elements, onElementContextMenu, onTrendContextMenu, onViewElementContextMenu]);
 
   const handleTrendLegendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, _elementId: string, series: TrendSeries, value: string | number | undefined) => {
     if (editable) return;
@@ -495,6 +503,12 @@ export function DisplaySurface({
 
   const handleLibrarySymbolContextMenu = useCallback((event: React.MouseEvent<SVGElement>, elementId: string) => {
     if (!editable) {
+      const element = elements.find((candidate) => candidate.id === elementId);
+      if (element) {
+        event.preventDefault();
+        event.stopPropagation();
+        onViewElementContextMenu?.(element, event);
+      }
       return;
     }
     const topLevelId = findTopLevelElementId(elements, elementId) ?? elementId;
@@ -511,12 +525,9 @@ export function DisplaySurface({
     } else {
       onElementContextMenu?.(topLevelElement, event);
     }
-  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu]);
+  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onViewElementContextMenu]);
 
   const handleElementContextMenu = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
-    if (!editable) {
-      return;
-    }
     const target = event.target as Element;
     const rawId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
     const topLevelId = rawId ? (findTopLevelElementId(elements, rawId) ?? rawId) : undefined;
@@ -526,6 +537,10 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
+    if (!editable) {
+      onViewElementContextMenu?.(element, event);
+      return;
+    }
     if (element.type === TREND_TYPE) {
       onTrendContextMenu?.(element as TrendElement, event);
     } else if (element.type === LIBRARY_SYMBOL_TYPE) {
@@ -533,7 +548,7 @@ export function DisplaySurface({
     } else {
       onElementContextMenu?.(element, event);
     }
-  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onTrendContextMenu]);
+  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onTrendContextMenu, onViewElementContextMenu]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
