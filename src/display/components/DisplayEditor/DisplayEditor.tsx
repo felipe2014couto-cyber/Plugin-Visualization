@@ -69,6 +69,7 @@ import { getPiPointMetadata, type PiDigitalStatesResult, type PiPointMetadata, t
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 import { CALCULATION_DRAG_MIME, parseCalculationDragData } from '../../../calculations/calculationDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
+import { getElementDataSourceCapability, replaceElementPiBinding } from '../../dataSourceBehavior';
 import { DisplaySurface } from './DisplaySurface';
 import { PROGRAMMING_TYPE, type ProgrammingElement } from '../../createProgramming';
 import { TrendPopup } from '../TrendPopup';
@@ -660,7 +661,6 @@ export function DisplayEditor({
     }
     commitDocument(appendDisplayElement(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-    setPropertiesPanelOpen(true);
     setOptionsElementId(null);
     setOptionsTrendId(null);
     setShapeMenuOpen(false);
@@ -744,11 +744,7 @@ export function DisplayEditor({
       event.preventDefault();
       const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
       const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
-      const targetTrend = dropSymbolType === 'trend'
-        ? resolveTrendDropTarget(documentRef.current, event.target, event.clientX, event.clientY, point)
-        : undefined;
-      const targetLibrarySymbol = resolveLibrarySymbolDropTarget(documentRef.current, event.target, point);
-      const targetShape = resolveGeometricDropTarget(documentRef.current, event.target, point);
+      const target = resolveDataSourceDropTarget(documentRef.current, event.target, event.clientX, event.clientY, point);
       const preview = svg
         ? createCalculationDragPreview(
           svg,
@@ -757,9 +753,7 @@ export function DisplayEditor({
           event.clientY,
           documentRef.current,
           dropSymbolType,
-          targetTrend,
-          targetLibrarySymbol,
-          targetShape,
+          target,
         )
         : undefined;
       event.dataTransfer.dropEffect = preview?.valid ? 'copy' : 'none';
@@ -779,18 +773,7 @@ export function DisplayEditor({
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
     const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
-    // Trend keeps its explicit insertion mode. Bar Chart and Table, however,
-    // always accept a dropped PI Point as another item.
-    const targetTrend = dropSymbolType === 'trend'
-      ? resolveTrendDropTarget(
-        documentRef.current,
-        event.target,
-        event.clientX,
-        event.clientY,
-        point,
-      )
-      : undefined;
-    const targetBarChart = resolveBarChartDropTarget(
+    const target = resolveDataSourceDropTarget(
       documentRef.current,
       event.target,
       event.clientX,
@@ -807,10 +790,7 @@ export function DisplayEditor({
         pointResult.name,
         dropSymbolType,
         pointResult,
-        targetTrend,
-        dropSymbolType === 'trend',
-        targetBarChart,
-        true,
+        target,
       )
       : undefined;
     event.dataTransfer.dropEffect = preview?.valid ? 'copy' : 'none';
@@ -860,43 +840,30 @@ export function DisplayEditor({
       if (dropSymbolType === 'table') {
         return;
       }
-      const targetText = resolveTextDropTarget(currentDocument, event.target, point);
-      if (targetText) {
-        commitDocument(updateTextProperties(currentDocument, targetText.id, { calculationId, binding: undefined }));
-        dispatch({ type: 'SELECT', elementId: targetText.id });
-        setPropertiesPanelOpen(true);
-        setOptionsElementId(null);
-        return;
-      }
-      const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
-      if (targetLibrarySymbol) {
-        const multistate = targetLibrarySymbol.properties.multistate
-          ? { ...targetLibrarySymbol.properties.multistate, enabled: true }
-          : { enabled: true, rules: [] };
-        commitDocument(updateLibrarySymbolProperties(currentDocument, targetLibrarySymbol.id, { calculationId, binding: undefined, multistate }));
-        dispatch({ type: 'SELECT', elementId: targetLibrarySymbol.id });
-        setPropertiesPanelOpen(true);
-        setOptionsElementId(null);
-        return;
-      }
-      const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
-      if (targetShape) {
-        const multistate = targetShape.properties.multistate
-          ? { ...targetShape.properties.multistate, enabled: true }
-          : { enabled: true, rules: [] };
-        commitDocument(updateRectangleProperties(currentDocument, targetShape.id, { calculationId, binding: undefined, multistate }));
-        dispatch({ type: 'SELECT', elementId: targetShape.id });
-        setPropertiesPanelOpen(true);
-        setOptionsElementId(null);
-        return;
-      }
-      const targetTrend = dropSymbolType === 'trend'
-        ? resolveTrendDropTarget(currentDocument, event.target, event.clientX, event.clientY, point)
-        : undefined;
-      if (targetTrend) {
-        commitDocument(addCalculationTrendSeries(currentDocument, targetTrend.id, calculationId, calculation.name));
-        dispatch({ type: 'SELECT', elementId: targetTrend.id });
-        return;
+      const target = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
+      if (target) {
+        const capability = getElementDataSourceCapability(target);
+        if (capability === 'single') {
+          const properties: Record<string, unknown> = { ...target.properties, calculationId, binding: undefined };
+          if (target.type === 'library-symbol' || target.type === 'rectangle') {
+            properties.multistate = target.properties.multistate
+              ? { ...(target.properties.multistate as any), enabled: true }
+              : { enabled: true, rules: [] };
+          }
+          commitDocument({
+            ...currentDocument,
+            elements: currentDocument.elements.map((e) => (e.id === target.id ? { ...e, properties } : e)),
+          });
+          dispatch({ type: 'SELECT', elementId: target.id });
+          setPropertiesPanelOpen(true);
+          setOptionsElementId(null);
+          return;
+        }
+        if (capability === 'multiple' && target.type === 'trend') {
+          commitDocument(addCalculationTrendSeries(currentDocument, target.id, calculationId, calculation.name));
+          dispatch({ type: 'SELECT', elementId: target.id });
+          return;
+        }
       }
       const element = dropSymbolType === 'value' ? createValue(options)
         : dropSymbolType === 'trend' ? createTrend({ ...options, calculationName: calculation.name })
@@ -978,86 +945,50 @@ export function DisplayEditor({
     const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
     const currentDocument = documentRef.current;
-    // A Table and Bar Chart always receive a dropped PI Point as a new item,
-    // independently of the selected toolbar tool. Trend keeps its dedicated
-    // insertion mode to avoid changing the existing drop behavior.
-    const targetTrend = dropSymbolType === 'trend'
-      ? resolveTrendDropTarget(
-        currentDocument,
-        event.target,
-        event.clientX,
-        event.clientY,
-        point,
-      )
-      : undefined;
-    const targetBarChart = resolveBarChartDropTarget(
-      currentDocument,
-      event.target,
-      event.clientX,
-      event.clientY,
-      point,
-    );
-    const targetLibrarySymbol = resolveLibrarySymbolDropTarget(currentDocument, event.target, point);
-    const targetTable = resolveTableDropTarget(currentDocument, event.target, point);
-    const targetXYPlot = resolveXYPlotDropTarget(currentDocument, event.target, point);
-    const targetShape = resolveGeometricDropTarget(currentDocument, event.target, point);
-    const targetText = resolveTextDropTarget(currentDocument, event.target, point);
-    if (!binding || (!point && !targetTrend && !targetBarChart && !targetShape && !targetLibrarySymbol && !targetTable && !targetXYPlot && !targetText)) {
+    const target = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
+    if (!binding || (!point && !target)) {
       return;
     }
     event.preventDefault();
 
-    if (targetText) {
-      commitDocument(updateTextProperties(currentDocument, targetText.id, { binding }));
-      dispatch({ type: 'SELECT', elementId: targetText.id });
-      setPropertiesPanelOpen(true);
-      setOptionsElementId(null);
-      return;
-    }
-
-    if (targetLibrarySymbol) {
-      const multistate = targetLibrarySymbol.properties.multistate
-        ? { ...targetLibrarySymbol.properties.multistate, enabled: true }
-        : { enabled: true, rules: [] };
-      commitDocument(updateLibrarySymbolProperties(currentDocument, targetLibrarySymbol.id, { binding, multistate }));
-      dispatch({ type: 'SELECT', elementId: targetLibrarySymbol.id });
-      setPropertiesPanelOpen(true);
-      setOptionsElementId(null);
-      return;
-    }
-
-    if (targetTrend) {
-      commitDocument(addTrendSeries(currentDocument, targetTrend.id, binding));
-      dispatch({ type: 'SELECT', elementId: targetTrend.id });
-      return;
-    }
-    if (targetBarChart) {
-      const item: BarChartItem = {
-        binding,
-        ...(pointResult?.description ? { description: pointResult.description } : {}),
-        ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}),
-      };
-      commitDocument(addBarChartItem(currentDocument, targetBarChart.id, item));
-      dispatch({ type: 'SELECT', elementId: targetBarChart.id });
-      return;
-    }
-    if (targetTable) {
-      const item: TableDataItem = { binding, ...(pointResult?.path ? { path: pointResult.path } : {}), ...(pointResult?.description ? { description: pointResult.description } : {}), ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}), ...(pointResult?.pointType ? { pointType: pointResult.pointType } : {}) };
-      commitDocument(addTableItem(currentDocument, targetTable.id, item));
-      dispatch({ type: 'SELECT', elementId: targetTable.id });
-      return;
-    }
-    if (targetXYPlot) {
-      commitDocument(addXYPlotYSeries(currentDocument, targetXYPlot.id, binding));
-      dispatch({ type: 'SELECT', elementId: targetXYPlot.id });
-      setPropertiesPanelOpen(true);
-      return;
-    }
-
-    if (targetShape) {
-      commitDocument(updateRectangleProperties(currentDocument, targetShape.id, { binding }));
-      dispatch({ type: 'SELECT', elementId: targetShape.id });
-      return;
+    if (target) {
+      const capability = getElementDataSourceCapability(target);
+      if (capability === 'single') {
+        commitDocument(replaceElementPiBinding(currentDocument, target.id, binding));
+        dispatch({ type: 'SELECT', elementId: target.id });
+        setPropertiesPanelOpen(true);
+        setOptionsElementId(null);
+        return;
+      }
+      if (capability === 'multiple') {
+        if (target.type === 'trend') {
+          commitDocument(addTrendSeries(currentDocument, target.id, binding));
+          dispatch({ type: 'SELECT', elementId: target.id });
+          return;
+        }
+        if (target.type === 'bar-chart') {
+          const item: BarChartItem = {
+            binding,
+            ...(pointResult?.description ? { description: pointResult.description } : {}),
+            ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}),
+          };
+          commitDocument(addBarChartItem(currentDocument, target.id, item));
+          dispatch({ type: 'SELECT', elementId: target.id });
+          return;
+        }
+        if (target.type === 'table') {
+          const item: TableDataItem = { binding, ...(pointResult?.path ? { path: pointResult.path } : {}), ...(pointResult?.description ? { description: pointResult.description } : {}), ...(pointResult?.engineeringUnit ? { engineeringUnit: pointResult.engineeringUnit } : {}), ...(pointResult?.pointType ? { pointType: pointResult.pointType } : {}) };
+          commitDocument(addTableItem(currentDocument, target.id, item));
+          dispatch({ type: 'SELECT', elementId: target.id });
+          return;
+        }
+      }
+      if (capability === 'xy' && target.type === 'xy-plot') {
+        commitDocument(addXYPlotYSeries(currentDocument, target.id, binding));
+        dispatch({ type: 'SELECT', elementId: target.id });
+        setPropertiesPanelOpen(true);
+        return;
+      }
     }
     const createOptions = {
       binding,
@@ -2067,9 +1998,9 @@ export function DisplayEditor({
               <CanvasIcon />
             </button>
             {(headerPortalTarget ? (c: React.ReactNode) => createPortal(c, headerPortalTarget) : (c: React.ReactNode) => c)(
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', paddingRight: '6px', borderRight: '1px solid var(--border-color)', marginRight: '6px' }}>
                 <div className={styles.exportControl}>
-                  <button type="button" title={exporting ? 'Exportando dados PI...' : 'Exportar Display'} aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" disabled={exporting} aria-expanded={exportMenuOpen} onClick={() => setExportMenuOpen((open) => !open)}>
+                  <button type="button" title={exporting ? 'Exportando dados PI...' : 'Exportar Display'} aria-label="Exportar Display" className={styles.headerPortalButton} data-testid="display-export" disabled={exporting} aria-expanded={exportMenuOpen} onClick={() => setExportMenuOpen((open) => !open)}>
                     <ExportIcon />
                   </button>
                   {exportMenuOpen && <div className={styles.exportMenu} data-testid="display-export-format" role="menu" aria-label="Formato de exportação">
@@ -2079,11 +2010,11 @@ export function DisplayEditor({
                       <button type="button" role="menuitem" data-testid="display-export-format-xml" onClick={() => void handleExport('xml')}>XML — Dados</button></>}
                   </div>}
                 </div>
-                <button type="button" title="Importar Display" aria-label="Importar Display" className={styles.iconButton} data-testid="display-import" disabled={!onChange} onClick={() => importInputRef.current?.click()}>
+                <button type="button" title="Importar Display" aria-label="Importar Display" className={styles.headerPortalButton} data-testid="display-import" disabled={!onChange} onClick={() => importInputRef.current?.click()}>
                   <ImportIcon />
                 </button>
                 <input ref={importInputRef} type="file" accept="application/json,.json,.pims-vision.json" data-testid="display-import-input" className={styles.fileInput} onChange={handleImportFile} />
-                <button type="button" title="Importar do PI Vision" aria-label="Importar do PI Vision" className={styles.iconButton} data-testid="display-import-pivision" disabled={!onChange} onClick={() => setPiVisionImportOpen(true)}>
+                <button type="button" title="Importar do PI Vision" aria-label="Importar do PI Vision" className={styles.headerPortalButton} data-testid="display-import-pivision" disabled={!onChange} onClick={() => setPiVisionImportOpen(true)}>
                   <PiVisionImportIcon />
                 </button>
               </div>
@@ -2440,74 +2371,48 @@ function createPiPointDragPreview(
   label: string,
   symbolType: PiPointDropSymbolType,
   pointResult: PiPointSearchResult,
-  trendAtClientPoint?: TrendElement,
-  allowTrendTarget = true,
-  barChartAtClientPoint?: BarChartElement,
-  allowBarChartTarget = true,
+  target?: DisplayElement,
 ): PiPointDragPreview {
   const binding = createPiPointBinding(pointResult);
   const point = binding ? getDropPoint(svg, clientX, clientY, document) : undefined;
-  const prototype = binding ? createDropPreviewElement(symbolType, binding, document) : undefined;
-  const targetTrend = allowTrendTarget
-    ? trendAtClientPoint ?? (point ? findTrendAtPoint(document, point) : undefined)
-    : undefined;
-  const targetBarChart = allowBarChartTarget
-    ? barChartAtClientPoint ?? (point ? findBarChartAtPoint(document, point) : undefined)
-    : undefined;
-  // The drop handler clamps the element to the surface bounds, so every
-  // pointer position inside the display is a valid placement.
-  const valid = !!binding && !!prototype && (!!point || !!targetTrend || !!targetBarChart);
+  
+  if (target) {
+    const capability = getElementDataSourceCapability(target);
+    if (capability !== 'none') {
+      const wrapperBounds = wrapper.getBoundingClientRect();
+      const viewport = getSvgViewport(svg);
+      const targetLeft = viewport.left - wrapperBounds.left + wrapper.scrollLeft + target.x * viewport.scale;
+      const targetTop = viewport.top - wrapperBounds.top + wrapper.scrollTop + target.y * viewport.scale;
+      const targetWidth = target.width * viewport.scale;
+      const targetHeight = target.height * viewport.scale;
+      const width = Math.min(320, Math.max(1, targetWidth - 12));
+      const height = Math.min(64, Math.max(1, targetHeight - 12));
+      const pointerLeft = clientX - wrapperBounds.left + wrapper.scrollLeft - width / 2;
+      const pointerTop = clientY - wrapperBounds.top + wrapper.scrollTop - height / 2;
+      return {
+        left: Math.max(targetLeft + 6, Math.min(pointerLeft, targetLeft + targetWidth - width - 6)),
+        top: Math.max(targetTop + 6, Math.min(pointerTop, targetTop + targetHeight - height - 6)),
+        width,
+        height,
+        valid: true,
+        label: capability === 'single' ? `Substituir ${target.type}` : label,
+        symbolType: target.type as PiPointDropSymbolType,
+        targetTrend: target.type === 'trend',
+        targetTrendId: target.type === 'trend' ? target.id : undefined,
+        targetBarChart: target.type === 'bar-chart',
+        targetBarChartId: target.type === 'bar-chart' ? target.id : undefined,
+      };
+    }
+  }
 
-  if (!valid || !prototype) {
+  const prototype = binding ? createDropPreviewElement(symbolType, binding, document) : undefined;
+  if (!binding || !point || !prototype) {
     return createInvalidDragPreview(wrapper, clientX, clientY, label, symbolType);
   }
 
+  const positioned = positionElementAt(prototype, point, document);
   const wrapperBounds = wrapper.getBoundingClientRect();
   const viewport = getSvgViewport(svg);
-  if (targetTrend) {
-    const trendLeft = viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetTrend.x * viewport.scale;
-    const trendTop = viewport.top - wrapperBounds.top + wrapper.scrollTop + targetTrend.y * viewport.scale;
-    const trendWidth = targetTrend.width * viewport.scale;
-    const trendHeight = targetTrend.height * viewport.scale;
-    const width = Math.min(320, Math.max(1, trendWidth - 12));
-    const height = Math.min(64, Math.max(1, trendHeight - 12));
-    const pointerLeft = clientX - wrapperBounds.left + wrapper.scrollLeft - width / 2;
-    const pointerTop = clientY - wrapperBounds.top + wrapper.scrollTop - height / 2;
-    return {
-      left: Math.max(trendLeft + 6, Math.min(pointerLeft, trendLeft + trendWidth - width - 6)),
-      top: Math.max(trendTop + 6, Math.min(pointerTop, trendTop + trendHeight - height - 6)),
-      width,
-      height,
-      valid: true,
-      label,
-      symbolType: 'trend',
-      targetTrend: true,
-      targetTrendId: targetTrend.id,
-    };
-  }
-  if (targetBarChart) {
-    const barChartLeft = viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetBarChart.x * viewport.scale;
-    const barChartTop = viewport.top - wrapperBounds.top + wrapper.scrollTop + targetBarChart.y * viewport.scale;
-    const barChartWidth = targetBarChart.width * viewport.scale;
-    const barChartHeight = targetBarChart.height * viewport.scale;
-    const width = Math.min(320, Math.max(1, barChartWidth - 12));
-    const height = Math.min(64, Math.max(1, barChartHeight - 12));
-    const pointerLeft = clientX - wrapperBounds.left + wrapper.scrollLeft - width / 2;
-    const pointerTop = clientY - wrapperBounds.top + wrapper.scrollTop - height / 2;
-    return {
-      left: Math.max(barChartLeft + 6, Math.min(pointerLeft, barChartLeft + barChartWidth - width - 6)),
-      top: Math.max(barChartTop + 6, Math.min(pointerTop, barChartTop + barChartHeight - height - 6)),
-      width,
-      height,
-      valid: true,
-      label,
-      symbolType: 'bar-chart',
-      targetTrend: false,
-      targetBarChart: true,
-      targetBarChartId: targetBarChart.id,
-    };
-  }
-  const positioned = positionElementAt(prototype, point!, document);
   return {
     left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + positioned.x * viewport.scale,
     top: viewport.top - wrapperBounds.top + wrapper.scrollTop + positioned.y * viewport.scale,
@@ -2527,57 +2432,34 @@ function createCalculationDragPreview(
   clientY: number,
   document: DisplayDocument,
   symbolType: PiPointDropSymbolType,
-  targetTrend?: TrendElement,
-  targetLibrarySymbol?: LibrarySymbolElement,
-  targetShape?: RectangleElement,
+  target?: DisplayElement,
 ): PiPointDragPreview | undefined {
   const point = getDropPoint(svg, clientX, clientY, document);
   if (!point) {
     return undefined;
   }
-  if (targetLibrarySymbol) {
-    const wrapperBounds = wrapper.getBoundingClientRect();
-    const viewport = getSvgViewport(svg);
-    return {
-      left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetLibrarySymbol.x * viewport.scale,
-      top: viewport.top - wrapperBounds.top + wrapper.scrollTop + targetLibrarySymbol.y * viewport.scale,
-      width: targetLibrarySymbol.width * viewport.scale,
-      height: targetLibrarySymbol.height * viewport.scale,
-      valid: true,
-      label: 'Vincular ao símbolo',
-      symbolType,
-      targetTrend: false,
-    };
+  
+  if (target) {
+    const capability = getElementDataSourceCapability(target);
+    if (capability !== 'none') {
+      const wrapperBounds = wrapper.getBoundingClientRect();
+      const viewport = getSvgViewport(svg);
+      return {
+        left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + target.x * viewport.scale,
+        top: viewport.top - wrapperBounds.top + wrapper.scrollTop + target.y * viewport.scale,
+        width: target.width * viewport.scale,
+        height: target.height * viewport.scale,
+        valid: true,
+        label: capability === 'single' ? `Vincular a ${target.type}` : 'Cálculo',
+        symbolType: target.type as PiPointDropSymbolType,
+        targetTrend: target.type === 'trend',
+        targetTrendId: target.type === 'trend' ? target.id : undefined,
+        targetBarChart: target.type === 'bar-chart',
+        targetBarChartId: target.type === 'bar-chart' ? target.id : undefined,
+      };
+    }
   }
-  if (targetShape) {
-    const wrapperBounds = wrapper.getBoundingClientRect();
-    const viewport = getSvgViewport(svg);
-    return {
-      left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetShape.x * viewport.scale,
-      top: viewport.top - wrapperBounds.top + wrapper.scrollTop + targetShape.y * viewport.scale,
-      width: targetShape.width * viewport.scale,
-      height: targetShape.height * viewport.scale,
-      valid: true,
-      label: 'Vincular à forma',
-      symbolType,
-      targetTrend: false,
-    };
-  }
-  if (symbolType === 'trend' && targetTrend) {
-    const wrapperBounds = wrapper.getBoundingClientRect();
-    const viewport = getSvgViewport(svg);
-    return {
-      left: viewport.left - wrapperBounds.left + wrapper.scrollLeft + targetTrend.x * viewport.scale,
-      top: viewport.top - wrapperBounds.top + wrapper.scrollTop + targetTrend.y * viewport.scale,
-      width: targetTrend.width * viewport.scale,
-      height: targetTrend.height * viewport.scale,
-      valid: true,
-      label: 'Cálculo',
-      symbolType,
-      targetTrend: true,
-      targetTrendId: targetTrend.id,
-    };
-  }
+
   const prototype = createCalculationDropPreviewElement(symbolType, document);
   const wrapperBounds = wrapper.getBoundingClientRect();
   const viewport = getSvgViewport(svg);
@@ -2594,233 +2476,39 @@ function createCalculationDragPreview(
   };
 }
 
-function findTrendAtPoint(document: DisplayDocument, point: Point): TrendElement | undefined {
-  const topmostElement = [...document.elements].reverse().find((element) => (
-    point.x >= element.x
-    && point.x <= element.x + element.width
-    && point.y >= element.y
-    && point.y <= element.y + element.height
-  ));
-  return topmostElement?.type === TREND_TYPE ? topmostElement as TrendElement : undefined;
-}
-
-function resolveGeometricDropTarget(
-  document: DisplayDocument,
-  eventTarget: EventTarget | null,
-  point: Point | undefined,
-): RectangleElement | undefined {
-  const shapeNode = eventTarget instanceof Element
-    ? eventTarget.closest('[data-element-id][data-element-type="rectangle"]')
-    : null;
-  const elementId = shapeNode?.getAttribute('data-element-id');
-  if (elementId) {
-    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === RECTANGLE_TYPE);
-    if (element) {
-      return element as RectangleElement;
-    }
-  }
-  if (!point) {
-    return undefined;
-  }
-  const topmostElement = [...document.elements].reverse().find((element) => (
-    element.type === RECTANGLE_TYPE
-      && point.x >= element.x
-      && point.x <= element.x + element.width
-      && point.y >= element.y
-      && point.y <= element.y + element.height
-  ));
-  return topmostElement as RectangleElement | undefined;
-}
-
-function resolveTextDropTarget(
-  document: DisplayDocument,
-  eventTarget: EventTarget | null,
-  point: Point | undefined,
-): TextElement | undefined {
-  const textNode = eventTarget instanceof Element
-    ? eventTarget.closest('[data-element-id][data-element-type="text"]')
-    : null;
-  const elementId = textNode?.getAttribute('data-element-id');
-  if (elementId) {
-    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === TEXT_TYPE);
-    if (element) {
-      return element as TextElement;
-    }
-  }
-  if (!point) {
-    return undefined;
-  }
-  const topmostElement = [...document.elements].reverse().find((element) => (
-    element.type === TEXT_TYPE
-      && point.x >= element.x
-      && point.x <= element.x + element.width
-      && point.y >= element.y
-      && point.y <= element.y + element.height
-  ));
-  return topmostElement as TextElement | undefined;
-}
-
-function resolveLibrarySymbolDropTarget(
-  document: DisplayDocument,
-  eventTarget: EventTarget | null,
-  point: Point | undefined,
-): LibrarySymbolElement | undefined {
-  const symbolNode = eventTarget instanceof Element
-    ? eventTarget.closest('[data-element-id][data-element-type="library-symbol"]')
-    : null;
-  const elementId = symbolNode?.getAttribute('data-element-id');
-  if (elementId) {
-    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === 'library-symbol');
-    if (element) {
-      return element as LibrarySymbolElement;
-    }
-  }
-  if (!point) {
-    return undefined;
-  }
-  const topmostElement = [...document.elements].reverse().find((element) => (
-    element.type === 'library-symbol'
-      && point.x >= element.x
-      && point.x <= element.x + element.width
-      && point.y >= element.y
-      && point.y <= element.y + element.height
-  ));
-  return topmostElement as LibrarySymbolElement | undefined;
-}
-
-function resolveTableDropTarget(
-  document: DisplayDocument,
-  eventTarget: EventTarget | null,
-  point: Point | undefined,
-): TableElement | undefined {
-  const tableNode = eventTarget instanceof Element
-    ? eventTarget.closest('[data-element-id][data-element-type="table"]')
-    : null;
-  const elementId = tableNode?.getAttribute('data-element-id');
-  if (elementId) {
-    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === TABLE_TYPE);
-    if (element) return element as TableElement;
-  }
-  if (!point) return undefined;
-  const element = [...document.elements].reverse().find((candidate) => candidate.type === TABLE_TYPE && point.x >= candidate.x && point.x <= candidate.x + candidate.width && point.y >= candidate.y && point.y <= candidate.y + candidate.height);
-  return element as TableElement | undefined;
-}
-
-function resolveXYPlotDropTarget(document: DisplayDocument, eventTarget: EventTarget | null, point: Point | undefined): XYPlotElement | undefined {
-  const xyNode = eventTarget instanceof Element ? eventTarget.closest('[data-element-id][data-element-type="xy-plot"]') : null;
-  const elementId = xyNode?.getAttribute('data-element-id');
-  if (elementId) {
-    const element = document.elements.find((candidate) => candidate.id === elementId && candidate.type === XY_PLOT_TYPE);
-    if (element) return element as XYPlotElement;
-  }
-  if (!point) return undefined;
-  return [...document.elements].reverse().find((candidate) => candidate.type === XY_PLOT_TYPE && point.x >= candidate.x && point.x <= candidate.x + candidate.width && point.y >= candidate.y && point.y <= candidate.y + candidate.height) as XYPlotElement | undefined;
-}
-
-function findTrendAtClientPoint(
-  clientX: number,
-  clientY: number,
-  displayDocument: DisplayDocument,
-): TrendElement | undefined {
-  const hit = globalThis.document.elementFromPoint?.(clientX, clientY);
-  const trendNode = hit instanceof Element
-    ? hit.closest('[data-element-id][data-element-type="trend"]')
-    : null;
-  const elementId = trendNode?.getAttribute('data-element-id');
-  if (!elementId) {
-    return undefined;
-  }
-  const element = displayDocument.elements.find((candidate) => (
-    candidate.id === elementId && candidate.type === TREND_TYPE
-  ));
-  return element as TrendElement | undefined;
-}
-
-function resolveTrendDropTarget(
+function resolveDataSourceDropTarget(
   document: DisplayDocument,
   eventTarget: EventTarget | null,
   clientX: number,
   clientY: number,
   point: Point | undefined,
-): TrendElement | undefined {
-  return findTrendFromEventTarget(eventTarget, document)
-    ?? findTrendAtClientPoint(clientX, clientY, document)
-    ?? (point ? findTrendAtPoint(document, point) : undefined);
-}
-
-function findTrendFromEventTarget(
-  eventTarget: EventTarget | null,
-  displayDocument: DisplayDocument,
-): TrendElement | undefined {
-  const trendNode = eventTarget instanceof Element
-    ? eventTarget.closest('[data-element-id][data-element-type="trend"]')
-    : null;
-  const elementId = trendNode?.getAttribute('data-element-id');
-  if (!elementId) {
-    return undefined;
+): DisplayElement | undefined {
+  let node = eventTarget instanceof Element ? eventTarget.closest('[data-element-id]') : null;
+  if (!node) {
+    const hit = typeof globalThis.document !== 'undefined' ? globalThis.document.elementFromPoint?.(clientX, clientY) : null;
+    node = hit instanceof Element ? hit.closest('[data-element-id]') : null;
   }
-  const element = displayDocument.elements.find((candidate) => (
-    candidate.id === elementId && candidate.type === TREND_TYPE
-  ));
-  return element as TrendElement | undefined;
-}
-
-function resolveBarChartDropTarget(
-  document: DisplayDocument,
-  eventTarget: EventTarget | null,
-  clientX: number,
-  clientY: number,
-  point: Point | undefined,
-): BarChartElement | undefined {
-  return findBarChartFromEventTarget(eventTarget, document)
-    ?? findBarChartAtClientPoint(clientX, clientY, document)
-    ?? (point ? findBarChartAtPoint(document, point) : undefined);
-}
-
-function findBarChartFromEventTarget(
-  eventTarget: EventTarget | null,
-  displayDocument: DisplayDocument,
-): BarChartElement | undefined {
-  const node = eventTarget instanceof Element
-    ? eventTarget.closest('[data-element-id][data-element-type="bar-chart"]')
-    : null;
+  
   const elementId = node?.getAttribute('data-element-id');
-  if (!elementId) {
+  if (elementId) {
+    const element = document.elements.find((candidate) => candidate.id === elementId);
+    if (element && !element.properties.locked && getElementDataSourceCapability(element) !== 'none') {
+      return element;
+    }
+  }
+
+  if (!point) {
     return undefined;
   }
-  const element = displayDocument.elements.find((candidate) => (
-    candidate.id === elementId && candidate.type === BAR_CHART_TYPE
-  ));
-  return element as BarChartElement | undefined;
-}
 
-function findBarChartAtClientPoint(
-  clientX: number,
-  clientY: number,
-  displayDocument: DisplayDocument,
-): BarChartElement | undefined {
-  const hit = globalThis.document.elementFromPoint?.(clientX, clientY);
-  const node = hit instanceof Element
-    ? hit.closest('[data-element-id][data-element-type="bar-chart"]')
-    : null;
-  const elementId = node?.getAttribute('data-element-id');
-  if (!elementId) {
-    return undefined;
-  }
-  const element = displayDocument.elements.find((candidate) => (
-    candidate.id === elementId && candidate.type === BAR_CHART_TYPE
+  return [...document.elements].reverse().find((element) => (
+    !element.properties.locked
+      && getElementDataSourceCapability(element) !== 'none'
+      && point.x >= element.x
+      && point.x <= element.x + element.width
+      && point.y >= element.y
+      && point.y <= element.y + element.height
   ));
-  return element as BarChartElement | undefined;
-}
-
-function findBarChartAtPoint(document: DisplayDocument, point: Point): BarChartElement | undefined {
-  const topmostElement = [...document.elements].reverse().find((element) => (
-    point.x >= element.x
-    && point.x <= element.x + element.width
-    && point.y >= element.y
-    && point.y <= element.y + element.height
-  ));
-  return topmostElement?.type === BAR_CHART_TYPE ? topmostElement as BarChartElement : undefined;
 }
 
 function createInvalidDragPreview(
@@ -3168,6 +2856,31 @@ const getStyles = (theme: GrafanaTheme2) => ({
       color: var(--text-primary);
       border-color: var(--border-color);
       background: var(--button-hover);
+    }
+  `,
+  headerPortalButton: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--button-bg);
+    color: var(--text-primary);
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      color: var(--accent);
+      background: var(--button-hover);
+      border-color: var(--accent);
+    }
+
+    &:disabled {
+      cursor: default;
+      opacity: 0.35;
     }
   `,
   surfaceWrapper: css`

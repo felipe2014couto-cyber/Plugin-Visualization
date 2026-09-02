@@ -10,8 +10,10 @@ import { createBarChart, BAR_CHART_TYPE } from './createBarChart';
 import { createXYPlot, getXYPlotYSeries, XY_PLOT_TYPE } from './createXYPlot';
 
 /** The data binding contract used by symbol replacement. */
+import type { DataSourceCapability as SymbolBindingCapability } from './dataSourceBehavior';
+
+export type { SymbolBindingCapability };
 export type SymbolConversionType = typeof VALUE_TYPE | typeof GAUGE_TYPE | typeof BAR_TYPE | typeof TREND_TYPE | typeof TABLE_TYPE | typeof BAR_CHART_TYPE | typeof XY_PLOT_TYPE;
-export type SymbolBindingCapability = 'single' | 'multiple' | 'xy';
 
 export const symbolConversionTargets: Array<{ type: SymbolConversionType; label: string; capability: SymbolBindingCapability }> = [
   { type: TABLE_TYPE, label: 'Tabela', capability: 'multiple' },

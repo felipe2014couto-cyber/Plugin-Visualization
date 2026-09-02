@@ -481,7 +481,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
 
     &::placeholder {
       color: var(--text-secondary) !important;
-      opacity: 0.9;
+      opacity: 1 !important;
     }
 
     &:focus {

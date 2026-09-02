@@ -41,7 +41,7 @@ function isValidHexColor(value: string): boolean {
 }
 
 export function isValidScale(minimum: number, maximum: number): boolean {
-  return Number.isFinite(minimum) && Number.isFinite(maximum) && minimum !== maximum;
+  return Number.isFinite(minimum) && Number.isFinite(maximum) && minimum < maximum;
 }
 
 export function getScaleRatio(value: number, minimum: number, maximum: number): number | undefined {
