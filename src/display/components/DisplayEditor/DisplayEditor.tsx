@@ -66,6 +66,7 @@ import {
 } from '../../createRectangle';
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
 import { getPiPointMetadata, type PiDigitalStatesResult, type PiPointMetadata, type PiPointSearchResult, type PiPointValue } from '../../../pi/piDataSource';
+import type { CalculationDefinition } from '../../../calculations/calculationEngine';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 import { CALCULATION_DRAG_MIME, parseCalculationDragData } from '../../../calculations/calculationDrag';
 import { LIBRARY_SYMBOL_DRAG_MIME, parseLibrarySymbolDragData } from '../../../library/librarySymbolDrag';
@@ -206,6 +207,7 @@ interface TrendPointInfoState {
   metadata?: PiPointMetadata;
   loading: boolean;
   error?: string;
+  calculation?: CalculationDefinition;
 }
 
 const TREND_POPUP_MAX_DATA_POINTS = 500;
@@ -1392,6 +1394,30 @@ export function DisplayEditor({
     applySymbolConversion(elementId, targetType, bindings);
   }, [applySymbolConversion]);
 
+  const showElementDataInfo = useCallback((element: DisplayElement) => {
+    const props = element.properties as Record<string, unknown>;
+    const calculationId = typeof props.calculationId === 'string' ? props.calculationId : undefined;
+    const calculation = calculationId ? documentRef.current.calculations?.find((item) => item.id === calculationId) : undefined;
+    const binding = getElementPiBindings(element)[0];
+    if (calculation) {
+      setTrendPointInfo({ pointName: calculation.name, value: undefined, loading: false, calculation });
+      return;
+    }
+    if (!binding) {
+      setTrendPointInfo(null);
+      return;
+    }
+    setTrendPointInfo({ pointName: binding.pointName, value: undefined, loading: true });
+    const metadataRequest = getPiPointMetadata(binding);
+    const valueRequest = loadValue ? loadValue(binding).catch(() => undefined) : Promise.resolve(undefined);
+    void Promise.all([metadataRequest, valueRequest]).then(([metadata, currentValue]) => {
+      const value = typeof currentValue?.value === 'string' || typeof currentValue?.value === 'number' ? currentValue.value : undefined;
+      setTrendPointInfo((current) => current?.pointName === binding.pointName ? { ...current, metadata, value, loading: false } : current);
+    }, () => {
+      setTrendPointInfo((current) => current?.pointName === binding.pointName ? { ...current, loading: false, error: 'Não foi possível carregar todos os atributos da PI Point.' } : current);
+    });
+  }, [loadValue]);
+
   const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement, event?: React.MouseEvent) => {
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
@@ -1412,6 +1438,7 @@ export function DisplayEditor({
       return;
     }
     batchEditElementIdsRef.current = [];
+    showElementDataInfo(element);
     dispatch({ type: 'SELECT', elementId: element.id });
     setContextMenu({
       x: event?.clientX ?? 100,
@@ -1422,7 +1449,7 @@ export function DisplayEditor({
       showUngroup: false,
       isLocked: isElementLocked(element),
     });
-  }, [dispatch]);
+  }, [dispatch, showElementDataInfo]);
 
   const handleTrendContextMenu = useCallback((element: TrendElement, event?: React.MouseEvent) => {
     const selectedIds = stateRef.current.selectedElementIds;
@@ -1482,6 +1509,7 @@ export function DisplayEditor({
       return;
     }
     batchEditElementIdsRef.current = [];
+    showElementDataInfo(element);
     if (element.type === GROUP_TYPE) {
       dispatch({ type: 'SELECT', elementId: element.id });
       setContextMenu({
@@ -1506,7 +1534,7 @@ export function DisplayEditor({
       isLocked: isElementLocked(element),
       showProgrammingEdit: element.type === PROGRAMMING_TYPE,
     });
-  }, [dispatch]);
+  }, [dispatch, showElementDataInfo]);
 
   const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
     if (!contextMenu) {
@@ -2134,7 +2162,7 @@ export function DisplayEditor({
             onOpenInNewTabChange={handleLinkOpenInNewTabChange}
           />
         )}
-        {mode === 'view' && trendPointInfo && <PiPointInfoPanel {...trendPointInfo} onClose={() => setTrendPointInfo(null)} />}
+        {trendPointInfo && <PiPointInfoPanel {...trendPointInfo} onClose={() => setTrendPointInfo(null)} />}
         {selectedGauge && (
           <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} binding={selectedGauge.properties.binding} loadDigitalStates={loadDigitalStates} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
