@@ -65,17 +65,31 @@ export function createProgressiveTrendLoader(
   ): Promise<Record<string, PiTrendSeriesResult>> => {
     const previewRange = range;
     const maxDataPoints = options.maxDataPoints ?? TREND_REFINED_DEFAULT_MAX_DATA_POINTS;
-    const previewResults = await loadPreviewBatch(
+    let recordedResults: Record<string, PiTrendSeriesResult> | undefined;
+    let recordedComplete = false;
+    const previewPromise = loadPreviewBatch(
       entries,
       bindings,
       previewRange,
       queryPreview,
-      publishComplete,
+      (results) => {
+        if (!recordedComplete) {
+          publishComplete?.(results);
+        }
+      },
     );
+    // A fase refinada pode ocupar vagas livres enquanto a prévia ainda está
+    // sendo processada. O limitador compartilhado das consultas históricas
+    // mantém no máximo cinco chamadas simultâneas ao PI.
     void loadRecordedBatch(entries, bindings, range, maxDataPoints, queryRecorded, persistentCache)
-      .then((recorded) => publishComplete?.(recorded))
+      .then((recorded) => {
+        recordedResults = recorded;
+        recordedComplete = true;
+        publishComplete?.(recorded);
+      })
       .catch(() => undefined);
-    return previewResults;
+    const previewResults = await previewPromise;
+    return recordedResults ?? previewResults;
   };
 
   load.loadRecorded = async (

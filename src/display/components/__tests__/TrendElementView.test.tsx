@@ -44,6 +44,8 @@ describe('TrendElementView', () => {
     expect(screen.getByTestId('trend-x-axis-trend-1')).toBeInTheDocument();
     expect(screen.getByTestId('trend-y-axis-trend-1')).toBeInTheDocument();
     expect(screen.getAllByText(/SINUSOID/).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('trend-series-clip-trend-1').getAttribute('clip-path'))
+      .toMatch(/^url\(#trend-plot-clip-/);
   });
 
   it('renderiza mudanças de estado de uma tag digital/string sem marcar BAD', () => {

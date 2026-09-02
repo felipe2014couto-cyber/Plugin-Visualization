@@ -60,7 +60,7 @@ export function evaluateCalculation(
 
 function containsToken(expression: string, token: string): boolean {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?<![A-Za-z0-9_.:-])${escaped}(?![A-Za-z0-9_.:-])`, 'i').test(expression);
+  return new RegExp(`(?<![A-Za-z0-9_.:])${escaped}(?![A-Za-z0-9_.:])`, 'i').test(expression);
 }
 
 /** Replaces PI digital-state comparisons (for example, TAG == "On") with 1 or 0. */
@@ -95,7 +95,7 @@ function getDigitalStateName(value: unknown): string | undefined {
 
 function replaceToken(expression: string, token: string, replacement: string): string {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return expression.replace(new RegExp(`(?<![A-Za-z0-9_.:-])${escaped}(?![A-Za-z0-9_.:-])`, 'gi'), replacement);
+  return expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])${escaped}(?![A-Za-z0-9_.:])`, 'gi'), replacement);
 }
 
 function parseArithmeticExpression(expression: string, variables: ReadonlyMap<string, number>): number {

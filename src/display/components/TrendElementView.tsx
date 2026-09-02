@@ -245,6 +245,10 @@ function trendContentClipPathId(elementId: string): string {
   return `trend-content-clip-${elementId.split('').map((character) => character.charCodeAt(0).toString(36)).join('-')}`;
 }
 
+function trendPlotClipPathId(elementId: string): string {
+  return `trend-plot-clip-${elementId.split('').map((character) => character.charCodeAt(0).toString(36)).join('-')}`;
+}
+
 function getTrendContent(
   element: TrendElement,
   seriesStates: readonly TrendSeriesViewState[],
@@ -316,7 +320,9 @@ function getTrendContent(
             ? currentState
             : runtimeState.status === 'loading'
               ? '...'
-              : runtimeState.status === 'error' ? 'BAD' : '--';
+              : runtimeState.status === 'error'
+                ? (data?.states?.at(-1)?.value ?? 'BAD')
+                : '--';
         const legendY = element.y + 26 + index * 54;
         const fullName = series.legendLabel || series.binding.pointName;
         const displayLabel = truncateLegendLabel(fullName, effectiveLegendWidth, visual.fontSize);
@@ -449,6 +455,7 @@ function getTrendContent(
     }),
   };
   const showTimeLabels = shouldShowTrendTimeLabels(element.width, element.height);
+  const plotClipPathId = trendPlotClipPathId(element.id);
   const seriesCharts = new Map(drawableSeries.map(({ series, data }) => {
     const baseChart = individualScale ? buildTrendChartForSeries(element, [data.points], timeRange, effectiveLegendWidth) : chart;
     if (visual.scaleMode !== 'configurable') {
@@ -470,6 +477,11 @@ function getTrendContent(
   }));
   return (
     <>
+      <defs>
+        <clipPath id={plotClipPathId} clipPathUnits="userSpaceOnUse">
+          <rect x={chart.plotX} y={chart.plotY} width={chart.plotWidth} height={chart.plotHeight} />
+        </clipPath>
+      </defs>
       {visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}
       <rect
         x={chart.plotX}
@@ -562,6 +574,7 @@ function getTrendContent(
           </g>
         );
       })}
+      <g clipPath={`url(#${plotClipPathId})`} data-testid={`trend-series-clip-${element.id}`}>
       {drawableSeries.map(({ series, data }, index) => {
         const key = trendBindingKey(series.binding);
         const seriesChart = seriesCharts.get(key) ?? chart;
@@ -597,6 +610,7 @@ function getTrendContent(
           </g>
         );
       })}
+      </g>
       {cursors.map((cursor) => {
         const values = drawableSeries.flatMap(({ series, data }) => {
           const value = resolveTrendCursorValue(data.points, cursor.time);
