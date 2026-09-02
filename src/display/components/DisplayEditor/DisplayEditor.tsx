@@ -210,6 +210,11 @@ interface TrendPointInfoState {
   calculation?: CalculationDefinition;
 }
 
+function hasElementDataSource(element: DisplayElement): boolean {
+  const props = element.properties as Record<string, unknown>;
+  return typeof props.calculationId === 'string' || getElementPiBindings(element).length > 0;
+}
+
 const TREND_POPUP_MAX_DATA_POINTS = 500;
 const DISPLAY_ZOOM_MIN = 0.1;
 const DISPLAY_ZOOM_MAX = 5;
@@ -272,6 +277,7 @@ export function DisplayEditor({
     showUngroup?: boolean;
     isLocked?: boolean;
     showProgrammingEdit?: boolean;
+    showDataDetails?: boolean;
   } | null>(null);
   const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null);
   const [pendingSymbolConversion, setPendingSymbolConversion] = useState<{ elementId: string; targetType: SymbolConversionType; bindings: PiPointBinding[]; selectedIndex: number } | null>(null);
@@ -1438,7 +1444,6 @@ export function DisplayEditor({
       return;
     }
     batchEditElementIdsRef.current = [];
-    showElementDataInfo(element);
     dispatch({ type: 'SELECT', elementId: element.id });
     setContextMenu({
       x: event?.clientX ?? 100,
@@ -1448,8 +1453,9 @@ export function DisplayEditor({
       showGroup: false,
       showUngroup: false,
       isLocked: isElementLocked(element),
+      showDataDetails: hasElementDataSource(element),
     });
-  }, [dispatch, showElementDataInfo]);
+  }, [dispatch]);
 
   const handleTrendContextMenu = useCallback((element: TrendElement, event?: React.MouseEvent) => {
     const selectedIds = stateRef.current.selectedElementIds;
@@ -1509,7 +1515,6 @@ export function DisplayEditor({
       return;
     }
     batchEditElementIdsRef.current = [];
-    showElementDataInfo(element);
     if (element.type === GROUP_TYPE) {
       dispatch({ type: 'SELECT', elementId: element.id });
       setContextMenu({
@@ -1533,8 +1538,9 @@ export function DisplayEditor({
       showUngroup: false,
       isLocked: isElementLocked(element),
       showProgrammingEdit: element.type === PROGRAMMING_TYPE,
+      showDataDetails: hasElementDataSource(element),
     });
-  }, [dispatch, showElementDataInfo]);
+  }, [dispatch]);
 
   const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
     if (!contextMenu) {
@@ -1562,6 +1568,18 @@ export function DisplayEditor({
             }
           }
           setPropertiesPanelOpen(true);
+          setContextMenu(null);
+        },
+      });
+    }
+    if (contextMenu.showDataDetails && targets.length === 1) {
+      items.push({
+        id: 'data-details',
+        label: 'Detalhes dos dados',
+        testId: 'context-menu-data-details',
+        onClick: () => {
+          const source = getElementById(documentRef.current, targets[0]);
+          if (source) showElementDataInfo(source);
           setContextMenu(null);
         },
       });
@@ -1618,7 +1636,7 @@ export function DisplayEditor({
       });
     }
     return items;
-  }, [contextMenu, handleGroupSelected, handleSymbolConversion, handleToggleLock, handleUngroupSelected, onProgrammingEdit]);
+  }, [contextMenu, handleGroupSelected, handleSymbolConversion, handleToggleLock, handleUngroupSelected, onProgrammingEdit, showElementDataInfo]);
   const optionsTrend = optionsTrendId
     ? (getElementById(displayDocument, optionsTrendId) as TrendElement | undefined)
     : undefined;
