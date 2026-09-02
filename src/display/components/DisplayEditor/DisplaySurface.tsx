@@ -59,8 +59,8 @@ import {
   getCanvasBounds,
   getResizeHandlePositions,
   getResizeHandleRect,
-  getHandleCursor,
   svgPointFromEvent,
+  getRotatedHandleCursor,
   type AlignmentGuide,
   type Point,
   type ResizeHandle,
@@ -182,6 +182,13 @@ function hasPointerCapture(target: Element, pointerId: number): boolean {
     return true;
   }
   return check.call(target, pointerId);
+}
+
+function getElementSelectionRotation(element: DisplayElement): number {
+  if (element.type === RECTANGLE_TYPE && typeof element.properties.rotation === 'number') {
+    return element.properties.rotation;
+  }
+  return 0;
 }
 
 export function DisplaySurface({
@@ -1316,11 +1323,16 @@ export function DisplaySurface({
         if (!element) {
           return null;
         }
-        const isLocked = isElementLocked(element);
         const geom = getElementAbsoluteGeometry(elements, id) ?? element;
         const positions = getResizeHandlePositions(geom);
+        const isLocked = isElementLocked(element);
+        const rotation = getElementSelectionRotation(element);
+        const centerX = geom.x + geom.width / 2;
+        const centerY = geom.y + geom.height / 2;
+        const transform = rotation ? `rotate(${rotation} ${centerX} ${centerY})` : undefined;
+
         return (
-          <g key={id} data-testid={`display-selection-overlay-${id}`}>
+          <g key={id} transform={transform}>
             <rect
               x={geom.x - 1}
               y={geom.y - 1}
@@ -1335,7 +1347,7 @@ export function DisplaySurface({
             />
             {!isLocked && positions.map((pos) => {
               const rect = getResizeHandleRect(pos, HANDLE_SIZE);
-              return <rect key={pos.handle} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={1} data-testid={`display-resize-handle-${id}-${pos.handle}`} data-element-id={id} data-resize-handle={pos.handle} style={{ cursor: getHandleCursor(pos.handle) }} />;
+              return <rect key={pos.handle} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={1} data-testid={`display-resize-handle-${id}-${pos.handle}`} data-element-id={id} data-resize-handle={pos.handle} style={{ cursor: getRotatedHandleCursor(pos.handle, rotation) }} />;
             })}
           </g>
         );
@@ -1343,8 +1355,13 @@ export function DisplaySurface({
       {selectedElement && (() => {
         const isLocked = isElementLocked(selectedElement);
         const geom = selectedElementGeom ?? selectedElement;
+        const rotation = getElementSelectionRotation(selectedElement);
+        const centerX = geom.x + geom.width / 2;
+        const centerY = geom.y + geom.height / 2;
+        const transform = rotation ? `rotate(${rotation} ${centerX} ${centerY})` : undefined;
+
         return (
-          <g data-testid="display-selection-overlay">
+          <g data-testid="display-selection-overlay" transform={transform}>
             <rect
               x={geom.x - 1}
               y={geom.y - 1}
@@ -1373,7 +1390,7 @@ export function DisplaySurface({
                   data-testid={`display-resize-handle-${pos.handle}`}
                   data-element-id={selectedElement.id}
                   data-resize-handle={pos.handle}
-                  style={{ cursor: getHandleCursor(pos.handle) }}
+                  style={{ cursor: getRotatedHandleCursor(pos.handle, rotation) }}
                 />
               );
             })}

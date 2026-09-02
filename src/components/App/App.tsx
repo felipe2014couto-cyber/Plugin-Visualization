@@ -50,6 +50,7 @@ import {
   savePimsVisionDashboard,
   type GrafanaDashboardFolder,
 } from '../../grafana/dashboardPersistence';
+import { serializePersistableDocument } from './unsavedChanges';
 
 const MiniSheetsPanel = React.lazy(async () => {
   const module = await import('../MiniSheets/MiniSheetsPanel');
@@ -319,6 +320,32 @@ export function App() {
   const [saveValidationError, setSaveValidationError] = useState('');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
+  const baselineDocumentFingerprintRef = useRef<string>(
+    serializePersistableDocument(cachedDashboardDocument ?? document)
+  );
+
+  const hasUnsavedChanges = useMemo(() => {
+    const effectiveDocument = getDocumentWithProgrammingDraft(document, editingProgrammingElementId, programmingDraft);
+    const currentFingerprint = serializePersistableDocument(effectiveDocument);
+    return currentFingerprint !== baselineDocumentFingerprintRef.current;
+  }, [document, editingProgrammingElementId, programmingDraft]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges || isGrafanaKioskMode()) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = true;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [hasUnsavedChanges]);
+
   // Every module uses the same toggle behavior: clicking the active module
   // hides/shows its sidebar, while switching modules opens the new sidebar.
   const handleModuleToggle = useCallback((module: ActiveModule) => {
@@ -429,6 +456,7 @@ export function App() {
         }
         setDocument(savedDocument.document);
         cacheDashboardDocument(uid, savedDocument.document);
+        baselineDocumentFingerprintRef.current = serializePersistableDocument(savedDocument.document);
         const savedProgramming = savedDocument.document.programming;
         if (savedProgramming) {
           setProgrammingDraft(savedProgramming);
@@ -719,6 +747,7 @@ export function App() {
       setDocument(documentToSave);
       setDashboardUid(saved.uid);
       cacheDashboardDocument(saved.uid, documentToSave);
+      baselineDocumentFingerprintRef.current = serializePersistableDocument(documentToSave);
       setDashboardLoadState('loaded');
       setSaveState('saved');
     } catch {
@@ -747,6 +776,7 @@ export function App() {
       const saved = await savePimsVisionDashboard(documentToSave, undefined, saveFolderUid);
       setDashboardUid(saved.uid);
       cacheDashboardDocument(saved.uid, documentToSave);
+      baselineDocumentFingerprintRef.current = serializePersistableDocument(documentToSave);
       setDashboardLoadState('loaded');
       setSelectedFolderUid(saveFolderUid);
       setIsSaveDialogOpen(false);
@@ -853,7 +883,7 @@ export function App() {
               data-testid="pims-vision-save-dashboard"
               disabled={saveState === 'saving'}
               onClick={handleSaveDashboard}
-            >{saveState === 'saving' ? 'Salvando...' : 'Salvar'}</button>
+            >{saveState === 'saving' ? 'Salvando...' : hasUnsavedChanges ? 'Salvar*' : 'Salvar'}</button>
             <button
               type="button"
               className={styles.saveAsButton}

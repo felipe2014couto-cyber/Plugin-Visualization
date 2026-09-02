@@ -54,13 +54,18 @@ export function createText(options: CreateTextOptions = {}): TextElement {
   while (existing.has(id)) {
     id = generate();
   }
+  const safeWidth = Math.max(1, Math.min(width, surface?.width ?? width));
+  const safeHeight = Math.max(1, Math.min(height, surface?.height ?? height));
+  const x = options.x ?? Math.max(0, ((surface?.width ?? safeWidth) - safeWidth) / 2);
+  const y = options.y ?? Math.max(0, ((surface?.height ?? safeHeight) - safeHeight) / 2);
+
   return {
     id,
     type: TEXT_TYPE,
-    x: options.x ?? 0,
-    y: options.y ?? 0,
-    width: Math.max(1, width),
-    height: Math.max(1, height),
+    x,
+    y,
+    width: safeWidth,
+    height: safeHeight,
     properties: {
       ...DEFAULT_TEXT_PROPERTIES,
       ...options.properties,

@@ -367,3 +367,111 @@ export function svgPointFromEvent(
   const transformed = pt.matrixTransform(inverse.call(ctm));
   return { x: transformed.x, y: transformed.y };
 }
+
+export function getElementCenter(geometry: ElementGeometry): Point {
+  return {
+    x: geometry.x + geometry.width / 2,
+    y: geometry.y + geometry.height / 2,
+  };
+}
+
+export function rotateVector(vector: Point, angleDegrees: number): Point {
+  const angleRadians = (angleDegrees * Math.PI) / 180;
+  const cos = Math.cos(angleRadians);
+  const sin = Math.sin(angleRadians);
+  return {
+    x: vector.x * cos - vector.y * sin,
+    y: vector.x * sin + vector.y * cos,
+  };
+}
+
+export function rotatePointAroundCenter(point: Point, center: Point, angleDegrees: number): Point {
+  const dx = point.x - center.x;
+  const dy = point.y - center.y;
+  const rotated = rotateVector({ x: dx, y: dy }, angleDegrees);
+  return {
+    x: center.x + rotated.x,
+    y: center.y + rotated.y,
+  };
+}
+
+const CURSOR_DIRECTIONS = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'] as const;
+
+export function getRotatedHandleCursor(handle: ResizeHandle, rotation: number): string {
+  if (!rotation) return getHandleCursor(handle);
+
+  let baseAngle = 0;
+  switch (handle) {
+    case 'tc': baseAngle = 0; break;
+    case 'tr': baseAngle = 45; break;
+    case 'mr': baseAngle = 90; break;
+    case 'br': baseAngle = 135; break;
+    case 'bc': baseAngle = 180; break;
+    case 'bl': baseAngle = 225; break;
+    case 'ml': baseAngle = 270; break;
+    case 'tl': baseAngle = 315; break;
+  }
+
+  let totalAngle = (baseAngle + rotation) % 360;
+  if (totalAngle < 0) {
+    totalAngle += 360;
+  }
+
+  const index = Math.round(totalAngle / 45) % 8;
+  const direction = CURSOR_DIRECTIONS[index];
+
+  switch (direction) {
+    case 'n':
+    case 's':
+      return 'ns-resize';
+    case 'e':
+    case 'w':
+      return 'ew-resize';
+    case 'ne':
+    case 'sw':
+      return 'nesw-resize';
+    case 'nw':
+    case 'se':
+      return 'nwse-resize';
+  }
+}
+
+export function computeRotatedResizeGeometry(
+  handle: ResizeHandle,
+  startGeometry: ElementGeometry,
+  startPointer: Point,
+  currentPointer: Point,
+  rotation: number,
+): ElementGeometry {
+  if (!rotation) {
+    return computeResizeGeometry(handle, startGeometry, startPointer, currentPointer);
+  }
+
+  const originalCenter = getElementCenter(startGeometry);
+
+  const localStartPointer = rotatePointAroundCenter(startPointer, originalCenter, -rotation);
+  const localCurrentPointer = rotatePointAroundCenter(currentPointer, originalCenter, -rotation);
+
+  const localGeometry = computeResizeGeometry(handle, startGeometry, localStartPointer, localCurrentPointer);
+
+  const localNewCenter = getElementCenter(localGeometry);
+
+  const localDelta = {
+    x: localNewCenter.x - originalCenter.x,
+    y: localNewCenter.y - originalCenter.y,
+  };
+
+  const worldDelta = rotateVector(localDelta, rotation);
+
+  const newWorldCenter = {
+    x: originalCenter.x + worldDelta.x,
+    y: originalCenter.y + worldDelta.y,
+  };
+
+  return {
+    x: newWorldCenter.x - localGeometry.width / 2,
+    y: newWorldCenter.y - localGeometry.height / 2,
+    width: localGeometry.width,
+    height: localGeometry.height,
+  };
+}

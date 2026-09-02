@@ -133,7 +133,7 @@ import { editorReducer, initialEditorState, type EditorAction, type EditorState 
 import {
   computeDragGeometry,
   computeAlignmentSnap,
-  computeResizeGeometry,
+  computeRotatedResizeGeometry,
   getCanvasBounds,
   getContentBounds,
   getElementById,
@@ -574,11 +574,16 @@ export function DisplayEditor({
         pointer,
       );
     } else {
-      newGeometry = computeResizeGeometry(
+      const rotation = typeof interaction.originalProperties?.rotation === 'number'
+        ? interaction.originalProperties.rotation
+        : 0;
+
+      newGeometry = computeRotatedResizeGeometry(
         interaction.handle,
         interaction.originalGeometry,
         interaction.startPointer,
         pointer,
+        rotation,
       );
     }
 
