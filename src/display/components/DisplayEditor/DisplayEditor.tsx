@@ -942,8 +942,10 @@ export function DisplayEditor({
         focusInsertedSymbol();
       }
       dispatch({ type: 'SELECT', elementId: positioned.id });
-      setPropertiesPanelOpen(true);
+      setPropertiesPanelOpen(false);
+
       return;
+
     }
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
     const binding = pointResult ? createPiPointBinding(pointResult) : undefined;

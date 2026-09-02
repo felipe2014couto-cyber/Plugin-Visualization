@@ -976,12 +976,25 @@ export function DisplaySurface({
         <pattern id="visualization-editor-grid" width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--canvas-dot)" />
         </pattern>
+        {/* Detail layer: extrai pixels CLAROS da imagem original e os pinta de branco.
+            Fluxo: luminância → alpha → flood branco → composto pela silhueta original.
+            Pixels escuros (corpo) ficam transparentes → mostra a cor base exata.
+            Pixels claros (linhas técnicas) ficam brancos sobre a cor base. */}
+        <filter id="pims-vision-detail-extract" colorInterpolationFilters="sRGB">
+          {/* 1. Converter para luminância: L = 0.2126R + 0.7152G + 0.0722B */}
+          <feColorMatrix type="luminanceToAlpha" in="SourceGraphic" result="lum" />
+          {/* 2. Promover o canal alpha (luminância) para uma imagem branca semitransparente */}
+          <feFlood floodColor="white" floodOpacity="1" result="white" />
+          <feComposite in="white" in2="lum" operator="in" result="whiteDetail" />
+          {/* 3. Clipar pela silhueta original para não extrapolar a borda do símbolo */}
+          <feComposite in="whiteDetail" in2="SourceAlpha" operator="in" />
+        </filter>
         {allElements.filter((element) => element.type === LIBRARY_SYMBOL_TYPE).map((element) => {
           const symbol = element as LibrarySymbolElement;
           const source = getLibrarySymbolSource(symbol);
           return (
-            <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height}>
-              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" />
+            <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height} style={{ maskType: 'alpha' }}>
+              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" />
             </mask>
           );
         })}
@@ -1245,8 +1258,10 @@ export function DisplaySurface({
             return (
               <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move', ...(blink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : {}) }}>
                 <g transform={transform}>
-                  <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
-                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" style={{ mixBlendMode: isCustomColored ? 'overlay' : 'normal', opacity: isCustomColored ? 0.45 : 1 }} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
+                  {isCustomColored && (
+                    <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
+                  )}
+                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" filter={isCustomColored ? 'url(#pims-vision-detail-extract)' : undefined} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
                 </g>
               </g>
             );
