@@ -118,9 +118,7 @@ export function ScalePropertiesPanel({
   onMultistateChange,
 }: ScalePropertiesPanelProps) {
   const styles = useStyles2(getStyles);
-  const [customBarNameDraft, setCustomBarNameDraft] = useState(customTagName ?? '');
   const [gaugeTitleDraft, setGaugeTitleDraft] = useState(title ?? '');
-  useEffect(() => setCustomBarNameDraft(customTagName ?? ''), [customTagName]);
   useEffect(() => setGaugeTitleDraft(title ?? ''), [title]);
 
   const [minText, setMinText] = useState(minimum?.toString() ?? '');
@@ -308,22 +306,22 @@ export function ScalePropertiesPanel({
                 <>
                   <label className={styles.field}>
                     <span>Acima</span>
-                    <input type="number" value={maxText} onChange={(event) => { setMaxText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value !== '' && Number.isFinite(val)) onChange({ maximum: val }); }} data-testid={`${kind.toLowerCase()}-maximum`} />
+                    <input type="number" value={maxText} onChange={(event) => { setMaxText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value === '') onChange({ maximum: undefined }); else if (Number.isFinite(val)) onChange({ maximum: val }); }} data-testid={`${kind.toLowerCase()}-maximum`} />
                   </label>
                   <label className={styles.field}>
                     <span>Abaixo</span>
-                    <input type="number" value={minText} onChange={(event) => { setMinText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value !== '' && Number.isFinite(val)) onChange({ minimum: val }); }} data-testid={`${kind.toLowerCase()}-minimum`} />
+                    <input type="number" value={minText} onChange={(event) => { setMinText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value === '') onChange({ minimum: undefined }); else if (Number.isFinite(val)) onChange({ minimum: val }); }} data-testid={`${kind.toLowerCase()}-minimum`} />
                   </label>
                 </>
               ) : (
                 <>
                   <label className={styles.field}>
                     <span>{kind === 'Bar' ? 'Esquerda' : 'Mínimo'}</span>
-                    <input type="number" value={minText} onChange={(event) => { setMinText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value !== '' && Number.isFinite(val)) onChange({ minimum: val }); }} data-testid={`${kind.toLowerCase()}-minimum`} />
+                    <input type="number" value={minText} onChange={(event) => { setMinText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value === '') onChange({ minimum: undefined }); else if (Number.isFinite(val)) onChange({ minimum: val }); }} data-testid={`${kind.toLowerCase()}-minimum`} />
                   </label>
                   <label className={styles.field}>
                     <span>{kind === 'Bar' ? 'Direita' : 'Máximo'}</span>
-                    <input type="number" value={maxText} onChange={(event) => { setMaxText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value !== '' && Number.isFinite(val)) onChange({ maximum: val }); }} data-testid={`${kind.toLowerCase()}-maximum`} />
+                    <input type="number" value={maxText} onChange={(event) => { setMaxText(event.currentTarget.value); const val = Number(event.currentTarget.value); if (event.currentTarget.value === '') onChange({ maximum: undefined }); else if (Number.isFinite(val)) onChange({ maximum: val }); }} data-testid={`${kind.toLowerCase()}-maximum`} />
                   </label>
                 </>
               )}
@@ -353,7 +351,9 @@ export function ScalePropertiesPanel({
                     onChange={(e) => {
                       setBarStartValueText(e.currentTarget.value);
                       const val = Number(e.currentTarget.value);
-                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                      if (e.currentTarget.value === '') {
+                        onChange({ barStartValue: undefined });
+                      } else if (Number.isFinite(val)) {
                         onChange({ barStartValue: val });
                       }
                     }}
@@ -374,8 +374,6 @@ export function ScalePropertiesPanel({
           </label>
         )}
         <label className={styles.checkbox}><input type="checkbox" checked={showTagName} onChange={(event) => onChange({ showTagName: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-tag-name`} /><span>Rótulo</span></label>
-        {kind === 'Bar' && <label className={styles.field}><span>Nome do rótulo</span><select value={tagNameMode} onChange={(event) => onChange({ tagNameMode: event.target.value as 'tag' | 'custom', ...(event.target.value === 'custom' && !customTagName ? { customTagName: pointName ?? '' } : {}) })} data-testid="bar-tag-name-mode"><option value="tag">Nome da tag</option><option value="custom">Personalizado</option></select></label>}
-        {kind === 'Bar' && tagNameMode === 'custom' && <label className={styles.field}><span>Rótulo personalizado</span><input value={customBarNameDraft} onChange={(event) => { setCustomBarNameDraft(event.target.value); onChange({ customTagName: event.target.value }); }} data-testid="bar-custom-tag-name" /><small className={styles.tagHint}>Tag usada: {pointName || '—'}</small></label>}
         {kind === 'Gauge' && <label className={styles.field}><span>Rótulo personalizado</span><input value={gaugeTitleDraft} onChange={(event) => { setGaugeTitleDraft(event.target.value); onChange({ title: event.target.value }); }} placeholder="Nome da tag" data-testid="gauge-title" /><small className={styles.tagHint}>Tag usada: {pointName || '—'}</small></label>}
         <label className={styles.checkbox}><input type="checkbox" checked={showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-value`} /><span>Valor</span></label>
         {(kind === 'Bar' || kind === 'Gauge') && <label className={styles.checkbox}><input type="checkbox" checked={showScale} onChange={(event) => onChange({ showScale: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-scale`} /><span>Mostrar escala</span></label>}

@@ -282,7 +282,9 @@ export function BarChartPropertiesPanel({
                     onChange={(e) => {
                       setMaxText(e.currentTarget.value);
                       const val = Number(e.currentTarget.value);
-                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                      if (e.currentTarget.value === '') {
+                        onVisualChange({ maximum: undefined });
+                      } else if (Number.isFinite(val)) {
                         onVisualChange({ maximum: val });
                       }
                     }}
@@ -297,7 +299,9 @@ export function BarChartPropertiesPanel({
                     onChange={(e) => {
                       setMinText(e.currentTarget.value);
                       const val = Number(e.currentTarget.value);
-                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                      if (e.currentTarget.value === '') {
+                        onVisualChange({ minimum: undefined });
+                      } else if (Number.isFinite(val)) {
                         onVisualChange({ minimum: val });
                       }
                     }}
@@ -315,7 +319,9 @@ export function BarChartPropertiesPanel({
                     onChange={(e) => {
                       setMinText(e.currentTarget.value);
                       const val = Number(e.currentTarget.value);
-                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                      if (e.currentTarget.value === '') {
+                        onVisualChange({ minimum: undefined });
+                      } else if (Number.isFinite(val)) {
                         onVisualChange({ minimum: val });
                       }
                     }}
@@ -330,7 +336,9 @@ export function BarChartPropertiesPanel({
                     onChange={(e) => {
                       setMaxText(e.currentTarget.value);
                       const val = Number(e.currentTarget.value);
-                      if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                      if (e.currentTarget.value === '') {
+                        onVisualChange({ maximum: undefined });
+                      } else if (Number.isFinite(val)) {
                         onVisualChange({ maximum: val });
                       }
                     }}
@@ -377,7 +385,9 @@ export function BarChartPropertiesPanel({
               onChange={(e) => {
                 setBarStartValueText(e.currentTarget.value);
                 const val = Number(e.currentTarget.value);
-                if (e.currentTarget.value !== '' && Number.isFinite(val)) {
+                if (e.currentTarget.value === '') {
+                  onVisualChange({ barStartValue: undefined });
+                } else if (Number.isFinite(val)) {
                   onVisualChange({ barStartValue: val });
                 }
               }}
@@ -452,7 +462,8 @@ export function BarChartPropertiesPanel({
               <label>
                 Nome personalizado
                 <input
-                  value={selectedItem.customName ?? selectedItem.binding.pointName}
+                  value={selectedItem.customName ?? ''}
+                  placeholder={selectedItem.binding.pointName}
                   onChange={(e) => changeItem({ nameMode: 'custom', customName: e.currentTarget.value })}
                   data-testid="bar-chart-item-custom-name"
                 />

@@ -1451,14 +1451,12 @@ export function DisplayEditor({
   }, [applySymbolConversion]);
 
   const handleLibrarySymbolContextMenu = useCallback((element: LibrarySymbolElement, event?: React.MouseEvent) => {
-    setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
       const isHomogeneousSelection = selectedElements.length === selectedIds.length
         && selectedElements.every((selected) => selected.type === element.type);
       batchEditElementIdsRef.current = isHomogeneousSelection ? [...selectedIds] : [];
-      setPropertiesPanelOpen(isHomogeneousSelection);
       const allLocked = selectedElements.length > 0 && selectedElements.every((el) => isElementLocked(el));
       setContextMenu({
         x: event?.clientX ?? 100,
@@ -1482,18 +1480,15 @@ export function DisplayEditor({
       showUngroup: false,
       isLocked: isElementLocked(element),
     });
-    setOptionsElementId(element.id);
   }, [dispatch]);
 
   const handleTrendContextMenu = useCallback((element: TrendElement, event?: React.MouseEvent) => {
-    setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
       const isHomogeneousSelection = selectedElements.length === selectedIds.length
         && selectedElements.every((selected) => selected.type === element.type);
       batchEditElementIdsRef.current = isHomogeneousSelection ? [...selectedIds] : [];
-      setPropertiesPanelOpen(isHomogeneousSelection);
       const allLocked = selectedElements.length > 0 && selectedElements.every((el) => isElementLocked(el));
       setContextMenu({
         x: event?.clientX ?? 100,
@@ -1517,8 +1512,6 @@ export function DisplayEditor({
       showUngroup: false,
       isLocked: isElementLocked(element),
     });
-    setOptionsElementId(null);
-    setOptionsTrendId(element.id);
   }, [dispatch]);
 
   const handleSurfaceContextMenu = useCallback((_event?: React.MouseEvent) => {
@@ -1528,14 +1521,12 @@ export function DisplayEditor({
   }, [dispatch]);
 
   const handleElementContextMenu = useCallback((element: DisplayElement, event?: React.MouseEvent) => {
-    setPropertiesPanelOpen(true);
     const selectedIds = stateRef.current.selectedElementIds;
     if (selectedIds.length > 1 && selectedIds.includes(element.id)) {
       const selectedElements = selectedIds.map((id) => getElementById(documentRef.current, id)).filter(Boolean) as DisplayElement[];
       const isHomogeneousSelection = selectedElements.length === selectedIds.length
         && selectedElements.every((selected) => selected.type === element.type);
       batchEditElementIdsRef.current = isHomogeneousSelection ? [...selectedIds] : [];
-      setPropertiesPanelOpen(isHomogeneousSelection);
       const allLocked = selectedElements.length > 0 && selectedElements.every((el) => isElementLocked(el));
       setContextMenu({
         x: event?.clientX ?? 100,
@@ -1573,8 +1564,6 @@ export function DisplayEditor({
       isLocked: isElementLocked(element),
       showProgrammingEdit: element.type === PROGRAMMING_TYPE,
     });
-    setOptionsElementId(element.id);
-    setOptionsTrendId(null);
   }, [dispatch]);
 
   const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
@@ -1582,6 +1571,31 @@ export function DisplayEditor({
       return [];
     }
     const items: ContextMenuItem[] = [];
+    const targets = contextMenu.elementIds && contextMenu.elementIds.length > 0
+      ? contextMenu.elementIds
+      : (contextMenu.elementId ? [contextMenu.elementId] : []);
+
+    if (targets.length > 0) {
+      items.push({
+        id: 'configure-element',
+        label: 'Configurar elemento',
+        testId: 'context-menu-configure-element',
+        onClick: () => {
+          if (targets.length === 1) {
+            const source = getElementById(documentRef.current, targets[0]);
+            if (source?.type === TREND_TYPE) {
+              setOptionsTrendId(source.id);
+              setOptionsElementId(null);
+            } else {
+              setOptionsElementId(targets[0]);
+              setOptionsTrendId(null);
+            }
+          }
+          setPropertiesPanelOpen(true);
+          setContextMenu(null);
+        },
+      });
+    }
     if (contextMenu.showGroup) {
       items.push({
         id: 'group',
@@ -1598,9 +1612,6 @@ export function DisplayEditor({
         onClick: handleUngroupSelected,
       });
     }
-    const targets = contextMenu.elementIds && contextMenu.elementIds.length > 0
-      ? contextMenu.elementIds
-      : (contextMenu.elementId ? [contextMenu.elementId] : []);
     if (contextMenu.showProgrammingEdit && targets.length === 1 && onProgrammingEdit) {
       items.push({
         id: 'edit-programming',
