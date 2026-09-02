@@ -753,6 +753,7 @@ export function App() {
             </div>
           </div>
           <div className={styles.headerSaveRow}>
+            <div id="pims-vision-header-portal" />
             <div className={styles.headerAutoRefresh}>
               <button
                 type="button"

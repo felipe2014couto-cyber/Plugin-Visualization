@@ -65,7 +65,7 @@ import {
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
-import { zoomViewportAtPoint, type SurfaceViewport } from './viewportZoom';
+import { type SurfaceViewport } from './viewportZoom';
 
 const HANDLE_SIZE = 8;
 const ELEMENT_FILL = 'rgba(110, 159, 255, 0.15)';
@@ -146,11 +146,11 @@ export interface DisplaySurfaceProps {
   onTrendLegendContextMenu?: (series: TrendSeries, value: string | number | undefined) => void;
   onElementContextMenu?: (element: DisplayElement, event?: React.MouseEvent) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement, event?: React.MouseEvent) => void;
-  onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
+  onTableLayoutChange?: (elementId: string, columns: TableColumnConfig[], tableWidth: number) => void;
   onTrendLegendWidthChange?: (elementId: string, legendWidth: number) => void;
   zoom?: number;
   viewCenter?: Point;
-  onViewportWheelZoom?: (viewport: SurfaceViewport) => void;
+  onViewportWheelZoom?: (anchor: Point, clientX: number, clientY: number, direction: 'in' | 'out') => void;
   minZoom?: number;
   maxZoom?: number;
   wheelZoomFactor?: number;
@@ -208,7 +208,7 @@ export function DisplaySurface({
   onTrendLegendContextMenu,
   onElementContextMenu,
   onLibrarySymbolContextMenu,
-  onTableColumnsChange,
+  onTableLayoutChange,
   onTrendLegendWidthChange,
   zoom = 1,
   viewCenter,
@@ -664,7 +664,9 @@ export function DisplaySurface({
     if (!element) {
       return;
     }
-    const trendElement = createTrendElementForElement(element);
+    const itemIndexAttr = target.getAttribute('data-table-item-index') ?? target.closest('[data-table-item-index]')?.getAttribute('data-table-item-index');
+    const itemIndex = itemIndexAttr ? parseInt(itemIndexAttr, 10) : undefined;
+    const trendElement = createTrendElementForElement(element, itemIndex);
     if (!trendElement) {
       return;
     }
@@ -709,17 +711,13 @@ export function DisplaySurface({
     }
     event.preventDefault();
     const anchor = svgPointFromEvent(svg, event.clientX, event.clientY);
-    const nextViewport = zoomViewportAtPoint(
-      viewportRef.current,
+    onViewportWheelZoom?.(
       anchor,
-      event.deltaY < 0 ? 'in' : 'out',
-      minZoom,
-      maxZoom,
-      wheelZoomFactor,
+      event.clientX,
+      event.clientY,
+      event.deltaY < 0 ? 'in' : 'out'
     );
-    viewportRef.current = nextViewport;
-    onViewportWheelZoom?.(nextViewport);
-  }, [maxZoom, minZoom, onViewportWheelZoom, wheelZoomFactor]);
+  }, [onViewportWheelZoom]);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -1091,7 +1089,7 @@ export function DisplaySurface({
             );
           }
           if (element.type === TABLE_TYPE) {
-            return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onColumnsChange={editable ? (columns) => onTableColumnsChange?.(element.id, columns) : undefined} />;
+            return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onTableLayoutChange={editable ? (columns, width) => onTableLayoutChange?.(element.id, columns, width) : undefined} />;
           }
           if (element.type === XY_PLOT_TYPE) {
             const xy = element as XYPlotElement;

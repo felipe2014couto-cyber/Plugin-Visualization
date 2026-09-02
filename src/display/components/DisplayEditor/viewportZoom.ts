@@ -35,3 +35,51 @@ function finiteClamp(value: number, min: number, max: number): number {
   const upper = Number.isFinite(max) ? Math.max(lower, max) : Math.max(lower, 5);
   return Number.isFinite(value) ? Math.max(lower, Math.min(upper, value)) : lower;
 }
+
+export interface FocalZoomIntent {
+  anchor: Point;
+  localX: number;
+  localY: number;
+  zoom: number;
+}
+
+/**
+ * Calculates the exact wrapper scroll offsets required to preserve an SVG logical
+ * point (anchor) precisely under its physical cursor coordinates (localX, localY).
+ */
+export function calculateAnchoredZoomScroll(
+  intent: FocalZoomIntent,
+  canvasBounds: { left: number; top: number },
+  scrollWidth: number,
+  scrollHeight: number,
+  clientWidth: number,
+  clientHeight: number,
+): { scrollLeft: number; scrollTop: number } {
+  const targetLeft = (intent.anchor.x - canvasBounds.left) * intent.zoom - intent.localX;
+  const targetTop = (intent.anchor.y - canvasBounds.top) * intent.zoom - intent.localY;
+  
+  const maxLeft = Math.max(0, scrollWidth - clientWidth);
+  const maxTop = Math.max(0, scrollHeight - clientHeight);
+  
+  return {
+    scrollLeft: Math.max(0, Math.min(targetLeft, maxLeft)),
+    scrollTop: Math.max(0, Math.min(targetTop, maxTop)),
+  };
+}
+
+/**
+ * Calculates the exact mathematical viewCenter based on the physical wrapper scroll.
+ */
+export function calculateViewCenterFromScroll(
+  scrollLeft: number,
+  scrollTop: number,
+  clientWidth: number,
+  clientHeight: number,
+  zoom: number,
+  canvasBounds: { left: number; top: number },
+): Point {
+  return {
+    x: canvasBounds.left + (scrollLeft + clientWidth / 2) / zoom,
+    y: canvasBounds.top + (scrollTop + clientHeight / 2) / zoom,
+  };
+}

@@ -142,7 +142,6 @@ import {
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
-import type { SurfaceViewport } from './viewportZoom';
 
 export type DisplayEditorMode = 'edit' | 'view';
 export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'bar-chart' | 'table' | 'xy-plot';
@@ -248,6 +247,7 @@ export function DisplayEditor({
   const historyRef = useRef(createDisplayHistory(displayDocument));
   const expectedDocumentsRef = useRef<DisplayDocument[]>([]);
   const pendingTransactionRef = useRef<PendingDocumentTransaction | null>(null);
+  const pendingZoomRef = useRef<{ anchor: Point, localX: number, localY: number, zoom: number } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [, refreshHistory] = useState(0);
@@ -270,6 +270,7 @@ export function DisplayEditor({
     isLocked?: boolean;
     showProgrammingEdit?: boolean;
   } | null>(null);
+  const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null);
   const [pendingSymbolConversion, setPendingSymbolConversion] = useState<{ elementId: string; targetType: SymbolConversionType; bindings: PiPointBinding[]; selectedIndex: number } | null>(null);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
@@ -434,6 +435,9 @@ export function DisplayEditor({
     reconcileSelection(nextDocument);
     return true;
   }, [publishDocument, reconcileSelection]);
+  useEffect(() => {
+    setHeaderPortalTarget(document.getElementById('pims-vision-header-portal'));
+  }, []);
 
   useEffect(() => {
     if (!editingDisplayName) {
@@ -1346,7 +1350,7 @@ export function DisplayEditor({
     })));
   }, [applyToCompatibleSelection]);
   
-  const handleTableColumnsChange = useCallback((elementId: string, columns: TableColumnConfig[]) => {
+  const handleTableLayoutChange = useCallback((elementId: string, columns: TableColumnConfig[], width?: number) => {
     commitDocument(updateTableProperties(documentRef.current, elementId, { columns }));
   }, [commitDocument]);
   const selectedText = selectedElement && selectedElement.type === TEXT_TYPE
@@ -1862,9 +1866,24 @@ export function DisplayEditor({
     setTrendPopup(null);
   }, []);
 
-  const handleViewportWheelZoom = useCallback((viewport: SurfaceViewport) => {
-    setSurfaceZoom(viewport.zoom);
-    setSurfaceViewCenter(viewport.viewCenter);
+  const handleViewportWheelZoom = useCallback((anchor: Point, clientX: number, clientY: number, direction: 'in' | 'out') => {
+    const wrapper = surfaceWrapperRef.current;
+    if (!wrapper) return;
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const localX = clientX - wrapperRect.left;
+    const localY = clientY - wrapperRect.top;
+    setSurfaceZoom((currentZoom) => {
+      const factor = 1.1; // Using standard zoom step
+      const minZoom = DISPLAY_ZOOM_MIN;
+      const maxZoom = DISPLAY_ZOOM_MAX;
+      const safeZoom = Number.isFinite(currentZoom) ? Math.max(minZoom, Math.min(maxZoom, currentZoom)) : 1;
+      const requestedZoom = direction === 'in' ? safeZoom * factor : safeZoom / factor;
+      const newZoom = Number.isFinite(requestedZoom) ? Math.max(minZoom, Math.min(maxZoom, requestedZoom)) : safeZoom;
+      if (newZoom !== currentZoom) {
+        pendingZoomRef.current = { anchor, localX, localY, zoom: newZoom };
+      }
+      return newZoom;
+    });
   }, []);
 
   const handleZoomFit = useCallback(() => {
@@ -2047,24 +2066,28 @@ export function DisplayEditor({
             >
               <CanvasIcon />
             </button>
-            <div className={styles.exportControl}>
-              <button type="button" title={exporting ? 'Exportando dados PI...' : 'Exportar Display'} aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" disabled={exporting} aria-expanded={exportMenuOpen} onClick={() => setExportMenuOpen((open) => !open)}>
-                <ExportIcon />
-              </button>
-              {exportMenuOpen && <div className={styles.exportMenu} data-testid="display-export-format" role="menu" aria-label="Formato de exportação">
-                {exporting ? <span>Exportando dados PI...</span> : <><span>Exportar como</span>
-                  <button type="button" role="menuitem" data-testid="display-export-format-json" onClick={() => void handleExport('json')}>JSON — Configuração</button>
-                  <button type="button" role="menuitem" data-testid="display-export-format-csv" onClick={() => void handleExport('csv')}>CSV — Dados</button>
-                  <button type="button" role="menuitem" data-testid="display-export-format-xml" onClick={() => void handleExport('xml')}>XML — Dados</button></>}
-              </div>}
-            </div>
-            <button type="button" title="Importar Display" aria-label="Importar Display" className={styles.iconButton} data-testid="display-import" disabled={!onChange} onClick={() => importInputRef.current?.click()}>
-              <ImportIcon />
-            </button>
-            <input ref={importInputRef} type="file" accept="application/json,.json,.pims-vision.json" data-testid="display-import-input" className={styles.fileInput} onChange={handleImportFile} />
-            <button type="button" title="Importar do PI Vision" aria-label="Importar do PI Vision" className={styles.iconButton} data-testid="display-import-pivision" disabled={!onChange} onClick={() => setPiVisionImportOpen(true)}>
-              <PiVisionImportIcon />
-            </button>
+            {(headerPortalTarget ? (c: React.ReactNode) => createPortal(c, headerPortalTarget) : (c: React.ReactNode) => c)(
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div className={styles.exportControl}>
+                  <button type="button" title={exporting ? 'Exportando dados PI...' : 'Exportar Display'} aria-label="Exportar Display" className={styles.iconButton} data-testid="display-export" disabled={exporting} aria-expanded={exportMenuOpen} onClick={() => setExportMenuOpen((open) => !open)}>
+                    <ExportIcon />
+                  </button>
+                  {exportMenuOpen && <div className={styles.exportMenu} data-testid="display-export-format" role="menu" aria-label="Formato de exportação">
+                    {exporting ? <span>Exportando dados PI...</span> : <><span>Exportar como</span>
+                      <button type="button" role="menuitem" data-testid="display-export-format-json" onClick={() => void handleExport('json')}>JSON — Configuração</button>
+                      <button type="button" role="menuitem" data-testid="display-export-format-csv" onClick={() => void handleExport('csv')}>CSV — Dados</button>
+                      <button type="button" role="menuitem" data-testid="display-export-format-xml" onClick={() => void handleExport('xml')}>XML — Dados</button></>}
+                  </div>}
+                </div>
+                <button type="button" title="Importar Display" aria-label="Importar Display" className={styles.iconButton} data-testid="display-import" disabled={!onChange} onClick={() => importInputRef.current?.click()}>
+                  <ImportIcon />
+                </button>
+                <input ref={importInputRef} type="file" accept="application/json,.json,.pims-vision.json" data-testid="display-import-input" className={styles.fileInput} onChange={handleImportFile} />
+                <button type="button" title="Importar do PI Vision" aria-label="Importar do PI Vision" className={styles.iconButton} data-testid="display-import-pivision" disabled={!onChange} onClick={() => setPiVisionImportOpen(true)}>
+                  <PiVisionImportIcon />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -2115,7 +2138,7 @@ export function DisplayEditor({
             onTrendLegendContextMenu={handleTrendLegendInfo}
             onElementContextMenu={handleElementContextMenu}
             onLibrarySymbolContextMenu={handleLibrarySymbolContextMenu}
-            onTableColumnsChange={handleTableColumnsChange}
+            onTableLayoutChange={handleTableLayoutChange}
             onTrendLegendWidthChange={handleTrendLegendWidthChange}
             zoom={surfaceZoom}
             viewCenter={surfaceViewCenter}

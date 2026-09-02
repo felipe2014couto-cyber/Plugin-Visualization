@@ -53,6 +53,7 @@ describe('DisplayEditor - propriedades em lote', () => {
       fireEvent.contextMenu(valueA, { clientX: 30, clientY: 30 });
     });
 
+    fireEvent.click(screen.getByText('Configurar elemento'));
     expect(screen.getByTestId('value-properties-panel')).toBeInTheDocument();
     fireEvent.change(screen.getByTestId('value-color'), { target: { value: '#000000' } });
     fireEvent.change(screen.getByTestId('value-link-url'), { target: { value: 'https://example.com/display' } });
