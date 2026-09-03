@@ -163,9 +163,6 @@ export function updateValueVisualOptions(
       return element;
     }
     const properties = element.properties as Partial<ValueProperties>;
-    if (!isPiPointBinding(properties.binding)) {
-      return element;
-    }
     return {
       ...element,
       properties: {

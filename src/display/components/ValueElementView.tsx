@@ -52,7 +52,8 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
 
   const visual = getValueVisualOptions(element.properties);
   const currentState = runtimeState ?? state;
-  const lines = getValueLines(currentState, visual, label ?? binding?.pointName ?? '');
+  const isCalculation = !element.properties.binding && !!element.properties.calculationId;
+  const lines = getValueLines(currentState, visual, label ?? binding?.pointName ?? '', isCalculation);
   const runtimeVal = getRuntimeValue(runtimeState ?? state);
   const textColor = getMultistateColor(runtimeVal, element.properties.multistate, resolveThemeForeground(visual.color));
   const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, visual.backgroundColor || 'transparent');
@@ -113,6 +114,7 @@ function getValueLines(
   state: ValueLoadState | ValueRuntimeState,
   visual: ValueVisualOptions,
   pointName: string,
+  isCalculation = false
 ): string[] {
   let valueText: string;
   const result = state.status === 'loading' ? undefined : state.result;
@@ -140,8 +142,12 @@ function getValueLines(
   } else if (visual.showUnit && result?.unit) {
     lines.push(result.unit);
   }
-  if (visual.showTimestamp && result?.timestamp) {
-    lines.push(formatTimestamp(result.timestamp));
+  if (visual.showTimestamp) {
+    if (result?.timestamp) {
+      lines.push(formatTimestamp(result.timestamp));
+    } else if (isCalculation && state.status !== 'loading') {
+      lines.push(formatTimestamp(new Date().toISOString()));
+    }
   }
   return lines.length > 0 ? lines : [''];
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { css } from '@emotion/css';
 import type { PiPointMetadata } from '../../../pi/piDataSource';
+import type { CalculationDefinition } from '../../../calculations/calculationEngine';
 
 export interface PiPointInfoPanelProps {
   pointName: string;
@@ -9,9 +10,21 @@ export interface PiPointInfoPanelProps {
   loading?: boolean;
   error?: string;
   onClose?: () => void;
+  calculation?: CalculationDefinition;
 }
 
-export function PiPointInfoPanel({ pointName, value, metadata, loading = false, error, onClose }: PiPointInfoPanelProps) {
+export function PiPointInfoPanel({ pointName, value, metadata, loading = false, error, onClose, calculation }: PiPointInfoPanelProps) {
+  if (calculation) {
+    return <aside className={getStyles().panel} data-testid="trend-point-info-panel" aria-label="Informações do cálculo">
+      <div className={getStyles().header}><strong>{calculation.name}</strong>{onClose && <button type="button" className={getStyles().closeButton} onClick={onClose} aria-label="Fechar informações da tag" data-testid="trend-point-info-close">×</button>}</div>
+      <dl className={getStyles().list}>
+        <dt>Tipo de item</dt><dd>Cálculo do tag do PI</dd>
+        <dt>Nome</dt><dd>{calculation.name}</dd>
+        <dt>Descrição</dt><dd>{calculation.description || '—'}</dd>
+        <dt>Expressão</dt><dd>{calculation.expression || '—'}</dd>
+      </dl>
+    </aside>;
+  }
   const styles = getStyles();
   const entries: Array<[string, string | number | undefined]> = [
     ['Nome', metadata?.name ?? pointName], ['Valor', value], ['Descrição', metadata?.description],

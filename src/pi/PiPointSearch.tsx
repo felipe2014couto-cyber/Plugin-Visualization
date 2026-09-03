@@ -88,6 +88,8 @@ export function PiPointSearch({
             }}
             placeholder="Nome da tag..."
             disabled={!enabled || status === 'loading'}
+            autoComplete="off"
+            spellCheck="false"
           />
           <button
             type="submit"
@@ -235,6 +237,14 @@ const getStyles = (theme: GrafanaTheme2) => ({
     &:focus {
       border-color: var(--accent);
       box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 2px var(--focus-ring);
+    }
+
+    &:-webkit-autofill,
+    &:-webkit-autofill:hover, 
+    &:-webkit-autofill:focus, 
+    &:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 30px var(--input-bg) inset !important;
+      -webkit-text-fill-color: var(--text-primary) !important;
     }
   `,
   button: css`

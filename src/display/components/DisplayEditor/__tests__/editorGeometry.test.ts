@@ -9,6 +9,9 @@ import {
   getResizeHandleRect,
   MIN_ELEMENT_SIZE,
   updateElementGeometry,
+  rotatePointAroundCenter,
+  getRotatedHandleCursor,
+  computeRotatedResizeGeometry,
   type ElementGeometry,
   type Point,
   type ResizeHandle,
@@ -258,6 +261,65 @@ describe('getHandleCursor', () => {
   it('retorna cursor ew-resize para ml e mr', () => {
     expect(getHandleCursor('ml')).toBe('ew-resize');
     expect(getHandleCursor('mr')).toBe('ew-resize');
+  });
+});
+
+describe('getRotatedHandleCursor', () => {
+  it('retorna os cursores corretos sem rotacao', () => {
+    expect(getRotatedHandleCursor('tl', 0)).toBe('nwse-resize');
+    expect(getRotatedHandleCursor('tc', 0)).toBe('ns-resize');
+    expect(getRotatedHandleCursor('tr', 0)).toBe('nesw-resize');
+    expect(getRotatedHandleCursor('ml', 0)).toBe('ew-resize');
+    expect(getRotatedHandleCursor('mr', 0)).toBe('ew-resize');
+  });
+
+  it('rotaciona cursores com 90 graus', () => {
+    expect(getRotatedHandleCursor('tc', 90)).toBe('ew-resize'); // top goes to right
+    expect(getRotatedHandleCursor('mr', 90)).toBe('ns-resize'); // right goes to bottom
+  });
+
+  it('rotaciona cursores com 45 graus', () => {
+    expect(getRotatedHandleCursor('tc', 45)).toBe('nesw-resize');
+  });
+});
+
+describe('rotatePointAroundCenter', () => {
+  it('rotaciona o ponto 90 graus', () => {
+    const center = { x: 100, y: 100 };
+    const pt = { x: 150, y: 100 };
+    const r = rotatePointAroundCenter(pt, center, 90);
+    expect(r.x).toBeCloseTo(100);
+    expect(r.y).toBeCloseTo(150);
+  });
+
+  it('faz a rotacao inversa retornar ao ponto original', () => {
+    const center = { x: 100, y: 100 };
+    const pt = { x: 150, y: 120 };
+    const r = rotatePointAroundCenter(pt, center, 45);
+    const original = rotatePointAroundCenter(r, center, -45);
+    expect(original.x).toBeCloseTo(pt.x);
+    expect(original.y).toBeCloseTo(pt.y);
+  });
+});
+
+describe('computeRotatedResizeGeometry', () => {
+  const startGeometry: ElementGeometry = { x: 100, y: 100, width: 200, height: 80 };
+
+  it('mantem o lado oposto intacto ao arrastar `mr` com rotacao de 90 graus', () => {
+    const rotation = 90;
+    // ml is visually on the left, but locally ml is left, and mr is right.
+    // when mr is pulled in local X, local delta is positive.
+    const ptBefore = rotatePointAroundCenter({ x: 300, y: 140 }, { x: 200, y: 140 }, rotation); // visual position of mr before
+    const ptAfter = { x: ptBefore.x, y: ptBefore.y + 50 }; // pulling it visually down (which is +X locally due to 90deg rot)
+
+    const geom = computeRotatedResizeGeometry('mr', startGeometry, ptBefore, ptAfter, rotation);
+    expect(geom.width).toBeCloseTo(250); // increased width
+    expect(geom.height).toBeCloseTo(80); // height unchanged
+  });
+
+  it('fallback para resize sem rotacao quando angle=0', () => {
+    const geom = computeRotatedResizeGeometry('mr', startGeometry, { x: 300, y: 140 }, { x: 350, y: 140 }, 0);
+    expect(geom.width).toBe(250);
   });
 });
 

@@ -1,46 +1,60 @@
-import { zoomViewportAtPoint } from '../viewportZoom';
+import { calculateAnchoredZoomScroll, calculateViewCenterFromScroll, type FocalZoomIntent } from '../viewportZoom';
 
-function projectX(viewCenterX: number, zoom: number, pointX: number, surfaceWidth = 1000): number {
-  const viewBoxX = viewCenterX - surfaceWidth / zoom / 2;
-  return (pointX - viewBoxX) * zoom;
-}
+describe('calculateAnchoredZoomScroll e calculateViewCenterFromScroll', () => {
+  const canvasBounds = { left: 0, top: 0, width: 2000, height: 1200 };
 
-function projectY(viewCenterY: number, zoom: number, pointY: number, surfaceHeight = 600): number {
-  const viewBoxY = viewCenterY - surfaceHeight / zoom / 2;
-  return (pointY - viewBoxY) * zoom;
-}
+  it('mantém a coordenada física do scroll para ancorar o ponto lógico - central', () => {
+    // Zoom 2x. Anchor at {x: 1000, y: 600}. Cursor is at exact center of wrapper (500, 300).
+    const intent: FocalZoomIntent = {
+      anchor: { x: 1000, y: 600 },
+      localX: 500,
+      localY: 300,
+      zoom: 2,
+    };
+    
+    const scroll = calculateAnchoredZoomScroll(intent, canvasBounds, 4000, 2400, 1000, 600);
+    expect(scroll.scrollLeft).toBeCloseTo(1500);
+    expect(scroll.scrollTop).toBeCloseTo(900);
 
-describe('zoomViewportAtPoint', () => {
-  it('mantém o ponto sob o cursor como âncora do zoom', () => {
-    const next = zoomViewportAtPoint({ zoom: 1, viewCenter: { x: 500, y: 300 } }, { x: 400, y: 300 }, 'in', 0.1, 5, 2);
-    expect(next.zoom).toBe(2);
-    expect(projectX(next.viewCenter.x, next.zoom, 400)).toBeCloseTo(400);
-    expect(projectY(next.viewCenter.y, next.zoom, 300)).toBeCloseTo(300);
+    const center = calculateViewCenterFromScroll(scroll.scrollLeft, scroll.scrollTop, 1000, 600, 2, canvasBounds);
+    expect(center.x).toBeCloseTo(1000);
+    expect(center.y).toBeCloseTo(600);
   });
 
-  it('preserva a âncora quando a viewport já possui offset', () => {
-    // zoom 2 e offset X=-200/Y=-100 equivalem ao centro 350/200 nesse surface.
-    const next = zoomViewportAtPoint({ zoom: 2, viewCenter: { x: 350, y: 200 } }, { x: 300, y: 250 }, 'in', 0.1, 5, 2);
-    expect(projectX(next.viewCenter.x, next.zoom, 300)).toBeCloseTo(400);
-    expect(projectY(next.viewCenter.y, next.zoom, 250)).toBeCloseTo(400);
+  it('mantém a coordenada física quando a âncora está no canto', () => {
+    // Cursor near top-left: localX=100, localY=100
+    // Anchor in logical coords = {x: 100, y: 100}
+    // Zoom from 1 -> 2
+    const intent: FocalZoomIntent = {
+      anchor: { x: 100, y: 100 },
+      localX: 100,
+      localY: 100,
+      zoom: 2,
+    };
+    
+    const scroll = calculateAnchoredZoomScroll(intent, canvasBounds, 4000, 2400, 1000, 600);
+    // targetLeft = (100 - 0) * 2 - 100 = 100
+    // targetTop = (100 - 0) * 2 - 100 = 100
+    expect(scroll.scrollLeft).toBeCloseTo(100);
+    expect(scroll.scrollTop).toBeCloseTo(100);
+    
+    // Reverse math check: if we are at scroll 100, local 100 means pixel 200 of the wrapper content.
+    // Pixel 200 / 2 = 100 logical! Correct!
   });
 
-  it('mantém a âncora fora do centro da viewport', () => {
-    const next = zoomViewportAtPoint({ zoom: 1, viewCenter: { x: 500, y: 300 } }, { x: 900, y: 100 }, 'in', 0.1, 5, 1.1);
-    expect(projectX(next.viewCenter.x, next.zoom, 900)).toBeCloseTo(900);
-    expect(projectY(next.viewCenter.y, next.zoom, 100)).toBeCloseTo(100);
-  });
-
-  it('respeita os limites sem gerar valores inválidos', () => {
-    expect(zoomViewportAtPoint({ zoom: 5, viewCenter: { x: 1, y: 2 } }, { x: 3, y: 4 }, 'in', 0.1, 5, 1.1).zoom).toBe(5);
-    expect(zoomViewportAtPoint({ zoom: 0.1, viewCenter: { x: 1, y: 2 } }, { x: 3, y: 4 }, 'out', 0.1, 5, 1.1).zoom).toBe(0.1);
-    expect(zoomViewportAtPoint({ zoom: NaN, viewCenter: { x: 1, y: 2 } }, { x: 3, y: 4 }, 'in', 0.1, 5, 1.1).zoom).toBeCloseTo(0.11);
-  });
-
-  it('usa o viewport atualizado a cada wheel sucessivo', () => {
-    const first = zoomViewportAtPoint({ zoom: 1, viewCenter: { x: 500, y: 300 } }, { x: 400, y: 300 }, 'in', 0.1, 5, 1.1);
-    const second = zoomViewportAtPoint(first, { x: 400, y: 300 }, 'in', 0.1, 5, 1.1);
-    const third = zoomViewportAtPoint(second, { x: 400, y: 300 }, 'in', 0.1, 5, 1.1);
-    expect(third.zoom).toBeCloseTo(1.331);
+  it('faz clamp no scroll ao atingir as bordas', () => {
+    const intent: FocalZoomIntent = {
+      anchor: { x: 10, y: 10 },
+      localX: 500, // attempting to anchor top-left logic point in center of screen
+      localY: 300,
+      zoom: 2,
+    };
+    
+    const scroll = calculateAnchoredZoomScroll(intent, canvasBounds, 4000, 2400, 1000, 600);
+    // targetLeft = 10 * 2 - 500 = -480 -> Clamped to 0
+    // targetTop = 10 * 2 - 300 = -280 -> Clamped to 0
+    expect(scroll.scrollLeft).toBe(0);
+    expect(scroll.scrollTop).toBe(0);
   });
 });
+

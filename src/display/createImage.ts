@@ -15,7 +15,11 @@ export function createImage(options: CreateImageOptions): ImageElement {
   while (existing.has(id)) {
     id = generate();
   }
-  return { id, type: IMAGE_TYPE, x: options.x ?? 0, y: options.y ?? 0, width: Math.max(1, width), height: Math.max(1, height), properties: { src: options.src, alt: options.alt ?? 'Imagem', rotation: 0 } };
+  const safeWidth = Math.max(1, Math.min(width, options.surface?.width ?? width));
+  const safeHeight = Math.max(1, Math.min(height, options.surface?.height ?? height));
+  const x = options.x ?? Math.max(0, ((options.surface?.width ?? safeWidth) - safeWidth) / 2);
+  const y = options.y ?? Math.max(0, ((options.surface?.height ?? safeHeight) - safeHeight) / 2);
+  return { id, type: IMAGE_TYPE, x, y, width: safeWidth, height: safeHeight, properties: { src: options.src, alt: options.alt ?? 'Imagem', rotation: 0 } };
 }
 import { updateElementInDocument } from './createGroup';
 

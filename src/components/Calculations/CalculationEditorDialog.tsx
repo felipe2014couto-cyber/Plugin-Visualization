@@ -231,6 +231,7 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
             className={styles.input}
             data-testid="calculation-editor-name"
             autoFocus
+            autoComplete="off"
             value={name}
             onChange={(event) => { setName(event.target.value); setValidationError(''); }}
           />

@@ -175,6 +175,8 @@ export function PiPointSearchDialog({
                   onChange={(e) => setTagMask(e.target.value)}
                   placeholder="ex: * ou ACI*"
                   data-testid="dialog-tag-mask"
+                  autoComplete="off"
+                  spellCheck="false"
                 />
               </label>
 
@@ -186,6 +188,8 @@ export function PiPointSearchDialog({
                   onChange={(e) => setDescriptor(e.target.value)}
                   placeholder="ex: *velocidade*"
                   data-testid="dialog-descriptor"
+                  autoComplete="off"
+                  spellCheck="false"
                 />
               </label>
 
@@ -213,6 +217,8 @@ export function PiPointSearchDialog({
                   onChange={(e) => setEngUnits(e.target.value)}
                   placeholder="ex: °C, bar, %"
                   data-testid="dialog-eng-units"
+                  autoComplete="off"
+                  spellCheck="false"
                 />
               </label>
 
@@ -224,6 +230,8 @@ export function PiPointSearchDialog({
                   onChange={(e) => setPointSource(e.target.value)}
                   placeholder="ex: *"
                   data-testid="dialog-point-source"
+                  autoComplete="off"
+                  spellCheck="false"
                 />
               </label>
             </div>
@@ -473,13 +481,21 @@ const getStyles = (theme: GrafanaTheme2) => ({
 
     &::placeholder {
       color: var(--text-secondary) !important;
-      opacity: 0.9;
+      opacity: 1 !important;
     }
 
     &:focus {
       border-color: var(--accent);
       outline: none;
       box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    &:-webkit-autofill,
+    &:-webkit-autofill:hover, 
+    &:-webkit-autofill:focus, 
+    &:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 30px var(--input-bg) inset !important;
+      -webkit-text-fill-color: var(--text-primary) !important;
     }
   `,
   select: css`

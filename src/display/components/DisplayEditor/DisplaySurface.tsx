@@ -59,13 +59,13 @@ import {
   getCanvasBounds,
   getResizeHandlePositions,
   getResizeHandleRect,
-  getHandleCursor,
   svgPointFromEvent,
+  getRotatedHandleCursor,
   type AlignmentGuide,
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
-import { zoomViewportAtPoint, type SurfaceViewport } from './viewportZoom';
+import { type SurfaceViewport } from './viewportZoom';
 
 const HANDLE_SIZE = 8;
 const ELEMENT_FILL = 'rgba(110, 159, 255, 0.15)';
@@ -145,12 +145,13 @@ export interface DisplaySurfaceProps {
   onTrendContextMenu?: (element: TrendElement, event?: React.MouseEvent) => void;
   onTrendLegendContextMenu?: (series: TrendSeries, value: string | number | undefined) => void;
   onElementContextMenu?: (element: DisplayElement, event?: React.MouseEvent) => void;
+  onViewElementContextMenu?: (element: DisplayElement, event?: React.MouseEvent) => void;
   onLibrarySymbolContextMenu?: (element: LibrarySymbolElement, event?: React.MouseEvent) => void;
-  onTableColumnsChange?: (elementId: string, columns: TableColumnConfig[]) => void;
+  onTableLayoutChange?: (elementId: string, columns: TableColumnConfig[], tableWidth: number) => void;
   onTrendLegendWidthChange?: (elementId: string, legendWidth: number) => void;
   zoom?: number;
   viewCenter?: Point;
-  onViewportWheelZoom?: (viewport: SurfaceViewport) => void;
+  onViewportWheelZoom?: (anchor: Point, clientX: number, clientY: number, direction: 'in' | 'out') => void;
   minZoom?: number;
   maxZoom?: number;
   wheelZoomFactor?: number;
@@ -184,6 +185,13 @@ function hasPointerCapture(target: Element, pointerId: number): boolean {
   return check.call(target, pointerId);
 }
 
+function getElementSelectionRotation(element: DisplayElement): number {
+  if (element.type === RECTANGLE_TYPE && typeof element.properties.rotation === 'number') {
+    return element.properties.rotation;
+  }
+  return 0;
+}
+
 export function DisplaySurface({
   document: displayDocument,
   editable,
@@ -207,8 +215,9 @@ export function DisplaySurface({
   onTrendContextMenu,
   onTrendLegendContextMenu,
   onElementContextMenu,
+  onViewElementContextMenu,
   onLibrarySymbolContextMenu,
-  onTableColumnsChange,
+  onTableLayoutChange,
   onTrendLegendWidthChange,
   zoom = 1,
   viewCenter,
@@ -461,6 +470,12 @@ export function DisplaySurface({
   }, [allElements, allTrendRuntimeStates, cursorsByTrend, editable, elements, onTrendOpen]);
   const handleTrendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, elementId: string) => {
     if (!editable) {
+      const element = elements.find((candidate) => candidate.id === elementId);
+      if (element) {
+        event.preventDefault();
+        event.stopPropagation();
+        onViewElementContextMenu?.(element, event);
+      }
       return;
     }
     const topLevelId = findTopLevelElementId(elements, elementId) ?? elementId;
@@ -477,7 +492,7 @@ export function DisplaySurface({
     } else {
       onElementContextMenu?.(topLevelElement, event);
     }
-  }, [editable, elements, onElementContextMenu, onTrendContextMenu]);
+  }, [editable, elements, onElementContextMenu, onTrendContextMenu, onViewElementContextMenu]);
 
   const handleTrendLegendContextMenu = useCallback((event: React.MouseEvent<SVGGElement>, _elementId: string, series: TrendSeries, value: string | number | undefined) => {
     if (editable) return;
@@ -488,6 +503,12 @@ export function DisplaySurface({
 
   const handleLibrarySymbolContextMenu = useCallback((event: React.MouseEvent<SVGElement>, elementId: string) => {
     if (!editable) {
+      const element = elements.find((candidate) => candidate.id === elementId);
+      if (element) {
+        event.preventDefault();
+        event.stopPropagation();
+        onViewElementContextMenu?.(element, event);
+      }
       return;
     }
     const topLevelId = findTopLevelElementId(elements, elementId) ?? elementId;
@@ -504,12 +525,9 @@ export function DisplaySurface({
     } else {
       onElementContextMenu?.(topLevelElement, event);
     }
-  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu]);
+  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onViewElementContextMenu]);
 
   const handleElementContextMenu = useCallback((event: React.MouseEvent<SVGSVGElement>) => {
-    if (!editable) {
-      return;
-    }
     const target = event.target as Element;
     const rawId = target.getAttribute('data-element-id') ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
     const topLevelId = rawId ? (findTopLevelElementId(elements, rawId) ?? rawId) : undefined;
@@ -519,6 +537,10 @@ export function DisplaySurface({
     }
     event.preventDefault();
     event.stopPropagation();
+    if (!editable) {
+      onViewElementContextMenu?.(element, event);
+      return;
+    }
     if (element.type === TREND_TYPE) {
       onTrendContextMenu?.(element as TrendElement, event);
     } else if (element.type === LIBRARY_SYMBOL_TYPE) {
@@ -526,7 +548,7 @@ export function DisplaySurface({
     } else {
       onElementContextMenu?.(element, event);
     }
-  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onTrendContextMenu]);
+  }, [editable, elements, onElementContextMenu, onLibrarySymbolContextMenu, onTrendContextMenu, onViewElementContextMenu]);
 
   useEffect(() => {
     setCursorsByTrend((current) => {
@@ -664,7 +686,9 @@ export function DisplaySurface({
     if (!element) {
       return;
     }
-    const trendElement = createTrendElementForElement(element);
+    const itemIndexAttr = target.getAttribute('data-table-item-index') ?? target.closest('[data-table-item-index]')?.getAttribute('data-table-item-index');
+    const itemIndex = itemIndexAttr ? parseInt(itemIndexAttr, 10) : undefined;
+    const trendElement = createTrendElementForElement(element, itemIndex);
     if (!trendElement) {
       return;
     }
@@ -709,17 +733,13 @@ export function DisplaySurface({
     }
     event.preventDefault();
     const anchor = svgPointFromEvent(svg, event.clientX, event.clientY);
-    const nextViewport = zoomViewportAtPoint(
-      viewportRef.current,
+    onViewportWheelZoom?.(
       anchor,
-      event.deltaY < 0 ? 'in' : 'out',
-      minZoom,
-      maxZoom,
-      wheelZoomFactor,
+      event.clientX,
+      event.clientY,
+      event.deltaY < 0 ? 'in' : 'out'
     );
-    viewportRef.current = nextViewport;
-    onViewportWheelZoom?.(nextViewport);
-  }, [maxZoom, minZoom, onViewportWheelZoom, wheelZoomFactor]);
+  }, [onViewportWheelZoom]);
 
   useEffect(() => {
     const svg = svgRef.current;
@@ -971,12 +991,25 @@ export function DisplaySurface({
         <pattern id="visualization-editor-grid" width="16" height="16" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="var(--canvas-dot)" />
         </pattern>
+        {/* Detail layer: extrai pixels CLAROS da imagem original e os pinta de branco.
+            Fluxo: luminância → alpha → flood branco → composto pela silhueta original.
+            Pixels escuros (corpo) ficam transparentes → mostra a cor base exata.
+            Pixels claros (linhas técnicas) ficam brancos sobre a cor base. */}
+        <filter id="pims-vision-detail-extract" colorInterpolationFilters="sRGB">
+          {/* 1. Converter para luminância: L = 0.2126R + 0.7152G + 0.0722B */}
+          <feColorMatrix type="luminanceToAlpha" in="SourceGraphic" result="lum" />
+          {/* 2. Promover o canal alpha (luminância) para uma imagem branca semitransparente */}
+          <feFlood floodColor="white" floodOpacity="1" result="white" />
+          <feComposite in="white" in2="lum" operator="in" result="whiteDetail" />
+          {/* 3. Clipar pela silhueta original para não extrapolar a borda do símbolo */}
+          <feComposite in="whiteDetail" in2="SourceAlpha" operator="in" />
+        </filter>
         {allElements.filter((element) => element.type === LIBRARY_SYMBOL_TYPE).map((element) => {
           const symbol = element as LibrarySymbolElement;
           const source = getLibrarySymbolSource(symbol);
           return (
-            <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height}>
-              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="xMidYMid meet" />
+            <mask key={getLibrarySymbolMaskId(element.id)} id={getLibrarySymbolMaskId(element.id)} maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x={element.x} y={element.y} width={element.width} height={element.height} style={{ maskType: 'alpha' }}>
+              <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" />
             </mask>
           );
         })}
@@ -1091,7 +1124,7 @@ export function DisplaySurface({
             );
           }
           if (element.type === TABLE_TYPE) {
-            return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onColumnsChange={editable ? (columns) => onTableColumnsChange?.(element.id, columns) : undefined} />;
+            return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onTableLayoutChange={editable ? (columns, width) => onTableLayoutChange?.(element.id, columns, width) : undefined} />;
           }
           if (element.type === XY_PLOT_TYPE) {
             const xy = element as XYPlotElement;
@@ -1240,8 +1273,10 @@ export function DisplaySurface({
             return (
               <g key={element.id} data-element-id={element.id} data-element-type={element.type} style={{ cursor: isElementLocked(element) ? 'default' : 'move', ...(blink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : {}) }}>
                 <g transform={transform}>
-                  <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
-                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" style={{ mixBlendMode: isCustomColored ? 'overlay' : 'normal', opacity: isCustomColored ? 0.45 : 1 }} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
+                  {isCustomColored && (
+                    <rect x={element.x} y={element.y} width={element.width} height={element.height} fill={color} mask={`url(#${getLibrarySymbolMaskId(element.id)})`} pointerEvents="none" data-testid={`library-symbol-color-layer-${element.id}`} />
+                  )}
+                  <image href={source} x={element.x} y={element.y} width={element.width} height={element.height} preserveAspectRatio="none" filter={isCustomColored ? 'url(#pims-vision-detail-extract)' : undefined} pointerEvents="all" data-testid={`display-element-${element.id}`} data-element-id={element.id} data-element-type={element.type} onContextMenu={(event) => handleLibrarySymbolContextMenu(event, element.id)} />
                 </g>
               </g>
             );
@@ -1318,11 +1353,16 @@ export function DisplaySurface({
         if (!element) {
           return null;
         }
-        const isLocked = isElementLocked(element);
         const geom = getElementAbsoluteGeometry(elements, id) ?? element;
         const positions = getResizeHandlePositions(geom);
+        const isLocked = isElementLocked(element);
+        const rotation = getElementSelectionRotation(element);
+        const centerX = geom.x + geom.width / 2;
+        const centerY = geom.y + geom.height / 2;
+        const transform = rotation ? `rotate(${rotation} ${centerX} ${centerY})` : undefined;
+
         return (
-          <g key={id} data-testid={`display-selection-overlay-${id}`}>
+          <g key={id} transform={transform}>
             <rect
               x={geom.x - 1}
               y={geom.y - 1}
@@ -1337,7 +1377,7 @@ export function DisplaySurface({
             />
             {!isLocked && positions.map((pos) => {
               const rect = getResizeHandleRect(pos, HANDLE_SIZE);
-              return <rect key={pos.handle} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={1} data-testid={`display-resize-handle-${id}-${pos.handle}`} data-element-id={id} data-resize-handle={pos.handle} style={{ cursor: getHandleCursor(pos.handle) }} />;
+              return <rect key={pos.handle} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={1} data-testid={`display-resize-handle-${id}-${pos.handle}`} data-element-id={id} data-resize-handle={pos.handle} style={{ cursor: getRotatedHandleCursor(pos.handle, rotation) }} />;
             })}
           </g>
         );
@@ -1345,8 +1385,13 @@ export function DisplaySurface({
       {selectedElement && (() => {
         const isLocked = isElementLocked(selectedElement);
         const geom = selectedElementGeom ?? selectedElement;
+        const rotation = getElementSelectionRotation(selectedElement);
+        const centerX = geom.x + geom.width / 2;
+        const centerY = geom.y + geom.height / 2;
+        const transform = rotation ? `rotate(${rotation} ${centerX} ${centerY})` : undefined;
+
         return (
-          <g data-testid="display-selection-overlay">
+          <g data-testid="display-selection-overlay" transform={transform}>
             <rect
               x={geom.x - 1}
               y={geom.y - 1}
@@ -1375,7 +1420,7 @@ export function DisplaySurface({
                   data-testid={`display-resize-handle-${pos.handle}`}
                   data-element-id={selectedElement.id}
                   data-resize-handle={pos.handle}
-                  style={{ cursor: getHandleCursor(pos.handle) }}
+                  style={{ cursor: getRotatedHandleCursor(pos.handle, rotation) }}
                 />
               );
             })}

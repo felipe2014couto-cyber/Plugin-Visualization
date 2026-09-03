@@ -318,7 +318,7 @@ function updateTrendElement(document: DisplayDocument, elementId: string, update
   });
 }
 
-export function createTrendElementForElement(element: DisplayElement): TrendElement | null {
+export function createTrendElementForElement(element: DisplayElement, itemIndex?: number): TrendElement | null {
   if (element.type === TREND_TYPE) {
     return element as TrendElement;
   }
@@ -331,8 +331,12 @@ export function createTrendElementForElement(element: DisplayElement): TrendElem
       description?: string;
     }>;
     const validItems = items.filter((item) => isPiPointBinding(item.binding));
-    if (validItems.length === 0) return null;
-    const series: TrendSeries[] = validItems.map((item, idx) => ({
+    let selectedItems = validItems;
+    if (typeof itemIndex === 'number' && items[itemIndex] && isPiPointBinding(items[itemIndex].binding)) {
+      selectedItems = [items[itemIndex]];
+    }
+    if (selectedItems.length === 0) return null;
+    const series: TrendSeries[] = selectedItems.map((item, idx) => ({
       binding: item.binding as PiPointBinding,
       color: TREND_SERIES_COLORS[idx % TREND_SERIES_COLORS.length],
       legendLabel: item.customName || item.label || item.description || (item.binding as PiPointBinding).pointName,
@@ -360,8 +364,12 @@ export function createTrendElementForElement(element: DisplayElement): TrendElem
       label?: string;
     }>;
     const validItems = items.filter((item) => isPiPointBinding(item.binding));
-    if (validItems.length === 0) return null;
-    const series: TrendSeries[] = validItems.map((item, idx) => ({
+    let selectedItems = validItems;
+    if (typeof itemIndex === 'number' && items[itemIndex] && isPiPointBinding(items[itemIndex].binding)) {
+      selectedItems = [items[itemIndex]];
+    }
+    if (selectedItems.length === 0) return null;
+    const series: TrendSeries[] = selectedItems.map((item, idx) => ({
       binding: item.binding as PiPointBinding,
       color: TREND_SERIES_COLORS[idx % TREND_SERIES_COLORS.length],
       legendLabel: item.label || (item.binding as PiPointBinding).pointName,

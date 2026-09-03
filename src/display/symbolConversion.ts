@@ -4,14 +4,16 @@ import type { DisplayElement } from './displayElement';
 import { createValue, VALUE_TYPE } from './createValue';
 import { createGauge, GAUGE_TYPE } from './createGauge';
 import { createBar, BAR_TYPE } from './createBar';
-import { createTrend, getTrendSeries, trendSeriesColor, TREND_TYPE } from './createTrend';
+import { createTrend, getTrendSeries, trendSeriesColor, TREND_TYPE, createCalculationTrendBinding } from './createTrend';
 import { createTable, TABLE_TYPE } from './createTable';
 import { createBarChart, BAR_CHART_TYPE } from './createBarChart';
 import { createXYPlot, getXYPlotYSeries, XY_PLOT_TYPE } from './createXYPlot';
 
 /** The data binding contract used by symbol replacement. */
+import type { DataSourceCapability as SymbolBindingCapability } from './dataSourceBehavior';
+
+export type { SymbolBindingCapability };
 export type SymbolConversionType = typeof VALUE_TYPE | typeof GAUGE_TYPE | typeof BAR_TYPE | typeof TREND_TYPE | typeof TABLE_TYPE | typeof BAR_CHART_TYPE | typeof XY_PLOT_TYPE;
-export type SymbolBindingCapability = 'single' | 'multiple' | 'xy';
 
 export const symbolConversionTargets: Array<{ type: SymbolConversionType; label: string; capability: SymbolBindingCapability }> = [
   { type: TABLE_TYPE, label: 'Tabela', capability: 'multiple' },
@@ -38,7 +40,13 @@ export function getElementPiBindings(element: DisplayElement): PiPointBinding[] 
     const items = Array.isArray(props.items) ? props.items : [];
     return items.map((item: any) => item?.binding).filter(isPiPointBinding).map(copyBinding);
   }
-  return isPiPointBinding(props.binding) ? [copyBinding(props.binding)] : [];
+  if (isPiPointBinding(props.binding)) {
+    return [copyBinding(props.binding)];
+  }
+  if (typeof props.calculationId === 'string' && props.calculationId.trim().length > 0) {
+    return [createCalculationTrendBinding(props.calculationId)];
+  }
+  return [];
 }
 
 function commonProperties(source: DisplayElement, target: DisplayElement): DisplayElement {
@@ -56,14 +64,24 @@ export function convertDisplayElementType(source: DisplayElement, targetType: Sy
   if (!bindings.length) throw new Error('O elemento não possui PI Point para converter.');
   const geometry = { id: source.id, x: source.x, y: source.y, width: source.width, height: source.height };
   const first = bindings[0];
+  const isCalc = first.dataSourceUid === '__pims_calculation__';
+  const bindingProps = isCalc ? { calculationId: first.serverPath } : { binding: first };
+
   let target: DisplayElement;
   switch (targetType) {
-    case VALUE_TYPE: target = createValue({ ...geometry, binding: first }); break;
-    case GAUGE_TYPE: target = createGauge({ ...geometry, binding: first }); break;
-    case BAR_TYPE: target = createBar({ ...geometry, binding: first }); break;
+    case VALUE_TYPE: target = createValue({ ...geometry, ...bindingProps }); break;
+    case GAUGE_TYPE: target = createGauge({ ...geometry, ...bindingProps }); break;
+    case BAR_TYPE: target = createBar({ ...geometry, ...bindingProps }); break;
     case TREND_TYPE: {
-      const trend = createTrend({ ...geometry, binding: first });
-      target = { ...trend, properties: { ...trend.properties, series: bindings.map((binding, index) => ({ binding: copyBinding(binding), color: trendSeriesColor(index) })) } };
+      const trend = createTrend({ ...geometry, ...bindingProps });
+      target = { ...trend, properties: { ...trend.properties, series: bindings.map((binding, index) => {
+        const isBindingCalc = binding.dataSourceUid === '__pims_calculation__';
+        return {
+          binding: copyBinding(binding),
+          color: trendSeriesColor(index),
+          ...(isBindingCalc ? { calculationId: binding.serverPath, legendLabel: binding.serverPath } : {})
+        };
+      }) } };
       break;
     }
     case TABLE_TYPE: {
@@ -83,3 +101,4 @@ export function convertDisplayElementType(source: DisplayElement, targetType: Sy
   }
   return commonProperties(source, target);
 }
+
