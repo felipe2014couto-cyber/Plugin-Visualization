@@ -174,9 +174,19 @@ export function formatValue(value: unknown, visual: ValueVisualOptions = getValu
     if ('Value' in rec && rec.Value !== undefined) return formatValue(rec.Value, visual);
     if ('value' in rec && rec.value !== undefined) return formatValue(rec.value, visual);
   }
-  return typeof value === 'number' && Number.isFinite(value) && visual.decimals !== null
-    ? value.toFixed(visual.decimals)
-    : String(value);
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (visual.decimals !== null && visual.decimals !== undefined) {
+      return value.toFixed(visual.decimals);
+    }
+    const str = String(value);
+    const dotIndex = str.indexOf('.');
+    if (dotIndex >= 0 && str.length - dotIndex - 1 > 2) {
+      const rounded = Math.round(value * 100) / 100;
+      return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+    }
+    return str;
+  }
+  return String(value);
 }
 
 function getTextX(element: ValueElement, textAlign: ValueVisualOptions['textAlign']): number {
