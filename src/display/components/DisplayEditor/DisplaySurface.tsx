@@ -110,7 +110,16 @@ function calculationValueRuntimeState(
   if (evaluation.status === 'error') {
     return { status: 'error' };
   }
-  return { status: 'success', result: { value: evaluation.value } };
+  let maxTimestamp: string | undefined;
+  for (const input of calculation.inputs) {
+    const inputState = runtimeStates.get(`${elementId}:${input.name}`);
+    if (inputState?.status === 'success' && inputState.result.timestamp) {
+      if (!maxTimestamp || new Date(inputState.result.timestamp) > new Date(maxTimestamp)) {
+        maxTimestamp = inputState.result.timestamp;
+      }
+    }
+  }
+  return { status: 'success', result: { value: evaluation.value, timestamp: maxTimestamp || new Date().toISOString() } };
 }
 
 interface CursorSelection {
@@ -332,13 +341,30 @@ export function DisplaySurface({
       : [];
   }).concat(allElements.flatMap((element) => {
     if (element.type === TABLE_TYPE) {
-      return (element as TableElement).properties.items.map((item, index) => ({ elementId: getTableItemConsumerId(element.id, index), binding: item.binding }));
+      return (element as TableElement).properties.items.flatMap((item, index) => {
+        const consumerId = getTableItemConsumerId(element.id, index);
+        if (item.binding.dataSourceUid === '__pims_calculation__') {
+          const calculation = calculations.find(c => c.id === item.binding.serverPath);
+          return calculation?.inputs.map((input) => ({ elementId: `${consumerId}:${input.name}`, binding: input.binding })) ?? [];
+        }
+        return [{
+          elementId: consumerId,
+          binding: item.binding,
+        }];
+      });
     }
     if (element.type === BAR_CHART_TYPE) {
-      return (element as BarChartElement).properties.items.map((item) => ({
-        elementId: getBarChartItemConsumerId(element.id, item.binding),
-        binding: item.binding,
-      }));
+      return (element as BarChartElement).properties.items.flatMap((item) => {
+        const consumerId = getBarChartItemConsumerId(element.id, item.binding);
+        if (item.binding.dataSourceUid === '__pims_calculation__') {
+          const calculation = calculations.find(c => c.id === item.binding.serverPath);
+          return calculation?.inputs.map((input) => ({ elementId: `${consumerId}:${input.name}`, binding: input.binding })) ?? [];
+        }
+        return [{
+          elementId: consumerId,
+          binding: item.binding,
+        }];
+      });
     }
     return [];
   }));
@@ -391,12 +417,24 @@ export function DisplaySurface({
   ), []);
   const trendRuntimeStates = useTrendRuntime(trendConsumers, loadTrend ?? fallbackTrendLoader, trendRefreshKey);
   const calculationTrendElements = useMemo(() => allElements.flatMap((element) => {
-    if (element.type !== TREND_TYPE) {
-      return [];
+    const calcElements: { element: DisplayElement; series: { calculationId: string; binding: PiPointBinding }; consumerId: string }[] = [];
+    if (element.type === TREND_TYPE) {
+      calcElements.push(...getTrendSeries(element as TrendElement)
+        .filter((series) => Boolean(series.calculationId))
+        .map((series) => ({ element, series: { calculationId: series.calculationId!, binding: series.binding }, consumerId: getTrendSeriesConsumerId(element.id, series.binding) })));
     }
-    return getTrendSeries(element as TrendElement)
-      .filter((series) => Boolean(series.calculationId))
-      .map((series) => ({ element: element as TrendElement, series }));
+    if (element.type === TABLE_TYPE) {
+      (element as TableElement).properties.items.forEach((item, index) => {
+        if (item.binding.dataSourceUid === '__pims_calculation__') {
+          calcElements.push({
+            element,
+            series: { calculationId: item.binding.serverPath, binding: item.binding },
+            consumerId: getTableTrendConsumerId(element.id, index),
+          });
+        }
+      });
+    }
+    return calcElements;
   }), [allElements]);
   const calculationTrendSignature = calculationTrendElements.map(({ element, series }) => `${element.id}:${series.calculationId}`).join('|');
   const [calculationTrendStates, setCalculationTrendStates] = useState<Map<string, TrendRuntimeState>>(new Map());
@@ -408,30 +446,30 @@ export function DisplaySurface({
       return () => { active = false; };
     }
     if (!loadTrend) {
-      calculationTrendElements.forEach(({ element, series }) => {
-        next.set(getTrendSeriesConsumerId(element.id, series.binding), { status: 'error', error: new Error('Consulta histórica PI indisponível') });
+      calculationTrendElements.forEach(({ consumerId }) => {
+        next.set(consumerId, { status: 'error', error: new Error('Consulta histórica PI indisponível') });
       });
       setCalculationTrendStates(next);
       return () => { active = false; };
     }
     const calculationsById = new Map(calculations.map((calculation) => [calculation.id, calculation]));
-    void Promise.all(calculationTrendElements.map(async ({ element, series }) => {
+    void Promise.all(calculationTrendElements.map(async ({ element, series, consumerId }) => {
       const calculation = series.calculationId ? calculationsById.get(series.calculationId) : undefined;
       if (!calculation) {
-        return [element, series, { status: 'error', error: new Error('Cálculo não encontrado') } as TrendRuntimeState] as const;
+        return [consumerId, { status: 'error', error: new Error('Cálculo não encontrado') } as TrendRuntimeState] as const;
       }
       const results = await loadTrend(calculation.inputs.map((input) => input.binding), undefined, { maxDataPoints: 1000 });
       const inputSeries = calculation.inputs.map((input) => results[getPiBindingKey(input.binding)]);
       if (inputSeries.some((result) => !result || result.status !== 'success')) {
-        return [element, series, { status: 'error', error: new Error('Não foi possível carregar o histórico do cálculo') } as TrendRuntimeState] as const;
+        return [consumerId, { status: 'error', error: new Error('Não foi possível carregar o histórico do cálculo') } as TrendRuntimeState] as const;
       }
       const points = calculateHistoricalPoints(calculation, inputSeries.map((result) => result.status === 'success' ? result.series : undefined), trendTimeRange);
-      return [element, series, { status: 'success', data: { pointName: calculation.name, points } } as TrendRuntimeState] as const;
+      return [consumerId, { status: 'success', data: { pointName: calculation.name, points } } as TrendRuntimeState] as const;
     })).then((results) => {
       if (!active) {
         return;
       }
-      results.forEach(([element, series, state]) => next.set(getTrendSeriesConsumerId(element.id, series.binding), state));
+      results.forEach(([consumerId, state]) => next.set(consumerId, state));
       setCalculationTrendStates(next);
     }).catch(() => {
       if (active) {
@@ -1114,17 +1152,42 @@ export function DisplaySurface({
             );
           }
           if (element.type === BAR_CHART_TYPE) {
+            const chartElement = element as unknown as BarChartElement;
+            const enhancedStates = new Map(runtimeStates);
+            for (const item of chartElement.properties.items) {
+              if (item.binding.dataSourceUid === '__pims_calculation__') {
+                const calculationId = item.binding.serverPath;
+                const calculation = calculations.find(c => c.id === calculationId);
+                if (calculation) {
+                  const consumerId = getBarChartItemConsumerId(chartElement.id, item.binding);
+                  enhancedStates.set(consumerId, calculationValueRuntimeState(calculation, consumerId, runtimeStates));
+                }
+              }
+            }
             return (
               <BarChartElementView
                 key={element.id}
-                element={element as unknown as BarChartElement}
-                runtimeStates={runtimeStates}
+                element={chartElement}
+                runtimeStates={enhancedStates}
                 databaseScales={databaseScales}
               />
             );
           }
           if (element.type === TABLE_TYPE) {
-            return <TableElementView key={element.id} element={element as TableElement} runtimeStates={runtimeStates} trendStates={trendRuntimeStates} onTableLayoutChange={editable ? (columns, width) => onTableLayoutChange?.(element.id, columns, width) : undefined} />;
+            const tableElement = element as TableElement;
+            const enhancedStates = new Map(runtimeStates);
+            for (let i = 0; i < tableElement.properties.items.length; i++) {
+              const item = tableElement.properties.items[i];
+              if (item.binding.dataSourceUid === '__pims_calculation__') {
+                const calculationId = item.binding.serverPath;
+                const calculation = calculations.find(c => c.id === calculationId);
+                if (calculation) {
+                  const consumerId = getTableItemConsumerId(tableElement.id, i);
+                  enhancedStates.set(consumerId, calculationValueRuntimeState(calculation, consumerId, runtimeStates));
+                }
+              }
+            }
+            return <TableElementView key={element.id} element={tableElement} runtimeStates={enhancedStates} trendStates={allTrendRuntimeStates} onTableLayoutChange={editable ? (columns, width) => onTableLayoutChange?.(element.id, columns, width) : undefined} />;
           }
           if (element.type === XY_PLOT_TYPE) {
             const xy = element as XYPlotElement;

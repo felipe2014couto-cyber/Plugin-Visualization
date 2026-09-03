@@ -37,6 +37,7 @@ import {
   updateTrendSeriesOptions,
   updateTrendVisualOptions,
   createTrendElementForElement,
+  createCalculationTrendBinding,
 } from '../../createTrend';
 import {
   appendGauge,
@@ -690,8 +691,7 @@ export function DisplayEditor({
     }
     commitDocument(appendText(currentDocument, element));
     dispatch({ type: 'SELECT', elementId: element.id });
-    setPropertiesPanelOpen(true);
-    setOptionsElementId(element.id);
+    setOptionsElementId(null);
     setOptionsTrendId(null);
   }, [commitDocument, dispatch]);
 
@@ -837,60 +837,88 @@ export function DisplayEditor({
     }
     const calculationId = parseCalculationDragData(event.dataTransfer.getData(CALCULATION_DRAG_MIME));
     if (calculationId) {
-      const currentDocument = documentRef.current;
-      const calculation = currentDocument.calculations?.find((item) => item.id === calculationId);
-      const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
-      const point = svg ? getDropPoint(svg, event.clientX, event.clientY, currentDocument) : undefined;
-      if (!calculation || !point) {
-        return;
-      }
-      event.preventDefault();
-      const options = {
-        calculationId,
-        surface: currentDocument.surface,
-        existingIds: currentDocument.elements.map((item) => item.id),
-      };
-      if (dropSymbolType === 'table') {
-        return;
-      }
-      const target = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
-      if (target) {
-        const capability = getElementDataSourceCapability(target);
-        if (capability === 'single') {
-          const properties: Record<string, unknown> = { ...target.properties, calculationId, binding: undefined };
-          if (target.type === 'library-symbol' || target.type === 'rectangle') {
-            properties.multistate = target.properties.multistate
-              ? { ...(target.properties.multistate as any), enabled: true }
-              : { enabled: true, rules: [] };
+      try {
+        const currentDocument = documentRef.current;
+        const calculation = currentDocument.calculations?.find((item) => item.id === calculationId);
+        const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
+        const point = svg ? getDropPoint(svg, event.clientX, event.clientY, currentDocument) : undefined;
+        if (!calculation || !point) {
+          return;
+        }
+        event.preventDefault();
+        const options = {
+          calculationId,
+          surface: currentDocument.surface,
+          existingIds: currentDocument.elements.map((item) => item.id),
+        };
+        const target = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
+        if (target) {
+          const capability = getElementDataSourceCapability(target);
+          if (capability === 'single') {
+            const properties: Record<string, unknown> = { ...target.properties, calculationId, binding: undefined };
+            if (target.type === 'library-symbol' || target.type === 'rectangle') {
+              properties.multistate = target.properties.multistate
+                ? { ...(target.properties.multistate as any), enabled: true }
+                : { enabled: true, rules: [] };
+            }
+            commitDocument({
+              ...currentDocument,
+              elements: currentDocument.elements.map((e) => (e.id === target.id ? { ...e, properties } : e)),
+            });
+            dispatch({ type: 'SELECT', elementId: target.id });
+            return;
           }
-          commitDocument({
-            ...currentDocument,
-            elements: currentDocument.elements.map((e) => (e.id === target.id ? { ...e, properties } : e)),
-          });
-          dispatch({ type: 'SELECT', elementId: target.id });
-          setPropertiesPanelOpen(true);
-          setOptionsElementId(null);
-          return;
+          if (capability === 'multiple') {
+            if (target.type === 'trend') {
+              commitDocument(addCalculationTrendSeries(currentDocument, target.id, calculationId, calculation.name));
+              dispatch({ type: 'SELECT', elementId: target.id });
+              return;
+            }
+            if (target.type === 'bar-chart') {
+              const item: BarChartItem = {
+                binding: createCalculationTrendBinding(calculationId),
+                label: calculation.name,
+                nameMode: 'custom',
+                customName: calculation.name,
+              };
+              commitDocument(addBarChartItem(currentDocument, target.id, item));
+              dispatch({ type: 'SELECT', elementId: target.id });
+              return;
+            }
+            if (target.type === 'table') {
+              const item: TableDataItem = {
+                binding: createCalculationTrendBinding(calculationId),
+                description: calculation.name,
+                nameMode: 'custom',
+                customName: calculation.name,
+              };
+              commitDocument(addTableItem(currentDocument, target.id, item));
+              dispatch({ type: 'SELECT', elementId: target.id });
+              return;
+            }
+          }
         }
-        if (capability === 'multiple' && target.type === 'trend') {
-          commitDocument(addCalculationTrendSeries(currentDocument, target.id, calculationId, calculation.name));
-          dispatch({ type: 'SELECT', elementId: target.id });
-          return;
-        }
+        const element = dropSymbolType === 'value' ? createValue(options)
+          : dropSymbolType === 'trend' ? createTrend({ ...options, calculationName: calculation.name })
+            : dropSymbolType === 'gauge' ? createGauge(options)
+              : dropSymbolType === 'bar-chart' ? createBarChart({ ...options, binding: createCalculationTrendBinding(calculationId), item: { binding: createCalculationTrendBinding(calculationId), label: calculation.name, nameMode: 'custom', customName: calculation.name } as any })
+                : dropSymbolType === 'table' ? createTable({ surface: currentDocument.surface, existingIds: currentDocument.elements.map((item) => item.id), item: { binding: createCalculationTrendBinding(calculationId), description: calculation.name, nameMode: 'custom', customName: calculation.name } })
+                  : createBar(options);
+        const positioned = positionElementAt(element, point, currentDocument);
+        const nextDocument = dropSymbolType === 'value' ? appendValue(currentDocument, positioned as ValueElement)
+          : dropSymbolType === 'trend' ? appendTrend(currentDocument, positioned as TrendElement)
+            : dropSymbolType === 'gauge' ? appendGauge(currentDocument, positioned as GaugeElement)
+              : dropSymbolType === 'bar-chart' ? appendBarChart(currentDocument, positioned as BarChartElement)
+                : dropSymbolType === 'table' ? appendTable(currentDocument, positioned as TableElement)
+                  : appendBar(currentDocument, positioned as BarElement);
+        commitDocument(nextDocument);
+        dispatch({ type: 'SELECT', elementId: positioned.id });
+        return;
+      } catch (error) {
+        console.error("Error dropping calculation:", error);
+        alert(String(error));
+        return;
       }
-      const element = dropSymbolType === 'value' ? createValue(options)
-        : dropSymbolType === 'trend' ? createTrend({ ...options, calculationName: calculation.name })
-          : dropSymbolType === 'gauge' ? createGauge(options)
-            : createBar(options);
-      const positioned = positionElementAt(element, point, currentDocument);
-      const nextDocument = dropSymbolType === 'value' ? appendValue(currentDocument, positioned as ValueElement)
-        : dropSymbolType === 'trend' ? appendTrend(currentDocument, positioned as TrendElement)
-          : dropSymbolType === 'gauge' ? appendGauge(currentDocument, positioned as GaugeElement)
-            : appendBar(currentDocument, positioned as BarElement);
-      commitDocument(nextDocument);
-      dispatch({ type: 'SELECT', elementId: positioned.id });
-      setPropertiesPanelOpen(true);
-      return;
     }
     const librarySymbolId = parseLibrarySymbolDragData(event.dataTransfer.getData(LIBRARY_SYMBOL_DRAG_MIME));
     if (librarySymbolId) {
@@ -950,7 +978,6 @@ export function DisplayEditor({
         focusInsertedSymbol();
       }
       dispatch({ type: 'SELECT', elementId: positioned.id });
-      setPropertiesPanelOpen(false);
 
       return;
 
@@ -971,8 +998,6 @@ export function DisplayEditor({
       if (capability === 'single') {
         commitDocument(replaceElementPiBinding(currentDocument, target.id, binding));
         dispatch({ type: 'SELECT', elementId: target.id });
-        setPropertiesPanelOpen(true);
-        setOptionsElementId(null);
         return;
       }
       if (capability === 'multiple') {
@@ -1001,7 +1026,6 @@ export function DisplayEditor({
       if (capability === 'xy' && target.type === 'xy-plot') {
         commitDocument(addXYPlotYSeries(currentDocument, target.id, binding));
         dispatch({ type: 'SELECT', elementId: target.id });
-        setPropertiesPanelOpen(true);
         return;
       }
     }

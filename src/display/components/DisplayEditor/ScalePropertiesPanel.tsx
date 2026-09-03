@@ -121,6 +121,9 @@ export function ScalePropertiesPanel({
   const [gaugeTitleDraft, setGaugeTitleDraft] = useState(title ?? '');
   useEffect(() => setGaugeTitleDraft(title ?? ''), [title]);
 
+  const [customTagNameDraft, setCustomTagNameDraft] = useState(customTagName ?? '');
+  useEffect(() => setCustomTagNameDraft(customTagName ?? ''), [customTagName]);
+
   const [minText, setMinText] = useState(minimum?.toString() ?? '');
   const [maxText, setMaxText] = useState(maximum?.toString() ?? '');
   const [barStartValueText, setBarStartValueText] = useState(barStartValue?.toString() ?? '0');
@@ -374,6 +377,18 @@ export function ScalePropertiesPanel({
           </label>
         )}
         <label className={styles.checkbox}><input type="checkbox" checked={showTagName} onChange={(event) => onChange({ showTagName: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-tag-name`} /><span>Rótulo</span></label>
+        {kind === 'Bar' && (
+          <label className={styles.field}>
+            <span>Nome do rótulo</span>
+            <select value={tagNameMode} onChange={(event) => onChange({ tagNameMode: event.target.value as 'tag' | 'custom' })} data-testid="bar-tag-name-mode">
+              <option value="tag">Nome da Tag</option>
+              <option value="custom">Personalizado</option>
+            </select>
+          </label>
+        )}
+        {kind === 'Bar' && tagNameMode === 'custom' && (
+          <label className={styles.field}><span>Rótulo personalizado</span><input type="text" value={customTagNameDraft} onChange={(event) => { setCustomTagNameDraft(event.target.value); onChange({ customTagName: event.target.value }); }} placeholder="Nome da tag" data-testid="bar-custom-tag-name" /><small className={styles.tagHint}>Tag usada: {pointName || '—'}</small></label>
+        )}
         {kind === 'Gauge' && <label className={styles.field}><span>Rótulo personalizado</span><input type="text" value={gaugeTitleDraft} onChange={(event) => { setGaugeTitleDraft(event.target.value); onChange({ title: event.target.value }); }} placeholder="Nome da tag" data-testid="gauge-title" /><small className={styles.tagHint}>Tag usada: {pointName || '—'}</small></label>}
         <label className={styles.checkbox}><input type="checkbox" checked={showValue} onChange={(event) => onChange({ showValue: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-value`} /><span>Valor</span></label>
         {(kind === 'Bar' || kind === 'Gauge') && <label className={styles.checkbox}><input type="checkbox" checked={showScale} onChange={(event) => onChange({ showScale: event.target.checked })} data-testid={`${kind.toLowerCase()}-show-scale`} /><span>Mostrar escala</span></label>}
