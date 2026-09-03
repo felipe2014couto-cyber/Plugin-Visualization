@@ -172,6 +172,7 @@ export interface DisplayEditorProps {
   showToolbar?: boolean;
   loadRecordedData?: DisplayDataLoader;
   loadInterpolatedData?: DisplayDataLoader;
+  presentationMode?: boolean;
 }
 
 interface PendingDocumentTransaction {
@@ -244,6 +245,7 @@ export function DisplayEditor({
   loadRecordedData,
   loadInterpolatedData,
   onSelectionChange,
+  presentationMode = false,
 }: DisplayEditorProps) {
   const styles = useStyles2(getStyles);
   const [state, baseDispatch] = useReducer(editorReducer, initialEditorState);
@@ -1937,9 +1939,21 @@ export function DisplayEditor({
     }
   }, [displayDocument.elements, handleTrendOpen, trendRefreshKey]);
 
+  useEffect(() => {
+    if (presentationMode) {
+      setMode('view');
+      onModeChange?.('view');
+    }
+    const timeout = setTimeout(() => {
+      handleZoomFit();
+    }, 60);
+    return () => clearTimeout(timeout);
+  }, [presentationMode, handleZoomFit, onModeChange]);
+
   return (
     <div ref={editorContainerRef} className={styles.container} data-testid="display-editor" onKeyDownCapture={handleEditorKeyDown}>
-      <div className={styles.header}>
+      {!presentationMode && (
+        <div className={styles.header}>
         <div className={styles.headerPrimary}>
           <div className={styles.displayLabel}>
             <span className={styles.displayLabelPrefix}>Display:</span>
@@ -2088,6 +2102,7 @@ export function DisplayEditor({
           </div>
         </div>
       </div>
+      )}
       {importError && <div className={styles.importError} role="alert" data-testid="display-import-error">{importError}</div>}
       {piVisionImportOpen && (
         <PiVisionImportDialog

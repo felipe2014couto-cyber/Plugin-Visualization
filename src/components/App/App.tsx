@@ -300,6 +300,17 @@ export function App() {
   const [isPiPointFiltersOpen, setIsPiPointFiltersOpen] = useState(false);
   const [isPiSearchOpen, setIsPiSearchOpen] = useState(true);
   const [visualizationTheme, setVisualizationTheme] = useState<VisualizationTheme>(getInitialTheme);
+  const [presentationMode, setPresentationMode] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && presentationMode) {
+        setPresentationMode(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [presentationMode]);
   const [dashboardUid, setDashboardUid] = useState<string | undefined>(getDashboardUidFromLocation);
   const [dashboardLoadState, setDashboardLoadState] = useState<DashboardLoadState>(() => (
     cachedDashboardDocument ? 'loaded' : getDashboardUidFromLocation() ? 'loading' : 'idle'
@@ -829,9 +840,9 @@ export function App() {
       data-visualization-theme={visualizationTheme}
       className={`${styles.container} ${visualizationTheme === 'light' ? styles.themeLight : styles.themeDark}`}
     >
-      {! (kioskMode && editorMode === 'view') && <header className={styles.header} data-testid="pims-vision-header">
+      {! (kioskMode && editorMode === 'view') && <header className={presentationMode ? styles.headerPresentation : styles.header} data-testid="pims-vision-header">
         <span
-          className={styles.productMark}
+          className={presentationMode ? styles.productMarkPresentation : styles.productMark}
           role="img"
           aria-label="Aperam Visualization"
         />
@@ -839,6 +850,18 @@ export function App() {
         <div className={styles.displayContext}>Display operacional</div>
         <div className={styles.headerActions}>
           <div className={styles.headerConnectionRow}>
+            <button
+              type="button"
+              className={presentationMode ? styles.presentationButtonActive : styles.presentationButton}
+              onClick={() => setPresentationMode((prev) => !prev)}
+              title={presentationMode ? 'Sair do modo apresentação (Esc)' : 'Modo apresentação'}
+              aria-label="Modo apresentação"
+              aria-pressed={presentationMode}
+              data-testid="pims-vision-presentation-toggle"
+            >
+              <PresentationIcon />
+              <span>Apresentação</span>
+            </button>
             <div className={styles.themeSelector} role="group" aria-label="Tema visual">
               <button type="button" className={visualizationTheme === 'dark' ? styles.themeButtonActive : styles.themeButton} aria-pressed={visualizationTheme === 'dark'} data-testid="visualization-theme-dark" onClick={() => setVisualizationTheme('dark')}>Escuro</button>
               <button type="button" className={visualizationTheme === 'light' ? styles.themeButtonActive : styles.themeButton} aria-pressed={visualizationTheme === 'light'} data-testid="visualization-theme-light" onClick={() => setVisualizationTheme('light')}>Claro</button>
@@ -847,54 +870,56 @@ export function App() {
               {getConnectionLabel(piConnection)}
             </div>
           </div>
-          <div className={styles.headerSaveRow}>
-            <div id="pims-vision-header-portal" />
-            <div className={styles.headerAutoRefresh}>
+          {!presentationMode && (
+            <div className={styles.headerSaveRow}>
+              <div id="pims-vision-header-portal" />
+              <div className={styles.headerAutoRefresh}>
+                <button
+                  type="button"
+                  className={styles.headerRefreshButton}
+                  data-testid="header-refresh-now"
+                  title="Atualizar agora"
+                  aria-label="Atualizar agora"
+                  onClick={handleManualRefresh}
+                >
+                  <RefreshIcon />
+                </button>
+                <span className={styles.headerRefreshLabel}>Atualização automática:</span>
+                <select
+                  className={styles.headerRefreshSelect}
+                  value={refreshInterval}
+                  data-testid="header-auto-refresh-select"
+                  aria-label="Intervalo de atualização automática"
+                  onChange={(e) => setRefreshInterval(e.target.value)}
+                >
+                  {REFRESH_INTERVAL_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <button
                 type="button"
-                className={styles.headerRefreshButton}
-                data-testid="header-refresh-now"
-                title="Atualizar agora"
-                aria-label="Atualizar agora"
-                onClick={handleManualRefresh}
-              >
-                <RefreshIcon />
-              </button>
-              <span className={styles.headerRefreshLabel}>Atualização automática:</span>
-              <select
-                className={styles.headerRefreshSelect}
-                value={refreshInterval}
-                data-testid="header-auto-refresh-select"
-                aria-label="Intervalo de atualização automática"
-                onChange={(e) => setRefreshInterval(e.target.value)}
-              >
-                {REFRESH_INTERVAL_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                className={styles.saveButton}
+                data-testid="pims-vision-save-dashboard"
+                disabled={saveState === 'saving'}
+                onClick={handleSaveDashboard}
+              >{saveState === 'saving' ? 'Salvando...' : hasUnsavedChanges ? 'Salvar*' : 'Salvar'}</button>
+              <button
+                type="button"
+                className={styles.saveAsButton}
+                data-testid="pims-vision-save-as-dashboard"
+                disabled={saveState === 'saving'}
+                onClick={openSaveAsDialog}
+              >Salvar como</button>
+              {saveState !== 'idle' && (
+                <span className={saveState === 'error' ? styles.saveError : styles.saveStatus} role="status">
+                  {saveState === 'saved' ? 'Salvo no Grafana' : saveState === 'error' ? 'Não foi possível salvar' : ''}
+                </span>
+              )}
             </div>
-            <button
-              type="button"
-              className={styles.saveButton}
-              data-testid="pims-vision-save-dashboard"
-              disabled={saveState === 'saving'}
-              onClick={handleSaveDashboard}
-            >{saveState === 'saving' ? 'Salvando...' : hasUnsavedChanges ? 'Salvar*' : 'Salvar'}</button>
-            <button
-              type="button"
-              className={styles.saveAsButton}
-              data-testid="pims-vision-save-as-dashboard"
-              disabled={saveState === 'saving'}
-              onClick={openSaveAsDialog}
-            >Salvar como</button>
-            {saveState !== 'idle' && (
-              <span className={saveState === 'error' ? styles.saveError : styles.saveStatus} role="status">
-                {saveState === 'saved' ? 'Salvo no Grafana' : saveState === 'error' ? 'Não foi possível salvar' : ''}
-              </span>
-            )}
-          </div>
+          )}
         </div>
       </header>}
       {isSaveDialogOpen && (
@@ -959,10 +984,10 @@ export function App() {
           </form>
         </div>
       )}
-      <div className={styles.workspace}>
+      <div className={presentationMode ? styles.workspacePresentation : styles.workspace}>
         <aside
           className={isAssetsPanelOpen ? styles.assetsPanel : styles.assetsPanelCollapsed}
-          style={{ display: kioskMode && editorMode === 'view' ? 'none' : undefined }}
+          style={{ display: (presentationMode || (kioskMode && editorMode === 'view')) ? 'none' : undefined }}
           data-testid="pims-vision-assets-panel"
           aria-label="Data, Library e Calculation"
         >
@@ -1223,6 +1248,7 @@ export function App() {
                 setOpenCalculationId(calculationId);
               }}
               onProgrammingEdit={handleProgrammingEdit}
+              presentationMode={presentationMode}
               />
             </div>
           </div>
@@ -1265,6 +1291,7 @@ export function App() {
       <TimeRangeBar
         selection={timeSelection}
         onChange={setTimeSelection}
+        presentationMode={presentationMode}
       />
     </div>
   );
@@ -1528,6 +1555,19 @@ const getStyles = (theme: GrafanaTheme2) => ({
     background: var(--top-header-bg);
     border-bottom: 1px solid var(--border-color);
   `,
+  headerPresentation: css`
+    flex: 0 0 46px;
+    min-height: 46px;
+    padding: 0 ${theme.spacing(2)};
+    display: flex;
+    align-items: center;
+    gap: ${theme.spacing(1)};
+    box-sizing: border-box;
+    color: var(--text-primary);
+    background: var(--top-header-bg);
+    border-bottom: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+  `,
   productMark: css`
     width: 158px;
     height: 68px;
@@ -1536,6 +1576,16 @@ const getStyles = (theme: GrafanaTheme2) => ({
     background-repeat: no-repeat;
     background-position: center;
     background-size: contain;
+  `,
+  productMarkPresentation: css`
+    width: 110px;
+    height: 38px;
+    flex: 0 0 110px;
+    background-image: var(--brand-logo);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    transition: all 0.2s ease;
   `,
   productName: css`
     position: absolute;
@@ -1798,6 +1848,56 @@ const getStyles = (theme: GrafanaTheme2) => ({
     border: 1px solid var(--border-color);
     border-radius: 10px;
     background: var(--surface-secondary);
+  `,
+  presentationButton: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    background: var(--button-bg);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+
+    &:hover {
+      color: var(--text-primary);
+      background: var(--button-hover);
+      border-color: var(--accent);
+    }
+  `,
+  presentationButtonActive: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    color: var(--accent-contrast);
+    background: var(--accent);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: 0 0 8px rgba(211, 59, 145, 0.4);
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+  `,
+  workspacePresentation: css`
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+    padding: 2px 4px 0;
+    box-sizing: border-box;
   `,
   themeButton: css`
     min-width: 56px;
@@ -2289,6 +2389,17 @@ function getConnectionLabel(connection: PiConnectionState): string {
 
 function getTrendBindingCacheKey(binding: { dataSourceUid: string; serverPath: string; pointName: string }): string {
   return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
+}
+
+function PresentationIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+      <path d="M7 10l3 3 7-7" />
+    </svg>
+  );
 }
 
 function RefreshIcon() {
