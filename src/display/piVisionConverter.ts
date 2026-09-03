@@ -473,7 +473,7 @@ export function convertPiVisionDisplay(
     ? display.Height
     : (bounds?.height ?? 1080);
   const rawBg = normalizeColor(display.BackgroundColor ?? display.DisplayProperties?.BackgroundColor);
-  const backgroundColor = (rawBg && rawBg.toLowerCase() !== '#ffffff' && rawBg.toLowerCase() !== '#fff') ? rawBg : '#1f1f1f';
+  const backgroundColor = (rawBg && rawBg.toLowerCase() !== '#ffffff' && rawBg.toLowerCase() !== '#fff') ? rawBg : '#000000';
 
   const existingIds = new Set<string>();
   const elements: DisplayElement[] = [];
@@ -799,9 +799,12 @@ function convertBar(
   const backgroundColor = normalizeColor(cfg.Background ?? cfg.BackColor) ?? '#ffffff';
   const borderColor = normalizeColor(cfg.ValueStroke ?? cfg.Stroke) ?? '#000000';
 
+  const isExplicitCustomScale = typeof cfg.ValueScaleSettings?.MinValue === 'number' || typeof cfg.ValueScaleSettings?.MaxValue === 'number' || typeof cfg.MinValue === 'number' || typeof cfg.MaxValue === 'number';
+  const scaleMode: 'custom' | 'database' = ((cfg.ValueScaleSettings as any)?.ScaleType === 'Database' || !isExplicitCustomScale) ? 'database' : 'custom';
   const properties: BarProperties = {
     ...(binding ? { binding } : {}),
     ...(calculation ? { calculationId: calculation.id } : {}),
+    scaleMode,
     minimum,
     maximum,
     showValue,
@@ -903,7 +906,7 @@ function convertText(
   const cfg = symbol.Configuration ?? {};
   const text = decodePiVisionText(cfg.Content ?? cfg.Text ?? cfg.StaticText ?? '');
   const rawColor = normalizeColor(cfg.ForeColor ?? cfg.Stroke ?? cfg.Fill);
-  const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor);
+  const rawBg = normalizeColor(cfg.Background ?? cfg.BackColor ?? cfg.BackgroundColor ?? (cfg.Fill && cfg.Fill !== '#c0c0c0' ? cfg.Fill : undefined));
   const isDefaultWhiteOrTransparent = !rawBg || rawBg.toLowerCase() === '#ffffff' || rawBg.toLowerCase() === '#fff' || rawBg === 'transparent' || cfg.Transparent === true;
   const backgroundColor = isDefaultWhiteOrTransparent ? 'transparent' : rawBg;
   const color = rawColor ?? DEFAULT_TEXT_PROPERTIES.color;
@@ -962,9 +965,9 @@ function convertShape(
   const symType = (symbol.SymbolType ?? cfg.ShapeType ?? 'rectangle').toLowerCase();
   const shape = normalizeGeometricShape(symType);
   const isTransparent = cfg.Transparent === true || cfg.IsTransparent === true || cfg.Transparent === 1 || String(cfg.Transparent).toLowerCase() === 'true';
-  const rawFill = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
+  const rawFill = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill ?? (cfg as any).FillColor);
   const fill = isTransparent ? 'transparent' : (rawFill ?? 'transparent');
-  const stroke = normalizeColor(cfg.ForeColor ?? cfg.Stroke) ?? DEFAULT_RECTANGLE_PROPERTIES.stroke;
+  const stroke = normalizeColor(cfg.ForeColor ?? cfg.Stroke ?? (cfg as any).LineColor) ?? DEFAULT_RECTANGLE_PROPERTIES.stroke;
   const thresholdMultistate = convertPiVisionThresholdMultistate(cfg.Multistates);
   const multistateBinding = firstMultistateBinding(symbol, dataSourceUid);
   const calculation = firstMultistateCalculation(symbol, calculationsByName);
@@ -1754,8 +1757,11 @@ function removePiVisionResourceId(pathPart: string): string {
 }
 
 function normalizeColor(value: unknown): string | undefined {
-  if (typeof value === 'number') {
-    const bgr = value & 0xFFFFFF;
+  if (typeof value === 'string' && /^-?\d+$/.test(value.trim())) {
+    value = Number(value.trim());
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const bgr = (value < 0 ? value + 0x100000000 : value) & 0xFFFFFF;
     const b = (bgr >> 16) & 0xFF;
     const g = (bgr >> 8) & 0xFF;
     const r = bgr & 0xFF;

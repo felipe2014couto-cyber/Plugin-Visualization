@@ -231,7 +231,7 @@ describe('convertPiVisionDisplay — documento', () => {
 
   it('usa cor de fundo padrao quando BackgroundColor e invalida', () => {
     const result = convertPiVisionDisplay({ BackgroundColor: 'nao-hex' });
-    expect(result.surface.backgroundColor).toBe('#1f1f1f');
+    expect(result.surface.backgroundColor).toBe('#000000');
   });
 
   it('retorna lista de elementos vazia quando Symbols e ausente', () => {

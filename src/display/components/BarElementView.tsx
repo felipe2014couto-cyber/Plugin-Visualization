@@ -30,8 +30,9 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
       : 'var(--surface-secondary, #2d3b4f)';
   const borderClearance = Math.max(0, barOptions.borderWidth);
   const value = getNumericValue(runtimeState);
-  const minimum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero : options.minimum;
-  const maximum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : options.maximum;
+  const scaleMode = barOptions.scaleMode;
+  const minimum = scaleMode === 'database' && databaseScale ? databaseScale.zero : barOptions.minimum;
+  const maximum = scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : barOptions.maximum;
   const ratio = value === undefined ? undefined : getScaleRatio(value, minimum, maximum);
   const horizontal = options.orientation === 'horizontal';
   const valueText = getValueText(binding, label, runtimeState, value, options.decimals);
@@ -76,6 +77,9 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const activeColor = getMultistateColor(rawValue, options.multistate, barOptions.fillColor);
   const blink = evaluateMultistate(rawValue, options.multistate)?.rule.blink === true;
   const borderColor = resolveThemeForeground(barOptions.borderColor);
+  const valueColor = isPiVisionCompactGauge
+    ? (activeColor || barOptions.fillColor || '#00ff00')
+    : borderColor;
   const barCenterX = plotX + plotWidth / 2;
   // Reserve a dedicated header area: the label stays at the top and the value
   // occupies the gap immediately above the track, without touching either.
@@ -155,7 +159,7 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
         />
       )}
       <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} rx={0} fill="none" stroke={resolveThemeForeground(barOptions.borderColor)} strokeWidth={barOptions.borderWidth} vectorEffect="non-scaling-stroke" data-testid={`bar-border-${element.id}`} pointerEvents="none" />
-      <text x={barCenterX} y={element.y + element.height - (isPiVisionCompactGauge ? 3 : 12)} textAnchor="middle" fill={borderColor} style={{ fill: borderColor }} fontSize={isPiVisionCompactGauge ? Math.max(7, Math.min(11, element.width * 0.15)) : Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
+      <text x={barCenterX} y={element.y + element.height - (isPiVisionCompactGauge ? 3 : 12)} textAnchor="middle" fill={valueColor} style={{ fill: valueColor }} fontSize={isPiVisionCompactGauge ? Math.max(7, Math.min(11, element.width * 0.15)) : Math.max(12, Math.min(24, element.height * 0.12))} data-testid={`bar-value-${element.id}`} pointerEvents="none">
         {!horizontal && detailLines.map((line, index) => <tspan key={`${line}-${index}`} x={barCenterX} dy={index === 0 ? 0 : -16}>{line}</tspan>)}
       </text>
       {!isValidScale(minimum, maximum) && (
