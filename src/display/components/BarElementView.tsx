@@ -22,32 +22,47 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   // Displays criados antes da opção de cor do preenchimento não possuem essa
   // propriedade. Nesse caso o trilho deve acompanhar o tema ativo; uma cor
   // escolhida explicitamente pelo usuário continua sendo preservada.
+  const isPiVisionCompactGauge = options._piVisionCompactGauge === true;
   const trackColor = typeof element.properties.backgroundColor === 'string'
     ? barOptions.backgroundColor
-    : 'var(--surface-secondary, #2d3b4f)';
+    : isPiVisionCompactGauge
+      ? '#ffffff'
+      : 'var(--surface-secondary, #2d3b4f)';
+  const borderClearance = Math.max(0, barOptions.borderWidth);
   const value = getNumericValue(runtimeState);
   const minimum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero : options.minimum;
   const maximum = options.scaleMode === 'database' && databaseScale ? databaseScale.zero + databaseScale.span : options.maximum;
   const ratio = value === undefined ? undefined : getScaleRatio(value, minimum, maximum);
   const horizontal = options.orientation === 'horizontal';
-  const isPiVisionCompactGauge = options._piVisionCompactGauge === true;
-  const borderClearance = Math.max(0, barOptions.borderWidth);
-  // Os vertical gauges do PI Vision podem ter somente ~70 px de largura. O
-  // layout generico reserva 78 px para a escala e deixava o trilho sem area.
-  const leftPadding = isPiVisionCompactGauge ? 16 + borderClearance : 78 + borderClearance * 2;
-  const rightPadding = isPiVisionCompactGauge ? 4 + borderClearance : 12;
+  const valueText = getValueText(binding, label, runtimeState, value, options.decimals);
+  const detailLines = getDetailLines(valueText, runtimeState, barOptions.showValue, barOptions.showUnit, false);
+  const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
+    ? barOptions.customTagName
+    : label ?? (binding && isPiPointBinding(binding) ? binding.pointName : '');
+
+  const hasScale = options.showScale !== false && isValidScale(minimum, maximum) && (isPiVisionCompactGauge || element.width >= 80);
+  const hasTagName = Boolean(tagLabel) && options.showTagName;
+  const hasFooter = options.showValue && detailLines.length > 0;
+
+  const leftPadding = !horizontal && hasScale
+    ? (isPiVisionCompactGauge ? 16 + borderClearance : 78 + borderClearance * 2)
+    : borderClearance + 2;
+  const rightPadding = isPiVisionCompactGauge ? 4 + borderClearance : (hasScale ? 12 : borderClearance + 2);
+  const topPadding = hasTagName
+    ? (isPiVisionCompactGauge ? 20 : horizontal ? 48 : 36) + borderClearance
+    : borderClearance + 2;
+  const bottomPadding = hasFooter
+    ? (isPiVisionCompactGauge ? 20 : horizontal ? 48 : 36) + borderClearance
+    : borderClearance + 2;
+
   const plotX = element.x + leftPadding;
-  // Horizontal bars reserve the header for the tag/value and the footer for X scale labels.
-  const plotY = element.y + (isPiVisionCompactGauge ? 30 : horizontal ? 48 : 44) + borderClearance * 2;
+  const plotY = element.y + topPadding;
   const plotWidth = Math.max(1, element.width - leftPadding - rightPadding);
-  // Keep title, scale and value clear of thick borders.
-  // Horizontal scale labels live below the track, so leave enough room for the
-  // border stroke plus the tick labels instead of letting the stroke cover them.
-  const plotHeight = Math.max(1, element.height - (isPiVisionCompactGauge ? 48 : horizontal ? 104 : 90) - borderClearance * 4);
+  const plotHeight = Math.max(1, element.height - topPadding - bottomPadding);
   const startRatio = options.barStartMode === 'custom' && typeof options.barStartValue === 'number'
     ? getScaleRatio(options.barStartValue, minimum, maximum) ?? 0
     : 0;
-  
+
   const activeRatio = ratio ?? 0;
   const minRatio = Math.min(startRatio, activeRatio);
   const maxRatio = Math.max(startRatio, activeRatio);
@@ -56,16 +71,11 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const fillHeight = !horizontal && ratio !== undefined ? plotHeight * (maxRatio - minRatio) : !horizontal ? 0 : plotHeight;
   const fillX = horizontal ? plotX + plotWidth * minRatio : plotX;
   const fillY = !horizontal ? plotY + plotHeight - plotHeight * maxRatio : plotY;
-  const valueText = getValueText(binding, label, runtimeState, value, options.decimals);
-  const detailLines = getDetailLines(valueText, runtimeState, barOptions.showValue, barOptions.showUnit, false);
   const scaleTickCount = getScaleTickCount(horizontal ? plotWidth : plotHeight, horizontal ? 44 : 34);
   const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
   const activeColor = getMultistateColor(rawValue, options.multistate, barOptions.fillColor);
   const blink = evaluateMultistate(rawValue, options.multistate)?.rule.blink === true;
   const borderColor = resolveThemeForeground(barOptions.borderColor);
-  const tagLabel = barOptions.tagNameMode === 'custom' && barOptions.customTagName.trim()
-    ? barOptions.customTagName
-    : label ?? (binding && isPiPointBinding(binding) ? binding.pointName : '');
   const barCenterX = plotX + plotWidth / 2;
   // Reserve a dedicated header area: the label stays at the top and the value
   // occupies the gap immediately above the track, without touching either.

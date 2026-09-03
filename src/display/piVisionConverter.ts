@@ -383,6 +383,33 @@ function firstCalculation(
  * @returns DisplayDocument compativel com o PIMS Vision.
  * @throws PiVisionConvertError se o input nao for um objeto valido.
  */
+function isLightBackground(fill: unknown): boolean {
+  if (typeof fill !== 'string') return false;
+  const lower = fill.trim().toLowerCase();
+  if (lower === 'transparent' || lower === 'none' || !lower) return false;
+  if (lower === 'white' || lower === '#ffffff' || lower === '#fff') return true;
+  if (lower.startsWith('rgba') || lower.startsWith('rgb')) {
+    const match = lower.match(/\d+(?:\.\d+)?/g);
+    if (match && match.length >= 3) {
+      const r = Number(match[0]);
+      const g = Number(match[1]);
+      const b = Number(match[2]);
+      const a = match.length >= 4 ? Number(match[3]) : 1;
+      if (a < 0.4) return false;
+      const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return luminance > 0.6;
+    }
+  }
+  if (/^#[0-9a-f]{6}$/i.test(lower)) {
+    const r = parseInt(lower.slice(1, 3), 16);
+    const g = parseInt(lower.slice(3, 5), 16);
+    const b = parseInt(lower.slice(5, 7), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.6;
+  }
+  return false;
+}
+
 function applyContextualColors(elements: DisplayElement[]) {
   const isInside = (textEl: DisplayElement, bgEl: DisplayElement) => {
     const cx = textEl.x + textEl.width / 2;
@@ -411,15 +438,12 @@ function applyContextualColors(elements: DisplayElement[]) {
 
         if (backgroundElement) {
           const bgFill = (backgroundElement.properties as any).fill;
-          const isBgBlack = bgFill === '#000000' || bgFill === 'black';
-          const hasBgMultistate = !!(backgroundElement.properties as any).multistate?.enabled;
-          
-          const newColor = (isBgBlack && !hasBgMultistate) ? '#ffffff' : '#000000';
-          
-          if (isText) {
-            (el.properties as any).color = newColor;
-          } else {
-            (el.properties as any).visual.color = newColor;
+          if (isLightBackground(bgFill)) {
+            if (isText) {
+              (el.properties as any).color = '#000000';
+            } else {
+              (el.properties as any).visual.color = '#000000';
+            }
           }
         }
       }
@@ -590,7 +614,7 @@ function convertValue(
       showUnit: cfg.ShowUnit ?? cfg.ShowUOM ?? DEFAULT_VALUE_VISUAL_OPTIONS.showUnit,
       showTimestamp: cfg.ShowTimestamp ?? cfg.ShowTime ?? DEFAULT_VALUE_VISUAL_OPTIONS.showTimestamp,
       showValue: cfg.ShowValue ?? DEFAULT_VALUE_VISUAL_OPTIONS.showValue,
-      decimals: normalizeDecimals(cfg.Decimals) ?? decimalsFromFormat(cfg.FormatType),
+      decimals: normalizeDecimals(cfg.Decimals ?? cfg.DisplayDigits ?? (cfg.FormatSettings as any)?.Decimals) ?? decimalsFromFormat(cfg.FormatType ?? (cfg.FormatSettings as any)?.Format),
       labelMode: cfg.NameType === 'C' && typeof cfg.CustomName === 'string' ? 'custom' : 'tag',
       customLabel: typeof cfg.CustomName === 'string' ? cfg.CustomName : '',
     },
@@ -768,22 +792,28 @@ function convertBar(
     : 'vertical';
   const color = normalizeColor(cfg.Fill ?? cfg.ForeColor) ?? '#6e9fff';
   const multistate = convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
-  const isPiVisionCompactGauge = symType === 'verticalgauge' || symType === 'horizontalgauge';
+  const isPiVisionCompactGauge = symType === 'verticalgauge' || symType === 'horizontalgauge' || symType === 'verticalbar' || symType === 'horizontalbar' || symType === 'bar';
+  const showScale = cfg.ShowScale === true || (cfg.ValueScaleSettings as any)?.DisplayScale === true;
+  const showTagName = cfg.ShowLabel === true || cfg.ShowTagName === true;
+  const showValue = cfg.ShowValue === true;
+  const backgroundColor = normalizeColor(cfg.Background ?? cfg.BackColor) ?? '#ffffff';
+  const borderColor = normalizeColor(cfg.ValueStroke ?? cfg.Stroke) ?? '#000000';
 
   const properties: BarProperties = {
     ...(binding ? { binding } : {}),
     ...(calculation ? { calculationId: calculation.id } : {}),
     minimum,
     maximum,
-    showValue: cfg.ShowValue !== false,
-    showTagName: cfg.ShowLabel ?? cfg.ShowTagName ?? true,
+    showValue,
+    showTagName,
+    showScale,
     showUnit: cfg.ShowUnit === true || cfg.ShowUOM === true,
-    decimals: normalizeDecimals(cfg.Decimals) ?? decimalsFromFormat(cfg.FormatType),
+    decimals: normalizeDecimals(cfg.Decimals ?? cfg.DisplayDigits ?? (cfg.FormatSettings as any)?.Decimals) ?? decimalsFromFormat(cfg.FormatType ?? (cfg.FormatSettings as any)?.Format),
     orientation,
     color,
     fillColor: color,
-    backgroundColor: normalizeColor(cfg.Background ?? cfg.BackColor) ?? 'transparent',
-    borderColor: normalizeColor(cfg.ValueStroke ?? cfg.Stroke) ?? '#ffffff',
+    backgroundColor,
+    borderColor,
     borderWidth: typeof cfg.StrokeWidth === 'number' ? cfg.StrokeWidth : 1,
     tagNameMode: cfg.NameType === 'C' && typeof cfg.CustomName === 'string' ? 'custom' : 'tag',
     customTagName: typeof cfg.CustomName === 'string' ? cfg.CustomName : '',
@@ -872,8 +902,8 @@ function convertText(
 ): DisplayElement {
   const cfg = symbol.Configuration ?? {};
   const text = decodePiVisionText(cfg.Content ?? cfg.Text ?? cfg.StaticText ?? '');
-  const rawColor = normalizeColor(cfg.ForeColor ?? cfg.Stroke);
-  const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
+  const rawColor = normalizeColor(cfg.ForeColor ?? cfg.Stroke ?? cfg.Fill);
+  const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor);
   const isDefaultWhiteOrTransparent = !rawBg || rawBg.toLowerCase() === '#ffffff' || rawBg.toLowerCase() === '#fff' || rawBg === 'transparent' || cfg.Transparent === true;
   const backgroundColor = isDefaultWhiteOrTransparent ? 'transparent' : rawBg;
   const color = rawColor ?? DEFAULT_TEXT_PROPERTIES.color;
@@ -899,7 +929,22 @@ function convertText(
       : {}),
   };
 
-  return makeElement(TEXT_TYPE, geo, properties, existingIds);
+  const explicitWidth = hasExplicitWidth(symbol);
+  const explicitHeight = hasExplicitHeight(symbol);
+  const textGeo = { ...geo };
+  const textLines = text.split('\n');
+  const longestLine = Math.max(1, ...textLines.map((l) => l.length));
+  const lineCount = Math.max(1, textLines.length);
+  const fittedWidth = Math.ceil(longestLine * fontSize * 0.65 + 16);
+  const fittedHeight = Math.ceil(lineCount * fontSize * 1.3);
+  if (!explicitWidth) {
+    textGeo.width = fittedWidth;
+  }
+  if (!explicitHeight) {
+    textGeo.height = fittedHeight;
+  }
+
+  return makeElement(TEXT_TYPE, textGeo, properties, existingIds);
 }
 
 // ---------------------------------------------------------------------------
@@ -916,7 +961,9 @@ function convertShape(
   const cfg = symbol.Configuration ?? {};
   const symType = (symbol.SymbolType ?? cfg.ShapeType ?? 'rectangle').toLowerCase();
   const shape = normalizeGeometricShape(symType);
-  const fill = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill) ?? DEFAULT_RECTANGLE_PROPERTIES.fill;
+  const isTransparent = cfg.Transparent === true || cfg.IsTransparent === true || cfg.Transparent === 1 || String(cfg.Transparent).toLowerCase() === 'true';
+  const rawFill = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
+  const fill = isTransparent ? 'transparent' : (rawFill ?? 'transparent');
   const stroke = normalizeColor(cfg.ForeColor ?? cfg.Stroke) ?? DEFAULT_RECTANGLE_PROPERTIES.stroke;
   const thresholdMultistate = convertPiVisionThresholdMultistate(cfg.Multistates);
   const multistateBinding = firstMultistateBinding(symbol, dataSourceUid);
@@ -1476,6 +1523,7 @@ export function parseDataSourcePath(
     return undefined;
   }
 
+  const serverPath = removePiVisionResourceId(normalized.slice(0, firstSep));
   const remainder = normalized.slice(firstSep + 1);
 
   if (!remainder) {
@@ -1488,18 +1536,11 @@ export function parseDataSourcePath(
   const rawPointName = lastSep >= 0 ? remainder.slice(lastSep + 1) : remainder;
   const pointName = removePiVisionResourceId(rawPointName);
 
-  // O serverPath deve ser tudo antes do pointName para nao perder subestruturas (ex: DB\Element)
-  const pointNameIndex = normalized.lastIndexOf(rawPointName);
-  let newServerPath = pointNameIndex > 0 ? normalized.slice(0, pointNameIndex) : normalized;
-  // Limpar pipes ou barras no final do serverPath
-  newServerPath = newServerPath.replace(/[\\/|]+$/, '');
-  newServerPath = removePiVisionResourceId(newServerPath);
-
-  if (!newServerPath || !pointName) {
+  if (!serverPath || !pointName) {
     return undefined;
   }
 
-  return { dataSourceUid, serverPath: newServerPath, pointName };
+  return { dataSourceUid, serverPath, pointName };
 }
 
 // ---------------------------------------------------------------------------
@@ -1542,6 +1583,13 @@ function hasExplicitWidth(symbol: PiVisionSymbol): boolean {
     || (typeof cfg.Width === 'number' && cfg.Width > 0)
     || (typeof cfg.Right === 'number' && typeof cfg.Left === 'number' && cfg.Right > cfg.Left)
     || (typeof cfg.Center === 'number' && typeof cfg.Left === 'number' && cfg.Center > cfg.Left);
+}
+
+function hasExplicitHeight(symbol: PiVisionSymbol): boolean {
+  const cfg = symbol.Configuration ?? {};
+  return (typeof symbol.Height === 'number' && symbol.Height > 0)
+    || (typeof cfg.Height === 'number' && cfg.Height > 0)
+    || (typeof cfg.Bottom === 'number' && typeof cfg.Top === 'number' && cfg.Bottom > cfg.Top);
 }
 
 function estimateCompactValueWidth(cfg: PiVisionSymbolConfiguration): number {

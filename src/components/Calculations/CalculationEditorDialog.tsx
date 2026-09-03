@@ -24,6 +24,8 @@ const CALCULATION_HELP_ITEMS: readonly CalculationHelpItem[] = [
   { name: 'ABS', template: 'ABS(0)', description: 'Retorna o valor absoluto, sem sinal negativo.', example: 'ABS(Setpoint - Medida)' },
   { name: 'ROUND', template: 'ROUND(0, 2)', description: 'Arredonda um valor para a quantidade desejada de casas decimais.', example: 'ROUND(Eficiencia, 2)' },
   { name: 'CLAMP', template: 'CLAMP(0, 0, 100)', description: 'Limita um valor entre mínimo e máximo.', example: 'CLAMP(Nivel, 0, 100)' },
+  { name: 'POWER', template: 'POWER(0, 2)', description: 'Eleva um número a uma potência (ex.: base ^ expoente).', example: 'POWER(Pressao, 2)' },
+  { name: 'SQRT', template: 'SQRT(0)', description: 'Retorna a raiz quadrada de um número.', example: 'SQRT(Vazao)' },
   { name: 'WHILE', description: 'Não é permitido em cálculos para evitar expressões sem término. Use IF para decisões condicionais.', example: 'Use IF(Condicao, valor_se_sim, valor_se_nao)', unsupported: true },
 ];
 
@@ -43,7 +45,7 @@ function isPiTimeString(str: string): boolean {
   return false;
 }
 
-const CALCULATION_RESERVED_NAMES = new Set(['IF', 'SE', 'AND', 'OR', 'NOT', 'MIN', 'MAX', 'ABS', 'ROUND', 'CLAMP', 'WHILE']);
+const CALCULATION_RESERVED_NAMES = new Set(['IF', 'SE', 'AND', 'OR', 'NOT', 'MIN', 'MAX', 'ABS', 'ROUND', 'CLAMP', 'WHILE', 'POW', 'POWER', 'SQRT', 'SQR', 'EXP', 'LOG', 'LN', 'LOG10', 'MOD', 'SIN', 'COS', 'TAN']);
 
 export interface CalculationDraft {
   name: string;
@@ -270,7 +272,7 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
           />
 
           <div className={styles.operatorRow} aria-label="Operadores">
-            {['+', '-', '*', '/', '(', ')'].map((operator) => (
+            {['+', '-', '*', '/', '^', '(', ')'].map((operator) => (
               <button key={operator} type="button" className={styles.operatorButton} onClick={() => appendToken(operator)}>{operator}</button>
             ))}
           </div>
@@ -629,7 +631,7 @@ function extractTagNames(expression: string): string[] {
   const expressionWithoutStrings = expression.replace(/(["'])(?:(?=(\\?))\2.)*?\1/g, '');
   
   // 2. Token pattern supporting Unicode letters (\p{L}) and numbers (\p{N})
-  const tokenPattern = /(?:^|[^\p{L}\p{N}_.:-])([\p{L}_][\p{L}\p{N}_.:-]*)(?=[^\p{L}\p{N}_.:-]|$)/gu;
+  const tokenPattern = new RegExp('(?:^|[^\\p{L}\\p{N}_.:-])([\\p{L}_][\\p{L}\\p{N}_.:-]*)(?=[^\\p{L}\\p{N}_.:-]|$)', 'gu');
   
   let match: RegExpExecArray | null;
   while ((match = tokenPattern.exec(expressionWithoutStrings)) !== null) {

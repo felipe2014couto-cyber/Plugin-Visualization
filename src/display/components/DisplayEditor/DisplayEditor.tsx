@@ -173,6 +173,7 @@ export interface DisplayEditorProps {
   showToolbar?: boolean;
   loadRecordedData?: DisplayDataLoader;
   loadInterpolatedData?: DisplayDataLoader;
+  presentationMode?: boolean;
 }
 
 interface PendingDocumentTransaction {
@@ -245,6 +246,7 @@ export function DisplayEditor({
   loadRecordedData,
   loadInterpolatedData,
   onSelectionChange,
+  presentationMode = false,
 }: DisplayEditorProps) {
   const styles = useStyles2(getStyles);
   const [state, baseDispatch] = useReducer(editorReducer, initialEditorState);
@@ -447,7 +449,7 @@ export function DisplayEditor({
   }, [publishDocument, reconcileSelection]);
   useEffect(() => {
     setHeaderPortalTarget(document.getElementById('pims-vision-header-portal'));
-  }, []);
+  }, [presentationMode]);
 
   useEffect(() => {
     if (!editingDisplayName) {
@@ -1961,9 +1963,27 @@ export function DisplayEditor({
     }
   }, [displayDocument.elements, handleTrendOpen, trendRefreshKey]);
 
+  const presentationMountedRef = useRef(false);
+  useEffect(() => {
+    if (!presentationMountedRef.current) {
+      presentationMountedRef.current = true;
+      if (!presentationMode) {
+        return;
+      }
+    }
+    if (presentationMode) {
+      setMode('view');
+      onModeChange?.('view');
+    }
+    const timeout = setTimeout(() => {
+      handleZoomFit();
+    }, 60);
+    return () => clearTimeout(timeout);
+  }, [presentationMode, handleZoomFit, onModeChange]);
+
   return (
     <div ref={editorContainerRef} className={styles.container} data-testid="display-editor" onKeyDownCapture={handleEditorKeyDown}>
-      <div className={styles.header}>
+      <div className={styles.header} style={{ display: presentationMode ? 'none' : undefined }}>
         <div className={styles.headerPrimary}>
           <div className={styles.displayLabel}>
             <span className={styles.displayLabelPrefix}>Display:</span>

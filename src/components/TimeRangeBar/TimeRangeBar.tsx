@@ -14,6 +14,7 @@ export interface TimeRangeBarProps {
   selection: DisplayTimeSelection;
   onChange: (selection: DisplayTimeSelection) => void;
   compact?: boolean;
+  presentationMode?: boolean;
 }
 
 const QUICK_RANGES = [
@@ -28,6 +29,7 @@ export function TimeRangeBar({
   selection,
   onChange,
   compact = false,
+  presentationMode = false,
 }: TimeRangeBarProps) {
   const styles = useStyles2(getStyles);
   const [startExpression, setStartExpression] = useState(selection.startExpression);
@@ -64,10 +66,17 @@ export function TimeRangeBar({
     }
   };
 
+  const isPres = presentationMode;
+
   return (
-    <form className={`${styles.bar} ${compact ? styles.compactBar : ''}`} data-testid="time-range-bar" aria-label="Período do display" onSubmit={apply}>
+    <form
+      className={`${styles.bar} ${isPres ? styles.presentationBar : (compact ? styles.compactBar : '')}`}
+      data-testid="time-range-bar"
+      aria-label="Período do display"
+      onSubmit={apply}
+    >
       {quickRangesOpen && (
-        <div className={`${styles.quickRanges} ${compact ? styles.compactQuickRanges : ''}`} role="group" aria-label="Períodos rápidos" data-testid="time-range-presets">
+        <div className={`${styles.quickRanges} ${compact || isPres ? styles.compactQuickRanges : ''}`} role="group" aria-label="Períodos rápidos" data-testid="time-range-presets">
           {QUICK_RANGES.map((quickRange) => {
             const selected = selection.endExpression === '*' && selection.startExpression === `*-${quickRange.expression}`;
             return (
@@ -86,21 +95,21 @@ export function TimeRangeBar({
         </div>
       )}
       <input
-        className={error ? styles.inputError : styles.input}
+        className={error ? (isPres ? styles.presentationInputError : styles.inputError) : (isPres ? styles.presentationInput : styles.input)}
         value={startExpression}
         data-testid="time-range-start"
         aria-label="Início do período"
         title="Início: use *-8h, *-30m ou uma data"
         onChange={(event) => setStartExpression(event.target.value)}
       />
-      <button type="submit" className={styles.iconButton} data-testid="time-range-apply" aria-label="Aplicar período" title="Aplicar período">
+      <button type="submit" className={isPres ? styles.presentationIconButton : styles.iconButton} data-testid="time-range-apply" aria-label="Aplicar período" title="Aplicar período">
         <RefreshIcon />
       </button>
-      <div className={styles.navigation} role="group" aria-label="Navegar no tempo">
-        <button type="button" className={styles.arrowButton} data-testid="time-range-back" aria-label="Período anterior" title="Período anterior" onClick={() => shift(-1)}><span className={styles.arrowLeft} /></button>
+      <div className={isPres ? styles.presentationNavigation : styles.navigation} role="group" aria-label="Navegar no tempo">
+        <button type="button" className={isPres ? styles.presentationArrowButton : styles.arrowButton} data-testid="time-range-back" aria-label="Período anterior" title="Período anterior" onClick={() => shift(-1)}><span className={isPres ? styles.presentationArrowLeft : styles.arrowLeft} /></button>
         <button
           type="button"
-          className={styles.duration}
+          className={isPres ? styles.presentationDuration : styles.duration}
           data-testid="time-range-duration"
           title="Selecionar duração do período"
           aria-label="Selecionar duração do período"
@@ -109,12 +118,12 @@ export function TimeRangeBar({
         >
           {duration}
         </button>
-        <button type="button" className={styles.arrowButton} data-testid="time-range-forward" aria-label="Próximo período" title="Próximo período" onClick={() => shift(1)}><span className={styles.arrowRight} /></button>
+        <button type="button" className={isPres ? styles.presentationArrowButton : styles.arrowButton} data-testid="time-range-forward" aria-label="Próximo período" title="Próximo período" onClick={() => shift(1)}><span className={isPres ? styles.presentationArrowRight : styles.arrowRight} /></button>
       </div>
       {error && <span className={styles.error} role="alert">Período inválido</span>}
-      <button type="button" className={styles.nowButton} data-testid="time-range-now" onClick={now}>Agora</button>
+      <button type="button" className={isPres ? styles.presentationNowButton : styles.nowButton} data-testid="time-range-now" onClick={now}>Agora</button>
       <input
-        className={error ? styles.inputError : styles.input}
+        className={error ? (isPres ? styles.presentationInputError : styles.inputError) : (isPres ? styles.presentationInput : styles.input)}
         value={endExpression}
         data-testid="time-range-end"
         aria-label="Fim do período"
@@ -304,6 +313,135 @@ const getStyles = (_theme: GrafanaTheme2) => ({
     color: var(--danger);
     font-size: 10px;
     white-space: nowrap;
+  `,
+  presentationBar: css`
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 0 0 38px;
+    min-height: 38px;
+    gap: 6px;
+    margin: 2px 8px;
+    padding: 3px 10px;
+    box-sizing: border-box;
+    color: var(--text-secondary);
+    background: var(--surface-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background: linear-gradient(110deg, var(--surface-primary), var(--surface-secondary));
+    overflow: visible;
+  `,
+  presentationInput: css`
+    width: 142px;
+    height: 30px;
+    box-sizing: border-box;
+    padding: 2px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    outline: none;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    text-align: center;
+    font-size: 11px;
+
+    &:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--focus-ring);
+    }
+  `,
+  presentationInputError: css`
+    width: 142px;
+    height: 30px;
+    box-sizing: border-box;
+    padding: 2px 8px;
+    border: 1px solid var(--danger);
+    border-radius: 2px;
+    outline: none;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    text-align: center;
+    font-size: 11px;
+  `,
+  presentationIconButton: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: var(--button-bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+
+    &:hover { color: var(--text-primary); background: var(--button-hover); }
+
+    svg {
+      width: 14px;
+      height: 14px;
+    }
+  `,
+  presentationNavigation: css`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    margin: 0 auto;
+  `,
+  presentationArrowButton: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--button-bg);
+    cursor: pointer;
+  `,
+  presentationArrowLeft: css`
+    width: 0;
+    height: 0;
+    border-top: 7px solid transparent;
+    border-bottom: 7px solid transparent;
+    border-right: 19px solid var(--text-secondary);
+  `,
+  presentationArrowRight: css`
+    width: 0;
+    height: 0;
+    border-top: 7px solid transparent;
+    border-bottom: 7px solid transparent;
+    border-left: 19px solid var(--text-secondary);
+  `,
+  presentationDuration: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 88px;
+    height: 30px;
+    box-sizing: border-box;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    background: var(--button-bg);
+    font-size: 11px;
+    cursor: pointer;
+
+    &:hover { color: var(--text-primary); border-color: var(--accent-hover); }
+  `,
+  presentationNowButton: css`
+    width: 95px;
+    height: 30px;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    color: var(--text-primary);
+    background: var(--selection-bg);
+    font-size: 11px;
+    cursor: pointer;
+
+    &:hover { color: var(--text-primary); border-color: var(--accent-hover); }
   `,
 });
 

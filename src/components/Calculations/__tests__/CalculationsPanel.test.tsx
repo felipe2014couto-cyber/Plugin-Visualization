@@ -124,4 +124,25 @@ describe('CalculationsPanel', () => {
     expect(screen.getByRole('button', { name: 'Teste' })).toHaveAttribute('draggable', 'true');
     expect(dataTransfer.setData).toHaveBeenCalledWith(CALCULATION_DRAG_MIME, '1');
   });
+
+  it('exibe indicador de uso apenas quando o cálculo está presente no documento', () => {
+    const docWithCalc: any = {
+      schemaVersion: 1,
+      id: 'doc-1',
+      name: 'Painel',
+      surface: { width: 800, height: 600, backgroundColor: '#000' },
+      calculations: [
+        { id: 'calc-1', name: 'Total Produção', expression: '10 + 20', inputs: [] },
+        { id: 'calc-2', name: 'Não Usado', expression: '5 * 2', inputs: [] },
+      ],
+      elements: [
+        { id: 'el-1', type: 'value', x: 0, y: 0, width: 100, height: 50, properties: { calculationId: 'calc-1' } },
+      ],
+    };
+
+    render(<CalculationsPanel document={docWithCalc} />);
+
+    expect(screen.getByTestId('calculation-in-use-calc-1')).toHaveTextContent('Em uso');
+    expect(screen.queryByTestId('calculation-in-use-calc-2')).toBeNull();
+  });
 });

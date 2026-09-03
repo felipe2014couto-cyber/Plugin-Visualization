@@ -11,6 +11,10 @@ function escapeScriptEnd(value: string): string {
   return value.replace(/<\s*\/\s*script/gi, '<\\/script');
 }
 
+function escapeStyleEnd(value: string): string {
+  return value.replace(/<\s*\/\s*style/gi, '<\\/style');
+}
+
 function serializeContext(piPoints: ProgrammingPiPointContext[] = []): string {
   const piPointsByName = Object.fromEntries(piPoints.map((point) => [point.name, point]));
   return JSON.stringify({
@@ -26,8 +30,9 @@ function serializeContext(piPoints: ProgrammingPiPointContext[] = []): string {
 
 export function buildProgrammingSrcDoc(document: ProgrammingDocument, piPoints?: ProgrammingPiPointContext[]): string {
   const script = escapeScriptEnd(document.javascript);
+  const style = escapeStyleEnd(document.css);
   return `<!doctype html>
-<html><head><meta charset="utf-8"><style>${document.css}</style></head>
+<html><head><meta charset="utf-8"><style>${style}</style></head>
 <body>${document.html}<script>window.pimsVision = Object.freeze(${serializeContext(piPoints)});</script><script>try {\n${script}\n} catch (error) {\n  const output = document.createElement('pre');\n  output.textContent = String(error);\n  output.style.cssText = 'color:#f87171;white-space:pre-wrap;font:12px monospace;padding:8px';\n  document.body.appendChild(output);\n}</script></body></html>`;
 }
 

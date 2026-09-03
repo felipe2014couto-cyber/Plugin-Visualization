@@ -11,7 +11,7 @@ export const DATA_QUERY_HISTORICAL_TIMEOUT_MS = 30_000;
 // Snapshot values can be fetched together without the data volume of a trend;
 // keep this policy independent from the more expensive historical queries.
 export const DATA_QUERY_CURRENT_MAX_TARGETS = 60;
-export const DATA_QUERY_CURRENT_TIMEOUT_MS = 3_000;
+export const DATA_QUERY_CURRENT_TIMEOUT_MS = 10_000;
 // Current values are small, short-lived requests. One extra worker reduces
 // the initial loading waves without changing the more expensive trend limit.
 export const DATA_QUERY_CURRENT_MAX_CONCURRENT_BATCHES = 3;

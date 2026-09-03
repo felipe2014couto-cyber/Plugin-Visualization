@@ -12,9 +12,9 @@ export function pairXYByTimestamp(xs: readonly XYHistoricalPoint[], ys: readonly
   const pairs: XYPair[] = [];
   for (const x of xs.filter(valid)) {
     const nextIndex = sortedY.findIndex((point) => point.time >= x.time);
-    const next = nextIndex < 0 ? undefined : sortedY[nextIndex];
+    const next = nextIndex >= 0 ? sortedY[nextIndex] : undefined;
     const exact = next?.time === x.time ? next : undefined;
-    const previous = exact ?? (nextIndex < 0 ? sortedY[sortedY.length - 1] : nextIndex > 0 ? sortedY[nextIndex - 1] : undefined);
+    const previous = exact ?? (nextIndex < 0 ? (sortedY.length > 0 ? sortedY[sortedY.length - 1] : undefined) : nextIndex > 0 ? sortedY[nextIndex - 1] : undefined);
     let y: number | undefined;
     if (method === 'exact') y = exact?.value;
     else if (method === 'previous') y = previous?.value;

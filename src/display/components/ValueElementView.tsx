@@ -53,7 +53,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const visual = getValueVisualOptions(element.properties);
   const currentState = runtimeState ?? state;
   const isCalculation = !element.properties.binding && !!element.properties.calculationId;
-  const lines = getValueLines(currentState, visual, label ?? binding?.pointName ?? '', isCalculation);
+  const lines = getValueLines(currentState, visual, label ?? binding?.pointName ?? '', isCalculation, element.width);
   const runtimeVal = getRuntimeValue(runtimeState ?? state);
   const textColor = getMultistateColor(runtimeVal, element.properties.multistate, resolveThemeForeground(visual.color));
   const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, visual.backgroundColor || 'transparent');
@@ -114,7 +114,8 @@ function getValueLines(
   state: ValueLoadState | ValueRuntimeState,
   visual: ValueVisualOptions,
   pointName: string,
-  isCalculation = false
+  isCalculation = false,
+  elementWidth = 100
 ): string[] {
   let valueText: string;
   const result = state.status === 'loading' ? undefined : state.result;
@@ -135,10 +136,11 @@ function getValueLines(
     lines.push(label);
   }
   if (visual.showValue) {
-    // PI Vision presents the engineering unit alongside the value instead of
-    // consuming a separate line. This keeps the reading compact and prevents
-    // the value/unit pair from appearing detached in small elements.
-    lines.push(visual.showUnit && result?.unit ? `${valueText} ${result.unit}` : valueText);
+    if (valueText === 'Calc Failed' && elementWidth < 100) {
+      lines.push('Calc', 'Failed');
+    } else {
+      lines.push(visual.showUnit && result?.unit ? `${valueText} ${result.unit}` : valueText);
+    }
   } else if (visual.showUnit && result?.unit) {
     lines.push(result.unit);
   }
@@ -172,9 +174,19 @@ export function formatValue(value: unknown, visual: ValueVisualOptions = getValu
     if ('Value' in rec && rec.Value !== undefined) return formatValue(rec.Value, visual);
     if ('value' in rec && rec.value !== undefined) return formatValue(rec.value, visual);
   }
-  return typeof value === 'number' && Number.isFinite(value) && visual.decimals !== null
-    ? value.toFixed(visual.decimals)
-    : String(value);
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (visual.decimals !== null && visual.decimals !== undefined) {
+      return value.toFixed(visual.decimals);
+    }
+    const str = String(value);
+    const dotIndex = str.indexOf('.');
+    if (dotIndex >= 0 && str.length - dotIndex - 1 > 2) {
+      const rounded = Math.round(value * 100) / 100;
+      return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+    }
+    return str;
+  }
+  return String(value);
 }
 
 function getTextX(element: ValueElement, textAlign: ValueVisualOptions['textAlign']): number {

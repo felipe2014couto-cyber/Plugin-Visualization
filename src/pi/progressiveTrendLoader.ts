@@ -337,10 +337,12 @@ function isFresh(storedAt: number | undefined): boolean {
 }
 
 function trimEntries(entries: Map<string, TrendCacheEntry>, currentKey: string): void {
-  while (entries.size > TREND_CACHE_MAX_ENTRIES) {
-    const key = entries.keys().next().value as string | undefined;
-    if (!key || key === currentKey) {
-      return;
+  for (const key of entries.keys()) {
+    if (entries.size <= TREND_CACHE_MAX_ENTRIES) {
+      break;
+    }
+    if (key === currentKey) {
+      continue;
     }
     entries.delete(key);
   }

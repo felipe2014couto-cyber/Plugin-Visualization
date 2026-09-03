@@ -60,7 +60,11 @@ export function hasRedo(history: DisplayHistoryState): boolean {
 }
 
 export function areDisplayDocumentsEqual(left: DisplayDocument, right: DisplayDocument): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  if (left === right) {
+    return true;
+  }
+  return JSON.stringify(left, (_, value) => (value === undefined ? null : value))
+    === JSON.stringify(right, (_, value) => (value === undefined ? null : value));
 }
 
 function cloneDisplayDocument(document: DisplayDocument): DisplayDocument {

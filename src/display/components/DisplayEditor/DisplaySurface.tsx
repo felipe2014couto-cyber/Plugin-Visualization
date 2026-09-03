@@ -78,19 +78,29 @@ const themedDefaultSurface = css`
   fill: var(--canvas-bg);
 `;
 
+const lastCalculationValues = new Map<string, ValueRuntimeState>();
+
 function evaluateCalculationFromRuntime(
   calculation: CalculationDefinition,
   states: Array<ValueRuntimeState | undefined>,
 ) {
   const values = new Map<string, unknown>();
   for (const [index, state] of states.entries()) {
-    if (!state || state.status === 'loading') {
+    if (!state) {
       return { status: 'loading' as const };
     }
-    if (state.status === 'error') {
-      return { status: 'error' as const, error: new Error('Consulta PI indisponível.') };
+    // Prioriza o valor atual de sucesso; se em erro ou carregando, aproveita o último valor preservado no estado
+    const resolvedValue = state.status === 'success'
+      ? state.result.value
+      : (state.result && state.result.value !== undefined ? state.result.value : undefined);
+
+    if (resolvedValue === undefined) {
+      if (state.status === 'error') {
+        return { status: 'error' as const, error: new Error('Consulta PI indisponível.') };
+      }
+      return { status: 'loading' as const };
     }
-    values.set(calculation.inputs[index].name, state.result.value);
+    values.set(calculation.inputs[index].name, resolvedValue);
   }
   return evaluateCalculation(calculation, values);
 }
@@ -104,11 +114,22 @@ function calculationValueRuntimeState(
     calculation,
     calculation.inputs.map((input) => runtimeStates.get(`${elementId}:${input.name}`)),
   );
+  const previous = lastCalculationValues.get(elementId);
+
   if (evaluation.status === 'loading') {
+    // Mantém o último valor válido enquanto novas leituras estão em trânsito
+    if (previous) {
+      return previous;
+    }
     return { status: 'loading' };
   }
+
   if (evaluation.status === 'error') {
-    return { status: 'error' };
+    // Se a falha for temporária de rede/consulta PI e temos valor anterior válido, preserva o último valor
+    if (previous && evaluation.error?.message === 'Consulta PI indisponível.') {
+      return previous;
+    }
+    return { status: 'error', result: { value: 'Calc Failed' } };
   }
   let maxTimestamp: string | undefined;
   for (const input of calculation.inputs) {
@@ -119,7 +140,9 @@ function calculationValueRuntimeState(
       }
     }
   }
-  return { status: 'success', result: { value: evaluation.value, timestamp: maxTimestamp || new Date().toISOString() } };
+  const nextState: ValueRuntimeState = { status: 'success', result: { value: evaluation.value, timestamp: maxTimestamp || new Date().toISOString() } };
+  lastCalculationValues.set(elementId, nextState);
+  return nextState;
 }
 
 interface CursorSelection {
@@ -322,12 +345,19 @@ export function DisplaySurface({
       const calculation = calculations.find((item) => item.id === element.properties.calculationId);
       return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
     }
-    const calculationId = typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
+    const rawCalculationId = typeof (element.properties as { calculationId?: unknown }).calculationId === 'string'
       ? (element.properties as { calculationId: string }).calculationId
       : undefined;
-    if (calculationId && (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE || element.type === TEXT_TYPE)) {
-      const calculation = calculations.find((item) => item.id === calculationId);
-      return calculation?.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding })) ?? [];
+    const calc = rawCalculationId
+      ? calculations.find((item) => item.id === rawCalculationId)
+      : (isPiPointBinding(element.properties.binding)
+          ? calculations.find((item) => {
+              const pName = (element.properties.binding as PiPointBinding).pointName;
+              return item.name === pName || item.name === `${pName}_CALC` || item.name.replace(/_CALC$/i, '') === pName.replace(/_CALC$/i, '');
+            })
+          : undefined);
+    if (calc && (element.type === VALUE_TYPE || element.type === GAUGE_TYPE || element.type === BAR_TYPE || element.type === RECTANGLE_TYPE || element.type === LIBRARY_SYMBOL_TYPE || element.type === TEXT_TYPE)) {
+      return calc.inputs.map((input) => ({ elementId: `${element.id}:${input.name}`, binding: input.binding }));
     }
     if (element.type === PROGRAMMING_TYPE) {
       return (element as ProgrammingElement).properties.query.map((item, index) => ({
@@ -1120,9 +1150,10 @@ export function DisplaySurface({
             return <CalculationElementView key={element.id} element={element as CalculationElement} calculationName={calculation.name} evaluation={evaluation} />;
           }
           if (element.type === GAUGE_TYPE) {
+            const gaugeBindingName = isPiPointBinding(element.properties.binding) ? element.properties.binding.pointName : '';
             const calculation = typeof element.properties.calculationId === 'string'
               ? calculations.find((item) => item.id === element.properties.calculationId)
-              : undefined;
+              : (gaugeBindingName ? calculations.find((item) => item.name === gaugeBindingName || item.name === `${gaugeBindingName}_CALC` || item.name.replace(/_CALC$/i, '') === gaugeBindingName.replace(/_CALC$/i, '')) : undefined);
             return (
               <GaugeElementView
                 key={element.id}
@@ -1247,17 +1278,12 @@ export function DisplaySurface({
             const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
             const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
             const rotation = textElement.properties.rotation ?? 0;
-            // PI Vision keeps Text on one line and scales the whole vector to
-            // the symbol bounds. Use a uniform SVG transform so glyphs keep
-            // their aspect ratio while the box is resized.
-            const textValue = decodeRenderedText(textElement.properties.text || '').replace(/[\r\n]+/g, ' ');
-            const fontSize = textElement.properties.fontSize || 24;
-            const estimatedTextWidth = Math.max(fontSize, Array.from(textValue).length * fontSize * 0.58);
-            const textScale = Math.max(0.05, Math.min(20,
-              (textElement.width - 12) / estimatedTextWidth,
-              (textElement.height - 8) / fontSize,
-            ));
-            const textCenterY = textElement.y + textElement.height / 2;
+            const rawText = decodeRenderedText(textElement.properties.text || '');
+            const lines = rawText.includes('\n') ? rawText.split('\n') : [rawText];
+            const fontSize = textElement.properties.fontSize || 16;
+            const lineHeight = fontSize * 1.25;
+            const totalHeight = lines.length * lineHeight;
+            const startY = textElement.y + (textElement.height - totalHeight) / 2 + fontSize * 0.85;
             return (
               <g
                 key={element.id}
@@ -1286,17 +1312,23 @@ export function DisplaySurface({
                   pointerEvents="all"
                 />
                 <text
-                  x={x}
-                  y={textCenterY}
                   fill={textColor}
                   fontSize={fontSize}
                   textAnchor={anchor}
-                  dominantBaseline="middle"
-                  transform={`translate(${x} ${textCenterY}) scale(${textScale}) translate(${-x} ${-textCenterY})`}
                   pointerEvents="none"
                   style={textBlink ? { animation: 'pimsMultistateBlink .8s steps(2, start) infinite' } : undefined}
                 >
-                  {textValue}
+                  {lines.length === 1 ? (
+                    <tspan x={x} y={textElement.y + textElement.height / 2} dominantBaseline="middle">
+                      {lines[0]}
+                    </tspan>
+                  ) : (
+                    lines.map((line, idx) => (
+                      <tspan key={idx} x={x} y={startY + idx * lineHeight}>
+                        {line}
+                      </tspan>
+                    ))
+                  )}
                 </text>
               </g>
             );
