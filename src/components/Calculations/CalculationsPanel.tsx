@@ -4,6 +4,7 @@ import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import type { PiPointSearchResult, PiPointValue } from '../../pi/piDataSource';
 import type { DisplayDocument } from '../../display/displayDocument';
+import type { DisplayElement } from '../../display/displayElement';
 import type { CalculationDefinition } from '../../calculations/calculationEngine';
 import { CALCULATION_DRAG_MIME, serializeCalculationDragData } from '../../calculations/calculationDrag';
 import { CalculationEditorDialog, type CalculationDraft } from './CalculationEditorDialog';
@@ -89,31 +90,44 @@ export function CalculationsPanel({ document, onChange, resolvePiPoint, loadValu
             </div>
           ) : (
             <ul className={styles.list}>
-              {calculations.map((calculation) => (
-                <li key={calculation.id} className={styles.calculation} data-testid={`calculation-${calculation.id}`}>
-                  <button
-                    type="button"
-                    className={styles.calculationOpen}
-                    draggable
-                    title={`Arraste ${calculation.name} para o display`}
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = 'copy';
-                      event.dataTransfer.setData(CALCULATION_DRAG_MIME, serializeCalculationDragData(calculation.id));
-                      event.dataTransfer.setData('text/plain', calculation.name);
-                      hideNativeDragImage(event.dataTransfer);
-                    }}
-                    onClick={() => openExistingCalculation(calculation)}
-                  >
-                    <span className={styles.calculationIcon}><CalculatorIcon /></span>
-                    <span className={styles.calculationText}>
-                      <strong>{calculation.name}</strong>
-                    </span>
-                  </button>
-                  <div className={styles.actions}>
-                    <button type="button" className={styles.removeButton} aria-label={`Remover ${calculation.name}`} onClick={() => updateCalculations(calculations.filter((item) => item.id !== calculation.id))}>Remover</button>
-                  </div>
-                </li>
-              ))}
+              {calculations.map((calculation) => {
+                const inUse = isCalculationInUse(document?.elements, calculation.id);
+                return (
+                  <li key={calculation.id} className={styles.calculation} data-testid={`calculation-${calculation.id}`}>
+                    <button
+                      type="button"
+                      className={styles.calculationOpen}
+                      draggable
+                      title={`Arraste ${calculation.name} para o display`}
+                      onDragStart={(event) => {
+                        event.dataTransfer.effectAllowed = 'copy';
+                        event.dataTransfer.setData(CALCULATION_DRAG_MIME, serializeCalculationDragData(calculation.id));
+                        event.dataTransfer.setData('text/plain', calculation.name);
+                        hideNativeDragImage(event.dataTransfer);
+                      }}
+                      onClick={() => openExistingCalculation(calculation)}
+                    >
+                      <span className={styles.calculationIcon}><CalculatorIcon /></span>
+                      <span className={styles.calculationText}>
+                        <strong>{calculation.name}</strong>
+                      </span>
+                    </button>
+                    <div className={styles.actions}>
+                      {inUse && (
+                        <span
+                          className={styles.inUseBadge}
+                          data-testid={`calculation-in-use-${calculation.id}`}
+                          title="Este cálculo está em uso no dashboard"
+                        >
+                          <InUseIcon />
+                          <span>Em uso</span>
+                        </span>
+                      )}
+                      <button type="button" className={styles.removeButton} aria-label={`Remover ${calculation.name}`} onClick={() => updateCalculations(calculations.filter((item) => item.id !== calculation.id))}>Remover</button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -232,6 +246,26 @@ const getStyles = (theme: GrafanaTheme2) => ({
     gap: 3px;
   `,
   actions: css`display: flex; align-items: center; justify-content: flex-end; gap: 7px;`,
+  inUseBadge: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background: rgba(52, 211, 153, 0.15);
+    border: 1px solid rgba(52, 211, 153, 0.35);
+    color: #34d399;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+    user-select: none;
+    svg {
+      width: 10px;
+      height: 10px;
+      flex-shrink: 0;
+    }
+  `,
   removeButton: css`
     padding: 2px 3px;
     border: 0;
@@ -259,4 +293,38 @@ function CalculatorIcon() {
     <rect x="5" y="3" width="14" height="18" rx="2" />
     <path d="M8 7h8M8 11h2M14 11h2M8 15h2M14 15h2M8 18h2M14 18h2" />
   </svg>;
+}
+
+function InUseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
+    </svg>
+  );
+}
+
+function isCalculationInUse(elements: DisplayElement[] | undefined, calculationId: string): boolean {
+  if (!elements || elements.length === 0) {
+    return false;
+  }
+  for (const element of elements) {
+    const props = element.properties as Record<string, unknown> | undefined;
+    if (!props) {
+      continue;
+    }
+    if (props.calculationId === calculationId) {
+      return true;
+    }
+    if (Array.isArray(props.series)) {
+      if (props.series.some((s) => typeof s === 'object' && s !== null && (s as Record<string, unknown>).calculationId === calculationId)) {
+        return true;
+      }
+    }
+    if (Array.isArray(props.elements)) {
+      if (isCalculationInUse(props.elements as DisplayElement[], calculationId)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
