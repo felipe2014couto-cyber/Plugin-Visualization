@@ -899,7 +899,20 @@ function convertText(
       : {}),
   };
 
-  return makeElement(TEXT_TYPE, geo, properties, existingIds);
+  const textGeo = { ...geo };
+  const textLines = text.split('\n');
+  const longestLine = Math.max(1, ...textLines.map((l) => l.length));
+  const lineCount = Math.max(1, textLines.length);
+  const minWidth = Math.ceil(longestLine * fontSize * 0.65 + 16);
+  const minHeight = Math.ceil(lineCount * fontSize * 1.3);
+  if (textGeo.width < minWidth) {
+    textGeo.width = minWidth;
+  }
+  if (textGeo.height < minHeight) {
+    textGeo.height = minHeight;
+  }
+
+  return makeElement(TEXT_TYPE, textGeo, properties, existingIds);
 }
 
 // ---------------------------------------------------------------------------
