@@ -1194,7 +1194,7 @@ export function DisplayEditor({
     ? getElementById(displayDocument, state.selectedElementId)
     : undefined;
 
-  const selectedValue = selectedElement && selectedElement.type === VALUE_TYPE && isPiPointBinding(selectedElement.properties.binding)
+  const selectedValue = selectedElement && selectedElement.type === VALUE_TYPE
     ? selectedElement as ValueElement
     : undefined;
 
@@ -2180,7 +2180,7 @@ export function DisplayEditor({
         {selectedValue && (
           <ValuePropertiesPanel
             options={selectedValue.properties.visual}
-            pointName={selectedValue.properties.binding?.pointName ?? ''}
+            pointName={selectedValue.properties.binding?.pointName ?? displayDocument.calculations?.find((c) => c.id === selectedValue.properties.calculationId)?.name ?? ''}
             binding={selectedValue.properties.binding}
             loadDigitalStates={loadDigitalStates}
             onChange={handleValueVisualChange}
@@ -2196,10 +2196,10 @@ export function DisplayEditor({
         )}
         {trendPointInfo && <PiPointInfoPanel {...trendPointInfo} onClose={() => setTrendPointInfo(null)} />}
         {selectedGauge && (
-          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName} binding={selectedGauge.properties.binding} loadDigitalStates={loadDigitalStates} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Gauge" pointName={selectedGauge.properties.binding?.pointName ?? displayDocument.calculations?.find((c) => c.id === selectedGauge.properties.calculationId)?.name} binding={selectedGauge.properties.binding} loadDigitalStates={loadDigitalStates} {...getGaugeOptions(selectedGauge.properties)} linkUrl={typeof selectedGauge.properties.linkUrl === 'string' ? selectedGauge.properties.linkUrl : undefined} openInNewTab={selectedGauge.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleGaugeChange} multistate={selectedGauge.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedBar && (
-          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName} binding={selectedBar.properties.binding} loadDigitalStates={loadDigitalStates} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} openInNewTab={selectedBar.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
+          <ScalePropertiesPanel kind="Bar" pointName={selectedBar.properties.binding?.pointName ?? displayDocument.calculations?.find((c) => c.id === selectedBar.properties.calculationId)?.name} binding={selectedBar.properties.binding} loadDigitalStates={loadDigitalStates} {...getBarOptions(selectedBar.properties)} linkUrl={typeof selectedBar.properties.linkUrl === 'string' ? selectedBar.properties.linkUrl : undefined} openInNewTab={selectedBar.properties.openInNewTab !== false} onLinkChange={handleLinkChange} onOpenInNewTabChange={handleLinkOpenInNewTabChange} onChange={handleBarChange} multistate={selectedBar.properties.multistate} onMultistateChange={handleMultistateChange} />
         )}
         {selectedBarChart && (
           <BarChartPropertiesPanel

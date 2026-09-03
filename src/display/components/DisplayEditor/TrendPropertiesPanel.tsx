@@ -37,7 +37,7 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
   return <aside className={styles.panel} data-testid="trend-properties-panel" aria-label="Opções da Trend">
     <div className={styles.heading}><strong>Opções de traço</strong></div>
     <label>Série<select value={selectedKey} onChange={(e) => setKey(e.currentTarget.value)}>{series.map((item) => <option key={trendBindingKey(item.binding)} value={trendBindingKey(item.binding)}>{item.binding.pointName}</option>)}</select></label>
-    <label>Título<input value={visual.title} onChange={(e) => onVisualChange({ title: e.currentTarget.value })} placeholder="Título do gráfico" /></label>
+    <label>Título<input type="text" value={visual.title} onChange={(e) => onVisualChange({ title: e.currentTarget.value })} placeholder="Título do gráfico" /></label>
     <strong className={styles.sectionHeading}>Traços</strong>
     <div className={styles.choiceRow} role="group" aria-label="Estilo de traço">
       <TrendChoiceButton label="Linha" active={visual.traceMode === 'line'} onClick={() => onVisualChange({ traceMode: 'line' })}><svg viewBox="0 0 64 40"><path d="M4 31 20 10l14 16L59 5" /></svg></TrendChoiceButton>
@@ -52,7 +52,7 @@ export function TrendPropertiesPanel({ element, onVisualChange, onSeriesChange, 
     </div>
     <ColorControl label="Primeiro plano" color={visual.foregroundColor || '#d8dee9'} onChange={(foregroundColor) => onVisualChange({ foregroundColor })} />
     <ColorControl label="Plano de fundo" color={visual.backgroundColor || '#111923'} onChange={(backgroundColor) => onVisualChange({ backgroundColor })} />
-    <label>Rótulo da legenda<input value={selected.legendLabel ?? selected.binding.pointName} onChange={(e) => onSeriesChange(selectedKey, { legendLabel: e.currentTarget.value })} /></label>
+    <label>Rótulo da legenda<input type="text" value={selected.legendLabel ?? selected.binding.pointName} onChange={(e) => onSeriesChange(selectedKey, { legendLabel: e.currentTarget.value })} /></label>
     <ColorControl label="Cor" color={selected.color} onChange={(color) => onSeriesChange(selectedKey, { color })} />
     <label>Espessura <span className={styles.rangeValue}>{selected.lineWidth ?? 2}</span><input type="range" min="1" max="8" value={selected.lineWidth ?? 2} onChange={(e) => onSeriesChange(selectedKey, { lineWidth: Number(e.currentTarget.value) })} /></label>
     <button type="button" className={styles.removeButton} disabled={series.length <= 1} onClick={() => onSeriesRemove(selectedKey)}>Excluir tag selecionada</button>
