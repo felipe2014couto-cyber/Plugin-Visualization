@@ -1776,12 +1776,12 @@ async function queryCurrentValues(
   return withTimeout(
     resolveQueryResponse(instance.query(buildCurrentValuesRequest(bindings, now))),
     remainingMs,
-    'Consulta de valores atuais excedeu o limite de 3 segundos',
+    'Consulta de valores atuais excedeu o tempo limite',
   );
 }
 
 function isCurrentValueTimeout(error: unknown): boolean {
-  return error instanceof Error && error.message === 'Consulta de valores atuais excedeu o limite de 3 segundos';
+  return error instanceof Error && (error.message.includes('Consulta de valores atuais excedeu') || error.message.includes('tempo limite'));
 }
 
 function markCurrentValueErrors(
