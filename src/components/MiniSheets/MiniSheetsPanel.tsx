@@ -657,7 +657,7 @@ export function MiniSheetsPanel({
                 : { col: coord.col, row: coord.row + 1 };
               const spillKey = `${spillCoord.col},${spillCoord.row}`;
               const spillCell = next.get(spillKey);
-              const outsideGrid = spillCoord.col >= TOTAL_COLS || spillCoord.row >= TOTAL_ROWS;
+              const outsideGrid = spillCoord.col < 0 || spillCoord.row < 0 || spillCoord.col >= TOTAL_COLS || spillCoord.row >= TOTAL_ROWS;
               const occupied = Boolean(spillCell && (spillCell.rawValue || spillCell.spilledFrom));
 
               if (outsideGrid || occupied) {
@@ -796,7 +796,7 @@ export function MiniSheetsPanel({
                 ? { col: coord.col + 1, row: coord.row }
                 : { col: coord.col, row: coord.row + 1 };
               const spillCell = next.get(`${spillCoord.col},${spillCoord.row}`);
-              if (spillCoord.col >= TOTAL_COLS || spillCoord.row >= TOTAL_ROWS || Boolean(spillCell && (spillCell.rawValue || spillCell.spilledFrom))) {
+              if (spillCoord.col < 0 || spillCoord.row < 0 || spillCoord.col >= TOTAL_COLS || spillCoord.row >= TOTAL_ROWS || Boolean(spillCell && (spillCell.rawValue || spillCell.spilledFrom))) {
                 next.set(key, { rawValue, displayValue: '#SPILL!', format: existing?.format });
                 return evaluateStaticFormulas(next).nextMap;
               }

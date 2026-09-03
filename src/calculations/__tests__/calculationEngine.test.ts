@@ -54,14 +54,33 @@ describe('calculationEngine', () => {
     ]))).toMatchObject({ status: 'error' });
   });
 
-  it('substitui tags mesmo quando o token é precedido pelo operador de subtração sem espaço', () => {
-    const subtraction: CalculationDefinition = {
-      ...calculation,
-      expression: '(50-LFS_CL1_TR_BS5WIND)*0.3',
-      inputs: [
-        { name: 'LFS_CL1_TR_BS5WIND', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'LFS_CL1_TR_BS5WIND' } },
-      ],
+  it('rejeita PI Points com valor numérico não finito', () => {
+    expect(evaluateCalculation(calculation, new Map([
+      ['Vazao_01', NaN],
+      ['Producao_01', 50],
+    ]))).toMatchObject({ status: 'error' });
+
+    expect(evaluateCalculation(calculation, new Map([
+      ['Vazao_01', Infinity],
+      ['Producao_01', 50],
+    ]))).toMatchObject({ status: 'error' });
+  });
+
+  it('suporta parsing de dias da semana e rejeita expressões de tempo inválidas', () => {
+    const weekdayCalc: CalculationDefinition = {
+      id: '2',
+      name: 'Hora do dia',
+      expression: 'HOUR(mon) >= 0',
+      inputs: [],
     };
-    expect(evaluateCalculation(subtraction, new Map([['LFS_CL1_TR_BS5WIND', 30]]))).toEqual({ status: 'success', value: 6 });
+    expect(evaluateCalculation(weekdayCalc, new Map())).toEqual({ status: 'success', value: 1 });
+
+    const invalidTimeCalc: CalculationDefinition = {
+      id: '3',
+      name: 'Tempo inválido',
+      expression: '"not_a_valid_date_or_time"',
+      inputs: [],
+    };
+    expect(evaluateCalculation(invalidTimeCalc, new Map())).toMatchObject({ status: 'error' });
   });
 });

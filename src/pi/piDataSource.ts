@@ -65,6 +65,20 @@ export interface PiPointSearchResponse {
 export const PI_POINT_SEARCH_MAX_RESULTS = 1000;
 const PI_POINT_SEARCH_DEFAULT_LIMIT = PI_POINT_SEARCH_MAX_RESULTS;
 const PI_POINT_METADATA_CONCURRENCY = 8;
+const PI_METADATA_CACHE_MAX_ENTRIES = 512;
+
+function setBoundedCache<K, V>(cache: Map<K, V>, key: K, value: V, maxEntries = PI_METADATA_CACHE_MAX_ENTRIES): void {
+  cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > maxEntries) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) {
+      break;
+    }
+    cache.delete(oldestKey);
+  }
+}
+
 const piPointMetadataCache = new Map<string, PiPointSearchResult>();
 const piPointDetailsMetadataCache = new Map<string, Promise<PiPointMetadata>>();
 
@@ -443,7 +457,7 @@ async function enrichPiPointMetadata(
       const response = await resourceApi.getResource(`/points/${encodeURIComponent(candidate.webId)}`);
       const metadata = normalizePiPointMetadata(response, dataSourceUid);
       if (metadata) {
-        piPointMetadataCache.set(cacheKey, metadata);
+        setBoundedCache(piPointMetadataCache, cacheKey, metadata);
         return { ...candidate, ...metadata };
       }
     } catch {
@@ -622,7 +636,7 @@ export async function getPiPointMetadata(
     piPointDetailsMetadataCache.delete(cacheKey);
     throw error;
   });
-  piPointDetailsMetadataCache.set(cacheKey, request);
+  setBoundedCache(piPointDetailsMetadataCache, cacheKey, request);
   return request;
 }
 
@@ -717,7 +731,7 @@ export function getPiPointDigitalStates(
     piDigitalStatesCache.delete(cacheKey);
     throw error;
   });
-  piDigitalStatesCache.set(cacheKey, request);
+  setBoundedCache(piDigitalStatesCache, cacheKey, request);
   return request;
 }
 
@@ -1252,10 +1266,8 @@ async function queryPiTrendsHistory(
               return;
             }
             const middle = Math.ceil(selected.length / 2);
-            await Promise.all([
-              resolveBatch(selected.slice(0, middle), queryError),
-              resolveBatch(selected.slice(middle), queryError),
-            ]);
+            await resolveBatch(selected.slice(0, middle), queryError);
+            await resolveBatch(selected.slice(middle), queryError);
             return;
           }
 
@@ -1275,10 +1287,8 @@ async function queryPiTrendsHistory(
           }
           if (response.error && selected.length > 1) {
             const middle = Math.ceil(selected.length / 2);
-            await Promise.all([
-              resolveBatch(selected.slice(0, middle), fallbackError),
-              resolveBatch(selected.slice(middle), fallbackError),
-            ]);
+            await resolveBatch(selected.slice(0, middle), fallbackError);
+            await resolveBatch(selected.slice(middle), fallbackError);
           }
         };
 
@@ -1656,7 +1666,7 @@ function markTrendErrors(
 }
 
 function getFieldValues(field: DataFrame['fields'][number]): unknown[] {
-  const values = field.values as unknown as { get?: (index: number) => unknown; toArray?: () => unknown[] } | unknown[];
+  const values = field.values as unknown as { get?: (index: number) => unknown; toArray?: () => unknown[]; length?: number } | unknown[];
   if (!values) {
     return [];
   }
@@ -1668,7 +1678,14 @@ function getFieldValues(field: DataFrame['fields'][number]): unknown[] {
   }
   if (typeof values.get === 'function') {
     const output: unknown[] = [];
-    for (let index = 0; index < 10_000; index += 1) {
+    const len = typeof values.length === 'number' ? values.length : undefined;
+    if (len !== undefined) {
+      for (let index = 0; index < len; index += 1) {
+        output.push(values.get(index));
+      }
+      return output;
+    }
+    for (let index = 0; ; index += 1) {
       const value = values.get(index);
       if (value === undefined) {
         break;

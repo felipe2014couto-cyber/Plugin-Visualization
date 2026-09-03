@@ -154,7 +154,7 @@ export class ValueRuntime {
     }
     const bindings = uniqueBindings([...this.consumers.values()].map(({ binding }) => binding));
     if (this.activeRequest) {
-      this.request(bindings);
+      void this.request(bindings);
       return;
     }
     const pending = [...this.pendingImmediate.values()]

@@ -446,7 +446,6 @@ export function App() {
       .catch(() => {
         if (active) {
           setDashboardLoadState(cachedDocument ? 'loaded' : 'error');
-          setSaveState('error');
         }
       });
 
@@ -621,9 +620,13 @@ export function App() {
   }, [document, activeModule, selectedElementIds]);
 
   const [lastExecutedSql, setLastExecutedSql] = useState<{ sql: string; result: OracleQueryResponse } | null>(null);
+  const lastExecutedSqlRef = useRef<{ sql: string; result: OracleQueryResponse } | null>(null);
+  lastExecutedSqlRef.current = lastExecutedSql;
 
   const handleSqlResultChange = useCallback((result: OracleQueryResponse, sql: string, config?: Record<string, any>) => {
-    setLastExecutedSql({ sql, result });
+    const executed = { sql, result };
+    lastExecutedSqlRef.current = executed;
+    setLastExecutedSql(executed);
     const appliedConfig = config || {};
     setDocument((prev) => {
       const existingIds = prev.elements.map((e) => e.id);
@@ -671,9 +674,10 @@ export function App() {
       if (!targetId) {
         // Se ainda não existir nenhuma tabela, cria uma nova com os dados e as configurações
         const existingIds = prev.elements.map((e) => e.id);
+        const currentExecutedSql = lastExecutedSqlRef.current;
         const newTable = createSqlTable({
-          sql: lastExecutedSql?.sql || '',
-          result: lastExecutedSql?.result || null,
+          sql: currentExecutedSql?.sql || '',
+          result: currentExecutedSql?.result || null,
           surface: prev.surface,
           existingIds,
           ...(config as any),
@@ -743,8 +747,8 @@ export function App() {
       }
 
       const documentToSave = { ...getDocumentWithProgrammingDraft(document, editingProgrammingElementId, programmingDraft), name: title };
-      setDocument(documentToSave);
       const saved = await savePimsVisionDashboard(documentToSave, undefined, saveFolderUid);
+      setDocument(documentToSave);
       setDashboardUid(saved.uid);
       cacheDashboardDocument(saved.uid, documentToSave);
       setDashboardLoadState('loaded');

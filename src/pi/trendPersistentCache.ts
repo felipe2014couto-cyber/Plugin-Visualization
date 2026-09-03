@@ -54,10 +54,13 @@ class IndexedDbTrendPersistentCache implements TrendPersistentCache {
       const database = await this.open();
       const transaction = database.transaction(STORE_NAME, 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      store.put({ key, storedAt: Date.now(), series } as StoredTrendSeries);
       const records = await requestAsPromise<StoredTrendSeries[]>(store.getAll());
-      const oldestFirst = records.sort((left, right) => left.storedAt - right.storedAt);
-      const expiredBefore = Date.now() - TREND_PERSISTENT_CACHE_TTL_MS;
+      const now = Date.now();
+      const newRecord: StoredTrendSeries = { key, storedAt: now, series };
+      store.put(newRecord);
+      const allRecords = [...records.filter((record) => record.key !== key), newRecord];
+      const oldestFirst = allRecords.sort((left, right) => left.storedAt - right.storedAt);
+      const expiredBefore = now - TREND_PERSISTENT_CACHE_TTL_MS;
       const freshRecords = oldestFirst.filter((record) => record.storedAt >= expiredBefore);
       const expiredRecords = oldestFirst.filter((record) => record.storedAt < expiredBefore);
       const overflow = Math.max(0, freshRecords.length - TREND_PERSISTENT_CACHE_MAX_ENTRIES);

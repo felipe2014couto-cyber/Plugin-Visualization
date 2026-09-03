@@ -44,7 +44,7 @@ export function evaluateCalculation(
       }
       continue;
     }
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
+    if (!Number.isFinite(value)) {
       return { status: 'error', error: new Error(`O PI Point "${input.name}" não possui um valor numérico.`) };
     }
     variables.set(key, value);
@@ -290,6 +290,16 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
 }
 
 
+const WEEKDAY_MAP: Record<string, number> = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+};
+
 function parsePiTime(str: string): number {
   const lower = str.toLowerCase();
   const now = new Date();
@@ -302,9 +312,19 @@ function parsePiTime(str: string): number {
     case 'y':
     case 'yesterday':
       return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime() / 1000);
-    default:
-      // Pode adicionar fallback para parsing mais avancado depois se quiser
-      return Math.floor(now.getTime() / 1000);
+    default: {
+      if (lower in WEEKDAY_MAP) {
+        const targetDay = WEEKDAY_MAP[lower];
+        const currentDay = now.getDay();
+        const delta = (currentDay - targetDay + 7) % 7;
+        return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate() - delta).getTime() / 1000);
+      }
+      const parsed = Date.parse(str);
+      if (!Number.isNaN(parsed)) {
+        return Math.floor(parsed / 1000);
+      }
+      throw new Error(`Expressão de tempo PI desconhecida: "${str}".`);
+    }
   }
 }
 
