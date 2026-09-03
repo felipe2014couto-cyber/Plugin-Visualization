@@ -108,7 +108,7 @@ function calculationValueRuntimeState(
     return { status: 'loading' };
   }
   if (evaluation.status === 'error') {
-    return { status: 'error' };
+    return { status: 'error', result: { value: 'Calc Failed' } };
   }
   return { status: 'success', result: { value: evaluation.value } };
 }

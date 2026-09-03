@@ -110,7 +110,7 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
     skipWhitespace();
     if (expression[cursor] === '(') {
       cursor += 1;
-      const value = parseAdditive();
+      const value = parseLogicalOr();
       skipWhitespace();
       if (expression[cursor] !== ')') {
         throw new Error('Parênteses não balanceados.');
@@ -180,26 +180,37 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
     }
     throw new Error(`Expressão inválida próxima de "${expression.slice(cursor, cursor + 12)}".`);
   };
+  const parsePower = (): number => {
+    let value = parsePrimary();
+    skipWhitespace();
+    if (expression[cursor] === '^' || expression.slice(cursor, cursor + 2) === '**') {
+      const isDouble = expression.slice(cursor, cursor + 2) === '**';
+      cursor += isDouble ? 2 : 1;
+      const right = parseUnary();
+      value = Math.pow(value, right);
+    }
+    return value;
+  };
   const parseUnary = (): number => {
     skipWhitespace();
     if (expression[cursor] === '+') { cursor += 1; return parseUnary(); }
     if (expression[cursor] === '-') { cursor += 1; return -parseUnary(); }
-    return parsePrimary();
+    return parsePower();
   };
   const parseMultiplicative = (): number => {
     let value = parseUnary();
     while (true) {
       skipWhitespace();
       const operator = expression[cursor];
-      if (operator !== '*' && operator !== '/') {
+      if (operator !== '*' && operator !== '/' && operator !== '%') {
         break;
       }
       cursor += 1;
       const right = parseUnary();
-      if (operator === '/' && right === 0) {
+      if ((operator === '/' || operator === '%') && right === 0) {
         throw new Error('Divisão por zero.');
       }
-      value = operator === '*' ? value * right : value / right;
+      value = operator === '*' ? value * right : operator === '/' ? value / right : value % right;
     }
     return value;
   };
@@ -223,6 +234,9 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
     while (true) {
       skipWhitespace();
       const operator = expression.slice(cursor, cursor + 2);
+      if (operator === '<>') {
+        break;
+      }
       const comparison = operator === '>=' || operator === '<=' ? operator : expression[cursor];
       if (!['>', '<', '>=', '<='].includes(comparison)) {
         break;
@@ -242,7 +256,7 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
     while (true) {
       skipWhitespace();
       const operator = expression.slice(cursor, cursor + 2);
-      if (operator !== '==' && operator !== '!=') {
+      if (operator !== '==' && operator !== '!=' && operator !== '<>') {
         break;
       }
       cursor += 2;
@@ -387,6 +401,58 @@ function evaluateFunction(name: string, values: number[]): number {
   if (normalizedName === 'NOT') {
     requireArgumentCount(name, values, 1);
     return Number(values[0] === 0);
+  }
+  if (normalizedName === 'POW' || normalizedName === 'POWER') {
+    requireArgumentCount(name, values, 2);
+    return Math.pow(values[0], values[1]);
+  }
+  if (normalizedName === 'SQRT') {
+    requireArgumentCount(name, values, 1);
+    if (values[0] < 0) {
+      throw new Error('Raiz quadrada de número negativo.');
+    }
+    return Math.sqrt(values[0]);
+  }
+  if (normalizedName === 'SQR') {
+    requireArgumentCount(name, values, 1);
+    return values[0] * values[0];
+  }
+  if (normalizedName === 'EXP') {
+    requireArgumentCount(name, values, 1);
+    return Math.exp(values[0]);
+  }
+  if (normalizedName === 'LOG' || normalizedName === 'LN') {
+    requireArgumentCount(name, values, 1);
+    if (values[0] <= 0) {
+      throw new Error('Logaritmo de número não positivo.');
+    }
+    return Math.log(values[0]);
+  }
+  if (normalizedName === 'LOG10') {
+    requireArgumentCount(name, values, 1);
+    if (values[0] <= 0) {
+      throw new Error('Logaritmo de número não positivo.');
+    }
+    return Math.log10(values[0]);
+  }
+  if (normalizedName === 'MOD') {
+    requireArgumentCount(name, values, 2);
+    if (values[1] === 0) {
+      throw new Error('Divisão por zero em MOD.');
+    }
+    return values[0] % values[1];
+  }
+  if (normalizedName === 'SIN') {
+    requireArgumentCount(name, values, 1);
+    return Math.sin(values[0]);
+  }
+  if (normalizedName === 'COS') {
+    requireArgumentCount(name, values, 1);
+    return Math.cos(values[0]);
+  }
+  if (normalizedName === 'TAN') {
+    requireArgumentCount(name, values, 1);
+    return Math.tan(values[0]);
   }
   if (normalizedName === 'WHILE') {
     throw new Error('WHILE não é suportado em cálculos, pois a expressão precisa sempre terminar. Use IF para condições.');
