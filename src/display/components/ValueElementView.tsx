@@ -59,7 +59,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, visual.backgroundColor || 'transparent');
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
-  const responsiveFontSize = element.properties._piVisionPreserveFontSize === true && visual.fontSize >= 18
+  const responsiveFontSize = element.properties._piVisionPreserveFontSize === true
     ? visual.fontSize
     : getResponsiveFontSize(element, visual.fontSize, lines);
   const textBlink = evaluateMultistate(runtimeVal, element.properties.multistate)?.rule.blink === true;
@@ -196,21 +196,14 @@ function getTextX(element: ValueElement, textAlign: ValueVisualOptions['textAlig
  * two fit limits only reduce it when the content would not fit.
  */
 function getResponsiveFontSize(element: ValueElement, configuredSize: number, lines: readonly string[]): number {
-  const horizontalPadding = 8;
-  const verticalPadding = 6;
+  const horizontalPadding = 16;
+  const verticalPadding = 12;
   const longestLineLength = Math.max(1, ...lines.map((line) => line.length));
   const lineCount = Math.max(1, lines.length);
-  const widthLimit = Math.max(10, (element.width - horizontalPadding) / (longestLineLength * 0.58));
-  const heightLimit = Math.max(10, (element.height - verticalPadding) / (lineCount * 1.15));
-  const targetFit = Math.min(widthLimit, heightLimit);
-
-  // Se for apenas o valor ou resultado curto em caixa compacta (ex.: 51, -19, 0, ou Calc / Failed)
-  if (lineCount <= 2 && longestLineLength <= 7) {
-    return Math.max(13, Math.min(36, targetFit));
-  }
-
   const areaScale = Math.sqrt((element.width * element.height) / (120 * 40));
-  const preferredSize = configuredSize * Math.min(3, Math.max(0.75, areaScale));
+  const preferredSize = configuredSize * Math.min(3, Math.max(0.55, areaScale));
+  const widthLimit = Math.max(1, element.width - horizontalPadding) / (longestLineLength * 0.6);
+  const heightLimit = Math.max(1, element.height - verticalPadding) / (lineCount * 1.2);
 
-  return Math.max(10, Math.min(96, Math.max(preferredSize, targetFit)));
+  return Math.max(8, Math.min(96, preferredSize, widthLimit, heightLimit));
 }

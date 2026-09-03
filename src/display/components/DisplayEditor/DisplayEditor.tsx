@@ -1939,7 +1939,14 @@ export function DisplayEditor({
     }
   }, [displayDocument.elements, handleTrendOpen, trendRefreshKey]);
 
+  const presentationMountedRef = useRef(false);
   useEffect(() => {
+    if (!presentationMountedRef.current) {
+      presentationMountedRef.current = true;
+      if (!presentationMode) {
+        return;
+      }
+    }
     if (presentationMode) {
       setMode('view');
       onModeChange?.('view');
