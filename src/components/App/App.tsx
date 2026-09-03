@@ -51,6 +51,8 @@ import {
   type GrafanaDashboardFolder,
 } from '../../grafana/dashboardPersistence';
 import { serializePersistableDocument } from './unsavedChanges';
+import { LibraryPanel } from '../Library/LibraryPanel';
+import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 
 const MiniSheetsPanel = React.lazy(async () => {
   const module = await import('../MiniSheets/MiniSheetsPanel');
@@ -63,14 +65,6 @@ const SqlQueryPanel = React.lazy(async () => {
 const ProgrammingPanel = React.lazy(async () => {
   const module = await import('../../programming/ProgrammingModule');
   return { default: module.ProgrammingPanel };
-});
-const LibraryPanel = React.lazy(async () => {
-  const module = await import('../Library/LibraryPanel');
-  return { default: module.LibraryPanel };
-});
-const CalculationsPanel = React.lazy(async () => {
-  const module = await import('../Calculations/CalculationsPanel');
-  return { default: module.CalculationsPanel };
 });
 
 export type VisualizationTheme = 'dark' | 'light';
@@ -1083,10 +1077,10 @@ export function App() {
                       </div>}
                     </div>
                     {loadedAssetsTabsRef.current.has('library') && <div className={styles.libraryTabContent} hidden={assetsTab !== 'library'}>
-                      <Suspense fallback={<p>Carregando biblioteca...</p>}><LibraryPanel /></Suspense>
+                      <LibraryPanel />
                     </div>}
                     {loadedAssetsTabsRef.current.has('calculations') && <div className={`${styles.libraryTabContent} ${styles.calculationsTabContent}`} hidden={assetsTab !== 'calculations'}>
-                      <Suspense fallback={<p>Carregando cálculos...</p>}><CalculationsPanel
+                      <CalculationsPanel
                         document={document}
                         onChange={setDocument}
                         resolvePiPoint={resolveCalculationPiPoint}
@@ -1095,7 +1089,7 @@ export function App() {
                         loadValue={getPiPointCurrentValue}
                         openCalculationId={openCalculationId}
                         onCalculationOpenHandled={() => setOpenCalculationId(undefined)}
-                      /></Suspense>
+                      />
                     </div>}
                   </div>
               </div>

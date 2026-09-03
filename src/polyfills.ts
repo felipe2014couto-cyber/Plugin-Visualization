@@ -22,6 +22,12 @@ if (typeof window !== 'undefined') {
       match: async () => undefined,
     };
   }
+
+  try {
+    // Garante que dynamic imports/chunks sejam buscados na raiz absoluta /public/plugins/pims-vision-app/
+    // evitando 404 quando o Grafana esta na subrota /a/pims-vision-app
+    (window as any).__webpack_public_path__ = '/public/plugins/pims-vision-app/';
+  } catch {}
 }
 
 export {};
