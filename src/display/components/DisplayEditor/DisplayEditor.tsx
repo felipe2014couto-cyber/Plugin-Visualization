@@ -448,7 +448,7 @@ export function DisplayEditor({
   }, [publishDocument, reconcileSelection]);
   useEffect(() => {
     setHeaderPortalTarget(document.getElementById('pims-vision-header-portal'));
-  }, []);
+  }, [presentationMode]);
 
   useEffect(() => {
     if (!editingDisplayName) {
@@ -1959,8 +1959,7 @@ export function DisplayEditor({
 
   return (
     <div ref={editorContainerRef} className={styles.container} data-testid="display-editor" onKeyDownCapture={handleEditorKeyDown}>
-      {!presentationMode && (
-        <div className={styles.header}>
+      <div className={styles.header} style={{ display: presentationMode ? 'none' : undefined }}>
         <div className={styles.headerPrimary}>
           <div className={styles.displayLabel}>
             <span className={styles.displayLabelPrefix}>Display:</span>
@@ -2109,7 +2108,6 @@ export function DisplayEditor({
           </div>
         </div>
       </div>
-      )}
       {importError && <div className={styles.importError} role="alert" data-testid="display-import-error">{importError}</div>}
       {piVisionImportOpen && (
         <PiVisionImportDialog

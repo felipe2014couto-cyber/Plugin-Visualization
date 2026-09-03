@@ -870,56 +870,54 @@ export function App() {
               {getConnectionLabel(piConnection)}
             </div>
           </div>
-          {!presentationMode && (
-            <div className={styles.headerSaveRow}>
-              <div id="pims-vision-header-portal" />
-              <div className={styles.headerAutoRefresh}>
-                <button
-                  type="button"
-                  className={styles.headerRefreshButton}
-                  data-testid="header-refresh-now"
-                  title="Atualizar agora"
-                  aria-label="Atualizar agora"
-                  onClick={handleManualRefresh}
-                >
-                  <RefreshIcon />
-                </button>
-                <span className={styles.headerRefreshLabel}>Atualização automática:</span>
-                <select
-                  className={styles.headerRefreshSelect}
-                  value={refreshInterval}
-                  data-testid="header-auto-refresh-select"
-                  aria-label="Intervalo de atualização automática"
-                  onChange={(e) => setRefreshInterval(e.target.value)}
-                >
-                  {REFRESH_INTERVAL_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+          <div className={styles.headerSaveRow} style={{ display: presentationMode ? 'none' : 'flex' }}>
+            <div id="pims-vision-header-portal" />
+            <div className={styles.headerAutoRefresh}>
               <button
                 type="button"
-                className={styles.saveButton}
-                data-testid="pims-vision-save-dashboard"
-                disabled={saveState === 'saving'}
-                onClick={handleSaveDashboard}
-              >{saveState === 'saving' ? 'Salvando...' : hasUnsavedChanges ? 'Salvar*' : 'Salvar'}</button>
-              <button
-                type="button"
-                className={styles.saveAsButton}
-                data-testid="pims-vision-save-as-dashboard"
-                disabled={saveState === 'saving'}
-                onClick={openSaveAsDialog}
-              >Salvar como</button>
-              {saveState !== 'idle' && (
-                <span className={saveState === 'error' ? styles.saveError : styles.saveStatus} role="status">
-                  {saveState === 'saved' ? 'Salvo no Grafana' : saveState === 'error' ? 'Não foi possível salvar' : ''}
-                </span>
-              )}
+                className={styles.headerRefreshButton}
+                data-testid="header-refresh-now"
+                title="Atualizar agora"
+                aria-label="Atualizar agora"
+                onClick={handleManualRefresh}
+              >
+                <RefreshIcon />
+              </button>
+              <span className={styles.headerRefreshLabel}>Atualização automática:</span>
+              <select
+                className={styles.headerRefreshSelect}
+                value={refreshInterval}
+                data-testid="header-auto-refresh-select"
+                aria-label="Intervalo de atualização automática"
+                onChange={(e) => setRefreshInterval(e.target.value)}
+              >
+                {REFRESH_INTERVAL_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
+            <button
+              type="button"
+              className={styles.saveButton}
+              data-testid="pims-vision-save-dashboard"
+              disabled={saveState === 'saving'}
+              onClick={handleSaveDashboard}
+            >{saveState === 'saving' ? 'Salvando...' : hasUnsavedChanges ? 'Salvar*' : 'Salvar'}</button>
+            <button
+              type="button"
+              className={styles.saveAsButton}
+              data-testid="pims-vision-save-as-dashboard"
+              disabled={saveState === 'saving'}
+              onClick={openSaveAsDialog}
+            >Salvar como</button>
+            {saveState !== 'idle' && (
+              <span className={saveState === 'error' ? styles.saveError : styles.saveStatus} role="status">
+                {saveState === 'saved' ? 'Salvo no Grafana' : saveState === 'error' ? 'Não foi possível salvar' : ''}
+              </span>
+            )}
+          </div>
         </div>
       </header>}
       {isSaveDialogOpen && (
