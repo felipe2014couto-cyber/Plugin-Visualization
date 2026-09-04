@@ -307,21 +307,40 @@ function isCalculationInUse(elements: DisplayElement[] | undefined, calculationI
   if (!elements || elements.length === 0) {
     return false;
   }
-  for (const element of elements) {
-    const props = element.properties as Record<string, unknown> | undefined;
-    if (!props) {
-      continue;
+
+  const checkValue = (val: unknown): boolean => {
+    if (val === null || typeof val !== 'object') {
+      return false;
     }
-    if (props.calculationId === calculationId) {
+    // Check if it's a calculation binding
+    if (
+      'dataSourceUid' in val &&
+      'serverPath' in val &&
+      val.dataSourceUid === '__pims_calculation__' &&
+      val.serverPath === calculationId
+    ) {
       return true;
     }
-    if (Array.isArray(props.series)) {
-      if (props.series.some((s) => typeof s === 'object' && s !== null && (s as Record<string, unknown>).calculationId === calculationId)) {
-        return true;
-      }
+    // Check old calculationId format
+    if ('calculationId' in val && val.calculationId === calculationId) {
+      return true;
     }
-    if (Array.isArray(props.elements)) {
-      if (isCalculationInUse(props.elements as DisplayElement[], calculationId)) {
+    // Recurse into arrays and objects
+    if (Array.isArray(val)) {
+      return val.some(checkValue);
+    }
+    // We avoid recursing into `elements` here since the main loop handles it,
+    // but if a Group has `elements`, it's an array and handled by the check below.
+    return Object.values(val).some(checkValue);
+  };
+
+  for (const element of elements) {
+    if (checkValue(element.properties)) {
+      return true;
+    }
+    if (element.type === 'group') {
+      const props = element.properties as Record<string, unknown>;
+      if (Array.isArray(props.elements) && isCalculationInUse(props.elements as DisplayElement[], calculationId)) {
         return true;
       }
     }
