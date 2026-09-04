@@ -65,7 +65,7 @@ export function XYPlotElementView({ element, xState, yStates = [], xDatabaseScal
           color={pointIndex >= points.length - (item.recentCount ?? 0) && item.recentColor ? item.recentColor : color}
         />)}
         {regression && <line x1={scaleX(xRange.min)} y1={scaleY(regression.slope * xRange.min + regression.intercept, range)} x2={scaleX(xRange.max)} y2={scaleY(regression.slope * xRange.max + regression.intercept, range)} stroke={color} strokeDasharray="4 3" />}
-        {properties.showLegend !== false && <text x={x + padding.left + plotWidth + 8} y={y + padding.top + 15 + index * 18} fill={color} fontSize="10">{item.binding.pointName}{correlation === undefined ? '' : ` r = ${correlation.toFixed(3)}`}</text>}
+        {properties.showLegend !== false && <text x={x + padding.left + plotWidth + 8} y={y + padding.top + 15 + index * 18} fill={color} fontSize="10">{item.label ?? item.binding.pointName}{correlation === undefined ? '' : ` r = ${correlation.toFixed(3)}`}</text>}
       </g>;
     })}
     {all.length > 0 ? <>

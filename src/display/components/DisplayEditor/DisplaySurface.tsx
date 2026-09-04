@@ -7,7 +7,7 @@ import { VALUE_TYPE, type ValueElement } from '../../createValue';
 import { CALCULATION_TYPE, type CalculationElement } from '../../createCalculation';
 import { CalculationElementView } from '../CalculationElementView';
 import { evaluateCalculation, type CalculationDefinition } from '../../../calculations/calculationEngine';
-import { createTrendElementForElement, getTrendSeries, TREND_TYPE, type TrendElement, type TrendSeries } from '../../createTrend';
+import { createTrendElementForElement, getTrendSeries, TREND_TYPE, isCalculationTrendBinding, type TrendElement, type TrendSeries } from '../../createTrend';
 import { BAR_TYPE, getBarOptions, type BarElement } from '../../createBar';
 import { BAR_CHART_TYPE, getBarChartVisualOptions, getBarChartItemConsumerId, type BarChartElement } from '../../createBarChart';
 import { TABLE_TYPE, type TableColumnConfig, type TableElement } from '../../createTable';
@@ -309,11 +309,17 @@ export function DisplaySurface({
       }
       if (element.type === XY_PLOT_TYPE) {
         const xy = element as XYPlotElement;
+        // BUG-02 fix: never request Zero/Span for a synthetic Calculation binding.
+        // A Calculation has no PI Point metadata; the caller would receive an error.
+        // The renderer already falls back to 'plotted' when databaseScales[id] is undefined.
         return [
-          ...(xy.properties.xScaleMode === 'database' ? [{ id: `${xy.id}:xy-x`, binding: xy.properties.xBinding }] : []),
-          ...getXYPlotYSeries(xy.properties).flatMap((series, index) => series.scaleMode === 'database'
-            ? [{ id: `${xy.id}:xy-y-${index}`, binding: series.binding }]
+          ...(xy.properties.xScaleMode === 'database' && xy.properties.xBinding && !isCalculationTrendBinding(xy.properties.xBinding)
+            ? [{ id: `${xy.id}:xy-x`, binding: xy.properties.xBinding }]
             : []),
+          ...getXYPlotYSeries(xy.properties).flatMap((series, index) =>
+            series.scaleMode === 'database' && !isCalculationTrendBinding(series.binding)
+              ? [{ id: `${xy.id}:xy-y-${index}`, binding: series.binding }]
+              : []),
         ];
       }
       return [];
@@ -424,7 +430,18 @@ export function DisplaySurface({
   const trendConsumers: TrendRuntimeConsumer[] = allElements.flatMap((element) => {
     if (element.type === XY_PLOT_TYPE) {
       const xy = element as XYPlotElement;
-      return [{ elementId: xy.id, consumerId: `${xy.id}:xy-x`, binding: xy.properties.xBinding, width: xy.width }, ...getXYPlotYSeries(xy.properties).map((series, index) => ({ elementId: xy.id, consumerId: `${xy.id}:xy-y-${index}`, binding: series.binding, width: xy.width }))];
+      const consumers: TrendRuntimeConsumer[] = [];
+      // X axis — skip synthetic calculation bindings; they are handled by calculationTrendElements
+      if (xy.properties.xBinding && !isCalculationTrendBinding(xy.properties.xBinding)) {
+        consumers.push({ elementId: xy.id, consumerId: `${xy.id}:xy-x`, binding: xy.properties.xBinding, width: xy.width });
+      }
+      // Y axes — preserve GLOBAL index so consumerId matches XYPlotElementView's yStates[index]
+      getXYPlotYSeries(xy.properties).forEach((series, index) => {
+        if (!isCalculationTrendBinding(series.binding)) {
+          consumers.push({ elementId: xy.id, consumerId: `${xy.id}:xy-y-${index}`, binding: series.binding, width: xy.width });
+        }
+      });
+      return consumers;
     }
     if (element.type === TABLE_TYPE) {
       return (element as TableElement).properties.items.map((item, index) => ({ elementId: element.id, consumerId: getTableTrendConsumerId(element.id, index), binding: item.binding, width: Math.max(80, element.width / 4) }));
@@ -455,7 +472,7 @@ export function DisplaySurface({
     }
     if (element.type === TABLE_TYPE) {
       (element as TableElement).properties.items.forEach((item, index) => {
-        if (item.binding.dataSourceUid === '__pims_calculation__') {
+        if (isCalculationTrendBinding(item.binding)) {
           calcElements.push({
             element,
             series: { calculationId: item.binding.serverPath, binding: item.binding },
@@ -464,12 +481,64 @@ export function DisplaySurface({
         }
       });
     }
+    if (element.type === XY_PLOT_TYPE) {
+      const xy = element as XYPlotElement;
+      if (xy.properties.xBinding && isCalculationTrendBinding(xy.properties.xBinding)) {
+        calcElements.push({
+          element,
+          series: { calculationId: xy.properties.xBinding.serverPath, binding: xy.properties.xBinding },
+          consumerId: `${xy.id}:xy-x`,
+        });
+      }
+      // Use the GLOBAL index from getXYPlotYSeries so consumerId aligns with
+      // XYPlotElementView's yStates[index] lookup. (BUG-01 fix)
+      getXYPlotYSeries(xy.properties).forEach((series, index) => {
+        if (isCalculationTrendBinding(series.binding)) {
+          calcElements.push({
+            element,
+            series: { calculationId: series.binding.serverPath, binding: series.binding },
+            consumerId: `${xy.id}:xy-y-${index}`,
+          });
+        }
+      });
+    }
     return calcElements;
   }), [allElements]);
   const calculationTrendSignature = calculationTrendElements.map(({ element, series }) => `${element.id}:${series.calculationId}`).join('|');
   const [calculationTrendStates, setCalculationTrendStates] = useState<Map<string, TrendRuntimeState>>(new Map());
+  // BUG-03 fix: monotonically-increasing sequence so stale async results are discarded.
+  const calculationTrendRequestSeqRef = useRef(0);
+  const calculationConsumerSignaturesRef = useRef<Map<string, string>>(new Map());
+
   useEffect(() => {
+    const seq = ++calculationTrendRequestSeqRef.current;
     let active = true;
+
+    setCalculationTrendStates((prev) => {
+      let changed = false;
+      const nextState = new Map(prev);
+      const nextSignatures = new Map<string, string>();
+
+      calculationTrendElements.forEach(({ consumerId, series }) => {
+        const signature = series.calculationId;
+        nextSignatures.set(consumerId, signature);
+        if (calculationConsumerSignaturesRef.current.get(consumerId) !== signature) {
+          nextState.delete(consumerId);
+          changed = true;
+        }
+      });
+
+      for (const [consumerId] of prev) {
+        if (!nextSignatures.has(consumerId)) {
+          nextState.delete(consumerId);
+          changed = true;
+        }
+      }
+
+      calculationConsumerSignaturesRef.current = nextSignatures;
+      return changed ? nextState : prev;
+    });
+
     const next = new Map<string, TrendRuntimeState>();
     if (calculationTrendElements.length === 0) {
       setCalculationTrendStates(next);
@@ -496,13 +565,14 @@ export function DisplaySurface({
       const points = calculateHistoricalPoints(calculation, inputSeries.map((result) => result.status === 'success' ? result.series : undefined), trendTimeRange);
       return [consumerId, { status: 'success', data: { pointName: calculation.name, points } } as TrendRuntimeState] as const;
     })).then((results) => {
-      if (!active) {
+      // Discard if component unmounted OR if a newer request has already started (BUG-03)
+      if (!active || seq !== calculationTrendRequestSeqRef.current) {
         return;
       }
       results.forEach(([consumerId, state]) => next.set(consumerId, state));
       setCalculationTrendStates(next);
     }).catch(() => {
-      if (active) {
+      if (active && seq === calculationTrendRequestSeqRef.current) {
         setCalculationTrendStates(next);
       }
     });
@@ -1456,23 +1526,28 @@ export function DisplaySurface({
         const centerY = geom.y + geom.height / 2;
         const transform = rotation ? `rotate(${rotation} ${centerX} ${centerY})` : undefined;
 
+        const baseScale = 1 / Math.max(zoom, 0.001);
+        const scaledStrokeWidth = 1 * baseScale;
+        const scaledHandleSize = HANDLE_SIZE * baseScale;
+        const padding = 1 * baseScale;
+
         return (
           <g key={id} transform={transform}>
             <rect
-              x={geom.x - 1}
-              y={geom.y - 1}
-              width={geom.width + 2}
-              height={geom.height + 2}
+              x={geom.x - padding}
+              y={geom.y - padding}
+              width={geom.width + padding * 2}
+              height={geom.height + padding * 2}
               fill="none"
               stroke={isLocked ? '#f5a623' : SELECTION_STROKE}
-              strokeWidth={1}
-              strokeDasharray={isLocked ? '2 2' : '4 2'}
+              strokeWidth={scaledStrokeWidth}
+              strokeDasharray={isLocked ? `${2 * baseScale} ${2 * baseScale}` : `${4 * baseScale} ${2 * baseScale}`}
               data-testid={`display-selection-box-${id}`}
               pointerEvents="none"
             />
             {!isLocked && positions.map((pos) => {
-              const rect = getResizeHandleRect(pos, HANDLE_SIZE);
-              return <rect key={pos.handle} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={1} data-testid={`display-resize-handle-${id}-${pos.handle}`} data-element-id={id} data-resize-handle={pos.handle} style={{ cursor: getRotatedHandleCursor(pos.handle, rotation) }} />;
+              const rect = getResizeHandleRect(pos, scaledHandleSize);
+              return <rect key={pos.handle} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fill={HANDLE_FILL} stroke={HANDLE_STROKE} strokeWidth={scaledStrokeWidth} data-testid={`display-resize-handle-${id}-${pos.handle}`} data-element-id={id} data-resize-handle={pos.handle} style={{ cursor: getRotatedHandleCursor(pos.handle, rotation) }} />;
             })}
           </g>
         );
@@ -1485,23 +1560,28 @@ export function DisplaySurface({
         const centerY = geom.y + geom.height / 2;
         const transform = rotation ? `rotate(${rotation} ${centerX} ${centerY})` : undefined;
 
+        const baseScale = 1 / Math.max(zoom, 0.001);
+        const scaledStrokeWidth = 1 * baseScale;
+        const scaledHandleSize = HANDLE_SIZE * baseScale;
+        const padding = 1 * baseScale;
+
         return (
           <g data-testid="display-selection-overlay" transform={transform}>
             <rect
-              x={geom.x - 1}
-              y={geom.y - 1}
-              width={geom.width + 2}
-              height={geom.height + 2}
+              x={geom.x - padding}
+              y={geom.y - padding}
+              width={geom.width + padding * 2}
+              height={geom.height + padding * 2}
               fill="none"
               stroke={isLocked ? '#f5a623' : SELECTION_STROKE}
-              strokeWidth={1}
-              strokeDasharray={isLocked ? '2 2' : '4 2'}
+              strokeWidth={scaledStrokeWidth}
+              strokeDasharray={isLocked ? `${2 * baseScale} ${2 * baseScale}` : `${4 * baseScale} ${2 * baseScale}`}
               data-testid="display-selection-bounding-box"
               pointerEvents="none"
             />
 
             {!isLocked && handlePositions.map((pos) => {
-              const rect = getResizeHandleRect(pos, HANDLE_SIZE);
+              const rect = getResizeHandleRect(pos, scaledHandleSize);
               return (
                 <rect
                   key={pos.handle}
@@ -1511,7 +1591,7 @@ export function DisplaySurface({
                   height={rect.height}
                   fill={HANDLE_FILL}
                   stroke={HANDLE_STROKE}
-                  strokeWidth={1}
+                  strokeWidth={scaledStrokeWidth}
                   data-testid={`display-resize-handle-${pos.handle}`}
                   data-element-id={selectedElement.id}
                   data-resize-handle={pos.handle}

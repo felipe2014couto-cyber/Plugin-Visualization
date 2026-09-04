@@ -5,9 +5,10 @@ import { formatAbsoluteTime } from '../time/timeRange';
 import type { DisplayDocument } from './displayDocument';
 import { isPiPointBinding } from '../pi/piPointBinding';
 import { extractAllGroupBindingsAndElements } from './createGroup';
-import { getTrendSeries, TREND_TYPE } from './createTrend';
+import { getTrendSeries, TREND_TYPE, isCalculationTrendBinding } from './createTrend';
 import { TABLE_TYPE, type TableElement } from './createTable';
 import { BAR_CHART_TYPE, type BarChartElement } from './createBarChart';
+import { XY_PLOT_TYPE, getXYPlotYSeries, type XYPlotElement } from './createXYPlot';
 
 export const DISPLAY_DATA_EXPORT_MAX_POINTS = 3600;
 export type DisplayDataLoader = (bindings: readonly PiPointBinding[], range: DisplayTimeRange, options: { maxDataPoints: number }) => Promise<Record<string, PiTrendSeriesResult>>;
@@ -17,6 +18,8 @@ export function collectDisplayDataBindings(document: DisplayDocument): PiPointBi
   const output: PiPointBinding[] = [];
   const add = (binding: unknown) => {
     if (!isPiPointBinding(binding)) return;
+    // Never export synthetic Calculation pseudo-bindings to the PI datasource.
+    if (isCalculationTrendBinding(binding)) return;
     const key = `${binding.dataSourceUid}\u0000${binding.webId ?? ''}\u0000${binding.serverPath}\u0000${binding.pointName}`;
     if (!seen.has(key)) { seen.add(key); output.push(binding); }
   };
@@ -24,6 +27,12 @@ export function collectDisplayDataBindings(document: DisplayDocument): PiPointBi
     if (element.type === TREND_TYPE) getTrendSeries(element).forEach((series) => add(series.binding));
     else if (element.type === TABLE_TYPE) (element as TableElement).properties.items.forEach((item) => add(item.binding));
     else if (element.type === BAR_CHART_TYPE) (element as BarChartElement).properties.items.forEach((item) => add(item.binding));
+    else if (element.type === XY_PLOT_TYPE) {
+      // BUG-05 fix: collect X and all Y bindings; skip Calculation pseudo-bindings.
+      const xy = element as XYPlotElement;
+      add(xy.properties.xBinding);
+      getXYPlotYSeries(xy.properties).forEach((series) => add(series.binding));
+    }
     else add(element.properties.binding);
   });
   return output;

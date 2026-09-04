@@ -210,6 +210,8 @@ interface TrendPointInfoState {
   loading: boolean;
   error?: string;
   calculation?: CalculationDefinition;
+  availablePoints?: { label: string; binding?: PiPointBinding; calculation?: CalculationDefinition }[];
+  onSelectPoint?: (index: number) => void;
 }
 
 function hasElementDataSource(element: DisplayElement): boolean {
@@ -870,6 +872,17 @@ export function DisplayEditor({
             dispatch({ type: 'SELECT', elementId: target.id });
             return;
           }
+          if (capability === 'xy' && target.type === 'xy-plot') {
+            const xyEl = currentDocument.elements.find((el) => el.id === target.id) as XYPlotElement | undefined;
+            if (xyEl && !xyEl.properties.xBinding) {
+              // X axis is empty — first drop sets the X axis
+              commitDocument(updateXYPlotProperties(currentDocument, target.id, { xBinding: createCalculationTrendBinding(calculationId) }));
+            } else {
+              commitDocument(addXYPlotYSeries(currentDocument, target.id, createCalculationTrendBinding(calculationId), calculation.name));
+            }
+            dispatch({ type: 'SELECT', elementId: target.id });
+            return;
+          }
           if (capability === 'multiple') {
             if (target.type === 'trend') {
               commitDocument(addCalculationTrendSeries(currentDocument, target.id, calculationId, calculation.name));
@@ -905,14 +918,16 @@ export function DisplayEditor({
             : dropSymbolType === 'gauge' ? createGauge(options)
               : dropSymbolType === 'bar-chart' ? createBarChart({ ...options, binding: createCalculationTrendBinding(calculationId), item: { binding: createCalculationTrendBinding(calculationId), label: calculation.name, nameMode: 'custom', customName: calculation.name } as any })
                 : dropSymbolType === 'table' ? createTable({ surface: currentDocument.surface, existingIds: currentDocument.elements.map((item) => item.id), item: { binding: createCalculationTrendBinding(calculationId), description: calculation.name, nameMode: 'custom', customName: calculation.name } })
-                  : createBar(options);
+                  : dropSymbolType === 'xy-plot' ? createXYPlot({ ...options, xBinding: createCalculationTrendBinding(calculationId), xLabel: calculation.name })
+                    : createBar(options);
         const positioned = positionElementAt(element, point, currentDocument);
         const nextDocument = dropSymbolType === 'value' ? appendValue(currentDocument, positioned as ValueElement)
           : dropSymbolType === 'trend' ? appendTrend(currentDocument, positioned as TrendElement)
             : dropSymbolType === 'gauge' ? appendGauge(currentDocument, positioned as GaugeElement)
               : dropSymbolType === 'bar-chart' ? appendBarChart(currentDocument, positioned as BarChartElement)
                 : dropSymbolType === 'table' ? appendTable(currentDocument, positioned as TableElement)
-                  : appendBar(currentDocument, positioned as BarElement);
+                  : dropSymbolType === 'xy-plot' ? appendXYPlot(currentDocument, positioned as XYPlotElement)
+                    : appendBar(currentDocument, positioned as BarElement);
         commitDocument(nextDocument);
         dispatch({ type: 'SELECT', elementId: positioned.id });
         return;
@@ -1026,7 +1041,13 @@ export function DisplayEditor({
         }
       }
       if (capability === 'xy' && target.type === 'xy-plot') {
-        commitDocument(addXYPlotYSeries(currentDocument, target.id, binding));
+        const xyEl = currentDocument.elements.find((el) => el.id === target.id) as XYPlotElement | undefined;
+        if (xyEl && !xyEl.properties.xBinding) {
+          // X axis is empty — first drop sets the X axis
+          commitDocument(updateXYPlotProperties(currentDocument, target.id, { xBinding: binding }));
+        } else {
+          commitDocument(addXYPlotYSeries(currentDocument, target.id, binding));
+        }
         dispatch({ type: 'SELECT', elementId: target.id });
         return;
       }
@@ -1426,20 +1447,44 @@ export function DisplayEditor({
     applySymbolConversion(elementId, targetType, bindings);
   }, [applySymbolConversion]);
 
-  const showElementDataInfo = useCallback((element: DisplayElement) => {
-    const props = element.properties as Record<string, unknown>;
-    const calculationId = typeof props.calculationId === 'string' ? props.calculationId : undefined;
-    const calculation = calculationId ? documentRef.current.calculations?.find((item) => item.id === calculationId) : undefined;
-    const binding = getElementPiBindings(element)[0];
-    if (calculation) {
-      setTrendPointInfo({ pointName: calculation.name, value: undefined, loading: false, calculation });
-      return;
-    }
-    if (!binding) {
+  const showElementDataInfo = useCallback((element: DisplayElement, index = 0) => {
+    setPropertiesPanelOpen(false);
+    const bindings = getElementPiBindings(element);
+    if (!bindings.length) {
       setTrendPointInfo(null);
       return;
     }
-    setTrendPointInfo({ pointName: binding.pointName, value: undefined, loading: true });
+    const availablePoints = bindings.map(binding => {
+      if (binding.dataSourceUid === '__pims_calculation__') {
+        const calc = documentRef.current.calculations?.find(c => c.id === binding.serverPath);
+        return { label: calc?.name ?? binding.serverPath, calculation: calc };
+      }
+      return { label: binding.pointName, binding };
+    });
+    const selected = availablePoints[index];
+    if (!selected) {
+      setTrendPointInfo(null);
+      return;
+    }
+    if (selected.calculation) {
+      setTrendPointInfo({ 
+        pointName: selected.label, 
+        value: undefined, 
+        loading: false, 
+        calculation: selected.calculation,
+        availablePoints,
+        onSelectPoint: (newIndex) => showElementDataInfo(element, newIndex)
+      });
+      return;
+    }
+    const binding = selected.binding!;
+    setTrendPointInfo({ 
+      pointName: binding.pointName, 
+      value: undefined, 
+      loading: true,
+      availablePoints,
+      onSelectPoint: (newIndex) => showElementDataInfo(element, newIndex)
+    });
     const metadataRequest = getPiPointMetadata(binding);
     const valueRequest = loadValue ? loadValue(binding).catch(() => undefined) : Promise.resolve(undefined);
     void Promise.all([metadataRequest, valueRequest]).then(([metadata, currentValue]) => {
@@ -1518,6 +1563,7 @@ export function DisplayEditor({
   const handleSurfaceContextMenu = useCallback((_event?: React.MouseEvent) => {
     dispatch({ type: 'SELECT', elementId: null });
     setPropertiesPanelOpen(true);
+    setTrendPointInfo(null);
     setContextMenu(null);
   }, [dispatch]);
 
@@ -1607,6 +1653,7 @@ export function DisplayEditor({
             }
           }
           setPropertiesPanelOpen(true);
+          setTrendPointInfo(null);
           setContextMenu(null);
         },
       });
