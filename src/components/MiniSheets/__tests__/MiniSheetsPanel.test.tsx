@@ -1160,4 +1160,175 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
       });
     });
   });
+
+  describe('Drag and Drop PI Points', () => {
+    it('handles PI Point drop on cell and updates display and formula bar', async () => {
+      const { PI_POINT_DRAG_MIME } = await import('../../../pi/piPointDrag');
+      
+      render(<MiniSheetsPanel />);
+      
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      
+      // Simulate drop with valid PI Point payload
+      const validPayload = JSON.stringify({
+        name: 'LFS_RB2_TEMP',
+        path: '\\\\SERVER\\TAG',
+      });
+      
+      fireEvent.drop(cellA1, {
+        dataTransfer: {
+          types: [PI_POINT_DRAG_MIME],
+          getData: (type: string) => (type === PI_POINT_DRAG_MIME ? validPayload : ''),
+        },
+      });
+
+      // After drop, the cell should evaluate (we simulate finding PI value in tests often as returning Carregando... if not mocked, but we can just check if formula bar shows LFS_RB2_TEMP)
+      fireEvent.click(cellA1);
+      
+      await waitFor(() => {
+        expect(screen.getByTestId('mini-sheets-formula-input')).toHaveValue('LFS_RB2_TEMP');
+      });
+
+      // Enter edit mode
+      fireEvent.doubleClick(cellA1);
+      
+      const inlineInput = screen.getByTestId('mini-sheets-inline-input');
+      expect(inlineInput).toHaveValue('LFS_RB2_TEMP');
+    });
+
+    it('ignores invalid drag and drop payloads', async () => {
+      const { PI_POINT_DRAG_MIME } = await import('../../../pi/piPointDrag');
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      
+      fireEvent.drop(cellA1, {
+        dataTransfer: {
+          types: [PI_POINT_DRAG_MIME],
+          getData: () => 'invalid_json_or_corrupted',
+        },
+      });
+
+      fireEvent.click(cellA1);
+      expect(screen.getByTestId('mini-sheets-formula-input')).toHaveValue('');
+    });
+  });
+
+  describe('Excel Navigation and Editing UX', () => {
+    it('double click opens inline edit', () => {
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      fireEvent.doubleClick(cellA1);
+      expect(screen.getByTestId('mini-sheets-inline-input')).toBeInTheDocument();
+    });
+
+    it('F2 opens inline edit', () => {
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      fireEvent.click(cellA1);
+      fireEvent.keyDown(cellA1, { key: 'F2' });
+      expect(screen.getByTestId('mini-sheets-inline-input')).toBeInTheDocument();
+    });
+
+    it('Enter saves and moves down, Tab saves and moves right', () => {
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      
+      // Enter opens edit
+      fireEvent.click(cellA1);
+      fireEvent.keyDown(cellA1, { key: 'Enter' });
+      let input = screen.getByTestId('mini-sheets-inline-input');
+      
+      fireEvent.change(input, { target: { value: 'Test' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      
+      expect(screen.queryByTestId('mini-sheets-inline-input')).not.toBeInTheDocument();
+      expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('Test');
+      // A2 should be active (Enter moves down)
+      expect(screen.getByTestId('mini-sheets-cell-A2')).toHaveClass('cellActive');
+
+      // Now test Tab
+      const cellA2 = screen.getByTestId('mini-sheets-cell-A2');
+      fireEvent.keyDown(cellA2, { key: 'F2' }); // open edit
+      input = screen.getByTestId('mini-sheets-inline-input');
+      fireEvent.change(input, { target: { value: 'TabTest' } });
+      fireEvent.keyDown(input, { key: 'Tab' });
+
+      expect(screen.queryByTestId('mini-sheets-inline-input')).not.toBeInTheDocument();
+      expect(cellA2).toHaveTextContent('TabTest');
+      // B2 should be active (Tab moves right)
+      expect(screen.getByTestId('mini-sheets-cell-B2')).toHaveClass('cellActive');
+    });
+
+    it('Escape cancels edit and restores previous value', () => {
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      
+      // Setup initial value
+      fireEvent.click(cellA1);
+      fireEvent.keyDown(cellA1, { key: 'F2' });
+      let input = screen.getByTestId('mini-sheets-inline-input');
+      fireEvent.change(input, { target: { value: 'Original' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+
+      // Edit and escape
+      fireEvent.click(cellA1);
+      fireEvent.keyDown(cellA1, { key: 'F2' });
+      input = screen.getByTestId('mini-sheets-inline-input');
+      fireEvent.change(input, { target: { value: 'Changed' } });
+      fireEvent.keyDown(input, { key: 'Escape' });
+
+      expect(screen.queryByTestId('mini-sheets-inline-input')).not.toBeInTheDocument();
+      expect(cellA1).toHaveTextContent('Original'); // Restored
+    });
+
+    it('Delete clears cell but preserves format', () => {
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      
+      // Set format (simulated via toolbar button)
+      fireEvent.click(cellA1);
+      const boldBtn = screen.getByTitle('Negrito (Ctrl+B)');
+      fireEvent.click(boldBtn);
+      
+      // Set value
+      fireEvent.keyDown(cellA1, { key: 'F2' });
+      const input = screen.getByTestId('mini-sheets-inline-input');
+      fireEvent.change(input, { target: { value: 'To Delete' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      
+      expect(cellA1).toHaveTextContent('To Delete');
+      expect(cellA1).toHaveStyle('font-weight: bold');
+
+      // Delete
+      fireEvent.click(cellA1);
+      fireEvent.keyDown(cellA1, { key: 'Delete' });
+      
+      expect(cellA1).toHaveTextContent('');
+      expect(cellA1).toHaveStyle('font-weight: bold'); // Format preserved
+    });
+
+    it('Delete on PI cell removes piBinding', async () => {
+      const { PI_POINT_DRAG_MIME } = await import('../../../pi/piPointDrag');
+      render(<MiniSheetsPanel />);
+      const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
+      
+      // Drop PI Point
+      fireEvent.drop(cellA1, {
+        dataTransfer: {
+          types: [PI_POINT_DRAG_MIME],
+          getData: () => JSON.stringify({ name: 'MY_TAG' }),
+        },
+      });
+
+      fireEvent.click(cellA1);
+      expect(screen.getByTestId('mini-sheets-formula-input')).toHaveValue('MY_TAG');
+
+      // Delete
+      fireEvent.keyDown(cellA1, { key: 'Delete' });
+      
+      // Check that it's completely cleared
+      fireEvent.click(cellA1);
+      expect(screen.getByTestId('mini-sheets-formula-input')).toHaveValue('');
+    });
+  });
 });

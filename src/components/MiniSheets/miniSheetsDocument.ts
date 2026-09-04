@@ -1,4 +1,4 @@
-import { CellData } from './MiniSheetsPanel';
+import { CellData, PiBindingInfo } from './MiniSheetsPanel';
 import { colIndexToLetter, parseCellAddress } from './miniSheetFormula';
 import { CellFormat } from './miniSheetOperations';
 
@@ -16,6 +16,7 @@ export interface MiniSheetCell {
   sipOrigin?: SipQueryMetadata;
   spilledFrom?: string;
   valueOrigin?: 'manual' | 'formula' | 'sip' | 'pi';
+  piBinding?: PiBindingInfo;
 }
 
 export interface MiniSheetsDocument {
@@ -88,8 +89,9 @@ export function serializeMiniSheets(
     );
 
     const hasSipOrigin = Boolean(cell.sipOrigin);
+    const hasPiBinding = Boolean(cell.piBinding);
 
-    if (hasRawValue || hasDisplayValue || hasFormat || hasSipOrigin) {
+    if (hasRawValue || hasDisplayValue || hasFormat || hasSipOrigin || hasPiBinding) {
       const address = `${colIndexToLetter(colIndex)}${rowIndex + 1}`;
       const savedCell: MiniSheetCell = {};
       if (hasRawValue) {
@@ -99,6 +101,9 @@ export function serializeMiniSheets(
       }
       if (hasFormat) {
         savedCell.format = { ...cell.format };
+      }
+      if (hasPiBinding) {
+        savedCell.piBinding = { ...cell.piBinding! };
       }
       if (hasSipOrigin) {
         const origin = cell.sipOrigin!;
@@ -236,6 +241,20 @@ export function deserializeMiniSheets(rawDoc?: unknown): DeserializedMiniSheets 
             originCoord: { col: origin.originCoord.col, row: origin.originCoord.row },
             ...(typeof origin.maxRows === 'number' ? { maxRows: origin.maxRows } : {}),
             ...(typeof origin.includeHeaders === 'boolean' ? { includeHeaders: origin.includeHeaders } : {}),
+          };
+        }
+      }
+
+      if (cell.piBinding && typeof cell.piBinding === 'object' && cell.piBinding.type === 'pi-point') {
+        const binding = cell.piBinding as Partial<PiBindingInfo>;
+        if (typeof binding.name === 'string') {
+          cellData.piBinding = {
+            type: 'pi-point',
+            name: binding.name,
+            ...(typeof binding.path === 'string' ? { path: binding.path } : {}),
+            ...(typeof binding.webId === 'string' ? { webId: binding.webId } : {}),
+            ...(typeof binding.description === 'string' ? { description: binding.description } : {}),
+            ...(typeof binding.engineeringUnit === 'string' ? { engineeringUnit: binding.engineeringUnit } : {}),
           };
         }
       }

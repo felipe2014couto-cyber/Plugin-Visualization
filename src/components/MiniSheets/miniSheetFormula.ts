@@ -487,6 +487,150 @@ export function parseFormula(input: string): ParsedFormula | { type: 'error'; er
   };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal helpers for IF() and IFERROR() logical functions.
+// These are NOT exported and are only used by evaluateMathExpression.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Extracts the raw string body inside the outermost parentheses of a named
+ * function call. Returns null if the expression does not start with funcName(
+ * or if parentheses are unbalanced.
+ */
+function extractFunctionBody(expr: string, funcName: string): string | null {
+  const trimmed = expr.trimStart();
+  if (!trimmed.toUpperCase().startsWith(funcName.toUpperCase())) return null;
+  let i = funcName.length;
+  while (i < trimmed.length && trimmed[i] === ' ') { i++; }
+  if (trimmed[i] !== '(') return null;
+  const start = i + 1;
+  let depth = 1;
+  let inStr = false;
+  let strChar = '';
+  for (let j = start; j < trimmed.length; j++) {
+    const c = trimmed[j];
+    if (inStr) { if (c === strChar) { inStr = false; } continue; }
+    if (c === '"' || c === "'") { inStr = true; strChar = c; continue; }
+    if (c === '(') { depth++; } else if (c === ')') { depth--; if (depth === 0) { return trimmed.slice(start, j); } }
+  }
+  return null; // unbalanced parentheses
+}
+
+/**
+ * Evaluates an expression that may return either a number or a quoted string
+ * literal. Quoted strings ("...") are returned without the surrounding quotes.
+ * All other expressions are evaluated via evaluateMathExpression.
+ */
+function evaluateExprOrString(
+  expr: string,
+  getCellValue: (coord: CellCoord) => number | string | undefined,
+  maxCol: number,
+  maxRow: number,
+): { status: 'success'; value: number | string } | { status: 'error'; error: string } {
+  const trimmed = expr.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return { status: 'success', value: trimmed.slice(1, -1) };
+  }
+  if (!trimmed) return { status: 'success', value: 0 };
+  return evaluateMathExpression(trimmed, getCellValue, maxCol, maxRow);
+}
+
+/**
+ * Scans `expr` left-to-right (skipping quoted strings and parenthesised
+ * sub-expressions) and returns the position of the first comparison operator
+ * at depth-0: >=, <=, <>, >, <, or =.
+ */
+function findComparisonOperator(
+  expr: string,
+): { op: string; leftEnd: number; rightStart: number } | null {
+  let inStr = false;
+  let strChar = '';
+  let depth = 0;
+  for (let i = 0; i < expr.length; i++) {
+    const c = expr[i];
+    if (inStr) { if (c === strChar) { inStr = false; } continue; }
+    if (c === '"' || c === "'") { inStr = true; strChar = c; continue; }
+    if (c === '(') { depth++; continue; }
+    if (c === ')') { depth--; continue; }
+    if (depth > 0) continue;
+    const two = expr.slice(i, i + 2);
+    if (two === '>=' || two === '<=' || two === '<>') return { op: two, leftEnd: i, rightStart: i + 2 };
+    if (c === '>' || c === '<') return { op: c, leftEnd: i, rightStart: i + 1 };
+    if (c === '=') return { op: c, leftEnd: i, rightStart: i + 1 };
+  }
+  return null;
+}
+
+/**
+ * Evaluates one side of a condition expression, preserving the original type
+ * of a single-cell reference (string or number) for string equality checks.
+ */
+function evaluateConditionSide(
+  expr: string,
+  getCellValue: (coord: CellCoord) => number | string | undefined,
+  maxCol: number,
+  maxRow: number,
+): number | string | { error: string } {
+  const trimmed = expr.trim();
+  // Quoted string literal
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  // Direct cell reference: preserve original type so string comparisons work
+  const coord = parseCellAddress(trimmed);
+  if (coord && /^\$?[A-Za-z]+\$?\d+$/.test(trimmed)) {
+    if (coord.col >= maxCol || coord.row >= maxRow) return { error: '#REF!' };
+    const val = getCellValue(coord);
+    if (val === undefined || val === '') return 0;
+    return val;
+  }
+  // Arithmetic or composite expression
+  const res = evaluateMathExpression(trimmed, getCellValue, maxCol, maxRow);
+  if (res.status === 'error') return { error: res.error };
+  return res.value;
+}
+
+/**
+ * Evaluates a comparison condition such as "A1>10", "B1<>\"ALTO\"", "5>=3".
+ * Supports operators: >, <, >=, <=, =, <>.
+ * Returns a boolean result or an error descriptor object.
+ */
+function evaluateCondition(
+  condition: string,
+  getCellValue: (coord: CellCoord) => number | string | undefined,
+  maxCol: number,
+  maxRow: number,
+): boolean | { error: string } {
+  const found = findComparisonOperator(condition);
+  if (!found) {
+    // No operator: truthy if non-zero / non-empty
+    const val = evaluateConditionSide(condition.trim(), getCellValue, maxCol, maxRow);
+    if (typeof val === 'object') return val;
+    if (typeof val === 'string') return val !== '' && val !== '0';
+    return val !== 0;
+  }
+  const { op, leftEnd, rightStart } = found;
+  const leftVal = evaluateConditionSide(condition.slice(0, leftEnd).trim(), getCellValue, maxCol, maxRow);
+  const rightVal = evaluateConditionSide(condition.slice(rightStart).trim(), getCellValue, maxCol, maxRow);
+  if (typeof leftVal === 'object') return leftVal;
+  if (typeof rightVal === 'object') return rightVal;
+  switch (op) {
+    case '=':  return String(leftVal) === String(rightVal);
+    case '<>': return String(leftVal) !== String(rightVal);
+    case '>':  return Number(leftVal) > Number(rightVal);
+    case '<':  return Number(leftVal) < Number(rightVal);
+    case '>=': return Number(leftVal) >= Number(rightVal);
+    case '<=': return Number(leftVal) <= Number(rightVal);
+    default:   return { error: '#FORMULA!' };
+  }
+}
+
 /**
  * Evaluates an arithmetic expression given cell values map or function.
  */
@@ -495,7 +639,32 @@ export function evaluateMathExpression(
   getCellValue: (coord: CellCoord) => number | string | undefined,
   maxCol = 20,
   maxRow = 50,
-): { status: 'success'; value: number } | { status: 'error'; error: string } {
+): { status: 'success'; value: number | string } | { status: 'error'; error: string } {
+  // ─── IF() logical function ─────────────────────────────────────────────────
+  const exprTrimmed = expression.trim();
+  if (/^IF\s*\(/i.test(exprTrimmed)) {
+    const body = extractFunctionBody(exprTrimmed, 'IF');
+    if (body === null) return { status: 'error', error: '#FORMULA!' };
+    const args = parseFunctionArguments(body);
+    if (args.length < 2 || args.length > 3) return { status: 'error', error: '#FORMULA!' };
+    const cond = evaluateCondition(args[0], getCellValue, maxCol, maxRow);
+    if (typeof cond === 'object') return { status: 'error', error: cond.error };
+    const branch = cond ? args[1] : (args[2] ?? '');
+    return evaluateExprOrString(branch, getCellValue, maxCol, maxRow);
+  }
+
+  // ─── IFERROR() logical function ────────────────────────────────────────────
+  if (/^IFERROR\s*\(/i.test(exprTrimmed)) {
+    const body = extractFunctionBody(exprTrimmed, 'IFERROR');
+    if (body === null) return { status: 'error', error: '#FORMULA!' };
+    const args = parseFunctionArguments(body);
+    if (args.length !== 2) return { status: 'error', error: '#FORMULA!' };
+    const exprResult = evaluateMathExpression(args[0].trim(), getCellValue, maxCol, maxRow);
+    if (exprResult.status === 'error') return evaluateExprOrString(args[1], getCellValue, maxCol, maxRow);
+    return exprResult;
+  }
+
+  // ─── Arithmetic expression ─────────────────────────────────────────────────
   // Replace cell tokens with their numeric values
   let resolved = expression;
   const cellRefRegex = /\b([A-Za-z]+[0-9]+)\b/g;
@@ -577,6 +746,9 @@ export function evaluateMathExpression(
     if (err?.message === 'Divisão por zero.') {
       return { status: 'error', error: '#DIV/0!' };
     }
+    if (err?.message === '#VALUE!') {
+      return { status: 'error', error: '#VALUE!' };
+    }
     return { status: 'error', error: '#FORMULA!' };
   }
 }
@@ -650,6 +822,62 @@ function parseArithmeticExpression(
 
   const parsePrimary = (): number => {
     skipWhitespace();
+
+    // Math functions: ABS, ROUND, SQRT, INT, MOD
+    const mathFuncMatch = expression.slice(cursor).match(/^(ABS|ROUND|SQRT|INT|MOD)\s*\(/i);
+    if (mathFuncMatch) {
+      const funcName = mathFuncMatch[1].toUpperCase();
+      cursor += mathFuncMatch[0].length; // consume "FUNCNAME("
+
+      const arg1 = parseAdditive();
+      skipWhitespace();
+
+      if (funcName === 'ROUND' || funcName === 'MOD') {
+        // Two-argument functions
+        if (expression[cursor] === ',') {
+          cursor++; // consume ','
+          const arg2 = parseAdditive();
+          skipWhitespace();
+          if (expression[cursor] !== ')') {
+            throw new Error('Parênteses não balanceados.');
+          }
+          cursor++; // consume ')'
+          if (funcName === 'ROUND') {
+            const places = Math.trunc(arg2);
+            const factor = Math.pow(10, places);
+            return Math.round(arg1 * factor) / factor;
+          } else { // MOD
+            if (arg2 === 0) throw new Error('Divisão por zero.');
+            return arg1 - Math.floor(arg1 / arg2) * arg2;
+          }
+        } else if (funcName === 'ROUND') {
+          // ROUND without second arg → round to 0 decimal places
+          if (expression[cursor] !== ')') {
+            throw new Error('Parênteses não balanceados.');
+          }
+          cursor++;
+          return Math.round(arg1);
+        } else {
+          // MOD requires two arguments
+          throw new Error('#FORMULA!');
+        }
+      } else {
+        // Single-argument functions: ABS, SQRT, INT
+        if (expression[cursor] !== ')') {
+          throw new Error('Parênteses não balanceados.');
+        }
+        cursor++; // consume ')'
+        switch (funcName) {
+          case 'ABS': return Math.abs(arg1);
+          case 'SQRT':
+            if (arg1 < 0) throw new Error('#VALUE!');
+            return Math.sqrt(arg1);
+          case 'INT': return Math.floor(arg1);
+          default: throw new Error('#FORMULA!');
+        }
+      }
+    }
+
     if (expression[cursor] === '(') {
       cursor++;
       const value = parseAdditive();

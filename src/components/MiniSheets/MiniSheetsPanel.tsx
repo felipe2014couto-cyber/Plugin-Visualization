@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
-import { useStyles2 } from '@grafana/ui';
+import { useStyles2, ColorPicker } from '@grafana/ui';
 import {
   searchPiPointsWithStatus,
   getPiPointCurrentValue,
@@ -11,6 +11,7 @@ import {
   type PiPointSearchResult,
 } from '../../pi/piDataSource';
 import { createPiPointBinding, type PiPointBinding } from '../../pi/piPointBinding';
+import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../pi/piPointDrag';
 import {
   colIndexToLetter,
   formatCellAddress,
@@ -74,6 +75,15 @@ export interface SipOriginInfo {
   originCoord: CellCoord;
 }
 
+export interface PiBindingInfo {
+  type: 'pi-point';
+  name: string;
+  path?: string;
+  webId?: string;
+  description?: string;
+  engineeringUnit?: string;
+}
+
 export interface CellData {
   rawValue: string; // The formula or raw entered string, e.g. '=PICurrVal("TAG")'
   displayValue: string; // The computed result to show
@@ -81,12 +91,19 @@ export interface CellData {
   spillTargetAddresses?: string[]; // If this cell generated a spill across other cell addresses
   format?: CellFormat; // Formatting: bold, italic, textColor, backgroundColor, horizontalAlign, decimalPlaces
   sipOrigin?: SipOriginInfo;
+  piBinding?: PiBindingInfo; // Armazena a estrutura da tag quando ela for arrastada para a célula
   valueOrigin?: 'manual' | 'formula' | 'sip' | 'pi';
 }
 
 const TOTAL_COLS = 20; // A to T
 const TOTAL_ROWS = 100_000; // Limite máximo de linhas
 const INITIAL_VISIBLE_ROWS = 50;
+
+function getEditableText(cell: CellData | undefined): string {
+  if (!cell) return '';
+  if (cell.piBinding) return cell.piBinding.name;
+  return cell.rawValue;
+}
 
 function filterPiDataPoints<T extends { value: number | string }>(points: T[], expression?: string): T[] {
   const normalized = expression?.trim();
@@ -519,7 +536,7 @@ export function MiniSheetsPanel({
   // Sync formula bar when active cell changes (unless currently editing formula bar)
   useEffect(() => {
     const currentCell = cells.get(activeKey);
-    setFormulaBarText(currentCell?.rawValue ?? '');
+    setFormulaBarText(getEditableText(currentCell));
   }, [activeKey, cells]);
 
 
@@ -591,8 +608,19 @@ export function MiniSheetsPanel({
       }
 
       let finalMapToCommit: Map<string, CellData>;
+      
+      const existing = next.get(key);
+      let nextRawValue = rawValue;
+      let nextPiBinding = existing?.piBinding;
+      if (existing?.piBinding) {
+        if (getEditableText(existing) === rawValue) {
+          nextRawValue = existing.rawValue;
+        } else {
+          nextPiBinding = undefined;
+        }
+      }
+
       if (!trimmed) {
-        const existing = next.get(key);
         if (existing?.format) {
           next.set(key, { rawValue: '', displayValue: '', format: existing.format });
         } else {
@@ -600,11 +628,11 @@ export function MiniSheetsPanel({
         }
         finalMapToCommit = evaluateStaticFormulas(next).nextMap;
       } else {
-        const existing = next.get(key);
         next.set(key, {
-          rawValue,
+          rawValue: nextRawValue,
           displayValue: 'Carregando...',
           format: existing?.format,
+          piBinding: nextPiBinding,
         });
         finalMapToCommit = evaluateStaticFormulas(next).nextMap;
       }
@@ -1690,7 +1718,12 @@ export function MiniSheetsPanel({
       for (let r = norm.top; r <= norm.bottom; r++) {
         for (let c = norm.left; c <= norm.right; c++) {
           const key = `${c},${r}`;
-          next.delete(key);
+          const existing = next.get(key);
+          if (existing?.format) {
+            next.set(key, { rawValue: '', displayValue: '', format: existing.format });
+          } else {
+            next.delete(key);
+          }
         }
       }
     });
@@ -2250,6 +2283,33 @@ export function MiniSheetsPanel({
     setRanges([rangeSelectAll(TOTAL_COLS, visibleRows)]);
   };
 
+  const handlePiPointDropOnCell = (col: number, row: number, payload: string) => {
+    const piPoint = parsePiPointDragData(payload);
+    if (!piPoint) return;
+
+    const key = `${row},${col}`;
+    setCells((prev) => {
+      const next = new Map(prev);
+      
+      const rawValue = `=PICurrVal("${piPoint.name}")`;
+      
+      next.set(key, {
+        rawValue,
+        displayValue: piPoint.name,
+        piBinding: {
+          type: 'pi-point',
+          name: piPoint.name,
+          path: piPoint.path,
+          webId: piPoint.webId,
+          description: piPoint.description,
+          engineeringUnit: piPoint.engineeringUnit,
+        },
+      });
+      
+      return evaluateStaticFormulas(next).nextMap;
+    });
+  };
+
   const handleCellDoubleClick = (col: number, row: number) => {
     const key = `${col},${row}`;
     const cell = cells.get(key);
@@ -2257,7 +2317,7 @@ export function MiniSheetsPanel({
     setAnchorCell({ col, row });
     setRanges([rangeFromCells({ col, row }, { col, row })]);
     setEditingCellCoord({ col, row });
-    setEditingCellText(cell?.rawValue ?? '');
+    setEditingCellText(getEditableText(cell));
   };
 
   const handleFormulaBarSubmit = (e: React.FormEvent) => {
@@ -2362,13 +2422,14 @@ export function MiniSheetsPanel({
       e.preventDefault();
       const cell = cells.get(activeKey);
       setEditingCellCoord(activeCell);
-      setEditingCellText(cell?.rawValue ?? '');
-      if (cell?.rawValue?.trimStart().startsWith('=')) {
+      setEditingCellText(getEditableText(cell));
+      const editable = getEditableText(cell);
+      if (editable.trimStart().startsWith('=')) {
         formulaTargetRef.current = activeCell;
         setFormulaTargetCell(activeCell);
         setFormulaEditMode(true);
         formulaSessionRef.current = true;
-        formulaCursorRef.current = { start: cell.rawValue.length, end: cell.rawValue.length };
+        formulaCursorRef.current = { start: editable.length, end: editable.length };
       }
       return;
     }
@@ -2705,26 +2766,35 @@ export function MiniSheetsPanel({
           {/* Text Color */}
           <label className={styles.colorPickerLabel} title="Cor do texto">
             <span style={{ borderBottom: `3px solid ${activeFormat.textColor || 'var(--text-primary)'}` }}>A</span>
-            <input
-              type="color"
-              className={styles.colorInput}
-              data-testid="mini-sheets-format-text-color"
-              value={activeFormat.textColor || '#e5e7eb'}
-              onChange={(e) => handleApplyFormat({ textColor: e.target.value })}
-            />
+            <div style={{ marginLeft: 4 }}>
+              <ColorPicker
+                color={activeFormat.textColor || '#e5e7eb'}
+                onChange={(color) => handleApplyFormat({ textColor: color })}
+              />
+            </div>
           </label>
 
           {/* Background Color */}
-          <label className={styles.colorPickerLabel} title="Cor de fundo da célula">
-            <FillColorIcon />
-            <input
-              type="color"
-              className={styles.colorInput}
-              data-testid="mini-sheets-format-bg-color"
-              value={activeFormat.backgroundColor || '#1f2937'}
-              onChange={(e) => handleApplyFormat({ backgroundColor: e.target.value })}
-            />
-          </label>
+          <div className={styles.colorPickerContainer}>
+            <label className={styles.colorPickerLabel} title="Cor de fundo da célula">
+              <FillColorIcon />
+              <div style={{ marginLeft: 4 }}>
+                <ColorPicker
+                  color={activeFormat.backgroundColor || '#1f2937'}
+                  onChange={(color) => handleApplyFormat({ backgroundColor: color })}
+                />
+              </div>
+            </label>
+            <button
+              type="button"
+              className={styles.formatButton}
+              data-testid="mini-sheets-format-bg-clear"
+              title="Sem preenchimento (Transparente)"
+              onClick={() => handleApplyFormat({ backgroundColor: undefined })}
+            >
+              <EraserIcon />
+            </button>
+          </div>
 
           <div className={styles.toolbarDivider} />
 
@@ -2958,7 +3028,7 @@ export function MiniSheetsPanel({
                     if (cell?.format?.bold) customStyle.fontWeight = 'bold';
                     if (cell?.format?.italic) customStyle.fontStyle = 'italic';
                     if (cell?.format?.textColor) customStyle.color = cell.format.textColor;
-                    if (cell?.format?.backgroundColor && !isActive && !isInsideSelection) {
+                    if (cell?.format?.backgroundColor) {
                       customStyle.backgroundColor = cell.format.backgroundColor;
                     }
                     if (cell?.format?.horizontalAlign) customStyle.textAlign = cell.format.horizontalAlign;
@@ -3013,6 +3083,22 @@ export function MiniSheetsPanel({
                         onPointerEnter={(e) => handleCellPointerEnter(cIndex, rIndex, e)}
                         onMouseEnter={(e) => handleCellPointerEnter(cIndex, rIndex, e)}
                         onDoubleClick={() => handleCellDoubleClick(cIndex, rIndex)}
+                        onDragOver={(e) => {
+                          if (e.dataTransfer.types.includes(PI_POINT_DRAG_MIME)) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }
+                        }}
+                        onDrop={(e) => {
+                          if (e.dataTransfer.types.includes(PI_POINT_DRAG_MIME)) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const payload = e.dataTransfer.getData(PI_POINT_DRAG_MIME);
+                            if (payload) {
+                              handlePiPointDropOnCell(cIndex, rIndex, payload);
+                            }
+                          }
+                        }}
                       >
                         {isEditing ? (
                           <input
@@ -3152,6 +3238,16 @@ function AlignRightIcon() {
   );
 }
 
+function EraserIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+      <path d="M22 21H7" />
+      <path d="m5 11 9 9" />
+    </svg>
+  );
+}
+
 const getStyles = (theme: GrafanaTheme2) => ({
   container: css`
     display: flex;
@@ -3232,6 +3328,11 @@ const getStyles = (theme: GrafanaTheme2) => ({
     svg {
       color: var(--accent-hover, var(--accent)) !important;
     }
+  `,
+  colorPickerContainer: css`
+    display: flex;
+    align-items: center;
+    gap: 2px;
   `,
   colorPickerLabel: css`
     display: inline-flex;
@@ -3468,24 +3569,22 @@ const getStyles = (theme: GrafanaTheme2) => ({
   cellActive: css`
     outline: 2px solid #1890ff;
     outline-offset: -2px;
-    background: transparent !important;
     z-index: 1;
   `,
   cellInRange: css`
-    background: rgba(24, 144, 255, 0.12) !important;
+    box-shadow: inset 0 0 0 1000px rgba(24, 144, 255, 0.12) !important;
   `,
   cellFormulaReference: css`
-    background: rgba(24, 144, 255, 0.18) !important;
-    box-shadow: inset 0 0 0 2px #1890ff;
+    box-shadow: inset 0 0 0 1000px rgba(24, 144, 255, 0.18), inset 0 0 0 2px #1890ff !important;
   `,
   cellAutofillPreview: css`
     outline: 1px dashed #1890ff;
-    background: rgba(24, 144, 255, 0.12) !important;
+    box-shadow: inset 0 0 0 1000px rgba(24, 144, 255, 0.12) !important;
   `,
   cellSelected: css`
     outline: 2px solid #1890ff;
     outline-offset: -2px;
-    background: rgba(24, 144, 255, 0.12) !important;
+    box-shadow: inset 0 0 0 1000px rgba(24, 144, 255, 0.12) !important;
   `,
   cellSpilled: css`
     font-style: normal;
@@ -3506,7 +3605,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
     padding: 0;
     border: none;
     outline: none;
-    background: var(--input-bg, var(--panel-bg));
+    background: transparent;
     color: var(--text-primary);
     font-size: 12px;
     font-family: inherit;
