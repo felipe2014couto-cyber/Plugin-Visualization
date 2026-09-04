@@ -420,10 +420,11 @@ function applyContextualColors(elements: DisplayElement[]) {
 
   for (let i = 0; i < elements.length; i++) {
     const el = elements[i];
-    if (el.type === 'value' || el.type === 'text' || el.type === 'calculation') {
-      const isText = el.type === 'text';
-      const color = isText ? (el.properties as any).color : (el.properties as any).visual?.color;
-      
+    if ((el.properties as any)?.multistate?.enabled) {
+      continue;
+    }
+    if (el.type === 'text') {
+      const color = (el.properties as any).color;
       if (color === '#ffffff' || color === 'white' || color === '#fff') {
         let backgroundElement = null;
         for (let j = i - 1; j >= 0; j--) {
@@ -439,11 +440,7 @@ function applyContextualColors(elements: DisplayElement[]) {
         if (backgroundElement) {
           const bgFill = (backgroundElement.properties as any).fill;
           if (isLightBackground(bgFill)) {
-            if (isText) {
-              (el.properties as any).color = '#000000';
-            } else {
-              (el.properties as any).visual.color = '#000000';
-            }
+            (el.properties as any).color = '#000000';
           }
         }
       }
@@ -596,10 +593,7 @@ function convertValue(
   const backgroundColor = isDefaultWhiteOrTransparent ? 'transparent' : rawBg;
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize);
   const textAlign = normalizeTextAlign(cfg.TextAlignment);
-  const thresholdMultistate = convertPiVisionThresholdMultistate(cfg.Multistates);
-  const multistate = thresholdMultistate
-    ? { multistate: thresholdMultistate }
-    : convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
+  const multistate = extractAnyMultistate(symbol, cfg);
 
   const properties: ValueProperties = {
     ...(binding ? { binding } : {}),
@@ -791,7 +785,7 @@ function convertBar(
     ? 'horizontal'
     : 'vertical';
   const color = normalizeColor(cfg.Fill ?? cfg.ForeColor) ?? '#6e9fff';
-  const multistate = convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
+  const multistate = extractAnyMultistate(symbol, cfg);
   const isPiVisionCompactGauge = symType === 'verticalgauge' || symType === 'horizontalgauge' || symType === 'verticalbar' || symType === 'horizontalbar' || symType === 'bar';
   const showScale = cfg.ShowScale === true || (cfg.ValueScaleSettings as any)?.DisplayScale === true;
   const showTagName = cfg.ShowLabel === true || cfg.ShowTagName === true;
@@ -913,7 +907,7 @@ function convertText(
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize) ?? DEFAULT_TEXT_PROPERTIES.fontSize;
   const textAlign = normalizeTextAlign(cfg.TextAlignment) as TextAlign;
 
-  const multistate = convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
+  const multistate = extractAnyMultistate(symbol, cfg);
   const binding = firstMultistateBinding(symbol, dataSourceUid);
   const calculation = firstMultistateCalculation(symbol, calculationsByName);
 
@@ -968,12 +962,9 @@ function convertShape(
   const rawFill = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill ?? (cfg as any).FillColor);
   const fill = isTransparent ? 'transparent' : (rawFill ?? 'transparent');
   const stroke = normalizeColor(cfg.ForeColor ?? cfg.Stroke ?? (cfg as any).LineColor) ?? DEFAULT_RECTANGLE_PROPERTIES.stroke;
-  const thresholdMultistate = convertPiVisionThresholdMultistate(cfg.Multistates);
   const multistateBinding = firstMultistateBinding(symbol, dataSourceUid);
   const calculation = firstMultistateCalculation(symbol, calculationsByName);
-  const multistate = thresholdMultistate
-    ? { multistate: thresholdMultistate }
-    : convertMultistateIfPresent(symbol.Multistate ?? (cfg.Multistate as PiVisionMultistateConfig), cfg);
+  const multistate = extractAnyMultistate(symbol, cfg);
 
   const properties: RectangleProperties = {
     ...DEFAULT_RECTANGLE_PROPERTIES,
@@ -1225,6 +1216,42 @@ export function convertMultistate(
   return { enabled: rules.length > 0, rules };
 }
 
+function extractAnyMultistate(
+  symbol: PiVisionSymbol,
+  cfg: PiVisionSymbolConfiguration,
+): { multistate?: MultistateConfig; backgroundMultistate?: MultistateConfig } {
+  const candidates = [
+    cfg?.Multistates,
+    (symbol as any)?.Multistates,
+    (cfg as any)?.MultiStates,
+    (symbol as any)?.MultiStates,
+    symbol?.Multistate,
+    cfg?.Multistate,
+    (symbol as any)?.MultiState,
+    (cfg as any)?.MultiState,
+    (cfg as any)?.ThresholdMultistates,
+    (symbol as any)?.ThresholdMultistates,
+    (cfg as any)?.Thresholds,
+    (symbol as any)?.Thresholds,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+
+    const thresholdResult = convertPiVisionThresholdMultistate(candidate);
+    if (thresholdResult && thresholdResult.rules.length > 0) {
+      return { multistate: thresholdResult };
+    }
+
+    const triggerResult = convertMultistateIfPresent(candidate as PiVisionMultistateConfig, cfg);
+    if (triggerResult.multistate || triggerResult.backgroundMultistate) {
+      return triggerResult;
+    }
+  }
+
+  return {};
+}
+
 function convertMultistateIfPresent(
   multistate?: PiVisionMultistateConfig,
   cfg?: PiVisionSymbolConfiguration,
@@ -1252,9 +1279,20 @@ function convertMultistateIfPresent(
       .map((t, idx) => {
         const expr = (t.Expression ?? '').trim();
         const color = normalizeColor(t.BackColor);
-        if (!expr || !color) return undefined;
-        const parsed = parseExpression(expr);
+        if (!color) return undefined;
+        let parsed = expr ? parseExpression(expr) : undefined;
+        if (!parsed) {
+          const tAny = t as any;
+          const op = tAny.Operator ?? tAny.Comparison ?? tAny.Condition;
+          const rawVal = tAny.Value ?? tAny.UpperValue ?? tAny.TargetValue ?? tAny.Limit;
+          if (rawVal !== undefined) {
+            const numVal = typeof rawVal === 'number' ? rawVal : (typeof rawVal === 'string' && /^-?\d+(\.\d+)?$/.test(rawVal.trim()) ? Number(rawVal.trim()) : rawVal);
+            const normOp: MultistateOperator = op === '<' ? 'lt' : op === '<=' ? 'lte' : op === '>' ? 'gt' : op === '>=' ? 'gte' : op === 'between' ? 'between' : 'eq';
+            parsed = { operator: normOp, value: numVal };
+          }
+        }
         if (!parsed) return undefined;
+
         const stateObj = parentStates?.[idx];
         const stateRec = (stateObj && typeof stateObj === 'object') ? stateObj as Record<string, unknown> : undefined;
         const parentBlinkVal = parentBlinks?.[idx];
@@ -1293,63 +1331,146 @@ function convertMultistateIfPresent(
 }
 
 function convertPiVisionThresholdMultistate(
-  source: PiVisionThresholdMultistate[] | undefined,
+  source: unknown,
 ): MultistateConfig | undefined {
-  const definition = Array.isArray(source) ? source[0] : undefined;
-  const states = Array.isArray(definition?.States) ? definition?.States ?? [] : [];
-  if (states.length === 0) {
+  if (!source) {
     return undefined;
   }
 
-  const colorIndex = Math.max(0, definition?.StateVariables?.findIndex((name) => /color|fill/i.test(name)) ?? 0);
-  const blinkIndex = definition?.StateVariables?.findIndex((name) => /blink|flash/i.test(name)) ?? -1;
+  let definition: any;
+  let rawStates: any[] = [];
 
-  const converted = states.flatMap((state) => {
-    const upperValue = state.UpperValue;
-    const color = normalizeMultistateColor(state.StateValues?.[colorIndex]);
-    const rawBlink = blinkIndex >= 0 ? state.StateValues?.[blinkIndex] : undefined;
-    const isBlink = Boolean(
-      rawBlink === true || rawBlink === 1 || rawBlink === 'true' ||
-      state.Blink === true || state.Blink === 1 || state.Blink === 'true' ||
-      state.IsBlinking === true || state.IsBlinking === 1 || state.IsBlinking === 'true' ||
-      state.Blinking === true || state.Blinking === 1 || state.Blinking === 'true' ||
-      state.Flash === true || state.Flash === 1 || state.Flash === 'true'
-    );
-    return typeof upperValue === 'number' && Number.isFinite(upperValue) && color
-      ? [{ upperValue, color, blink: isBlink }]
-      : [];
-  });
+  if (Array.isArray(source)) {
+    if (source.length === 0) return undefined;
+    if (source[0] && typeof source[0] === 'object' && ('States' in source[0] || 'Thresholds' in source[0] || 'Triggers' in source[0])) {
+      definition = source[0];
+      rawStates = definition.States ?? definition.Thresholds ?? definition.Triggers ?? [];
+    } else {
+      rawStates = source;
+    }
+  } else if (typeof source === 'object' && source !== null) {
+    definition = source;
+    rawStates = (source as any).States ?? (source as any).Thresholds ?? (source as any).Triggers ?? [];
+  }
+
+  if (!Array.isArray(rawStates) || rawStates.length === 0) {
+    return undefined;
+  }
+
+  const stateVariables = Array.isArray(definition?.StateVariables)
+    ? definition.StateVariables.map((v: unknown) => String(v).toLowerCase())
+    : [];
+
+  let colorIndex = stateVariables.findIndex((name: string) => /color|fill|stroke/i.test(name));
+  if (colorIndex < 0) colorIndex = 0;
+
+  let blinkIndex = stateVariables.findIndex((name: string) => /blink|flash/i.test(name));
+
+  interface ConvertedState {
+    value: number | string;
+    color: string;
+    blink?: boolean;
+    lowerValue?: number;
+    upperValue?: number;
+  }
+
+  const converted: ConvertedState[] = [];
+
+  for (const state of rawStates) {
+    if (!state || typeof state !== 'object') continue;
+
+    let rawColor: unknown;
+    if (Array.isArray(state.StateValues)) {
+      rawColor = state.StateValues[colorIndex] ?? state.StateValues[0];
+    } else {
+      rawColor = state.Color ?? state.ForeColor ?? state.Fill ?? state.ValueColor ?? state.TextColor;
+    }
+    const color = normalizeMultistateColor(rawColor);
+    if (!color) continue;
+
+    let isBlink = false;
+    if (blinkIndex >= 0 && Array.isArray(state.StateValues)) {
+      const b = state.StateValues[blinkIndex];
+      isBlink = b === true || b === 1 || b === 'true';
+    }
+    if (!isBlink) {
+      const stateRec = state as Record<string, unknown>;
+      isBlink = Boolean(
+        stateRec.Blink === true || stateRec.Blink === 1 || stateRec.Blink === 'true' ||
+        stateRec.IsBlinking === true || stateRec.IsBlinking === 1 || stateRec.IsBlinking === 'true' ||
+        stateRec.Blinking === true || stateRec.Blinking === 1 || stateRec.Blinking === 'true' ||
+        stateRec.Flash === true || stateRec.Flash === 1 || stateRec.Flash === 'true'
+      );
+    }
+
+    const rawVal = state.UpperValue ?? state.Value ?? state.Limit ?? state.Threshold ?? state.TargetValue ?? state.State;
+    let val: number | string | undefined;
+    if (typeof rawVal === 'number' && Number.isFinite(rawVal)) {
+      val = rawVal;
+    } else if (typeof rawVal === 'string') {
+      const trimmed = rawVal.trim();
+      val = /^-?\d+(\.\d+)?$/.test(trimmed) ? Number(trimmed) : trimmed;
+    }
+
+    const lowerVal = typeof state.LowerValue === 'number' ? state.LowerValue : undefined;
+    const upperVal = typeof state.UpperValue === 'number' ? state.UpperValue : (typeof val === 'number' ? val : undefined);
+
+    if (val !== undefined) {
+      converted.push({
+        value: val,
+        color,
+        ...(isBlink ? { blink: true } : {}),
+        ...(lowerVal !== undefined ? { lowerValue: lowerVal } : {}),
+        ...(upperVal !== undefined ? { upperValue: upperVal } : {}),
+      });
+    }
+  }
+
   if (converted.length === 0) {
     return undefined;
   }
 
-  const isDigital = converted.length <= 4 && converted.every((s, i) => s.upperValue === i);
+  const allNumeric = converted.every((s) => typeof s.value === 'number');
+  const isDigital = !allNumeric || (converted.length <= 4 && converted.every((s, i) => s.value === i));
 
-  const rules: MultistateRule[] = converted.map((state, index) => {
-    const blinkProp = state.blink ? { blink: true } : {};
-    if (isDigital) {
-      const digitalName = converted.length === 2 ? (state.upperValue === 0 ? 'Off' : 'On') : undefined;
+  if (isDigital) {
+    const rules: MultistateRule[] = converted.map((s) => {
+      const digitalName = converted.length === 2
+        ? (s.value === 0 || s.value === '0' || String(s.value).toLowerCase() === 'off' ? 'Off' : 'On')
+        : (typeof s.value === 'string' ? s.value : undefined);
       return {
         id: generateId(),
         operator: 'eq',
-        value: state.upperValue,
-        digitalStateValue: state.upperValue,
+        value: s.value,
+        digitalStateValue: s.value,
         ...(digitalName ? { digitalStateName: digitalName } : {}),
-        color: state.color,
-        ...blinkProp,
+        color: s.color,
+        ...(s.blink ? { blink: true } : {}),
       };
-    }
+    });
+    return { enabled: true, rules };
+  }
+
+  const rules: MultistateRule[] = converted.map((state, index) => {
+    const blinkProp = state.blink ? { blink: true } : {};
     if (index === converted.length - 1 && index > 0) {
       return {
         id: generateId(),
         operator: 'gte',
-        value: converted[index - 1].upperValue,
+        value: converted[index - 1].value,
         color: state.color,
         ...blinkProp,
       };
     }
-    return { id: generateId(), operator: 'lte', value: state.upperValue, color: state.color, ...blinkProp };
+    return {
+      id: generateId(),
+      operator: 'lte',
+      value: state.value,
+      color: state.color,
+      ...blinkProp,
+    };
   });
+
   return { enabled: true, rules };
 }
 
@@ -1368,6 +1489,9 @@ function normalizeMultistateColor(value: unknown): string | undefined {
   if (/^#[0-9a-f]{6}$/i.test(color)) {
     return color.toLowerCase();
   }
+  if (/^#[0-9a-f]{8}$/i.test(color)) {
+    return color.slice(0, 7).toLowerCase();
+  }
   const rgba = color.match(/^rgba?\(\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)(?:\s*,\s*(0|1|0?\.\d+))?\s*\)$/i);
   if (rgba) {
     if (rgba[4] !== undefined && Number(rgba[4]) === 0) {
@@ -1378,7 +1502,7 @@ function normalizeMultistateColor(value: unknown): string | undefined {
       .join('')}`;
   }
   const namedColors: Record<string, string> = {
-    black: '#000000', white: '#ffffff', red: '#ff0000', green: '#008000', blue: '#0000ff',
+    black: '#000000', white: '#ffffff', red: '#ff0000', green: '#00ff00', blue: '#0000ff',
     yellow: '#ffff00', orange: '#ffa500', purple: '#800080', lime: '#00ff00', gray: '#808080', grey: '#808080',
   };
   return namedColors[color.toLowerCase()];
@@ -1393,11 +1517,18 @@ function convertMultistateTrigger(
   const expression = (trigger.Expression ?? '').trim();
   const color = normalizeColor(trigger.ForeColor ?? (trigger as Record<string, unknown>).Color ?? (trigger as Record<string, unknown>).Fill) ?? '#d32f2f';
 
-  if (!expression) {
-    return undefined;
+  let parsed = expression ? parseExpression(expression) : undefined;
+  if (!parsed) {
+    const trigAny = trigger as any;
+    const op = trigAny.Operator ?? trigAny.Comparison ?? trigAny.Condition;
+    const rawVal = trigAny.Value ?? trigAny.UpperValue ?? trigAny.TargetValue ?? trigAny.Limit;
+    if (rawVal !== undefined) {
+      const numVal = typeof rawVal === 'number' ? rawVal : (typeof rawVal === 'string' && /^-?\d+(\.\d+)?$/.test(rawVal.trim()) ? Number(rawVal.trim()) : rawVal);
+      const normOp: MultistateOperator = op === '<' ? 'lt' : op === '<=' ? 'lte' : op === '>' ? 'gt' : op === '>=' ? 'gte' : op === 'between' ? 'between' : 'eq';
+      parsed = { operator: normOp, value: numVal };
+    }
   }
 
-  const parsed = parseExpression(expression);
   if (!parsed) {
     return undefined;
   }

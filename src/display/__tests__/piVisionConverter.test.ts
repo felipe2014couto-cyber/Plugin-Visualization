@@ -1313,4 +1313,76 @@ describe('Multistate Blink e Background na conversão PI Vision', () => {
     expect(props.multistate?.rules[1].blink).toBeUndefined();
     expect(props.multistate?.rules[2].blink).toBe(true);
   });
+
+  it('converte multistate em Value quando configurado em symbol.Multistate com formato States (objeto)', () => {
+    const sym: PiVisionSymbol = {
+      SymbolType: 'Value',
+      DataSources: ['pi:\\\\SERVER\\TEMP_ZONA_6'],
+      Multistate: {
+        StateVariables: ['Color', 'Blink'],
+        States: [
+          { UpperValue: 100, StateValues: ['#0000ff', false] },
+          { UpperValue: 250, StateValues: ['#00ff00', false] },
+          { UpperValue: 350, StateValues: ['#ffff00', false] },
+          { UpperValue: 500, StateValues: ['#ff0000', true] },
+        ],
+      } as any,
+    };
+
+    const { elements } = convertPiVisionDisplay({ Symbols: [sym] });
+    const props = elements[0].properties as any;
+    expect(props.multistate?.enabled).toBe(true);
+    expect(props.multistate?.rules).toHaveLength(4);
+    expect(props.multistate?.rules[0]).toMatchObject({ operator: 'lte', value: 100, color: '#0000ff' });
+    expect(props.multistate?.rules[1]).toMatchObject({ operator: 'lte', value: 250, color: '#00ff00' });
+    expect(props.multistate?.rules[2]).toMatchObject({ operator: 'lte', value: 350, color: '#ffff00' });
+    expect(props.multistate?.rules[3]).toMatchObject({ operator: 'gte', value: 350, color: '#ff0000', blink: true });
+  });
+
+  it('converte multistate em Value com cfg.MultiStates e cores em 8-digitos hex (#00FF00FF)', () => {
+    const sym: PiVisionSymbol = {
+      SymbolType: 'Value',
+      DataSources: ['pi:\\\\SERVER\\TEMP_ZONA_1'],
+      Configuration: {
+        MultiStates: [{
+          StateVariables: ['Fill'],
+          States: [
+            { UpperValue: '200', StateValues: ['#00FF00FF'] },
+            { UpperValue: '300', StateValues: ['#FFFF00FF'] },
+            { UpperValue: '400', StateValues: ['#FF0000FF'] },
+          ],
+        }],
+      } as any,
+    };
+
+    const { elements } = convertPiVisionDisplay({ Symbols: [sym] });
+    const props = elements[0].properties as any;
+    expect(props.multistate?.enabled).toBe(true);
+    expect(props.multistate?.rules).toHaveLength(3);
+    expect(props.multistate?.rules[0]).toMatchObject({ operator: 'lte', value: 200, color: '#00ff00' });
+    expect(props.multistate?.rules[1]).toMatchObject({ operator: 'lte', value: 300, color: '#ffff00' });
+    expect(props.multistate?.rules[2]).toMatchObject({ operator: 'gte', value: 300, color: '#ff0000' });
+  });
+
+  it('preserva a cor original do Value e nao converte para preto quando dentro de elemento cinza', () => {
+    const bg: PiVisionSymbol = {
+      SymbolType: 'rectangle',
+      Configuration: {
+        Left: 0, Top: 0, Width: 400, Height: 400,
+        Fill: '#c0c0c0',
+      },
+    };
+    const val: PiVisionSymbol = {
+      SymbolType: 'Value',
+      DataSources: ['pi:\\\\SERVER\\PV_ZONA_1'],
+      Configuration: {
+        Left: 50, Top: 50, Width: 100, Height: 30,
+        ForeColor: '#00ff00',
+      },
+    };
+
+    const { elements } = convertPiVisionDisplay({ Symbols: [bg, val] });
+    const valEl = elements.find((e) => e.type === 'value');
+    expect((valEl?.properties as any).visual.color).toBe('#00ff00');
+  });
 });
