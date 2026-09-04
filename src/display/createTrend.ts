@@ -292,8 +292,14 @@ export function trendBindingKey(binding: PiPointBinding): string {
   return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
 }
 
+export const CALCULATION_DATASOURCE_UID = '__pims_calculation__';
+
 export function createCalculationTrendBinding(calculationId: string): PiPointBinding {
-  return { dataSourceUid: '__pims_calculation__', serverPath: calculationId, pointName: calculationId };
+  return { dataSourceUid: CALCULATION_DATASOURCE_UID, serverPath: calculationId, pointName: calculationId };
+}
+
+export function isCalculationTrendBinding(binding: PiPointBinding): boolean {
+  return binding.dataSourceUid === CALCULATION_DATASOURCE_UID;
 }
 
 export function trendSeriesColor(index: number): string {
