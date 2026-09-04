@@ -217,6 +217,85 @@ function getPiDataLinkInfoForCell(
   };
 }
 
+export function evaluateStaticFormulasBase(
+  currentMap: Map<string, CellData>,
+  totalCols: number,
+  totalRows: number
+): { nextMap: Map<string, CellData>; changed: boolean } {
+  const nextMap = new Map(currentMap);
+  let changed = false;
+  const evaluatedThisPass = new Set<string>();
+
+  const evaluateCell = (coord: CellCoord, visited: Set<string>, depth: number): string | undefined => {
+    const key = `${coord.col},${coord.row}`;
+
+    const cell = nextMap.get(key);
+    if (!cell || cell.spilledFrom) {
+      return cell?.displayValue;
+    }
+
+    if (evaluatedThisPass.has(key)) {
+      return cell.displayValue;
+    }
+
+    if (depth > 100) {
+      return '#REF_DEPTH!';
+    }
+
+    if (visited.has(key)) {
+      return '#REF_CYCLE!';
+    }
+
+    const raw = cell.rawValue?.trim() ?? '';
+    if (cell.valueOrigin === 'sip' || !raw.startsWith('=')) {
+      evaluatedThisPass.add(key);
+      return cell.displayValue;
+    }
+
+    const parsed = parseFormula(raw);
+    let newDisplay = cell.displayValue;
+
+    if (typeof parsed === 'object' && 'type' in parsed) {
+      const getVal = (depCoord: CellCoord) => {
+        const newVisited = new Set(visited);
+        newVisited.add(key);
+        const val = evaluateCell(depCoord, newVisited, depth + 1);
+        return val;
+      };
+
+      if (parsed.type === 'math_expression') {
+        const res = evaluateMathExpression(parsed.expression, getVal, totalCols, totalRows);
+        newDisplay = res.status === 'success' ? String(res.value) : res.error;
+      } else if (parsed.type === 'aggregate') {
+        const res = evaluateAggregate(parsed.func, parsed.referencedCells, getVal, totalCols, totalRows);
+        newDisplay = res.status === 'success' ? String(res.value) : res.error;
+      }
+    }
+
+    if (newDisplay !== cell.displayValue) {
+      nextMap.set(key, { ...cell, displayValue: newDisplay });
+      changed = true;
+    }
+
+    evaluatedThisPass.add(key);
+    return newDisplay;
+  };
+
+  nextMap.forEach((cellData, key) => {
+    if (cellData.spilledFrom) {
+      return;
+    }
+    const raw = cellData.rawValue?.trim() ?? '';
+    if (cellData.valueOrigin !== 'sip' && raw.startsWith('=')) {
+      const [colStr, rowStr] = key.split(',');
+      const coord = { col: parseInt(colStr, 10), row: parseInt(rowStr, 10) };
+      evaluateCell(coord, new Set(), 0);
+    }
+  });
+
+  return { nextMap, changed };
+}
+
 export function MiniSheetsPanel({
   dataSourceSrv,
   initialDocument,
@@ -478,46 +557,13 @@ export function MiniSheetsPanel({
     [dataSourceSrv],
   );
 
+
+
   /**
    * Evaluates all dependencies or regular math/aggregate formulas.
    */
   const evaluateStaticFormulas = useCallback((currentMap: Map<string, CellData>) => {
-    const nextMap = new Map(currentMap);
-    const getCellValue = (coord: CellCoord): number | string | undefined => {
-      const cell = nextMap.get(`${coord.col},${coord.row}`);
-      return cell?.displayValue;
-    };
-
-    let changed = false;
-    // Iterate over all entries in the map
-    nextMap.forEach((cellData, key) => {
-      if (cellData.spilledFrom) {
-        return;
-      }
-      const raw = cellData.rawValue?.trim() ?? '';
-      if (cellData.valueOrigin !== 'sip' && raw.startsWith('=')) {
-        const parsed = parseFormula(raw);
-        if (typeof parsed === 'object' && 'type' in parsed) {
-          if (parsed.type === 'math_expression') {
-            const res = evaluateMathExpression(parsed.expression, getCellValue, TOTAL_COLS, TOTAL_ROWS);
-            const newDisplay = res.status === 'success' ? String(res.value) : res.error;
-            if (newDisplay !== cellData.displayValue) {
-              nextMap.set(key, { ...cellData, displayValue: newDisplay });
-              changed = true;
-            }
-          } else if (parsed.type === 'aggregate') {
-            const res = evaluateAggregate(parsed.func, parsed.referencedCells, getCellValue, TOTAL_COLS, TOTAL_ROWS);
-            const newDisplay = res.status === 'success' ? String(res.value) : res.error;
-            if (newDisplay !== cellData.displayValue) {
-              nextMap.set(key, { ...cellData, displayValue: newDisplay });
-              changed = true;
-            }
-          }
-        }
-      }
-    });
-
-    return { nextMap, changed };
+    return evaluateStaticFormulasBase(currentMap, TOTAL_COLS, TOTAL_ROWS);
   }, []);
 
   /**

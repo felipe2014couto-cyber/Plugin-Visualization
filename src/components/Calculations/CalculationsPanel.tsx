@@ -314,15 +314,17 @@ function isCalculationInUse(elements: DisplayElement[] | undefined, calculationI
     }
     // Check if it's a calculation binding
     if (
+      val &&
+      typeof val === 'object' &&
       'dataSourceUid' in val &&
+      (val as any).dataSourceUid === '__pims_calculation__' &&
       'serverPath' in val &&
-      val.dataSourceUid === '__pims_calculation__' &&
-      val.serverPath === calculationId
+      (val as any).serverPath === calculationId
     ) {
       return true;
     }
-    // Check old calculationId format
-    if ('calculationId' in val && val.calculationId === calculationId) {
+    // Validação fallback para propriedades legadas (se existirem)
+    if (val && typeof val === 'object' && 'calculationId' in val && (val as any).calculationId === calculationId) {
       return true;
     }
     // Recurse into arrays and objects
