@@ -400,7 +400,9 @@ export function BarChartPropertiesPanel({
       {/* Barras / Tags */}
       <section className={styles.section}>
         <strong>Barras ({items.length})</strong>
-        {items.map((item, index) => (
+        {items.map((item, index) => {
+          const displayName = item.customName?.trim() || item.label?.trim() || item.binding.pointName;
+          return (
           <div
             className={`${styles.itemRow} ${index === effectiveIndex ? styles.itemRowSelected : ''}`}
             key={`${item.binding.dataSourceUid}-${item.binding.pointName}-${index}`}
@@ -409,9 +411,9 @@ export function BarChartPropertiesPanel({
               type="button"
               className={styles.itemName}
               onClick={() => setSelectedItemIndex(index)}
-              title={item.binding.pointName}
+              title={displayName}
             >
-              {item.binding.pointName}
+              {displayName}
             </button>
             <button
               type="button"
@@ -438,7 +440,7 @@ export function BarChartPropertiesPanel({
               Excluir
             </button>
           </div>
-        ))}
+        )})}
 
         {selectedItem && (
           <div className={styles.itemSettings}>

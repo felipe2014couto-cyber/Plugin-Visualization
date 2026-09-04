@@ -15,12 +15,14 @@ export interface BarChartElementViewProps {
   element: BarChartElement;
   runtimeStates?: Map<string, ValueRuntimeState>;
   databaseScales?: Record<string, PiPointDatabaseLimits>;
+  calculations?: readonly { id: string; name: string }[];
 }
 
 export const BarChartElementView = React.memo(function BarChartElementView({
   element,
   runtimeStates,
   databaseScales = {},
+  calculations = [],
 }: BarChartElementViewProps) {
   const items = getBarChartItems(element);
   const visual = getBarChartVisualOptions(element);
@@ -275,7 +277,7 @@ export const BarChartElementView = React.memo(function BarChartElementView({
         const numValue = typeof rawValue === 'number' && Number.isFinite(rawValue) ? rawValue : undefined;
         const unit = runtimeState?.result?.unit ?? item.engineeringUnit ?? '';
         const timestamp = runtimeState?.result?.timestamp;
-        const displayName = resolveBarChartItemLabel(item, visual.labelMode);
+        const displayName = resolveBarChartItemLabel(item, visual.labelMode, calculations);
         const formattedVal = numValue !== undefined ? formatBarChartValue(numValue, visual) : runtimeState?.status === 'loading' ? '...' : '--';
 
         const tooltipText = `${displayName}\n${formattedVal}${unit ? ` ${unit}` : ''}${timestamp ? `\n${formatTimestamp(timestamp)}` : ''}`;
@@ -445,12 +447,15 @@ export const BarChartElementView = React.memo(function BarChartElementView({
   );
 });
 
-export function resolveBarChartItemLabel(item: BarChartItem, mode: BarChartVisualOptions['labelMode']): string {
+export function resolveBarChartItemLabel(item: BarChartItem, mode: BarChartVisualOptions['labelMode'], calculations?: readonly { id: string; name: string }[]): string {
   if (item.nameMode === 'custom' && item.customName?.trim()) {
     return item.customName.trim();
   }
+  const calc = item.binding.dataSourceUid === '__pims_calculation__' ? calculations?.find((c) => c.id === item.binding.serverPath) : undefined;
+  const fallbackName = calc?.name || item.binding.pointName;
+
   if (mode === 'tag' || mode === 'name') {
-    return item.binding.pointName;
+    return fallbackName;
   }
   if (mode === 'description' && item.description?.trim()) {
     return item.description.trim();
@@ -458,7 +463,7 @@ export function resolveBarChartItemLabel(item: BarChartItem, mode: BarChartVisua
   if (mode === 'custom' && item.customName?.trim()) {
     return item.customName.trim();
   }
-  return item.label?.trim() || item.description?.trim() || item.binding.pointName;
+  return item.label?.trim() || item.description?.trim() || calc?.name || item.binding.pointName;
 }
 
 export function formatBarChartValue(value: number, visual: BarChartVisualOptions): string {

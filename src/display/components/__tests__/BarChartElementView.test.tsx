@@ -98,7 +98,7 @@ describe('BarChartElementView', () => {
 
     // Labels
     expect(screen.getByTestId(`bar-chart-label-${element.id}-0`)).toHaveTextContent('SINUSOID');
-    expect(screen.getByTestId(`bar-chart-label-${element.id}-1`)).toHaveTextContent('Temperatura');
+    expect(screen.getByTestId(`bar-chart-label-${element.id}-1`)).toHaveTextContent('CDT158');
 
     // Values
     expect(screen.getByTestId(`bar-chart-value-${element.id}-0`)).toHaveTextContent('75.4');

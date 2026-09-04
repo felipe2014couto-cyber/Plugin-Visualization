@@ -1271,6 +1271,7 @@ export function DisplaySurface({
                 element={chartElement}
                 runtimeStates={enhancedStates}
                 databaseScales={databaseScales}
+                calculations={calculations}
               />
             );
           }
