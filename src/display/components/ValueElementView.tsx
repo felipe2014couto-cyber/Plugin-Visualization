@@ -55,7 +55,14 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const isCalculation = !element.properties.binding && !!element.properties.calculationId;
   const lines = getValueLines(currentState, visual, label ?? binding?.pointName ?? '', isCalculation, element.width);
   const runtimeVal = getRuntimeValue(runtimeState ?? state);
-  const textColor = getMultistateColor(runtimeVal, element.properties.multistate, resolveThemeForeground(visual.color));
+  const normalMultistateColor = element.properties.multistate?.enabled && element.properties.multistate.rules.length > 0
+    ? element.properties.multistate.rules[0].color
+    : undefined;
+  const isColorBlack = !visual.color || visual.color === '#000000' || visual.color === '#000' || visual.color === 'rgba(0,0,0,1)';
+  const baseTextColor = isColorBlack && normalMultistateColor
+    ? normalMultistateColor
+    : resolveThemeForeground(visual.color);
+  const textColor = getMultistateColor(runtimeVal, element.properties.multistate, baseTextColor);
   const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, visual.backgroundColor || 'transparent');
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';

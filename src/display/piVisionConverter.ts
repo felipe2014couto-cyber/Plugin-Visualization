@@ -410,6 +410,67 @@ function isLightBackground(fill: unknown): boolean {
   return false;
 }
 
+function propagateMultistateToValues(elements: DisplayElement[]) {
+  const isInside = (vEl: DisplayElement, shapeEl: DisplayElement) => {
+    const cx = vEl.x + vEl.width / 2;
+    const cy = vEl.y + vEl.height / 2;
+    const margin = 10;
+    return cx >= shapeEl.x - margin && cx <= shapeEl.x + shapeEl.width + margin &&
+           cy >= shapeEl.y - margin && cy <= shapeEl.y + shapeEl.height + margin;
+  };
+
+  for (const el of elements) {
+    if (el.type !== VALUE_TYPE) continue;
+    const vProps = el.properties as ValueProperties;
+    const hasActiveMultistate = vProps.multistate?.enabled && Array.isArray(vProps.multistate.rules) && vProps.multistate.rules.length > 0;
+    if (hasActiveMultistate) continue;
+
+    const vBinding = vProps.binding;
+
+    // 1. Procura forma doadora com mesmo binding (pointName) e multistate ativo
+    let donorShape: DisplayElement | undefined;
+    if (vBinding?.pointName) {
+      donorShape = elements.find((other) => {
+        if (other.id === el.id) return false;
+        const oProps = other.properties as any;
+        if (!oProps?.multistate?.enabled || !Array.isArray(oProps.multistate.rules) || oProps.multistate.rules.length === 0) return false;
+        const oBinding = oProps.binding;
+        if (oBinding?.pointName && oBinding.pointName.toLowerCase() === vBinding.pointName.toLowerCase()) {
+          return true;
+        }
+        return false;
+      });
+    }
+
+    // 2. Se nao encontrou por binding, procura forma geometricamente envolvente/sobreposta com multistate
+    if (!donorShape) {
+      donorShape = elements.find((other) => {
+        if (other.id === el.id) return false;
+        if (other.type !== RECTANGLE_TYPE && other.type !== 'ellipse' && other.type !== 'polygon') return false;
+        const oProps = other.properties as any;
+        if (!oProps?.multistate?.enabled || !Array.isArray(oProps.multistate.rules) || oProps.multistate.rules.length === 0) return false;
+        return isInside(el, other);
+      });
+    }
+
+    if (donorShape) {
+      const donorProps = donorShape.properties as any;
+      const donorMultistate = donorProps.multistate;
+      vProps.multistate = donorMultistate;
+      if (donorProps.backgroundMultistate) {
+        vProps.backgroundMultistate = donorProps.backgroundMultistate;
+      }
+      if (!vProps.binding && donorProps.binding) {
+        vProps.binding = donorProps.binding;
+      }
+      const normalColor = donorMultistate.rules[0]?.color;
+      if (normalColor && (!vProps.visual.color || vProps.visual.color === '#000000' || vProps.visual.color === '#000' || vProps.visual.color === 'rgba(0,0,0,1)')) {
+        vProps.visual.color = normalColor;
+      }
+    }
+  }
+}
+
 function applyContextualColors(elements: DisplayElement[]) {
   const isInside = (textEl: DisplayElement, bgEl: DisplayElement) => {
     const cx = textEl.x + textEl.width / 2;
@@ -483,6 +544,7 @@ export function convertPiVisionDisplay(
     }
   }
   const normalizedElements = normalizeImportedButtonLayout(normalizeImportedTrendLayout(elements));
+  propagateMultistateToValues(normalizedElements);
   applyContextualColors(normalizedElements);
 
   return {
@@ -582,18 +644,22 @@ function convertValue(
     ? geo
     : { ...geo, width: estimateCompactValueWidth(cfg) };
   const calculation = firstCalculation(symbol, calculationsByName);
-  const binding = calculation ? undefined : firstBinding(symbol, dataSourceUid);
+  const binding = calculation ? undefined : (firstBinding(symbol, dataSourceUid) ?? firstMultistateBinding(symbol, dataSourceUid));
   if (!binding && !calculation) {
     return undefined;
   }
 
-  const color = normalizeColor(cfg.ForeColor ?? cfg.ValueStroke ?? cfg.Stroke) ?? DEFAULT_VALUE_VISUAL_OPTIONS.color;
+  const multistate = extractAnyMultistate(symbol, cfg);
+  const rawColor = normalizeColor(cfg.ForeColor ?? cfg.ValueStroke ?? cfg.Stroke);
+  const isBlackStroke = !rawColor || rawColor === '#000000' || rawColor === '#000' || rawColor === 'rgba(0,0,0,1)';
+  const color = isBlackStroke && multistate.multistate?.rules?.[0]?.color
+    ? multistate.multistate.rules[0].color
+    : (rawColor ?? DEFAULT_VALUE_VISUAL_OPTIONS.color);
   const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
   const isDefaultWhiteOrTransparent = !rawBg || rawBg.toLowerCase() === '#ffffff' || rawBg.toLowerCase() === '#fff' || rawBg === 'transparent' || cfg.Transparent === true;
   const backgroundColor = isDefaultWhiteOrTransparent ? 'transparent' : rawBg;
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize);
   const textAlign = normalizeTextAlign(cfg.TextAlignment);
-  const multistate = extractAnyMultistate(symbol, cfg);
 
   const properties: ValueProperties = {
     ...(binding ? { binding } : {}),
@@ -1220,7 +1286,18 @@ function extractAnyMultistate(
   symbol: PiVisionSymbol,
   cfg: PiVisionSymbolConfiguration,
 ): { multistate?: MultistateConfig; backgroundMultistate?: MultistateConfig } {
-  const candidates = [
+  const parseIfJsonString = (val: unknown) => {
+    if (typeof val === 'string' && (val.trim().startsWith('{') || val.trim().startsWith('['))) {
+      try {
+        return JSON.parse(val.trim());
+      } catch {
+        return val;
+      }
+    }
+    return val;
+  };
+
+  const rawCandidates = [
     cfg?.Multistates,
     (symbol as any)?.Multistates,
     (cfg as any)?.MultiStates,
@@ -1233,11 +1310,23 @@ function extractAnyMultistate(
     (symbol as any)?.ThresholdMultistates,
     (cfg as any)?.Thresholds,
     (symbol as any)?.Thresholds,
+    (cfg as any)?.Triggers,
+    (symbol as any)?.Triggers,
+    (cfg as any)?.MS,
+    (symbol as any)?.MS,
+    (cfg as any)?.MultiStateConfiguration,
+    (symbol as any)?.MultiStateConfiguration,
+    (cfg as any)?.MultiStateSettings,
+    (symbol as any)?.MultiStateSettings,
+    (cfg as any)?.StateSettings,
+    (symbol as any)?.StateSettings,
+    (cfg as any)?.FormatSettings?.Multistates,
+    (cfg as any)?.FormatSettings?.Thresholds,
   ];
 
-  for (const candidate of candidates) {
-    if (!candidate) continue;
+  const candidates = rawCandidates.map(parseIfJsonString).filter(Boolean);
 
+  for (const candidate of candidates) {
     const thresholdResult = convertPiVisionThresholdMultistate(candidate);
     if (thresholdResult && thresholdResult.rules.length > 0) {
       return { multistate: thresholdResult };

@@ -128,4 +128,23 @@ describe('ValueElementView', () => {
     expect(screen.getByTestId('display-value-value-dual-multistate')).toHaveAttribute('fill', '#ff0000');
     expect(screen.getByTestId('value-background-value-dual-multistate')).toHaveAttribute('fill', '#ffff00');
   });
+
+  it('usa a cor normal do multistate quando visual.color é preta ou indefinida mesmo durante loading', () => {
+    const element = createValue({
+      binding,
+      id: 'value-black-multistate',
+      visual: { color: '#000000' },
+      multistate: {
+        enabled: true,
+        rules: [
+          { id: 'ok', operator: 'lte', value: 50, color: '#00ff00' },
+          { id: 'warn', operator: 'gt', value: 50, color: '#ffff00' },
+        ],
+      },
+    });
+
+    render(<svg><ValueElementView element={element} runtimeState={{ status: 'loading' }} /></svg>);
+    expect(screen.getByTestId('display-value-value-black-multistate')).toHaveTextContent('...');
+    expect(screen.getByTestId('display-value-value-black-multistate')).toHaveAttribute('fill', '#00ff00');
+  });
 });

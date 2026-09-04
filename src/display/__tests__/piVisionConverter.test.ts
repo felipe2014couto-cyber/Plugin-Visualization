@@ -1385,4 +1385,67 @@ describe('Multistate Blink e Background na conversão PI Vision', () => {
     const valEl = elements.find((e) => e.type === 'value');
     expect((valEl?.properties as any).visual.color).toBe('#00ff00');
   });
+
+  it('propaga multistate de retangulo associado por binding ou sobreposicao para o elemento Value', () => {
+    const rect: PiVisionSymbol = {
+      SymbolType: 'rectangle',
+      MSDataSources: ['pi:\\\\pims\\LFI_RB4_MVX11_55ACM10_CV_NG_VEL?108807'],
+      Configuration: {
+        Left: 1000, Top: 300, Width: 120, Height: 35,
+        Fill: 'rgba(255,255,255,1)',
+        Multistates: [{
+          StateVariables: ['Fill', 'Blink'],
+          States: [
+            { StateValues: ['rgba(0,255,0,1)', false], UpperValue: 4 },
+            { StateValues: ['rgba(255,255,0,1)', false], UpperValue: 6 },
+            { StateValues: ['rgba(255,0,0,1)', false], UpperValue: 100 },
+          ],
+        }],
+      },
+    };
+    const val: PiVisionSymbol = {
+      SymbolType: 'value',
+      DataSources: ['pi:\\\\pims\\LFI_RB4_MVX11_55ACM10_CV_NG_VEL?108807'],
+      Configuration: {
+        Left: 1010, Top: 305, Width: 80, Height: 20,
+        Stroke: 'rgba(0,0,0,1)',
+        ValueStroke: 'rgba(0,0,0,1)',
+        Fill: 'rgba(255,255,255,0)',
+      },
+    };
+
+    const { elements } = convertPiVisionDisplay({ Symbols: [rect, val] }, 'pi-uid');
+    const valEl = elements.find((e) => e.type === 'value');
+    expect(valEl).toBeDefined();
+    const props = valEl?.properties as any;
+    expect(props.multistate?.enabled).toBe(true);
+    expect(props.multistate.rules).toHaveLength(3);
+    expect(props.multistate.rules[0]).toMatchObject({ operator: 'lte', value: 4, color: '#00ff00' });
+    expect(props.visual.color).toBe('#00ff00');
+  });
+
+  it('extrai binding e multistate de Value que usa MSDataSources e cor base preta', () => {
+    const val: PiVisionSymbol = {
+      SymbolType: 'value',
+      MSDataSources: ['pi:\\\\pims\\TAG_VALOR'],
+      Configuration: {
+        Left: 100, Top: 50, Width: 80, Height: 20,
+        ValueStroke: '#000000',
+        Multistates: [{
+          States: [
+            { UpperValue: 10, StateValues: ['#00ff00', false] },
+            { UpperValue: 20, StateValues: ['#ff0000', false] },
+          ],
+        }],
+      },
+    };
+
+    const { elements } = convertPiVisionDisplay({ Symbols: [val] }, 'pi-uid');
+    const valEl = elements.find((e) => e.type === 'value');
+    expect(valEl).toBeDefined();
+    const props = valEl?.properties as any;
+    expect(props.binding).toMatchObject({ pointName: 'TAG_VALOR' });
+    expect(props.multistate?.enabled).toBe(true);
+    expect(props.visual.color).toBe('#00ff00');
+  });
 });
