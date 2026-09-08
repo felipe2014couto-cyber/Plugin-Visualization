@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { css } from '@emotion/css';
 import type { ProgrammingDocument, ProgrammingPiPointContext } from './ProgrammingTypes';
 
@@ -33,15 +33,36 @@ export function buildProgrammingSrcDoc(document: ProgrammingDocument, piPoints?:
   const style = escapeStyleEnd(document.css);
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>${style}</style></head>
-<body>${document.html}<script>window.pimsVision = Object.freeze(${serializeContext(piPoints)});</script><script>try {\n${script}\n} catch (error) {\n  const output = document.createElement('pre');\n  output.textContent = String(error);\n  output.style.cssText = 'color:#f87171;white-space:pre-wrap;font:12px monospace;padding:8px';\n  document.body.appendChild(output);\n}</script></body></html>`;
+<body>${document.html}<script>
+window.pimsVision = Object.freeze(${serializeContext(piPoints)});
+window.addEventListener('message', function(event) {
+  if (event.data && event.data.type === 'PIMS_VISION_UPDATE') {
+    window.pimsVision = Object.freeze(event.data.payload);
+  }
+});
+</script><script>try {\n${script}\n} catch (error) {\n  const output = document.createElement('pre');\n  output.textContent = String(error);\n  output.style.cssText = 'color:#f87171;white-space:pre-wrap;font:12px monospace;padding:8px';\n  document.body.appendChild(output);\n}</script></body></html>`;
 }
 
 export function ProgrammingPreview({ document, piPoints }: ProgrammingPreviewProps) {
-  const srcDoc = useMemo(() => buildProgrammingSrcDoc(document, piPoints), [document, piPoints]);
+  const srcDoc = useMemo(() => buildProgrammingSrcDoc(document, piPoints), [document]);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const points = piPoints ?? [];
+    iframeRef.current?.contentWindow?.postMessage({
+      type: 'PIMS_VISION_UPDATE',
+      payload: {
+        piPoint: points[0] ?? null,
+        piPoints: points,
+        piPointsByName: Object.fromEntries(points.map((point) => [point.name, point])),
+      }
+    }, '*');
+  }, [piPoints]);
+
   return (
     <div className={styles.previewFrame} data-testid="programming-preview">
       <iframe
-        key={srcDoc}
+        ref={iframeRef}
         title="Programming preview"
         sandbox="allow-scripts"
         srcDoc={srcDoc}
