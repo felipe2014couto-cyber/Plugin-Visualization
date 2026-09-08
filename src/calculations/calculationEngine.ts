@@ -1,4 +1,5 @@
 import type { PiPointBinding } from '../pi/piPointBinding';
+import { applyQualityMacros, applyTemporalMacros, applyHistoricalMacros, updateTemporalCache } from './calculationMacros';
 
 export interface CalculationInput {
   name: string;
@@ -31,24 +32,46 @@ export function evaluateCalculation(
   const variables = new Map<string, number>();
   const inputs = [...(calculation.inputs ?? [])].sort((left, right) => right.name.length - left.name.length);
 
+  const now = Math.floor(Date.now() / 1000);
+
   for (const [index, input] of inputs.entries()) {
     const key = `__pi_${index}`;
     const value = values.get(input.name);
     if (value === undefined) {
       return { status: 'loading' };
     }
-    if (typeof value !== 'number') {
-      resolvedExpression = replaceDigitalComparisons(resolvedExpression, input.name, value);
-      if (containsToken(resolvedExpression, input.name)) {
+
+    const piPointValue = value as any;
+    const rawValue = piPointValue && typeof piPointValue === 'object' && 'value' in piPointValue ? piPointValue.value : piPointValue;
+    
+    const state = updateTemporalCache(calculation.id, input.name, piPointValue);
+    
+    let resolvedExpressionTemp = resolvedExpression;
+    resolvedExpressionTemp = applyQualityMacros(resolvedExpressionTemp, input.name, piPointValue);
+    resolvedExpressionTemp = applyTemporalMacros(resolvedExpressionTemp, input.name, state);
+    
+    try {
+      resolvedExpressionTemp = applyHistoricalMacros(resolvedExpressionTemp, input.name, calculation.id, input.binding, now);
+    } catch (e: any) {
+      if (e.message === 'FETCHING_HISTORY') return { status: 'loading' };
+      throw e;
+    }
+
+    if (typeof rawValue !== 'number') {
+      resolvedExpressionTemp = replaceDigitalComparisons(resolvedExpressionTemp, input.name, rawValue);
+      if (containsToken(resolvedExpressionTemp, input.name)) {
         return { status: 'error', error: new Error(`O PI Point "${input.name}" não possui um valor numérico.`) };
       }
+      resolvedExpression = resolvedExpressionTemp;
       continue;
     }
-    if (!Number.isFinite(value)) {
+    
+    if (!Number.isFinite(rawValue)) {
       return { status: 'error', error: new Error(`O PI Point "${input.name}" não possui um valor numérico.`) };
     }
-    variables.set(key, value);
-    resolvedExpression = replaceToken(resolvedExpression, input.name, key);
+    
+    variables.set(key, rawValue);
+    resolvedExpression = replaceToken(resolvedExpressionTemp, input.name, key);
   }
 
   try {
@@ -371,6 +394,35 @@ function evaluateFunction(name: string, values: number[]): number {
     requireMinimumArgumentCount(name, values, 1);
     return Math.max(...values);
   }
+  if (normalizedName === 'SUM') {
+    requireMinimumArgumentCount(name, values, 1);
+    return values.reduce((a, b) => a + b, 0);
+  }
+  if (normalizedName === 'AVG' || normalizedName === 'AVERAGE') {
+    requireMinimumArgumentCount(name, values, 1);
+    return values.reduce((a, b) => a + b, 0) / values.length;
+  }
+  if (normalizedName === 'COUNT') {
+    return values.length;
+  }
+  if (normalizedName === 'MEDIAN') {
+    requireMinimumArgumentCount(name, values, 1);
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  }
+  if (normalizedName === 'VARIANCE') {
+    requireMinimumArgumentCount(name, values, 1);
+    if (values.length === 1) return 0;
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    return values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (values.length - 1);
+  }
+  if (normalizedName === 'STDDEV') {
+    requireMinimumArgumentCount(name, values, 1);
+    if (values.length === 1) return 0;
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    return Math.sqrt(values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (values.length - 1));
+  }
   if (normalizedName === 'ABS') {
     requireArgumentCount(name, values, 1);
     return Math.abs(values[0]);
@@ -453,6 +505,52 @@ function evaluateFunction(name: string, values: number[]): number {
   if (normalizedName === 'TAN') {
     requireArgumentCount(name, values, 1);
     return Math.tan(values[0]);
+  }
+  if (normalizedName === 'ASIN') {
+    requireArgumentCount(name, values, 1);
+    if (values[0] < -1 || values[0] > 1) throw new Error('ASIN requer valor entre -1 e 1.');
+    return Math.asin(values[0]);
+  }
+  if (normalizedName === 'ACOS') {
+    requireArgumentCount(name, values, 1);
+    if (values[0] < -1 || values[0] > 1) throw new Error('ACOS requer valor entre -1 e 1.');
+    return Math.acos(values[0]);
+  }
+  if (normalizedName === 'ATAN') {
+    requireArgumentCount(name, values, 1);
+    return Math.atan(values[0]);
+  }
+  if (normalizedName === 'FLOOR') {
+    requireArgumentCount(name, values, 1);
+    return Math.floor(values[0]);
+  }
+  if (normalizedName === 'CEIL') {
+    requireArgumentCount(name, values, 1);
+    return Math.ceil(values[0]);
+  }
+  if (normalizedName === 'SIGN') {
+    requireArgumentCount(name, values, 1);
+    return Math.sign(values[0]);
+  }
+  if (normalizedName === 'TRUNC') {
+    requireArgumentCount(name, values, 1);
+    return Math.trunc(values[0]);
+  }
+  if (normalizedName === 'ATAN2') {
+    requireArgumentCount(name, values, 2);
+    return Math.atan2(values[0], values[1]);
+  }
+  if (normalizedName === 'SINH') {
+    requireArgumentCount(name, values, 1);
+    return Math.sinh(values[0]);
+  }
+  if (normalizedName === 'COSH') {
+    requireArgumentCount(name, values, 1);
+    return Math.cosh(values[0]);
+  }
+  if (normalizedName === 'TANH') {
+    requireArgumentCount(name, values, 1);
+    return Math.tanh(values[0]);
   }
   if (normalizedName === 'WHILE') {
     throw new Error('WHILE não é suportado em cálculos, pois a expressão precisa sempre terminar. Use IF para condições.');

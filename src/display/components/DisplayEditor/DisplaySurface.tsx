@@ -90,17 +90,17 @@ function evaluateCalculationFromRuntime(
       return { status: 'loading' as const };
     }
     // Prioriza o valor atual de sucesso; se em erro ou carregando, aproveita o último valor preservado no estado
-    const resolvedValue = state.status === 'success'
-      ? state.result.value
-      : (state.result && state.result.value !== undefined ? state.result.value : undefined);
+    const resolvedResult = state.status === 'success'
+      ? state.result
+      : (state.result && state.result.value !== undefined ? state.result : undefined);
 
-    if (resolvedValue === undefined) {
+    if (resolvedResult === undefined || resolvedResult.value === undefined) {
       if (state.status === 'error') {
         return { status: 'error' as const, error: new Error('Consulta PI indisponível.') };
       }
       return { status: 'loading' as const };
     }
-    values.set(calculation.inputs[index].name, resolvedValue);
+    values.set(calculation.inputs[index].name, resolvedResult);
   }
   return evaluateCalculation(calculation, values);
 }

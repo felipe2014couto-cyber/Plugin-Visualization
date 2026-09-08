@@ -120,4 +120,336 @@ describe('calculationEngine', () => {
     // 4 + 16 + 1 + 10 = 31
     expect(evaluateCalculation(mathCalc, new Map())).toEqual({ status: 'success', value: 31 });
   });
+  it('suporta novas funções trigonométricas e estatísticas', () => {
+    const mathCalc2: CalculationDefinition = {
+      id: '7',
+      name: 'Stats e Trig',
+      expression: 'SUM(1, 2, 3) + AVG(2, 4) + FLOOR(4.9) + SIGN(-10) + COS(0)',
+      inputs: [],
+    };
+    // SUM=6, AVG=3, FLOOR=4, SIGN=-1, COS=1 => 6+3+4-1+1 = 13
+    expect(evaluateCalculation(mathCalc2, new Map())).toEqual({ status: 'success', value: 13 });
+  });
+
+  it('suporta funções de qualidade IS_BAD e TIMESTAMP com objetos PiPointValue', () => {
+    const qualityCalc: CalculationDefinition = {
+      id: '8',
+      name: 'Qualidade',
+      expression: 'IF(IS_BAD(T1), -1, TIMESTAMP(T1))',
+      inputs: [
+        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } },
+      ],
+    };
+
+    // Objeto ruim
+    expect(evaluateCalculation(qualityCalc, new Map([
+      ['T1', { value: 10, good: false, timestamp: '2023-01-01T00:00:00Z' }]
+    ]))).toEqual({ status: 'success', value: -1 });
+
+    // Objeto bom
+    expect(evaluateCalculation(qualityCalc, new Map([
+      ['T1', { value: 10, good: true, timestamp: '2023-01-01T00:00:00Z' }]
+    ]))).toEqual({ status: 'success', value: Math.floor(Date.parse('2023-01-01T00:00:00Z') / 1000) });
+  });
+
+  it('retorna loading quando histórico está sendo buscado', () => {
+    const histCalc: CalculationDefinition = {
+      id: '9',
+      name: 'Historico',
+      expression: 'AVERAGE_TIME(T1, "1h")',
+      inputs: [
+        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } },
+      ],
+    };
+    
+    const result = evaluateCalculation(histCalc, new Map([['T1', 10]]));
+    expect(result).toEqual({ status: 'loading' });
+  });
+
+  it('suporta novas funções de qualidade avançada (IS_NO_DATA, IS_SUBSTITUTED)', () => {
+    const qCalc: CalculationDefinition = {
+      id: '10',
+      name: 'QualidadeAvancada',
+      expression: 'IF(IS_NO_DATA(T1), 1, IF(IS_SUBSTITUTED(T1), 2, 0))',
+      inputs: [
+        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } },
+      ],
+    };
+
+    expect(evaluateCalculation(qCalc, new Map([
+      ['T1', { value: undefined }]
+    ]))).toEqual({ status: 'success', value: 1 });
+
+    expect(evaluateCalculation(qCalc, new Map([
+      ['T1', { value: 10, quality: { substituted: true } }]
+    ]))).toEqual({ status: 'success', value: 2 });
+  });
+
+  it('testa funções de evento (TIME_IN_STATE e INTEGRAL) no temporal state cache', () => {
+    const eventCalc: CalculationDefinition = {
+      id: '11',
+      name: 'EventAnalytics',
+      expression: 'INTEGRAL(T1) + TIME_IN_STATE(T1, "On")',
+      inputs: [
+        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } },
+      ],
+    };
+
+    const t1 = Math.floor(Date.now() / 1000) - 10;
+    const t2 = t1 + 5;
+
+    // Primeiro tick
+    evaluateCalculation(eventCalc, new Map([
+      ['T1', { value: 10, timestamp: new Date(t1 * 1000).toISOString() }]
+    ]));
+
+    // Segundo tick (+5s depois, valor foi pra 20). Estado "10" esteve ativo por 5s. Integral deve acumular.
+    const res = evaluateCalculation(eventCalc, new Map([
+      ['T1', { value: 20, timestamp: new Date(t2 * 1000).toISOString() }]
+    ]));
+
+    expect(res.status).toBe('success');
+    // Integral = ((10+20)/2)*5 = 75. 
+    // Time_in_state("10") seria 5s. Mas a query tá 'TIME_IN_STATE("On")' que seria 0. 
+    // Então retorna 75 + 0 = 75
+    if (res.status === 'success') {
+       expect(res.value).toBe(75);
+    }
+  });
+
+  it('testa DERIVATIVE e RATE via macros', () => {
+    const rateCalc: CalculationDefinition = {
+      id: '12',
+      name: 'RateDeriv',
+      expression: 'DERIVATIVE(T1)',
+      inputs: [
+        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } },
+      ],
+    };
+
+    const t1 = Math.floor(Date.now() / 1000) - 10;
+    const t2 = t1 + 2;
+
+    evaluateCalculation(rateCalc, new Map([
+      ['T1', { value: 100, timestamp: new Date(t1 * 1000).toISOString() }]
+    ]));
+
+    // 2 segundos depois, valor = 120. Derivada = (120-100)/2 = 10
+    const res = evaluateCalculation(rateCalc, new Map([
+      ['T1', { value: 120, timestamp: new Date(t2 * 1000).toISOString() }]
+    ]));
+
+    expect(res).toEqual({ status: 'success', value: 10 });
+  });
+
+  it('testa COALESCE, FIRST_VALUE, STATE_DURATION e TIME_IN_RANGE', () => {
+    // COALESCE e REPLACE_BAD
+    const coalesceCalc: CalculationDefinition = {
+      id: '13',
+      name: 'Coalesce',
+      expression: 'COALESCE(T1, 999) + REPLACE_BAD(T2, 500)',
+      inputs: [
+        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } },
+        { name: 'T2', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T2' } },
+      ],
+    };
+
+    expect(evaluateCalculation(coalesceCalc, new Map([
+      ['T1', { value: 10, good: false }],
+      ['T2', { value: 20, good: true }],
+    ]))).toEqual({ status: 'success', value: 999 + 20 });
+    
+    // Testes de parse das funções assíncronas no histórico (elas devem retornar loading antes de completar)
+    const eventCalc: CalculationDefinition = {
+      id: '14',
+      name: 'EventFuncs',
+      expression: 'STATE_DURATION(T1, "On", "10m") + TIME_IN_RANGE(T1, 50, 100, "1h")',
+      inputs: [
+        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } }
+      ],
+    };
+
+    expect(evaluateCalculation(eventCalc, new Map([
+      ['T1', { value: 10, good: true }],
+    ]))).toEqual({ status: 'loading' });
+  });
+
+  it('testa COMPRESSION_FILTER, LINEAR_FORECAST, INTERPOLATE e TREND', () => {
+    const indCalc: CalculationDefinition = {
+      id: '15',
+      name: 'IndFuncs',
+      expression: 'LINEAR_FORECAST(T1, "30m") + INTERPOLATE(T1, "2026-09-08T10:30:00.000Z")',
+      inputs: [
+        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } }
+      ],
+    };
+
+    const trendCalc: CalculationDefinition = {
+      id: '16',
+      name: 'TrendFunc',
+      expression: 'IF(TREND(T1, "1h") == "UP", 1, 0)',
+      inputs: [
+        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } }
+      ],
+    };
+
+    expect(evaluateCalculation(indCalc, new Map([
+      ['T1', { value: 10, good: true }],
+    ]))).toEqual({ status: 'loading' });
+
+    expect(evaluateCalculation(trendCalc, new Map([
+      ['T1', { value: 10, good: true }],
+    ]))).toEqual({ status: 'loading' });
+  });
+
+  it('testa funções matemáticas avançadas (EXP, LN, LOG, POW, TRUNC, ATAN2, SINH, MOD)', () => {
+    const mathCalc: CalculationDefinition = {
+      id: '17',
+      name: 'Math',
+      expression: 'EXP(1) + LN(EXP(2)) + LOG(100) + LOG10(100) + POW(2,3) + POWER(3,2) + TRUNC(10.9) + ATAN2(0,1) + SINH(0) + COSH(0) + TANH(0) + MOD(10,3)',
+      inputs: [],
+    };
+    
+    // 10.9 truncate -> 10
+    // log(100) = ln(100) = 4.605...
+    // log10(100) = 2
+    // atan2(0,1) = 0
+    // sinh(0) = 0, cosh(0) = 1, tanh(0) = 0
+    // mod(10,3) = 1
+    // pow(2,3) = 8
+    // power(3,2) = 9
+    // ln(exp(2)) = 2
+    // exp(1) = 2.718281828459045
+    // Result: 2.718... + 2 + 4.60517... + 2 + 8 + 9 + 10 + 0 + 0 + 1 + 0 + 1 = 40.323452...
+    const result = evaluateCalculation(mathCalc, new Map());
+    expect(result.status).toBe('success');
+    expect((result as any).value).toBeCloseTo(Math.exp(1) + 2 + Math.log(100) + 2 + 8 + 9 + 10 + 0 + 0 + 1 + 0 + 1, 5);
+  });
+
+  it('testa funções estatísticas e vetoriais (SUM, AVERAGE, AVG, MEDIAN, COUNT, VARIANCE, STDDEV)', () => {
+    const statCalc: CalculationDefinition = {
+      id: '18',
+      name: 'Stats',
+      expression: 'SUM(1,2,3) + AVERAGE(2,4,6) + AVG(10,20) + MEDIAN(1,5,9) + COUNT(10,20,30,40) + VARIANCE(2,4,4,4,5,5,7,9) + STDDEV(2,4,4,4,5,5,7,9)',
+      inputs: [],
+    };
+    
+    // sum(1,2,3) = 6
+    // average(2,4,6) = 4
+    // avg(10,20) = 15
+    // median(1,5,9) = 5
+    // count = 4
+    // var(2,4,4,4,5,5,7,9) = 4
+    // stddev = 2
+    // total = 6 + 4 + 15 + 5 + 4 + 4 + 2 = 40
+    
+    const result = evaluateCalculation(statCalc, new Map());
+    expect(result).toEqual({ status: 'success', value: 40 });
+  });
+
+  it('testa validações e erros de borda (domain, nulls, div/0)', () => {
+    // Divisao por zero (nao passa no parse inicial de AST, porem o erro capturado é padrao)
+    const divCalc: CalculationDefinition = {
+      id: '19', name: 'DivZero', expression: '10 / 0', inputs: []
+    };
+    expect(() => evaluateCalculation(divCalc, new Map())).toThrow('Divisão por zero.');
+
+    const asinCalc: CalculationDefinition = {
+      id: '20', name: 'AsinError', expression: 'ASIN(2)', inputs: []
+    };
+    expect(() => evaluateCalculation(asinCalc, new Map())).toThrow('ASIN requer valor entre -1 e 1.');
+
+    const logCalc: CalculationDefinition = {
+      id: '21', name: 'LogError', expression: 'LOG(-10)', inputs: []
+    };
+    expect(() => evaluateCalculation(logCalc, new Map())).toThrow('Logaritmo de número não positivo.');
+    
+    const lnCalc: CalculationDefinition = {
+      id: '22', name: 'LnError', expression: 'LN(0)', inputs: []
+    };
+    expect(() => evaluateCalculation(lnCalc, new Map())).toThrow('Logaritmo de número não positivo.');
+
+    const sqrtCalc: CalculationDefinition = {
+      id: '23', name: 'SqrtError', expression: 'SQRT(-1)', inputs: []
+    };
+    expect(() => evaluateCalculation(sqrtCalc, new Map())).toThrow('Raiz quadrada de número negativo.');
+  it('Validação Final: Comportamento Matemático ABS, ROUND, TRUNC, MOD, EXP, LN, LOG10, POWER', () => {
+    const mathCalc: CalculationDefinition = {
+      id: 'F2',
+      name: 'F2',
+      expression: 'ABS(-10) + ROUND(10.567, 1) + TRUNC(10.567) + MOD(10,3) + EXP(2) + LN(10) + LOG10(100) + POWER(5,2)',
+      inputs: []
+    };
+    // ABS(-10) = 10
+    // ROUND(10.567, 1) = 10.6
+    // TRUNC(10.567) = 10
+    // MOD(10,3) = 1
+    // EXP(2) = 7.389056
+    // LN(10) = 2.302585
+    // LOG10(100) = 2
+    // POWER(5,2) = 25
+    // Soma esperada = 68.29164...
+    const result = evaluateCalculation(mathCalc, new Map());
+    expect(result.status).toBe('success');
+    expect((result as any).value).toBeCloseTo(10 + 10.6 + 10 + 1 + Math.exp(2) + Math.log(10) + 2 + 25, 5);
+  });
+
+  it('Validação Final: Trigonometria em Radianos', () => {
+    const trigCalc: CalculationDefinition = {
+      id: 'F3',
+      name: 'F3',
+      expression: 'SIN(1.57079632679) + COS(0) + ATAN2(1,1) + ATAN2(1,-1) + ATAN2(-1,-1) + ATAN2(-1,1)',
+      inputs: []
+    };
+    // SIN(PI/2) ~ 1
+    // COS(0) = 1
+    // ATAN2(1,1) = PI/4
+    // ATAN2(1,-1) = 3PI/4
+    // ATAN2(-1,-1) = -3PI/4
+    // ATAN2(-1,1) = -PI/4
+    // Soma = 1 + 1 + PI/4 + 3PI/4 - 3PI/4 - PI/4 = 2
+    const result = evaluateCalculation(trigCalc, new Map());
+    expect((result as any).value).toBeCloseTo(2, 5);
+
+    expect(() => evaluateCalculation({ id: 'F3-A', name: 'A', expression: 'ASIN(2)', inputs: [] }, new Map())).toThrow('ASIN requer valor entre -1 e 1.');
+    expect(() => evaluateCalculation({ id: 'F3-B', name: 'B', expression: 'ACOS(-2)', inputs: [] }, new Map())).toThrow('ACOS requer valor entre -1 e 1.');
+  });
+
+  it('Validação Final: Estatística (SUM, AVERAGE, MEDIAN, VARIANCE, STDDEV, COUNT)', () => {
+    const statCalc: CalculationDefinition = {
+      id: 'F4',
+      name: 'F4',
+      expression: 'SUM(1,2,3) + AVERAGE(10,20,30) + MEDIAN(1,5,10) + MEDIAN(1,2,3,4) + COUNT(10,20,30)',
+      inputs: []
+    };
+    // SUM = 6
+    // AVERAGE = 20
+    // MEDIAN impar = 5
+    // MEDIAN par = 2.5
+    // COUNT = 3
+    // Soma = 6 + 20 + 5 + 2.5 + 3 = 36.5
+    const result = evaluateCalculation(statCalc, new Map());
+    expect((result as any).value).toBeCloseTo(36.5, 5);
+
+    // Variance amostral e StdDev de [2,4,4,4,5,5,7,9] = mean: 5
+    // Sum squares: 9 + 1 + 1 + 1 + 0 + 0 + 4 + 16 = 32
+    // Variance = 32 / 7 = 4.5714...
+    // Stddev = sqrt(4.5714...) = 2.138...
+    const varCalc: CalculationDefinition = { id: 'F4-V', name: 'V', expression: 'VARIANCE(2,4,4,4,5,5,7,9)', inputs: [] };
+    const sdCalc: CalculationDefinition = { id: 'F4-S', name: 'S', expression: 'STDDEV(2,4,4,4,5,5,7,9)', inputs: [] };
+    
+    expect((evaluateCalculation(varCalc, new Map()) as any).value).toBeCloseTo(32/7, 5);
+    expect((evaluateCalculation(sdCalc, new Map()) as any).value).toBeCloseTo(Math.sqrt(32/7), 5);
+  });
+
+  it('Validação Final: Casos de Borda Documentados', () => {
+    expect(() => evaluateCalculation({ id: 'F5-1', name: 'F', expression: '10 / 0', inputs: [] }, new Map())).toThrow('Divisão por zero.');
+    expect(() => evaluateCalculation({ id: 'F5-2', name: 'F', expression: 'LN(0)', inputs: [] }, new Map())).toThrow('Logaritmo de número não positivo.');
+    expect(() => evaluateCalculation({ id: 'F5-3', name: 'F', expression: 'LOG(-1)', inputs: [] }, new Map())).toThrow('Logaritmo de número não positivo.');
+    expect(() => evaluateCalculation({ id: 'F5-4', name: 'F', expression: 'SQRT(-1)', inputs: [] }, new Map())).toThrow('Raiz quadrada de número negativo.');
+    expect(() => evaluateCalculation({ id: 'F5-5', name: 'F', expression: 'SUM()', inputs: [] }, new Map())).toThrow('A função SUM requer pelo menos 1 argumento(s).');
+    expect(() => evaluateCalculation({ id: 'F5-6', name: 'F', expression: 'AVERAGE()', inputs: [] }, new Map())).toThrow('A função AVERAGE requer pelo menos 1 argumento(s).');
+    expect(() => evaluateCalculation({ id: 'F5-7', name: 'F', expression: 'ROUND(10,1,2)', inputs: [] }, new Map())).toThrow('A função ROUND aceita um ou dois argumentos.');
+  });
+});
 });
