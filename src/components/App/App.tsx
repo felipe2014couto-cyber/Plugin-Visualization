@@ -1255,6 +1255,7 @@ export function App() {
               initialDocument={document.miniSheets}
               dataLinkMenuHostId="pims-sheets-menu-slot"
               dataLinkMenuActive={activeModule === 'sheets' && isAssetsPanelOpen}
+              refreshKey={`${rangeFrom}:${rangeTo}:${refreshCount}`}
               onChange={(miniSheetsDoc) => {
                 setDocument((prev) => {
                   if (prev.miniSheets === miniSheetsDoc) {

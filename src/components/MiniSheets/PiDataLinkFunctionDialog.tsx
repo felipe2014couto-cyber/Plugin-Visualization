@@ -282,19 +282,19 @@ export function PiDataLinkFunctionDialog({
   const getTitle = () => {
     switch (functionType) {
       case 'PICurrVal':
-        return 'Valor atual (PICurrVal)';
+        return 'Valor atual';
       case 'PIArcVal':
-        return 'Valor de Archive (PIArcVal)';
+        return 'Valor de Archive';
       case 'PICompDat':
-        return 'Dados compactados (PICompDat)';
+        return 'Dados compactados';
       case 'PISampDat':
-        return 'Dados de amostragem (PISampDat)';
+        return 'Dados de amostragem';
       case 'PITimeDat':
-        return 'Dados com marcação de tempo (PITimeDat)';
+        return 'Dados com marcação de tempo';
       case 'PIAdvCalcVal':
-        return 'Dados calculados (PIAdvCalcVal)';
+        return 'Dados calculados';
       case 'PITimeFilter':
-        return 'Tempo Filtrado (PITimeFilter)';
+        return 'Tempo Filtrado';
       case 'SIPQuery':
         return 'Consulta SIP (SQL)';
       default:

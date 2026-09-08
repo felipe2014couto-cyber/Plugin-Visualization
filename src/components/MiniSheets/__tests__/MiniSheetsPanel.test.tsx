@@ -933,7 +933,7 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
       fireEvent.click(cellB1);
 
       await waitFor(() => {
-        expect(screen.getByText('Valor atual (PICurrVal)')).toBeInTheDocument();
+        expect(screen.getByText('Valor atual')).toBeInTheDocument();
       });
 
       const tagInput = screen.getByLabelText('Item de dados (PI Point ou Célula)') as HTMLInputElement;
@@ -976,7 +976,7 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
       fireEvent.click(cellC1);
 
       await waitFor(() => {
-        expect(screen.getByText('Valor atual (PICurrVal)')).toBeInTheDocument();
+        expect(screen.getByText('Valor atual')).toBeInTheDocument();
       });
 
       const tagInput = screen.getByLabelText('Item de dados (PI Point ou Célula)') as HTMLInputElement;
@@ -1086,7 +1086,7 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
 
       // O diálogo ainda deve estar visível após clicar em Aplicar/Inserir
       await waitFor(() => {
-        expect(screen.getByText('Valor atual (PICurrVal)')).toBeInTheDocument();
+        expect(screen.getByText('Valor atual')).toBeInTheDocument();
       });
 
       // Fecha o diálogo com o botão Fechar (X)
@@ -1094,7 +1094,7 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
       fireEvent.click(closeBtn);
 
       await waitFor(() => {
-        expect(screen.queryByText('Valor atual (PICurrVal)')).not.toBeInTheDocument();
+        expect(screen.queryByText('Valor atual')).not.toBeInTheDocument();
       });
     });
 

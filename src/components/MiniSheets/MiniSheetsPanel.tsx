@@ -141,6 +141,7 @@ export interface MiniSheetsPanelProps {
   onOpenFunctionDialog?: (type: PiDataLinkFunctionType, formula: string, targetCell: string) => void;
   dataLinkMenuHostId?: string;
   dataLinkMenuActive?: boolean;
+  refreshKey?: string;
 }
 
 export interface PiDataLinkInfo {
@@ -320,6 +321,7 @@ export function MiniSheetsPanel({
   onOpenFunctionDialog,
   dataLinkMenuHostId,
   dataLinkMenuActive = false,
+  refreshKey,
 }: MiniSheetsPanelProps) {
   const styles = useStyles2(getStyles);
 
@@ -1495,6 +1497,15 @@ export function MiniSheetsPanel({
     }
     setStatusMessage('');
   }, [computeCell]);
+
+  // Auto-refresh when refreshKey changes (e.g. from App.tsx interval or dashboard time change)
+  const prevRefreshKey = useRef(refreshKey);
+  useEffect(() => {
+    if (refreshKey && refreshKey !== prevRefreshKey.current) {
+      prevRefreshKey.current = refreshKey;
+      handleRecalculate();
+    }
+  }, [refreshKey, handleRecalculate]);
 
   // Notify parent on cells or colWidths update
   const isFirstMountRef = useRef(true);
