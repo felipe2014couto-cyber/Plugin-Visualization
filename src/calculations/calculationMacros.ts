@@ -202,7 +202,7 @@ export function applyHistoricalMacros(
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const tokenPattern = `(?:')?${escaped}(?:')?`;
   
-  const funcNames = 'PI_AVERAGE|PI_MIN|PI_MAX|PI_TOTAL|PI_STDDEV|FIRST_VALUE|STATE_DURATION|EVENT_COUNT|CYCLES|TIME_IN_RANGE|TIME_OUT_OF_RANGE|TIME_AVERAGE|MOVING_AVERAGE|AVERAGE_TIME|TIME_MIN|MOVING_MIN|MIN_TIME|TIME_MAX|MOVING_MAX|MAX_TIME|TIME_SUM|SUM_TIME|STDDEV_TIME|MOVING_STDDEV|PERCENTILE|INTERPOLATE|RECORDED_VALUES|EXCEPTION_FILTER|COMPRESSION_FILTER|SLOPE|TREND|RATE_OF_CHANGE|IS_STABLE|IS_INCREASING|IS_DECREASING|LINEAR_FORECAST|TIME_TO_LIMIT';
+  const funcNames = 'PI_AVERAGE|PI_MIN|PI_MAX|PI_TOTAL|PI_STDDEV|FIRST_VALUE|LAST_VALUE|STATE_DURATION|EVENT_COUNT|COUNT_VALUES|CYCLES|TIME_IN_RANGE|TIME_OUT_OF_RANGE|TIME_AVERAGE|MOVING_AVERAGE|AVERAGE_TIME|TIME_MIN|MOVING_MIN|MIN_TIME|TIME_MAX|MOVING_MAX|MAX_TIME|TIME_SUM|SUM_TIME|STDDEV_TIME|MOVING_STDDEV|PERCENTILE|INTERPOLATE|VALUE_AT_TIME|RECORDED_VALUES|EXCEPTION_FILTER|COMPRESSION_FILTER|SLOPE|TREND|RATE_OF_CHANGE|IS_STABLE|IS_INCREASING|IS_DECREASING|LINEAR_FORECAST|TIME_TO_LIMIT|TIME_EQ|TIME_NE';
   const histRegex = new RegExp(`(?<![A-Za-z0-9_.:])(${funcNames})\\s*\\(\\s*${tokenPattern}\\s*,\\s*(.*?)\\s*\\)`, 'gi');
   
   expression = expression.replace(histRegex, (_match, funcName, argsStr) => {
@@ -238,7 +238,7 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, in
     let to = Date.now();
     let from = to - parseIntervalMs(interval);
     
-    if (funcName.toUpperCase() === 'INTERPOLATE') {
+    if (funcName.toUpperCase() === 'INTERPOLATE' || funcName.toUpperCase() === 'VALUE_AT_TIME') {
        const targetTime = Date.parse(interval);
        if (!isNaN(targetTime)) {
           from = targetTime - 60000;
@@ -274,7 +274,7 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, in
          return { m, b };
        };
        
-       if (fn === 'INTERPOLATE') {
+       if (fn === 'INTERPOLATE' || fn === 'VALUE_AT_TIME') {
          const targetTime = Date.parse(interval);
          if (!isNaN(targetTime) && pts.length > 0) {
            const exact = pts.find((p: any) => p.time === targetTime);
@@ -358,14 +358,17 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, in
          const idx = Math.floor((sorted.length - 1) * (Math.max(0, Math.min(100, perc)) / 100));
          res = sorted[idx] ?? 0;
        } else if (fn === 'FIRST_VALUE' && pts.length > 0) {
-         res = typeof pts[0].value === 'number' ? pts[0].value : 0;
-       } else if (fn === 'EVENT_COUNT') {
+         res = typeof pts[0].value === 'number' ? pts[0].value : (typeof pts[0].value === 'string' ? pts[0].value : 0);
+       } else if (fn === 'LAST_VALUE' && pts.length > 0) {
+         res = typeof pts[pts.length-1].value === 'number' ? pts[pts.length-1].value : (typeof pts[pts.length-1].value === 'string' ? pts[pts.length-1].value : 0);
+       } else if (fn === 'EVENT_COUNT' || fn === 'COUNT_VALUES') {
          res = Math.max(0, pts.length - 1);
-       } else if (fn === 'STATE_DURATION') {
+       } else if (fn === 'STATE_DURATION' || fn === 'TIME_EQ' || fn === 'TIME_NE') {
          const targetState = args[args.length - 2] || '';
          for (let i = 0; i < pts.length - 1; i++) {
            const sName = getDigitalStateName(pts[i].value) ?? String(pts[i].value);
-           if (sName.localeCompare(targetState, undefined, { sensitivity: 'accent' }) === 0) {
+           const isEqual = sName.localeCompare(targetState, undefined, { sensitivity: 'accent' }) === 0;
+           if ((fn === 'TIME_NE' && !isEqual) || (fn !== 'TIME_NE' && isEqual)) {
              const dt = Math.max(0, pts[i+1].time - pts[i].time) / 1000;
              if (typeof res === 'number') res += dt;
            }

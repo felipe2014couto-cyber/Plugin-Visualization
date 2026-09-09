@@ -15,7 +15,7 @@ export interface CalculationDefinition {
 }
 
 export type CalculationEvaluation =
-  | { status: 'success'; value: number }
+  | { status: 'success'; value: number | string }
   | { status: 'loading' }
   | { status: 'error'; error: Error };
 
@@ -72,7 +72,8 @@ export function evaluateCalculation(
   }
 
   try {
-    return { status: 'success', value: parseArithmeticExpression(resolvedExpression, variables) };
+    const value = parseArithmeticExpression(resolvedExpression, variables);
+    return { status: 'success', value: value };
   } catch (error) {
     return { status: 'error', error: error instanceof Error ? error : new Error(String(error)) };
   }
@@ -104,7 +105,7 @@ function replaceToken(expression: string, token: string, replacement: string): s
   return expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])${escaped}(?![A-Za-z0-9_.:])`, 'gi'), replacement);
 }
 
-function parseArithmeticExpression(expression: string, variables: ReadonlyMap<string, number | string>): number {
+function parseArithmeticExpression(expression: string, variables: ReadonlyMap<string, number | string>): number | string {
   let cursor = 0;
 
   const skipWhitespace = () => {
@@ -345,11 +346,10 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
   if (cursor !== expression.length) {
     throw new Error('A expressão contém tokens inválidos.');
   }
-  const finalResult = Number(result);
-  if (!Number.isFinite(finalResult)) {
+  if (typeof result === 'number' && !Number.isFinite(result)) {
     throw new Error('O resultado não é um número finito.');
   }
-  return finalResult;
+  return result;
 }
 
 
@@ -391,10 +391,14 @@ function parsePiTime(str: string): number {
   }
 }
 
-function evaluateFunction(name: string, args: any[]): number {
+function evaluateFunction(name: string, args: any[]): number | string {
   const normalizedName = name.toLocaleUpperCase();
-  // Forçar conversoes numericas para funcoes matematicas
-  const values = args.map(a => typeof a === 'string' ? Number(a) : a);
+  
+  // Helpers para forçar conversoes numericas localmente apenas para funcoes que precisam
+  const getNumValues = () => args.map(a => typeof a === 'string' ? Number(a) : a);
+  
+  // Retrocompatibilidade: por padrão a maior parte das funções abaixo espera numbers
+  const values = getNumValues();
   
   // Funcoes de tempo do PI
   if (['DAY', 'MONTH', 'YEAR', 'HOUR', 'MINUTE', 'SECOND'].includes(normalizedName)) {
@@ -580,6 +584,81 @@ function evaluateFunction(name: string, args: any[]): number {
     requireArgumentCount(name, values, 1);
     return Math.tanh(values[0]);
   }
+  if (normalizedName === 'PI') {
+    return Math.PI;
+  }
+  if (normalizedName === 'DEGREES') {
+    requireArgumentCount(name, values, 1);
+    return values[0] * (180 / Math.PI);
+  }
+  if (normalizedName === 'RADIANS') {
+    requireArgumentCount(name, values, 1);
+    return values[0] * (Math.PI / 180);
+  }
+  if (normalizedName === 'PERCENTILE') {
+    // Percentile(val1, val2, val3, percentual)
+    if (values.length < 2) throw new Error('PERCENTILE precisa de valores e do percentual no último argumento.');
+    const percent = values.pop()!;
+    if (percent < 0 || percent > 100) throw new Error('PERCENTILE precisa de percentual entre 0 e 100.');
+    const sorted = [...values].sort((a, b) => a - b);
+    const index = (percent / 100) * (sorted.length - 1);
+    const lower = Math.floor(index);
+    const upper = Math.ceil(index);
+    if (lower === upper) return sorted[lower];
+    const weight = index - lower;
+    return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+  }
+  if (normalizedName === 'MAD') {
+    requireMinimumArgumentCount(name, values, 1);
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    return values.reduce((a, b) => a + Math.abs(b - mean), 0) / values.length;
+  }
+  if (normalizedName === 'CV') {
+    requireMinimumArgumentCount(name, values, 1);
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    if (mean === 0) return 0;
+    const stddev = Math.sqrt(values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (values.length - 1 || 1));
+    return (stddev / mean) * 100; // Porcentagem
+  }
+  if (normalizedName === 'RANGE') {
+    requireMinimumArgumentCount(name, values, 1);
+    return Math.max(...values) - Math.min(...values);
+  }
+  if (normalizedName === 'TIME_DIFF') {
+    requireArgumentCount(name, values, 2);
+    // Presume unix timestamps (s) ou ms
+    return Math.abs(values[0] - values[1]);
+  }
+
+  // Funções de Strings
+  if (normalizedName === 'CONCAT') {
+    return args.join('');
+  }
+  if (normalizedName === 'CONTAINS') {
+    requireArgumentCount(name, args, 2);
+    return String(args[0]).includes(String(args[1])) ? 1 : 0;
+  }
+  if (normalizedName === 'STARTS_WITH') {
+    requireArgumentCount(name, args, 2);
+    return String(args[0]).startsWith(String(args[1])) ? 1 : 0;
+  }
+  if (normalizedName === 'ENDS_WITH') {
+    requireArgumentCount(name, args, 2);
+    return String(args[0]).endsWith(String(args[1])) ? 1 : 0;
+  }
+  if (normalizedName === 'UPPER') {
+    requireArgumentCount(name, args, 1);
+    return String(args[0]).toUpperCase();
+  }
+  if (normalizedName === 'LOWER') {
+    requireArgumentCount(name, args, 1);
+    return String(args[0]).toLowerCase();
+  }
+  if (normalizedName === 'TRIM') {
+    requireArgumentCount(name, args, 1);
+    return String(args[0]).trim();
+  }
+
   if (normalizedName === 'WHILE') {
     throw new Error('WHILE não é suportado em cálculos, pois a expressão precisa sempre terminar. Use IF para condições.');
   }

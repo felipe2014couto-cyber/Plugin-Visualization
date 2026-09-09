@@ -1652,7 +1652,7 @@ function calculateHistoricalPoints(
       values.set(input.name, point.value);
     }
     const evaluation = evaluateCalculation(calculation, values);
-    return evaluation.status === 'success' ? [{ time, value: evaluation.value }] : [];
+    return evaluation.status === 'success' ? [{ time, value: typeof evaluation.value === 'number' ? evaluation.value : Number(evaluation.value) }] : [];
   });
 }
 

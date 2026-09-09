@@ -433,3 +433,31 @@ O Motor de Cálculos é protegido, mas se um cálculo falhar, um erro será exib
 | **VARIANCE** | Estatística | Variância da amostragem | `VARIANCE(A, B)` |
 | **STDDEV** | Estatística | Desvio padrão da amostragem | `STDDEV(A, B)` |
 | **COUNT** | Estatística | Contagem de valores alimentados | `COUNT(A, B)` |
+| **PI** | Matemática | Constante Pi | `PI()` |
+| **DEGREES** | Matemática | Converter radianos para graus | `DEGREES(Tag)` |
+| **RADIANS** | Matemática | Converter graus para radianos | `RADIANS(Tag)` |
+| **MAD** | Estatística | Desvio absoluto médio | `MAD(A, B)` |
+| **CV** | Estatística | Coeficiente de variação em % | `CV(A, B)` |
+| **RANGE** | Estatística | Diferença entre máx e mín | `RANGE(A, B)` |
+| **PERCENTILE** | Estatística | Encontra o N-ésimo percentil | `PERCENTILE(A, B, C, 95)` |
+| **TIME_DIFF** | Temporal | Diferença de tempo absoluta (s) | `TIME_DIFF(T1, T2)` |
+| **CONCAT** | String | Juntar textos | `CONCAT('A', 'B')` |
+| **CONTAINS** | String | Verifica se contém substring | `CONTAINS('A', 'B')` |
+| **STARTS_WITH**| String | Verifica se inicia com substring | `STARTS_WITH('A', 'B')` |
+| **ENDS_WITH** | String | Verifica se termina com substring | `ENDS_WITH('A', 'B')` |
+| **UPPER** | String | Transformar para maiúsculas | `UPPER('Tag')` |
+| **LOWER** | String | Transformar para minúsculas | `LOWER('Tag')` |
+| **TRIM** | String | Remover espaços nas pontas | `TRIM('Tag')` |
+
+### Macros Históricas (PI Vision/DataLink)
+
+| Função | Uso | Exemplo |
+|--------|-----|---------|
+| **INTERPOLATE** | Interpolar no tempo (sinônimo: **VALUE_AT_TIME**) | `INTERPOLATE('Tag', '*')` |
+| **FIRST_VALUE** | Primeiro valor da janela | `FIRST_VALUE('Tag', '-1d')` |
+| **LAST_VALUE** | Último valor da janela | `LAST_VALUE('Tag', '-1d')` |
+| **EVENT_COUNT** | Contar os eventos (sinônimo: **COUNT_VALUES**) | `EVENT_COUNT('Tag', '-1d')` |
+| **STATE_DURATION**| Tempo contínuo no estado | `STATE_DURATION('Tag', "On", '-8h')` |
+| **TIME_EQ** | Tempo total no estado na janela inteira | `TIME_EQ('Tag', "On", '-8h')` |
+| **TIME_NE** | Tempo total fora do estado na janela inteira | `TIME_NE('Tag', "On", '-8h')` |
+| **IS_GOOD** / etc. | Funções de qualidade retornam 1 ou 0 | `IS_GOOD('Tag')` |

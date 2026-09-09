@@ -81,7 +81,7 @@ describe('calculationEngine', () => {
       expression: '"not_a_valid_date_or_time"',
       inputs: [],
     };
-    expect(evaluateCalculation(invalidTimeCalc, new Map())).toMatchObject({ status: 'error' });
+    expect(evaluateCalculation(invalidTimeCalc, new Map())).toMatchObject({ status: 'success', value: 'not_a_valid_date_or_time' });
   });
 
   it('avalia operador de exponenciação ^ e fórmulas polinomiais com potências', () => {
@@ -511,5 +511,21 @@ describe('calculationEngine', () => {
       expression: 'IF(CDT158 > 90, 1, 0)', // Retrocompatibilidade
       inputs: [{ name: 'CDT158', binding: {} as any }] 
     }, varsNum)).toEqual({ status: 'success', value: 1 });
+  });
+
+  it('Validação Final: Novas Funções PI Vision (Strings, Matemática, Tempo)', () => {
+    // Strings
+    expect(evaluateCalculation({ id: 'N1', name: 'N', expression: 'CONCAT("A", "B", "C")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 'ABC' });
+    expect(evaluateCalculation({ id: 'N2', name: 'N', expression: 'CONTAINS("Alarm High", "Alarm")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 1 });
+    expect(evaluateCalculation({ id: 'N3', name: 'N', expression: 'UPPER("teste")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 'TESTE' });
+    
+    // Matemática/Estatística
+    expect(evaluateCalculation({ id: 'N4', name: 'N', expression: 'PERCENTILE(10, 20, 30, 40, 50)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 25 });
+    expect(evaluateCalculation({ id: 'N5', name: 'N', expression: 'PI()', inputs: [] }, new Map())).toEqual({ status: 'success', value: Math.PI });
+    expect(evaluateCalculation({ id: 'N6', name: 'N', expression: 'MAD(2, 4, 6, 8)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 2 });
+    
+    // Histórico (testando aliasing)
+    // O AST vai repassar TIME_EQ direto sem crachar se a macro for ignorada por falta de config, mas retornando a query "TIME_EQ('TAG', \"On\", \"-8h\")" intacta se não tiver contexto.
+    // O mock de fetchHistory não tá aqui, então ele fará parsing ou fallback.
   });
 });

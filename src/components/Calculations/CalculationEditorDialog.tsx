@@ -73,7 +73,7 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
   const [isDropActive, setIsDropActive] = useState(false);
   const [isResolvingInputs, setIsResolvingInputs] = useState(false);
   const [executionState, setExecutionState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [executionResult, setExecutionResult] = useState<{ value: number; timestamp?: string }>();
+  const [executionResult, setExecutionResult] = useState<{ value: number | string; timestamp?: string }>();
   const [isFunctionHelpOpen, setIsFunctionHelpOpen] = useState(false);
   const [expandedFunctionName, setExpandedFunctionName] = useState<string>();
 
@@ -654,7 +654,8 @@ function extractTagNames(expression: string): string[] {
   return [...names];
 }
 
-function formatExecutionValue(value: number): string {
+function formatExecutionValue(value: number | string): string {
+  if (typeof value === 'string') return value;
   return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }
 
