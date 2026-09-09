@@ -1,5 +1,5 @@
 import type { PiPointBinding } from '../pi/piPointBinding';
-import { applyQualityMacros, applyTemporalMacros, applyHistoricalMacros, updateTemporalCache, parsePiTimeMs } from './calculationMacros';
+import { applyQualityMacros, applyTemporalMacros, applyHistoricalMacros, applyMetadataMacros, applyDigitalStateMacros, updateTemporalCache, parsePiTimeMs } from './calculationMacros';
 
 export interface CalculationInput {
   name: string;
@@ -52,8 +52,10 @@ export function evaluateCalculation(
     
     try {
       resolvedExpressionTemp = applyHistoricalMacros(resolvedExpressionTemp, input.name, calculation.id, input.binding, now);
+      resolvedExpressionTemp = applyMetadataMacros(resolvedExpressionTemp, input.name, input.binding);
+      resolvedExpressionTemp = applyDigitalStateMacros(resolvedExpressionTemp, input.name, input.binding, piPointValue);
     } catch (e: any) {
-      if (e.message === 'FETCHING_HISTORY') return { status: 'loading' };
+      if (e.message === 'FETCHING_HISTORY' || e.message === 'FETCHING_METADATA' || e.message === 'FETCHING_DIGITAL_STATES') return { status: 'loading' };
       throw e;
     }
 
@@ -102,7 +104,17 @@ function replaceToken(expression: string, token: string, replacement: string): s
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Se o usuário digitou 'TAG', token='TAG', replacement='__pi_X' => se quisermos preservar as aspas do template, o regex substitui TAG por __pi_X.
   // Entao 'TAG' se tornará '__pi_X', e se ele digitou TAG, vai virar __pi_X. Ambos sao corretos se tratarmos isso no parsePrimary.
-  return expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])${escaped}(?![A-Za-z0-9_.:])`, 'gi'), replacement);
+  const tokenRegex = new RegExp(`(?<![A-Za-z0-9_.:])${escaped}(?![A-Za-z0-9_.:])`, 'gi');
+  let result = '';
+  let cursor = 0;
+  const stringRegex = /"(?:\\.|[^"\\])*"/g;
+  for (const stringMatch of expression.matchAll(stringRegex)) {
+    const start = stringMatch.index ?? 0;
+    result += expression.slice(cursor, start).replace(tokenRegex, replacement);
+    result += stringMatch[0];
+    cursor = start + stringMatch[0].length;
+  }
+  return result + expression.slice(cursor).replace(tokenRegex, replacement);
 }
 
 function parseArithmeticExpression(expression: string, variables: ReadonlyMap<string, number | string>): number | string {
@@ -113,11 +125,28 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
       cursor += 1;
     }
   };
+  const matchWord = (word: string): boolean => {
+    skipWhitespace();
+    const candidate = expression.slice(cursor, cursor + word.length);
+    if (candidate.toLocaleUpperCase() !== word) {
+      return false;
+    }
+    const previous = expression[cursor - 1];
+    const next = expression[cursor + word.length];
+    if ((previous && /[A-Za-z0-9_]/.test(previous)) || (next && /[A-Za-z0-9_]/.test(next))) {
+      return false;
+    }
+    cursor += word.length;
+    return true;
+  };
   const parsePrimary = (): number | string => {
     skipWhitespace();
+    if (/^IF\b\s*(?!\()/i.test(expression.slice(cursor))) {
+      return parseConditional();
+    }
     if (expression[cursor] === '(') {
       cursor += 1;
-      const value = parseLogicalOr();
+      const value = parseConditional();
       skipWhitespace();
       if (expression[cursor] !== ')') {
         throw new Error('Parênteses não balanceados.');
@@ -174,7 +203,7 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
       skipWhitespace();
       if (expression[cursor] !== ')') {
         while (true) {
-          argumentsList.push(parseLogicalOr());
+          argumentsList.push(parseConditional());
           skipWhitespace();
           if (expression[cursor] !== ',') {
             break;
@@ -209,6 +238,9 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
   };
   const parseUnary = (): number | string => {
     skipWhitespace();
+    if (matchWord('NOT')) {
+      return Number(Number(parseUnary()) === 0);
+    }
     if (expression[cursor] === '+') { cursor += 1; return Number(parseUnary()); }
     if (expression[cursor] === '-') { cursor += 1; return -Number(parseUnary()); }
     return parsePower();
@@ -319,11 +351,13 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
     let value = parseEquality();
     while (true) {
       skipWhitespace();
-      if (expression.slice(cursor, cursor + 2) !== '&&') {
+      if (expression.slice(cursor, cursor + 2) === '&&') {
+        cursor += 2;
+      } else if (!matchWord('AND')) {
         break;
       }
-      cursor += 2;
-      value = Number(Boolean(Number(value)) && Boolean(Number(parseEquality())));
+      const right = parseEquality();
+      value = Number(Boolean(Number(value)) && Boolean(Number(right)));
     }
     return value;
   }
@@ -332,16 +366,36 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
     let value = parseLogicalAnd();
     while (true) {
       skipWhitespace();
-      if (expression.slice(cursor, cursor + 2) !== '||') {
+      if (expression.slice(cursor, cursor + 2) === '||') {
+        cursor += 2;
+      } else if (!matchWord('OR')) {
         break;
       }
-      cursor += 2;
-      value = Number(Boolean(Number(value)) || Boolean(Number(parseLogicalAnd())));
+      const right = parseLogicalAnd();
+      value = Number(Boolean(Number(value)) || Boolean(Number(right)));
     }
     return value;
   }
 
-  const result = parseLogicalOr();
+  function parseConditional(): number | string {
+    skipWhitespace();
+    if (!/^IF\b\s*(?!\()/i.test(expression.slice(cursor))) {
+      return parseLogicalOr();
+    }
+    cursor += 2;
+    const condition = parseLogicalOr();
+    if (!matchWord('THEN')) {
+      throw new Error('A expressão IF requer THEN.');
+    }
+    const whenTrue = parseConditional();
+    if (!matchWord('ELSE')) {
+      throw new Error('A expressão IF requer ELSE.');
+    }
+    const whenFalse = parseConditional();
+    return Number(condition) !== 0 ? whenTrue : whenFalse;
+  }
+
+  const result = parseConditional();
   skipWhitespace();
   if (cursor !== expression.length) {
     throw new Error('A expressão contém tokens inválidos.');
@@ -367,7 +421,7 @@ function evaluateFunction(name: string, args: any[]): number | string {
   const values = getNumValues();
   
   // Funcoes de tempo do PI
-  if (['DAY', 'MONTH', 'YEAR', 'HOUR', 'MINUTE', 'SECOND'].includes(normalizedName)) {
+  if (['DAY', 'MONTH', 'YEAR', 'HOUR', 'MINUTE', 'SECOND', 'WEEKDAY', 'YEARDAY', 'DAYSEC'].includes(normalizedName)) {
     requireArgumentCount(name, values, 1);
     const date = new Date(values[0] * 1000);
     switch (normalizedName) {
@@ -377,7 +431,28 @@ function evaluateFunction(name: string, args: any[]): number | string {
       case 'HOUR': return date.getHours();
       case 'MINUTE': return date.getMinutes();
       case 'SECOND': return date.getSeconds();
+      case 'WEEKDAY': return date.getDay() + 1;
+      case 'YEARDAY': {
+        const start = new Date(date.getFullYear(), 0, 1);
+        return Math.floor((Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) - Date.UTC(start.getFullYear(), 0, 1)) / 86400000) + 1;
+      }
+      case 'DAYSEC': return date.getHours() * 3600 + date.getMinutes() * 60 + date.getSeconds();
     }
+  }
+
+  if (['BOD', 'BOM', 'BONM', 'NOON'].includes(normalizedName)) {
+    requireArgumentCount(name, values, 1);
+    const date = new Date(values[0] * 1000);
+    if (normalizedName === 'BOD') date.setHours(0, 0, 0, 0);
+    if (normalizedName === 'BOM') date.setDate(1), date.setHours(0, 0, 0, 0);
+    if (normalizedName === 'BONM') date.setMonth(date.getMonth() + 1, 1), date.setHours(0, 0, 0, 0);
+    if (normalizedName === 'NOON') date.setHours(12, 0, 0, 0);
+    return Math.floor(date.getTime() / 1000);
+  }
+  if (normalizedName === 'PARSETIME') {
+    requireArgumentCount(name, args, 1);
+    if (typeof args[0] !== 'string') throw new Error('ParseTime requer uma string de tempo.');
+    return parsePiTimeMs(args[0], Date.now()) / 1000;
   }
 
   if (normalizedName === 'IF' || normalizedName === 'SE') {
@@ -465,7 +540,10 @@ function evaluateFunction(name: string, args: any[]): number | string {
   }
   if (normalizedName === 'SQR') {
     requireArgumentCount(name, values, 1);
-    return values[0] * values[0];
+    if (values[0] < 0) {
+      throw new Error('Raiz quadrada de número negativo.');
+    }
+    return Math.sqrt(values[0]);
   }
   if (normalizedName === 'EXP') {
     requireArgumentCount(name, values, 1);
@@ -514,7 +592,7 @@ function evaluateFunction(name: string, args: any[]): number | string {
     if (values[0] < -1 || values[0] > 1) throw new Error('ACOS requer valor entre -1 e 1.');
     return Math.acos(values[0]);
   }
-  if (normalizedName === 'ATAN') {
+  if (normalizedName === 'ATAN' || normalizedName === 'ATN') {
     requireArgumentCount(name, values, 1);
     return Math.atan(values[0]);
   }
@@ -526,7 +604,7 @@ function evaluateFunction(name: string, args: any[]): number | string {
     requireArgumentCount(name, values, 1);
     return Math.ceil(values[0]);
   }
-  if (normalizedName === 'SIGN') {
+  if (normalizedName === 'SIGN' || normalizedName === 'SGN') {
     requireArgumentCount(name, values, 1);
     return Math.sign(values[0]);
   }
@@ -534,7 +612,7 @@ function evaluateFunction(name: string, args: any[]): number | string {
     requireArgumentCount(name, values, 1);
     return Math.trunc(values[0]);
   }
-  if (normalizedName === 'ATAN2') {
+  if (normalizedName === 'ATAN2' || normalizedName === 'ATN2') {
     requireArgumentCount(name, values, 2);
     return Math.atan2(values[0], values[1]);
   }
@@ -549,6 +627,22 @@ function evaluateFunction(name: string, args: any[]): number | string {
   if (normalizedName === 'TANH') {
     requireArgumentCount(name, values, 1);
     return Math.tanh(values[0]);
+  }
+  if (normalizedName === 'INT') {
+    requireArgumentCount(name, values, 1);
+    if (!Number.isFinite(values[0])) throw new Error('INT requer um número válido.');
+    return Math.trunc(values[0]);
+  }
+  if (normalizedName === 'FRAC') {
+    requireArgumentCount(name, values, 1);
+    if (!Number.isFinite(values[0])) throw new Error('FRAC requer um número válido.');
+    return values[0] - Math.trunc(values[0]);
+  }
+  if (normalizedName === 'FLOAT') {
+    requireArgumentCount(name, args, 1);
+    const result = typeof args[0] === 'number' ? args[0] : Number(args[0]);
+    if (!Number.isFinite(result)) throw new Error('FLOAT requer uma string numérica.');
+    return result;
   }
   if (normalizedName === 'PI') {
     return Math.PI;
@@ -596,9 +690,99 @@ function evaluateFunction(name: string, args: any[]): number | string {
     return Math.abs(values[0] - values[1]);
   }
 
+  if (normalizedName === 'STRING') {
+    requireArgumentCount(name, args, 1);
+    return piStringValue(args[0]);
+  }
+  if (normalizedName === 'TEXT') {
+    requireMinimumArgumentCount(name, args, 1);
+    return args.map(piStringValue).join('');
+  }
+  if (normalizedName === 'FORMAT') {
+    if (args.length < 2 || args.length > 3) throw new Error('FORMAT requer número, formato e tipo opcional (R ou I).');
+    if (typeof args[1] !== 'string') throw new Error('FORMAT requer uma string de formato.');
+    return formatPiNumber(args[0], args[1], args[2]);
+  }
+  if (normalizedName === 'POLY') {
+    requireMinimumArgumentCount(name, values, 2);
+    if (values.some((value) => !Number.isFinite(value))) throw new Error('POLY requer x e coeficientes numéricos válidos.');
+    const x = values[0];
+    return values.slice(1).reduce((result, coefficient, power) => result + coefficient * x ** power, 0);
+  }
+  if (normalizedName === 'DIGTEXT') {
+    throw new Error('DigText requer o Digital State Set do PI Point, que não é exposto pelo datasource atual.');
+  }
+
   // Funções de Strings
   if (normalizedName === 'CONCAT') {
     return args.join('');
+  }
+  if (normalizedName === 'UCASE') {
+    requireArgumentCount(name, args, 1);
+    return String(args[0]).toUpperCase();
+  }
+  if (normalizedName === 'LCASE') {
+    requireArgumentCount(name, args, 1);
+    return String(args[0]).toLowerCase();
+  }
+  if (normalizedName === 'LEN') {
+    requireArgumentCount(name, args, 1);
+    return String(args[0]).length;
+  }
+  if (normalizedName === 'LEFT' || normalizedName === 'RIGHT') {
+    requireArgumentCount(name, args, 2);
+    const count = Number(args[1]);
+    if (!Number.isInteger(count) || count < 0 || count > 999) throw new Error(`${name} requer uma quantidade inteira entre 0 e 999.`);
+    const text = String(args[0]);
+    return normalizedName === 'LEFT' ? text.slice(0, count) : count === 0 ? '' : text.slice(-count);
+  }
+  if (normalizedName === 'MID') {
+    if (args.length < 2 || args.length > 3) throw new Error('MID requer string, posição e comprimento opcional.');
+    const start = Number(args[1]);
+    const length = args.length === 3 ? Number(args[2]) : 999;
+    if (!Number.isInteger(start) || start < 1 || !Number.isInteger(length) || length < 0 || length > 999) {
+      throw new Error('MID requer posição a partir de 1 e comprimento entre 0 e 999.');
+    }
+    return String(args[0]).slice(start - 1, start - 1 + length);
+  }
+  if (normalizedName === 'LTRIM' || normalizedName === 'RTRIM') {
+    requireArgumentCount(name, args, 1);
+    return normalizedName === 'LTRIM' ? String(args[0]).replace(/^\s+/, '') : String(args[0]).replace(/\s+$/, '');
+  }
+  if (normalizedName === 'INSTR') {
+    if (args.length < 2 || args.length > 4) throw new Error('INSTR aceita [start,] string1, string2 [,casesen].');
+    const hasStart = typeof args[0] === 'number' && args.length >= 3;
+    const start = hasStart ? Number(args[0]) : 1;
+    const first = String(hasStart ? args[1] : args[0]);
+    const second = String(hasStart ? args[2] : args[1]);
+    const caseSensitive = args.length === (hasStart ? 4 : 3) ? Number(args[hasStart ? 3 : 2]) !== 0 : false;
+    if (!Number.isInteger(start) || start < 0) throw new Error('INSTR requer posição inicial não negativa.');
+    const haystack = caseSensitive ? first : first.toLocaleLowerCase();
+    const needle = caseSensitive ? second : second.toLocaleLowerCase();
+    const index = haystack.indexOf(needle, Math.max(0, start - 1));
+    return index < 0 ? 0 : index + 1;
+  }
+  if (normalizedName === 'ASCII') {
+    requireArgumentCount(name, args, 1);
+    const text = String(args[0]);
+    if (text.length === 0) throw new Error('ASCII requer uma string não vazia.');
+    return text.charCodeAt(0);
+  }
+  if (normalizedName === 'CHAR') {
+    requireMinimumArgumentCount(name, values, 1);
+    return values.map((value) => {
+      if (!Number.isInteger(value) || value < 0 || value > 255) throw new Error('CHAR requer códigos ASCII entre 0 e 255.');
+      return String.fromCharCode(value);
+    }).join('');
+  }
+  if (normalizedName === 'COMPARE') {
+    if (args.length < 2 || args.length > 3) throw new Error('COMPARE requer duas strings e casesen opcional.');
+    const first = String(args[0]);
+    const pattern = String(args[1]);
+    const caseSensitive = args.length === 3 && Number(args[2]) !== 0;
+    const escape = (value: string) => value.replace(/[.+^${}()|[\]\\*?]/g, '\\$&');
+    const regex = new RegExp(`^${escape(pattern).replace(/\\\*/g, '.*').replace(/\\\?/g, '.')}$`, caseSensitive ? '' : 'i');
+    return regex.test(first) ? 1 : 0;
   }
   if (normalizedName === 'CONTAINS') {
     requireArgumentCount(name, args, 2);
@@ -644,6 +828,59 @@ function evaluateFunction(name: string, args: any[]): number | string {
     throw new Error(`A função ${name} requer uma referência válida de PI Point (entre aspas simples) no primeiro argumento e conectividade com o servidor histórico.`);
   }
   throw new Error(`Função desconhecida: ${name}.`);
+}
+
+function piStringValue(value: unknown): string {
+  if (value === undefined || value === null) throw new Error('STRING/TEXT não aceita valor ausente.');
+  if (typeof value === 'object') throw new Error('STRING/TEXT requer o valor escalar do PI Point, não o objeto PiPointValue.');
+  if (typeof value === 'number' && !Number.isFinite(value)) throw new Error('STRING/TEXT requer um valor finito.');
+  return String(value);
+}
+
+function formatPiNumber(value: unknown, format: string, numberType: unknown): string {
+  const number = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(number)) throw new Error('FORMAT requer um número finito.');
+  const type = numberType === undefined ? 'R' : String(numberType).toUpperCase();
+  if (type !== 'R' && type !== 'I') throw new Error('FORMAT aceita tipo numérico R ou I.');
+  const match = format.match(/^%([-+0 ]*)(\d+)?(?:\.(\d+))?([diuoxXfFeEgG])$/);
+  if (!match) throw new Error('FORMAT suporta somente uma especificação C numérica simples (%[flags][width][.precision][diuoxXfFeEgG]).');
+  const [, flag, widthText, precisionText, conversion] = match;
+  if (type === 'I' && !'diuoxX'.includes(conversion)) throw new Error('FORMAT tipo I requer conversão inteira.');
+  if (type === 'R' && 'diuoxX'.includes(conversion)) throw new Error('FORMAT tipo R requer conversão real.');
+
+  let result: string;
+  const precision = precisionText === undefined ? undefined : Number(precisionText);
+  if ('diuoxX'.includes(conversion)) {
+    const integer = Math.trunc(number);
+    if (conversion === 'o') result = Math.abs(integer).toString(8);
+    else if (conversion === 'x' || conversion === 'X') result = Math.abs(integer).toString(16);
+    else result = Math.abs(integer).toString(10);
+    if (conversion === 'X') result = result.toUpperCase();
+    if (precision !== undefined) result = result.padStart(precision, '0');
+    if (integer < 0) result = `-${result}`;
+  } else {
+    const digits = precision === undefined ? 6 : precision;
+    if (conversion.toLowerCase() === 'f') result = number.toFixed(digits);
+    else if (conversion === 'e' || conversion === 'E') result = number.toExponential(digits);
+    else {
+      result = number.toPrecision(precision ?? 6);
+      if (!/[eE]/.test(result)) result = result.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '');
+    }
+    if (conversion === conversion.toUpperCase()) result = result.toUpperCase();
+  }
+  if (number >= 0 && (flag.includes('+') || flag.includes(' '))) result = `${flag.includes('+') ? '+' : ' '}${result}`;
+  const width = widthText === undefined ? 0 : Number(widthText);
+  if (width > result.length) {
+    const padding = '0'.repeat(width - result.length);
+    if (flag.includes('-')) {
+      result = `${result}${' '.repeat(width - result.length)}`;
+    } else if (flag.includes('0') && /^[+-]/.test(result)) {
+      result = `${result[0]}${padding}${result.slice(1)}`;
+    } else {
+      result = `${flag.includes('0') ? padding : ' '.repeat(width - result.length)}${result}`;
+    }
+  }
+  return result;
 }
 
 function requireArgumentCount(name: string, values: number[], expected: number): void {

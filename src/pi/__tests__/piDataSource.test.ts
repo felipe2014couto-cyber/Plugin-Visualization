@@ -1,6 +1,6 @@
 import type { DataSourceSrv } from '@grafana/runtime';
 import { of, throwError, type Observable } from 'rxjs';
-import { checkPiConnection, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
+import { checkPiConnection, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, getPiResource, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
 
 function makeDataSource(overrides: Partial<{ uid: string; name: string; isDefault: boolean }> = {}) {
   return {
@@ -34,6 +34,29 @@ function makeDataSourceSrv(options: {
 }
 
 describe('PI data source integration', () => {
+  it('acessa recurso relativo pelo proxy da datasource GPA e preserva erros', async () => {
+    const getResource = jest.fn().mockResolvedValue({ PointID: 12345 });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+
+    await expect(getPiResource('pi-default', '/points/point-webid', dataSourceSrv)).resolves.toEqual({ PointID: 12345 });
+    expect(getResource).toHaveBeenCalledWith('/points/point-webid');
+  });
+
+  it('não aceita URL absoluta nem mascara ausência do resource handler', async () => {
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })] });
+    await expect(getPiResource('pi-default', 'https://pi.local/points/x', dataSourceSrv)).rejects.toThrow('caminho relativo');
+
+    const get = jest.fn(async () => ({ uid: 'pi-default', type: PI_DATASOURCE_TYPE, query: jest.fn(), testDatasource: jest.fn(), metricFindQuery: jest.fn() }));
+    await expect(getPiResource('pi-default', '/points/x', { get } as unknown as Pick<DataSourceSrv, 'get'>))
+      .rejects.toThrow('não expõe recursos');
+  });
+
+  it('propaga erro HTTP do resource handler', async () => {
+    const getResource = jest.fn().mockRejectedValue(new Error('HTTP 403'));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    await expect(getPiResource('pi-default', '/points/point-webid', dataSourceSrv)).rejects.toThrow('HTTP 403');
+  });
+
   it('obtém Zero e Span pelos metadados do PI Point', async () => {
     const getResource = jest.fn(async () => ({ Zero: -50, Span: 100 }));
     const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });

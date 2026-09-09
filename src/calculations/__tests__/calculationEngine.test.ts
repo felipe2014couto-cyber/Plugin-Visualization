@@ -48,6 +48,34 @@ describe('calculationEngine', () => {
     ]))).toEqual({ status: 'success', value: 16.67 });
   });
 
+  it.each([
+    ['Sqr(9)', 3],
+    ['Sqr(25)', 5],
+  ])('calcula Sqr como raiz quadrada: %s', (expression, value) => {
+    expect(evaluateCalculation({ ...calculation, expression, inputs: [] }, new Map())).toEqual({ status: 'success', value });
+  });
+
+  it('aceita IF THEN ELSE e operadores lógicos PI sem alterar IF funcional', () => {
+    expect(evaluateCalculation({ ...calculation, expression: 'if 1 then 2 else 3', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 2 });
+    expect(evaluateCalculation({ ...calculation, expression: 'if 0 then 2 else 3', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 3 });
+    expect(evaluateCalculation({ ...calculation, expression: 'if 1 then if 0 then 1 else 2 else 3', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 2 });
+    expect(evaluateCalculation({ ...calculation, expression: 'if 1 > 0 and 2 < 3 then 1 else 0', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 1 });
+    expect(evaluateCalculation({ ...calculation, expression: 'if not 1 then 1 else 0', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 0 });
+    expect(evaluateCalculation({ ...calculation, expression: 'IF(1, 2, 3)', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 2 });
+    expect(evaluateCalculation({ ...calculation, expression: '1 OR 0 AND 0', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 1 });
+    expect(evaluateCalculation({ ...calculation, expression: 'NOT 1 AND 0', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 0 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Text("android", "notebook", "origin")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 'androidnotebookorigin' });
+  });
+
   it('avalia comparações com estados digitais do PI', () => {
     expect(evaluateCalculation({
       ...calculation,
@@ -129,6 +157,48 @@ describe('calculationEngine', () => {
     // 4 + 16 + 1 + 10 = 31
     expect(evaluateCalculation(mathCalc, new Map())).toEqual({ status: 'success', value: 31 });
   });
+
+  it('suporta funções PI de strings com indexação baseada em 1', () => {
+    expect(evaluateCalculation({ ...calculation, expression: 'Len("ABCDE")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 5 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Left("ABCDE", 2)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 'AB' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Right("ABCDE", 2)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 'DE' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Mid("ABCDE", 2, 2)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 'BC' });
+    expect(evaluateCalculation({ ...calculation, expression: 'LTrim("   ABC   ")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 'ABC   ' });
+    expect(evaluateCalculation({ ...calculation, expression: 'RTrim("   ABC   ")', inputs: [] }, new Map())).toEqual({ status: 'success', value: '   ABC' });
+    expect(evaluateCalculation({ ...calculation, expression: 'InStr("What", "At")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 3 });
+    expect(evaluateCalculation({ ...calculation, expression: 'InStr("what", "At", 1)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 0 });
+    expect(evaluateCalculation({ ...calculation, expression: 'UCase("abc")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 'ABC' });
+    expect(evaluateCalculation({ ...calculation, expression: 'LCase("ABC")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 'abc' });
+  });
+
+  it('suporta Char, Ascii, Compare e aliases matemáticos PI', () => {
+    expect(evaluateCalculation({ ...calculation, expression: 'Ascii("A")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 65 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Char(66)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 'B' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Compare("What", "wh*")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 1 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Atn(1) - ATAN(1)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 0 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Atn2(1, 1) - ATAN2(1, 1)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 0 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Sgn(-10) + Sgn(0) + Sgn(10)', inputs: [] }, new Map())).toEqual({ status: 'success', value: 0 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Int(-1.7) + Frac(-1.7)', inputs: [] }, new Map())).toEqual({ status: 'success', value: -1.7 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Float("12.5")', inputs: [] }, new Map())).toEqual({ status: 'success', value: 12.5 });
+  });
+
+  it('suporta funções PI de data/hora com timestamp determinístico', () => {
+    const timestamp = new Date(2024, 1, 29, 13, 14, 15).getTime() / 1000;
+    expect(evaluateCalculation({ ...calculation, expression: `Day(${timestamp}) + Month(${timestamp}) + Year(${timestamp})`, inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 29 + 2 + 2024 });
+    expect(evaluateCalculation({ ...calculation, expression: `Hour(${timestamp}) * 10000 + Minute(${timestamp}) * 100 + Second(${timestamp})`, inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 131415 });
+    expect(evaluateCalculation({ ...calculation, expression: `Weekday(${timestamp})`, inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: new Date(timestamp * 1000).getDay() + 1 });
+    expect(evaluateCalculation({ ...calculation, expression: `Yearday(${timestamp})`, inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 60 });
+    expect(evaluateCalculation({ ...calculation, expression: `DaySec(${timestamp})`, inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 13 * 3600 + 14 * 60 + 15 });
+    expect(evaluateCalculation({ ...calculation, expression: `Bod(${timestamp})`, inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: new Date(2024, 1, 29).getTime() / 1000 });
+    expect(evaluateCalculation({ ...calculation, expression: `Noon(${timestamp})`, inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: new Date(2024, 1, 29, 12).getTime() / 1000 });
+  });
   it('suporta novas funções trigonométricas e estatísticas', () => {
     const mathCalc2: CalculationDefinition = {
       id: '7',
@@ -159,6 +229,38 @@ describe('calculationEngine', () => {
     expect(evaluateCalculation(qualityCalc, new Map([
       ['T1', { value: 10, good: true, timestamp: '2023-01-01T00:00:00Z' }]
     ]))).toEqual({ status: 'success', value: Math.floor(Date.parse('2023-01-01T00:00:00Z') / 1000) });
+  });
+
+  it.each([
+    ['valor numérico zero é bom', { value: 0, quality: { Good: true } }, 0],
+    ['estado digital é bom', { value: 'On', quality: { Good: true } }, 0],
+    ['qualidade explícita ruim', { value: 10, quality: { Good: false } }, 1],
+    ['estado de sistema PI é ruim', { value: 'Shutdown' }, 1],
+    ['valor ausente é ruim', { value: undefined }, 1],
+  ])('suporta BadVal sem confundir tipo com qualidade: %s', (_label, value, expected) => {
+    const badValCalc: CalculationDefinition = {
+      id: '8-quality', name: 'BadVal', expression: 'BadVal(T1)',
+      inputs: [{ name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } }],
+    };
+    expect(evaluateCalculation(badValCalc, new Map([['T1', value]]))).toEqual({ status: 'success', value: expected });
+  });
+
+  it('usa a qualidade aninhada também para IS_BAD e IS_GOOD', () => {
+    const qualityCalc: CalculationDefinition = {
+      id: '8-nested-quality', name: 'Qualidade aninhada', expression: 'IS_BAD(T1) + IS_GOOD(T1)',
+      inputs: [{ name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } }],
+    };
+    expect(evaluateCalculation(qualityCalc, new Map([['T1', { value: 10, quality: { Good: false } }]])))
+      .toEqual({ status: 'success', value: 1 });
+  });
+
+  it('prioriza quality.Good real sobre o nome de estado do valor', () => {
+    const qualityCalc: CalculationDefinition = {
+      id: '8-quality-priority', name: 'Prioridade de qualidade', expression: 'BadVal(T1)',
+      inputs: [{ name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } }],
+    };
+    expect(evaluateCalculation(qualityCalc, new Map([['T1', { value: 'Shutdown', quality: { Good: true } }]])))
+      .toEqual({ status: 'success', value: 0 });
   });
 
   it('retorna loading quando histórico está sendo buscado', () => {
@@ -192,6 +294,51 @@ describe('calculationEngine', () => {
     expect(evaluateCalculation(qCalc, new Map([
       ['T1', { value: 10, quality: { substituted: true } }]
     ]))).toEqual({ status: 'success', value: 2 });
+  });
+
+  it('implementa Poly com a ordem oficial c0, c1, ... cn', () => {
+    expect(evaluateCalculation({ ...calculation, expression: 'Poly(2, 1, 3, 4)', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 23 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Poly(-1, 5, -2, 3)', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 10 });
+    expect(evaluateCalculation({ ...calculation, expression: 'Poly(0, 7, -4, 10)', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 7 });
+  });
+
+  it('implementa String, Text e o subconjunto numérico determinístico de Format', () => {
+    expect(evaluateCalculation({ ...calculation, expression: 'String(12.5)', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '12.5' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Text("Value=", 0, " On")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 'Value=0 On' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(45, "%3.3d", "I")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '045' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(12.5, "%3.2f")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '12.50' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(10, "%i", "I")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '10' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(10, "%u", "I")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '10' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(10, "%o", "I")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '12' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(10, "%x", "I")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 'a' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(10, "%X", "I")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: 'A' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(12.5, "%e")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '1.250000e+1' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(12.5, "%E")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '1.250000E+1' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(12.5, "%g")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '12.5' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(12.5, "%G")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '12.5' });
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(12.5, "%+08.2f")', inputs: [] }, new Map()))
+      .toEqual({ status: 'success', value: '+0012.50' });
+  });
+
+  it('rejeita DigText sem Digital State Set e formatos não suportados', () => {
+    expect(evaluateCalculation({ ...calculation, expression: 'DigText("On")', inputs: [] }, new Map()).status).toBe('error');
+    expect(evaluateCalculation({ ...calculation, expression: 'Format(12.5, "0.00")', inputs: [] }, new Map()).status).toBe('error');
   });
 
   it('testa LENGTH e SUBSTRING nativas', () => {

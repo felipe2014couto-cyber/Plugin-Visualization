@@ -6,7 +6,7 @@ import type { PiPointSearchResult, PiPointValue } from '../../pi/piDataSource';
 import { createPiPointBinding } from '../../pi/piPointBinding';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../pi/piPointDrag';
 import { evaluateCalculation, type CalculationDefinition, type CalculationInput } from '../../calculations/calculationEngine';
-import { hasPendingHistoricalRequests, waitForPendingHistoricalRequests } from '../../calculations/calculationMacros';
+import { hasPendingHistoricalRequests, waitForPendingHistoricalRequests, hasPendingMetadataRequests, waitForPendingMetadataRequests, hasPendingDigitalStateRequests, waitForPendingDigitalStateRequests } from '../../calculations/calculationMacros';
 
 interface CalculationHelpItem {
   name: string;
@@ -175,7 +175,7 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
         input,
         value: await loadValue?.(input.binding),
       })));
-      pointValues.forEach(({ input, value }) => values.set(input.name, value?.value));
+      pointValues.forEach(({ input, value }) => values.set(input.name, value));
       const calculation = {
         id: '__preview__',
         name: name.trim() || 'Cálculo',
@@ -184,9 +184,9 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
       };
       let evaluation = evaluateCalculation(calculation, values);
       let attempts = 0;
-      while (evaluation.status === 'loading' && hasPendingHistoricalRequests() && attempts < 10) {
+      while (evaluation.status === 'loading' && (hasPendingHistoricalRequests() || hasPendingMetadataRequests() || hasPendingDigitalStateRequests()) && attempts < 10) {
         attempts += 1;
-        await waitForPendingHistoricalRequests();
+        await Promise.all([waitForPendingHistoricalRequests(), waitForPendingMetadataRequests(), waitForPendingDigitalStateRequests()]);
         evaluation = evaluateCalculation(calculation, values);
       }
       if (evaluation.status === 'loading') {

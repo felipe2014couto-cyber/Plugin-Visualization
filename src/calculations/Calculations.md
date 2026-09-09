@@ -22,6 +22,179 @@ O Calculation Engine possui suporte a diversas funções matemáticas, estatíst
 
 A sintaxe foi desenvolvida para facilitar a criação de novos cálculos e a migração de expressões existentes para o Plugin-Visualization.
 
+#### Status da compatibilidade PE/PI Vision — Fase 1
+
+Os fundamentos abaixo foram validados no parser e no engine:
+
+| Construção | Status | Exemplo |
+|---|---|---|
+| `Sqr(x)` | Compatível | `Sqr(9)` retorna `3` |
+| `IF ... THEN ... ELSE ...` | Compatível | `IF Tag > 10 THEN 1 ELSE 0` |
+| `AND`, `OR`, `NOT` | Compatível | `IF A > 0 AND NOT B THEN 1 ELSE 0` |
+| `IF()`, `AND()`, `OR()`, `NOT()` | Forma legada do plugin, mantida | `IF(A > 10, 1, 0)` |
+
+Na Fase 10 houve uma correção na avaliação/consumo dos operadores lógicos
+`AND`/`OR`; isso não alterou a gramática nem a sintaxe geral do parser.
+
+As construções históricas, de busca temporal, strings, datas e metadados ainda
+devem ser classificadas individualmente conforme suas assinaturas e semântica
+forem validadas. A existência de uma função com nome semelhante não implica
+compatibilidade completa com PI Performance Equations.
+
+#### Status da compatibilidade PE/PI Vision — Fase 3
+
+| Função | Status | Observação |
+|---|---|---|
+| `TagAvg` | PARCIAL | Média ponderada no tempo sobre os intervalos disponíveis; o datasource atual não informa stepped, qualidade por ponto nem valores de fronteira. |
+| `TagMean` | PARCIAL | Média ponderada por eventos, sem interpolação de fronteira. |
+| `TagMin`, `TagMax` | PARCIAL | Mínimo/máximo dos eventos numéricos retornados; qualidade e `pctgood` não estão disponíveis. |
+| `TagTot` | PARCIAL | Integral em dias, usando interpolação linear entre pontos retornados; stepped e fronteiras não são fornecidos. |
+| `EventCount` | PARCIAL | Conta os eventos retornados pelo modo `recorded`; o frame atual não expõe marcadores adicionais para auditar fronteiras. |
+| `Range` | PARCIAL | Máximo menos mínimo dos eventos numéricos retornados. |
+| `PctGood` | NÃO IMPLEMENTADO | A resposta normalizada não fornece qualidade por evento nem cobertura temporal Good/Bad. |
+| `StDev`, `PStDev`, `SStDev` | NÃO IMPLEMENTADO | As variantes PI e seus denominadores/ponderação ainda não foram implementados nesta fase. |
+
+#### Status da compatibilidade PE/PI Vision — Fase 4
+
+| Função | Status | Retorno e limitações |
+|---|---|---|
+| `TimeEq`, `TimeNE` | PARCIAL | Duração em segundos; estados digitais são tratados como stepped, enquanto séries numéricas usam igualdade contínua. Não há valores de fronteira nem stepped numérico no frame. |
+| `TimeGT`, `TimeGE` | PARCIAL | Duração em segundos com cruzamento linear para séries numéricas; comparação inclusiva preserva platôs no limite. |
+| `TimeLT`, `TimeLE` | PARCIAL | Duração em segundos com cruzamento linear para séries numéricas; comparação inclusiva preserva platôs no limite. |
+| `FindEq`, `FindNE`, `FindGT`, `FindGE`, `FindLT`, `FindLE` | PARCIAL | Retornam timestamp Unix em segundos; há interpolação numérica e suporte stepped digital, mas não há boundary values nem extrapolação. |
+
+As funções `Time*` calculam somente os intervalos cobertos por dois eventos
+retornados pelo datasource. Como o GPA atual não fornece stepped numérico,
+qualidade por evento ou valores boundary, a compatibilidade é explicitamente
+parcial; estados digitais não são interpolados como números.
+
+#### Status da compatibilidade PE/PI Vision — Fase 5
+
+**String Functions**
+
+| Função PI | Status | Observação |
+|---|---|---|
+| `UCase`, `LCase`, `Len` | COMPATÍVEL | Conversão de caixa e comprimento Unicode conforme a string JavaScript recebida. |
+| `Left`, `Right`, `Mid` | COMPATÍVEL | Índices PI baseados em 1; `Mid` aceita comprimento opcional. |
+| `Trim`, `LTrim`, `RTrim` | COMPATÍVEL | Removem espaços em branco nas extremidades correspondentes. |
+| `InStr` | PARCIAL | Retorna posição base 1 ou `0`; suporta início opcional e `casesen`, sem curingas. |
+| `Ascii`, `Char`, `Compare` | PARCIAL | Implementados para códigos ASCII e curingas de `Compare`; limites de encoding PI mais amplos ainda não foram validados. |
+
+Os nomes legados `UPPER`, `LOWER`, `LENGTH`, `SUBSTRING` e `CONCAT` foram
+mantidos como extensões do plugin.
+
+**Date/Time Functions**
+
+| Função PI | Status | Observação |
+|---|---|---|
+| `Day`, `Month`, `Year`, `Hour`, `Minute`, `Second` | PARCIAL | Retornam componentes usando o timezone local do navegador. |
+| `Weekday`, `Yearday`, `DaySec` | PARCIAL | Semana de 1 a 7 (domingo = 1), dia do ano de 1 a 366 e segundos desde meia-noite. |
+| `Bod`, `Bom`, `Bonm`, `Noon` | PARCIAL | Retornam timestamp em segundos no timezone local do navegador. |
+| `ParseTime` | PARCIAL | Reutiliza o parser PI temporal existente; não cobre toda a gramática histórica. |
+
+**Math Functions**
+
+| Função PI | Status | Observação |
+|---|---|---|
+| `Atn`, `Atn2`, `Sgn` | COMPATÍVEL | Aliases de `ATAN`, `ATAN2` e `SIGN`, respectivamente. |
+| `Int`, `Frac`, `Float` | PARCIAL | Conversão e parte fracionária preservam sinal; limites de tipos PI não foram ampliados. |
+| `Log`, `Ln`, `Log10`, `Sqr` | COMPATÍVEL | `Log`/`Ln` natural, `Log10` comum e `Sqr` raiz quadrada. |
+
+`TagNum` permanece **NÃO IMPLEMENTADO** por depender do PointID real, que não é
+exposto pelo datasource atual. `DigText`, `DigState` e `StateNo` foram
+integrados de forma PARCIAL usando o Digital State Set resolvido pelo
+datasource; `Find*` foi implementado posteriormente como PARCIAL;
+metadados PI Point, `PctGood` e qualidade por evento devem ser lidos conforme a
+matriz final abaixo.
+
+#### Status da compatibilidade PE/PI Vision — Fase 9
+
+| Função | Status | Assinatura/retorno | Limitação |
+|---|---|---|---|
+| `Format` | PARCIAL | `Format(num, format[, "R"/"I"])` retorna string | Subconjunto determinístico de especificadores C numéricos; datas, locale e máscaras compostas não são suportados. |
+| `String` | PARCIAL | `String(anyvalue)` retorna string | Números, strings e estados digitais já resolvidos; timestamp numérico não recebe formatação de data PI. |
+| `Text` | PARCIAL | `Text(val1[, ...])` concatena os valores em string | Não aplica formatação de timestamp PI nem substitui `Concat` para tipos incompatíveis. |
+| `Poly` | COMPATÍVEL | `Poly(x, c0, ..., cn)` = `c0 + c1*x + ... + cn*x^n` | Todos os argumentos precisam ser numéricos. |
+| `DigText` | PARCIAL | `DigText(tagname)` retorna texto do estado digital | Consulta o Digital State Set associado ao PI Point; requer metadata e não cobre a pesquisa global de sets. |
+| `TagNum` | NÃO IMPLEMENTADO | `TagNum("tagname")` retorna PointID | As respostas atuais de `/points/{webId}`, atributos e `metricFindQuery` não expõem PointID; WebId não é equivalente. |
+
+### Digital State Functions — Fase 12
+
+| Função | Status | Dependência | Observação |
+|---|---|---|---|
+| `DigText(tagname)` | PARCIAL | PI Point digital + Digital State Set | Traduz o código/nome do valor atual; ponto não digital, set ausente ou estado desconhecido geram erro. |
+| `DigState(state[, tagname])` | PARCIAL | Digital State Set do PI Point | Resolve o nome do estado com comparação case-insensitive e preserva o nome do set; a forma sem tag não é suportada. |
+| `StateNo(digstate)` | PARCIAL | Digital State Set | Retorna o código fornecido pelo PI, sem assumir `On = 1`; estados sem código geram erro. |
+| `IsSet(value, select)` | NÃO IMPLEMENTADO | Flags `Annotated`, `Substituted` ou `Questionable` | O datasource atual não fornece essas flags de forma integrada ao cálculo. |
+
+As consultas de Digital State Set usam cache e Promise lock por PI Point. A
+interface aguarda essas Promises junto com histórico e metadata, preservando o
+fluxo de um único clique. Estados normais do set não são misturados aos estados
+de sistema (`Shutdown`, `I/O Timeout`, `Pt Created`, `No Data`), cuja qualidade
+continua seguindo a prioridade da Fase 8.
+
+### Capacidades do PI Web API via datasource Grafana configurada
+
+O plugin não abre uma segunda conexão com o PI, não lê `secureJsonData` e não
+envia credenciais próprias. Ele obtém a instância GPA pelo `dataSourceSrv` e
+usa os métodos já autenticados da datasource: `query`, `metricFindQuery` e,
+quando disponível, `getResource`. O último não é tratado como proxy universal:
+é um resource handler da versão instalada da GPA e cada rota precisa ser
+suportada pelo backend.
+
+| Capacidade | Recurso usado | GPA/resource disponível no código | Integração |
+|---|---|---|---|
+| Pesquisa de PI Points | `/points/search`, `/dataservers/{id}/points` | Sim, via `getResource`; fallback `metricFindQuery` | Pesquisa |
+| Metadata de ponto | `/points/{webId}`, `/points/{webId}/attributes` | Sim, via `getResource` | Metadata e limites |
+| Digital State Set | `/enumerationsets/{id}/enumerationvalues` e rotas legadas | Sim, via `getResource` | `DigText`, `DigState`, `StateNo` |
+| Plot de stream | `/streams/{webId}/plot` | Sim, quando o handler existe | Tendências auxiliares |
+| Boundary histórico | recurso `recorded` não confirmado nesta instalação | Não confirmado | Não integrado |
+| Qualidade por evento | recurso raw não confirmado nesta instalação | Não confirmado | `PctGood` permanece não implementado |
+| Stepped/PointID/timezone do servidor | nenhum campo confirmado no metadata carregado | Não | Funções permanecem parciais |
+
+O helper `getPiResource(datasourceUid, path)` aceita somente caminhos relativos,
+confirma o tipo GPA e propaga erros. Portanto a autenticação continua no fluxo
+Grafana → datasource GPA → PI Web API, sem URL PI hardcoded, token ou senha no
+bundle do plugin.
+
+Inventário das funções confirmadas que permanecem fora do escopo: `IsSet`
+depende de flags não disponíveis de forma completa; `PctGood`, `StDev`,
+`PStDev` e `SStDev` dependem de qualidade e
+fronteiras históricas por evento; `TagBad` e `PrevEvent` exigem semântica de
+arquivo/qualidade adicional; `Delay` e funções de alarmes não se aplicam ao
+modelo síncrono de cálculo do plugin. `GoodVal` não foi encontrado como função
+oficial na referência adotada e não foi implementado.
+
+`TagMean` não é alias de `TagAvg`: o primeiro usa a média dos eventos e o
+segundo pondera os intervalos de tempo. `TagTot` retorna unidade de valor por
+dia, conforme a semântica PE de totalizador; `Total` permanece como extensão
+legada do plugin.
+
+### Auditoria final — Fase 10
+
+A auditoria foi feita contra a lista de funções do *PI Server Applications
+User's Guide* (Performance Equations). **COMPATÍVEL** indica assinatura e
+semântica validadas para os tipos cobertos; **PARCIAL** indica limitação
+explícita; **PLUGIN EXTENSION** não é uma promessa de compatibilidade PE; e
+**NÃO IMPLEMENTADO** não deve ser usado como se fosse PE. Não foi classificada
+nenhuma função como NÃO CONFIRMADA.
+
+| Família | COMPATÍVEL | PARCIAL | PLUGIN EXTENSION | NÃO IMPLEMENTADO |
+|---|---|---|---|---|
+| Matemática | `Acos`, `Asin`, `Atn`, `Atn2`, `Cos`, `Cosh`, `Exp`, `Frac`, `Int`, `Log`, `Log10`, `Mod`, `Sgn`, `Sin`, `Sinh`, `Sqr`, `Tan`, `Tanh`, `Poly` | `Avg`, `Float`, `Max`, `Min`, `Median`, `Round`, `Trunc` | — | `Arma`, `Curve`, `Impulse`, `MedianFilt` |
+| Strings/conversão | `UCase`, `LCase`, `Len`, `Left`, `Right`, `Mid`, `Trim`, `LTrim`, `RTrim` | `Ascii`, `Char`, `Compare`, `Concat`, `InStr`, `Format`, `String`, `Text`, `DigText` | `UPPER`, `LOWER`, `LENGTH`, `SUBSTRING`, `CONCAT` | — |
+| Data/hora | — | `Day`, `DaySec`, `Hour`, `Minute`, `Month`, `Second`, `Weekday`, `Year`, `Yearday`, `Bod`, `Bom`, `Bonm`, `Noon`, `ParseTime` | — | `Delay`, `IsDST` |
+| Histórico/arquivo | — | `TagAvg`, `TagMean`, `TagMin`, `TagMax`, `TagTot`, `EventCount`, `Range`, `TagVal`, `PrevVal`, `NextVal`, `TimeEq`, `TimeNE`, `TimeGT`, `TimeGE`, `TimeLT`, `TimeLE`, `FindEq`, `FindNE`, `FindGT`, `FindGE`, `FindLT`, `FindLE` | `Average`, `Minimum`, `Maximum`, `Count`, `Total`, `Moving_Average`, `Moving_Min`, `Moving_Max`, `Moving_StdDev` | `NextEvent`, `PrevEvent`, `PctGood`, `StDev`, `PStDev`, `SStDev` |
+| Qualidade/estado | — | `BadVal`, `DigState`, `StateNo` | `IS_GOOD`, `IS_BAD`, `IS_QUESTIONABLE`, `IS_SUBSTITUTED`, `IS_NO_DATA`, `QUALITY`, `STATUS_CODE` | `IsSet`, `TagBad` |
+| Metadata | `TagDesc`, `TagEU`, `TagExDesc`, `TagName`, `TagSource`, `TagSpan`, `TagZero`, `TagType`, `TagTypVal` | — | — | `TagNum` |
+| Alarmes | — | — | — | `AlmAckStat`, `AlmCondition`, `AlmCondText`, `AlmPriority` |
+
+Contagem dos 112 nomes da referência auditada: 37 COMPATÍVEIS, 56 PARCIAIS e
+19 NÃO IMPLEMENTADOS; NÃO CONFIRMADOS: 0. Além deles, a matriz identifica 14
+EXTENSÕES do plugin. `GoodVal`
+não faz parte da lista de referência adotada e não foi inventada como função
+PE.
+
 ---
 
 ## 2. Como Criar um Cálculo
@@ -100,6 +273,7 @@ O motor possui diversas funções embutidas para tratamento de dados operacionai
 - **Resultado:** Retorna a diferença de pressão sempre positiva, independente de qual for maior.
 
 ### ROUND()
+- **Status:** 🔵 PLUGIN EXTENSION (não é a assinatura PI `Round(x[, unit])`).
 - **Descrição:** Arredonda um número para uma quantidade específica de casas decimais.
 - **Sintaxe:** `ROUND(valor, casas_decimais)`
 - **Exemplo industrial:** `ROUND(Vazao_Principal, 2)`
@@ -459,13 +633,15 @@ O Plugin suporta **exclusivamente a sintaxe nativa do PI Vision** para as funç�
 | **TimeEq** | `TimeEq('Tag', start, end, "Estado")` | `TimeEq('STATUS', '-24h', '*', "On")` | Tempo total em que a tag esteve em um estado digital específico durante a janela de tempo informada. |
 | **TimeGT** | `TimeGT('Tag', start, end, Valor)` | `TimeGT('TEMP', '-8h', '*', 100)` | Tempo total (s) em que a tag esteve acima de um valor durante a janela. |
 | **TimeLT** | `TimeLT('Tag', start, end, Valor)` | `TimeLT('PRESSAO', 'y', 't', 50)` | Tempo total (s) em que a tag esteve abaixo de um valor durante a janela. |
+| **TagVal** | `TagVal('Tag'[, time])` | `TagVal('TEMP', '*')` | Valor interpolado da tag no instante solicitado; sem `time`, usa `'*'`. |
+| **PrevVal** | `PrevVal('Tag'[, time])` | `PrevVal('TEMP', '*-5m')` | Último valor arquivado até o instante solicitado. |
+| **NextVal** | `NextVal('Tag'[, time])` | `NextVal('TEMP', '*-5m')` | Primeiro valor arquivado a partir do instante solicitado. |
 | **Average** | `Average('Tag', start, end)` | `Average('TEMP', '*-24h', '*')` | Média temporal dos valores da tag no período especificado. |
-| **Total** | `Total('Tag', start, end)` | `Total('VAZAO', '-1d', '*')` | Integral ponderada no tempo (Time-Weighted) computada em dias, replicando exatamente o Total nativo do PI. |
+| **Total** | `Total('Tag', start, end)` | `Total('VAZAO', '-1d', '*')` | Extensão histórica do plugin; integral linear nos pontos retornados, em unidades/dia, sem boundary/stepped. |
 | **Minimum** | `Minimum('Tag', start, end)` | `Minimum('TEMP', '-1h', '*')` | Menor valor alcançado na janela de tempo. |
 | **Maximum** | `Maximum('Tag', start, end)` | `Maximum('TEMP', '-1h', '*')` | Maior valor alcançado na janela de tempo. |
 | **Count** | `Count('Tag', start, end)` | `Count('TEMP', '-8h', '*')` | Quantidade total de eventos / registros salvos no histórico durante o período. |
 | **ValueAtTime** | `ValueAtTime('Tag', timestamp)` | `ValueAtTime('TEMP', 't')` | Obtém o valor interpolado na data/hora especificada. |
-| **PrevVal** | `PrevVal('Tag', timestamp)` | `PrevVal('TEMP', '*')` | Obtém o último valor registrado antes da data/hora especificada. |
 | **Moving_Average** | `Moving_Average('Tag', start, end)` | `Moving_Average('T', '-1h', '*')` | Média móvel dos valores da tag. |
 | **Moving_Min** | `Moving_Min('Tag', start, end)` | `Moving_Min('T', '-1h', '*')` | Mínimo móvel na janela de histórico. |
 | **Moving_Max** | `Moving_Max('Tag', start, end)` | `Moving_Max('T', '-1h', '*')` | Máximo móvel na janela de histórico. |
@@ -480,6 +656,24 @@ Qualquer macro histórica ou função de data que aceita um parâmetro de tempo 
 - `'-8h'` - 8 horas antes do momento atual (assume-se `*` como base).
 - `'*-24h'` - 24 horas antes do momento atual.
 - `'+1d'` - Adiciona 1 dia.
+
+### Limitações atuais da compatibilidade PI
+
+- O datasource histórico não fornece valores de fronteira; estatísticas e
+  funções de busca não extrapolam o primeiro/último evento.
+- Metadata `stepped` numérica não está disponível; séries numéricas usam
+  interpolação linear. Séries digitais são tratadas como stepped.
+- Não há qualidade histórica por evento suficiente para `PctGood`, desvios PI
+  e filtros de qualidade.
+- O Digital State Set não está disponível para implementar `DigText`, `DigState`
+  e `StateNo` com segurança.
+- O PointID não é exposto pelo caminho atual de metadata; `TagNum` não usa WebId
+  como substituto.
+- `Format` limita-se aos especificadores C numéricos documentados na matriz da
+  Fase 9; datas, locale e máscaras compostas não são suportados.
+- Funções de data usam o timezone local do navegador, enquanto PI pode operar
+  com timezone/configuração diferente; essas funções são classificadas como
+  PARCIAIS.
 
 | **SQRT** | Matemática | Raiz quadrada | `SQRT(Tag)` |
 | **YEAR** | Data/Tempo | Ano da data atual ou de evento | `YEAR('*')` |
@@ -506,9 +700,60 @@ Qualquer macro histórica ou função de data que aceita um parâmetro de tempo 
 
 ### Funções de Qualidade PI
 Todas essas funções retornam 1 (verdadeiro) ou 0 (falso) para validar tags:
+- `BadVal('Tag')`: 1 para qualidade PI explicitamente Good=false ou valor ausente; 0 para valor digital/numericamente válido sem flag de erro.
 - `IS_GOOD('Tag')`: O valor é confiável.
 - `IS_BAD('Tag')`: O valor não é confiável (ex: I/O Timeout).
 - `IS_QUESTIONABLE('Tag')`: O valor está com flag de questionável no PI.
 - `IS_SUBSTITUTED('Tag')`: O valor foi sobreescrito manualmente.
 - `IS_NO_DATA('Tag')`: A tag está sem dados (Pt Created / No Data).
 - `QUALITY('Tag')` e `STATUS_CODE('Tag')`: Recuperam o código interno do estado digital (Int32).
+
+O datasource preserva os campos de qualidade disponíveis no valor atual (por
+exemplo `Good`, `Questionable` e `Substituted`, inclusive dentro de
+`quality`). O editor mantém esse objeto ao chamar o Calculation Engine; assim,
+zero numérico e estados digitais como `On`/`Off` não são classificados como
+ruins por seu tipo. Estados de sistema do PI (como `Shutdown`/`No Data`) são
+ruins quando o datasource os informa como `Good=false` ou quando não há valor.
+Sem uma flag Good explícita, `BadVal` não inventa uma qualidade para valores
+válidos. A série histórica normalizada atualmente não carrega qualidade por
+evento; por isso `PctGood` continua não implementado e a qualidade histórica
+não é inferida.
+
+### Archive Search / Find Functions
+
+As funções `Find*` retornam um timestamp Unix em segundos, correspondente ao
+instante mais próximo do início da janela em que a condição é satisfeita.
+Janelas invertidas são consultadas em ordem reversa. Séries numéricas usam
+interpolação linear entre eventos disponíveis; não há extrapolação antes do
+primeiro ou depois do último ponto porque o datasource atual não fornece
+boundary values. Ausência de correspondência e qualidade inválida retornam
+erro, não zero ou No Data silencioso.
+
+| Function | Status | Return | Numeric | Digital | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `FindEq(Tag, Start, End, Value)` | PARCIAL | Timestamp (s) | Sim, interpolado | Sim, stepped | Sem extrapolação/boundary; erro sem correspondência |
+| `FindNE(Tag, Start, End, Value)` | PARCIAL | Timestamp (s) | Sim, interpolado | Sim, stepped | Sem extrapolação/boundary; erro sem correspondência |
+| `FindGT(Tag, Start, End, Value)` | PARCIAL | Timestamp (s) | Sim, interpolado | Não | Comparação digital não é semântica; erro explícito |
+| `FindGE(Tag, Start, End, Value)` | PARCIAL | Timestamp (s) | Sim, interpolado | Não | Comparação digital não é semântica; erro explícito |
+| `FindLT(Tag, Start, End, Value)` | PARCIAL | Timestamp (s) | Sim, interpolado | Não | Comparação digital não é semântica; erro explícito |
+| `FindLE(Tag, Start, End, Value)` | PARCIAL | Timestamp (s) | Sim, interpolado | Não | Comparação digital não é semântica; erro explícito |
+
+### PI Point Metadata
+
+As funções abaixo consultam os metadados reais do PI Point pela API de recurso
+do datasource PI configurado. Não há inferência a partir de valores atuais ou
+do histórico; quando a propriedade não estiver disponível, a avaliação retorna
+erro.
+
+| Função | Status | Retorno | Fonte |
+| --- | --- | --- | --- |
+| `TagDesc('Tag')` | COMPATÍVEL | String | Atributo `Descriptor`/`Description` do PI Point |
+| `TagEU('Tag')` | COMPATÍVEL | String | Atributo `EngineeringUnits`/`EngUnits` |
+| `TagExDesc('Tag')` | COMPATÍVEL | String | Atributo `ExDesc`/`ExtendedDescriptor`, quando exposto pelo PI Web API |
+| `TagName('Tag')` | COMPATÍVEL | String | Campo `Name` do PI Point |
+| `TagSource('Tag')` | COMPATÍVEL | String | Atributo `PointSource` |
+| `TagSpan('Tag')` | COMPATÍVEL | Número | Atributo `Span` |
+| `TagZero('Tag')` | COMPATÍVEL | Número | Atributo `Zero` |
+| `TagType('Tag')` | COMPATÍVEL | String | Atributo `PointType` |
+| `TagTypVal('Tag')` | COMPATÍVEL | Número ou String | Atributo `TypicalValue`/`TypicalVal`, quando exposto pelo PI Web API |
+| `TagNum('Tag')` | NÃO IMPLEMENTADO | — | O datasource atual não expõe PointID; WebId não é substituído por esse valor |

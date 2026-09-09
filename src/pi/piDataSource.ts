@@ -93,6 +93,8 @@ export interface PiPointValue {
 export interface PiPointMetadata {
   name: string;
   description?: string;
+  extendedDescriptor?: string;
+  pointSource?: string;
   instrumentTag?: string;
   pointType?: string;
   zero?: number;
@@ -100,6 +102,7 @@ export interface PiPointMetadata {
   compDev?: number;
   excDev?: number;
   engineeringUnit?: string;
+  typicalValue?: number | string;
 }
 
 /** A compact representation of a state configured in a PI Digital State Set. */
@@ -654,16 +657,21 @@ async function loadPiPointMetadata(
     : {};
   const fields = { ...(metadata ?? {}), ...attributes };
   const description = getMetadataString(fields, 'Description', 'Descriptor');
+  const extendedDescriptor = getMetadataString(fields, 'ExtendedDescriptor', 'ExDesc');
   const instrumentTag = getMetadataString(fields, 'InstrumentTag', 'SourceTag', 'PointSource');
+  const pointSource = getMetadataString(fields, 'PointSource');
   const pointType = getMetadataString(fields, 'PointType') ?? binding.pointType;
   const engineeringUnit = getMetadataString(fields, 'EngineeringUnits', 'EngUnits');
   const zero = getMetadataNumber(fields, 'Zero');
   const span = getMetadataNumber(fields, 'Span');
   const compDev = getMetadataNumber(fields, 'CompDev', 'CompressionDeviation');
   const excDev = getMetadataNumber(fields, 'ExcDev', 'ExceptionDeviation');
+  const typicalValue = getMetadataScalar(fields, 'TypicalValue', 'TypicalVal');
   return {
     name: getMetadataString(fields, 'Name', 'text') ?? binding.pointName,
     ...(description ? { description } : {}),
+    ...(extendedDescriptor ? { extendedDescriptor } : {}),
+    ...(pointSource ? { pointSource } : {}),
     ...(instrumentTag ? { instrumentTag } : {}),
     ...(pointType ? { pointType } : {}),
     ...(zero !== undefined ? { zero } : {}),
@@ -671,6 +679,7 @@ async function loadPiPointMetadata(
     ...(compDev !== undefined ? { compDev } : {}),
     ...(excDev !== undefined ? { excDev } : {}),
     ...(engineeringUnit ? { engineeringUnit } : {}),
+    ...(typicalValue !== undefined ? { typicalValue } : {}),
   };
 }
 
@@ -684,7 +693,7 @@ async function getPiPointAttributes(resourceApi: PiDataSourceResourceApi, webId:
       // Try the next representation supported by this PI Web API version.
     }
   }
-  const names = ['descriptor', 'instrumenttag', 'sourcetag', 'pointsource', 'compdev', 'excdev', 'engunits'];
+  const names = ['descriptor', 'exdesc', 'instrumenttag', 'sourcetag', 'pointsource', 'compdev', 'excdev', 'engunits', 'typicalvalue'];
   const responses = await Promise.all(names.map(async (name) => {
     try {
       const response = await resourceApi.getResource(`${pointPath}/${encodeURIComponent(name)}`);
@@ -2109,6 +2118,19 @@ function getMetadataNumber(value: Record<string, unknown>, ...fields: string[]):
   return undefined;
 }
 
+function getMetadataScalar(value: Record<string, unknown>, ...fields: string[]): number | string | undefined {
+  for (const field of fields) {
+    const actualField = Object.keys(value).find((key) => key.toLocaleLowerCase() === field.toLocaleLowerCase());
+    const raw = actualField ? value[actualField] : undefined;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (typeof raw === 'string' && raw.trim()) {
+      const numeric = Number(raw);
+      return Number.isFinite(numeric) && raw.trim() !== '' ? numeric : raw.trim();
+    }
+  }
+  return undefined;
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
@@ -2137,4 +2159,28 @@ export type PiDataSourceApi = Pick<DataSourceApi, 'uid' | 'type' | 'testDatasour
 
 interface PiDataSourceResourceApi extends PiDataSourceApi {
   getResource(path: string): Promise<unknown>;
+}
+
+/**
+ * Reads a PI Web API resource through the already configured GPA datasource.
+ * Credentials and transport remain owned by Grafana/the datasource plugin.
+ */
+export async function getPiResource<T = unknown>(
+  datasourceUid: string,
+  path: string,
+  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+): Promise<T> {
+  if (!path.startsWith('/') || path.startsWith('//') || /^[a-z][a-z\d+.-]*:/i.test(path)) {
+    throw new Error('O recurso PI deve ser um caminho relativo.');
+  }
+  const instance = await getResolvedPiDataSource(dataSourceSrv, {
+    uid: datasourceUid,
+    name: '',
+    type: PI_DATASOURCE_TYPE,
+  });
+  const resourceApi = instance as PiDataSourceResourceApi;
+  if (typeof resourceApi.getResource !== 'function') {
+    throw new Error('A Data Source GPA não expõe recursos PI Web API.');
+  }
+  return resourceApi.getResource(path) as Promise<T>;
 }

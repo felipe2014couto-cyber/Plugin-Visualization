@@ -2,17 +2,18 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
 import { CalculationEditorDialog, type CalculationEditorDialogProps } from '../CalculationEditorDialog';
-import { globalHistoricalPromiseLock, globalHistoricalResultCache } from '../../../calculations/calculationMacros';
-import { getPiTrendsRecordedHistoryForRange } from '../../../pi/piDataSource';
+import { globalHistoricalPromiseLock, globalHistoricalResultCache, globalMetadataPromiseLock, globalMetadataResultCache } from '../../../calculations/calculationMacros';
+import { getPiPointMetadata, getPiTrendsRecordedHistoryForRange } from '../../../pi/piDataSource';
 
 jest.mock('@grafana/ui', () => {
   const actual = jest.requireActual('@grafana/ui');
   return { ...actual, useStyles2: <T,>(getStyles: (theme: unknown) => T) => getStyles(createTheme()) };
 });
 
-jest.mock('../../../pi/piDataSource', () => ({ getPiTrendsRecordedHistoryForRange: jest.fn() }));
+jest.mock('../../../pi/piDataSource', () => ({ getPiTrendsRecordedHistoryForRange: jest.fn(), getPiPointMetadata: jest.fn() }));
 
 const queryHistory = getPiTrendsRecordedHistoryForRange as jest.MockedFunction<typeof getPiTrendsRecordedHistoryForRange>;
+const queryMetadata = getPiPointMetadata as jest.MockedFunction<typeof getPiPointMetadata>;
 const calculation = {
   id: '__preview__', name: 'Teste', expression: "Average('SINUSOID', '-1h', '*')",
   inputs: [{ name: 'SINUSOID', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'SINUSOID' } }],
@@ -22,6 +23,29 @@ beforeEach(() => {
   queryHistory.mockReset();
   globalHistoricalPromiseLock.clear();
   globalHistoricalResultCache.clear();
+  globalMetadataPromiseLock.clear();
+  globalMetadataResultCache.clear();
+  queryMetadata.mockReset();
+});
+
+it('aguarda metadata e calcula após um único clique', async () => {
+  queryMetadata.mockResolvedValue({ name: 'SINUSOID', description: 'Sinusoid', engineeringUnit: 'unit' });
+  render(<CalculationEditorDialog initialCalculation={{
+    ...calculation, expression: 'Len(TagDesc(\'SINUSOID\'))',
+  }} loadValue={async () => ({ value: 1 })} onCancel={jest.fn()} onSave={jest.fn()} />);
+
+  fireEvent.click(screen.getByTestId('calculation-editor-execute'));
+  await waitFor(() => expect(screen.getByTestId('calculation-editor-result')).toHaveTextContent('Último valor: 8'));
+  expect(queryMetadata).toHaveBeenCalledTimes(1);
+});
+
+it('preserva a qualidade do valor atual no cálculo de um único clique', async () => {
+  render(<CalculationEditorDialog initialCalculation={{
+    ...calculation, expression: "IF(BadVal('SINUSOID'), 0, 1)",
+  }} loadValue={async () => ({ value: 0, quality: { Good: true } })} onCancel={jest.fn()} onSave={jest.fn()} />);
+
+  fireEvent.click(screen.getByTestId('calculation-editor-execute'));
+  await waitFor(() => expect(screen.getByTestId('calculation-editor-result')).toHaveTextContent('Último valor: 1'));
 });
 
 it('aguarda o histórico e exibe o resultado após um único clique', async () => {
