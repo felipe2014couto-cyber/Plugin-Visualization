@@ -191,8 +191,19 @@ export function applyTemporalMacros(expression: string, token: string, state: an
 
 import type { PiPointBinding } from '../pi/piPointBinding';
 
-export const globalHistoricalResultCache = new Map<string, {value: number | string, timestamp: number}>();
+export const globalHistoricalResultCache = new Map<string, {value?: number | string, error?: Error, timestamp: number}>();
 export const globalHistoricalPromiseLock = new Map<string, Promise<void>>();
+
+export function hasPendingHistoricalRequests(): boolean {
+  return globalHistoricalPromiseLock.size > 0;
+}
+
+export async function waitForPendingHistoricalRequests(): Promise<void> {
+  const pending = [...globalHistoricalPromiseLock.values()];
+  if (pending.length > 0) {
+    await Promise.allSettled(pending);
+  }
+}
 
 export const PI_TIME_ABBREVIATIONS = new Set(['*', 't', 'y', 'today', 'yesterday', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
 
@@ -307,6 +318,7 @@ export function applyHistoricalMacros(
      
      const cachedData = globalHistoricalResultCache.get(globalKey);
      if (cachedData && (now - cachedData.timestamp) < 15) {
+       if (cachedData.error) throw cachedData.error;
        return typeof cachedData.value === 'string' ? `'${cachedData.value.replace(/'/g, "\\'")}'` : String(cachedData.value);
      }
      
@@ -347,7 +359,8 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
     
     const response = await getPiTrendsRecordedHistoryForRange([binding], { from, to });
     
-    const result = response[binding.pointName];
+    // Esta consulta contém somente uma binding; a chave do datasource é composta.
+    const result = Object.values(response)[0];
     if (result && result.status === 'success' && result.series && result.series.points) {
        const pts = result.series.points;
        const vals = pts.map((p: any) => p.value).filter((v: any) => Number.isFinite(v));
@@ -390,10 +403,11 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
          res = Math.max(0, pts.length - 1);
        } else if (fn === 'TIMEEQ') {
          const targetState = args[0] || '';
-         for (let i = 0; i < pts.length - 1; i++) {
-           const sName = getDigitalStateName(pts[i].value) ?? String(pts[i].value);
+         const statePoints = result.series.states?.length ? result.series.states : pts;
+         for (let i = 0; i < statePoints.length - 1; i++) {
+           const sName = getDigitalStateName(statePoints[i].value) ?? String(statePoints[i].value);
            if (sName.localeCompare(targetState, undefined, { sensitivity: 'accent' }) === 0) {
-             const dt = Math.max(0, pts[i+1].time - pts[i].time) / 1000;
+             const dt = Math.max(0, statePoints[i+1].time - statePoints[i].time) / 1000;
              if (typeof res === 'number') res += dt;
            }
          }
@@ -420,15 +434,12 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
         
         globalHistoricalResultCache.set(globalKey, { value: res, timestamp: Math.floor(Date.now()/1000) });
     } else {
-        console.log("Historical response (Failed or No Data)", {
-          tag: binding.pointName,
-          resultStatus: result?.status
-        });
-        globalHistoricalResultCache.set(globalKey, { value: 0, timestamp: Math.floor(Date.now()/1000) });
+        throw result?.status === 'error' ? result.error : new Error('Resposta histórica inválida ou ausente');
     }
   } catch (err) {
-    const cachedData = globalHistoricalResultCache.get(globalKey);
-    globalHistoricalResultCache.set(globalKey, { ...(cachedData||{value: 0}), timestamp: Math.floor(Date.now()/1000) });
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error('[HISTORICAL QUERY ERROR]', { tag: binding.pointName, message: error.message });
+    globalHistoricalResultCache.set(globalKey, { error, timestamp: Math.floor(Date.now()/1000) });
   }
 }
 

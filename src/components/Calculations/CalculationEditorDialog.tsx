@@ -6,6 +6,7 @@ import type { PiPointSearchResult, PiPointValue } from '../../pi/piDataSource';
 import { createPiPointBinding } from '../../pi/piPointBinding';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../pi/piPointDrag';
 import { evaluateCalculation, type CalculationDefinition, type CalculationInput } from '../../calculations/calculationEngine';
+import { hasPendingHistoricalRequests, waitForPendingHistoricalRequests } from '../../calculations/calculationMacros';
 
 interface CalculationHelpItem {
   name: string;
@@ -175,12 +176,19 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
         value: await loadValue?.(input.binding),
       })));
       pointValues.forEach(({ input, value }) => values.set(input.name, value?.value));
-      const evaluation = evaluateCalculation({
+      const calculation = {
         id: '__preview__',
         name: name.trim() || 'Cálculo',
         expression: normalizedExpression,
         inputs: resolvedInputs,
-      }, values);
+      };
+      let evaluation = evaluateCalculation(calculation, values);
+      let attempts = 0;
+      while (evaluation.status === 'loading' && hasPendingHistoricalRequests() && attempts < 10) {
+        attempts += 1;
+        await waitForPendingHistoricalRequests();
+        evaluation = evaluateCalculation(calculation, values);
+      }
       if (evaluation.status === 'loading') {
         throw new Error('Aguardando os valores dos PI Points.');
       }

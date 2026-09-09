@@ -1,4 +1,5 @@
 import type { DataSourceSrv } from '@grafana/runtime';
+import { of, throwError, type Observable } from 'rxjs';
 import { checkPiConnection, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
 
 function makeDataSource(overrides: Partial<{ uid: string; name: string; isDefault: boolean }> = {}) {
@@ -15,7 +16,7 @@ function makeDataSourceSrv(options: {
   dataSources?: Array<ReturnType<typeof makeDataSource>>;
   testDatasource?: () => Promise<unknown>;
   metricFindQuery?: (query: unknown, options: unknown) => Promise<unknown[]>;
-  query?: (request: unknown) => Promise<unknown>;
+  query?: (request: unknown) => Promise<unknown> | Observable<unknown>;
   getResource?: (path: string) => Promise<unknown>;
   instanceUid?: string;
   instanceType?: string;
@@ -968,6 +969,142 @@ describe('PI data source integration', () => {
         recordedValues: { enable: true, maxNumber: 2_000, boundaryType: 'Inside' },
       })],
     });
+  });
+
+  it('executa fallback gravado quando o datasource resolve a consulta com erro HTTP', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce({
+        data: [],
+        error: {
+          status: 500,
+          message: 'Internal Server Error',
+          data: { message: 'boundaryType is not supported' },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: [{
+          refId: 'A',
+          fields: [
+            { name: 'Time', values: ['2026-08-07T11:00:00.000Z'] },
+            { name: 'SINUSOID', values: [10] },
+          ],
+        }],
+      });
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const infoLog = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const from = Date.parse('2026-08-07T11:00:00.000Z');
+    const to = Date.parse('2026-08-07T12:00:00.000Z');
+    const { getPiTrendsRecordedHistoryForRange } = await import('../piDataSource');
+
+    try {
+      await expect(getPiTrendsRecordedHistoryForRange([
+        { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID' },
+      ], { from, to }, dataSourceSrv)).resolves.toEqual({
+        'pi-default\u0000pims\u0000SINUSOID': {
+          status: 'success',
+          series: {
+            pointName: 'SINUSOID',
+            points: [{ time: from, value: 10 }],
+          },
+        },
+      });
+
+      expect(query).toHaveBeenCalledTimes(2);
+      const normalRequest = query.mock.calls[0][0] as any;
+      const fallbackRequest = query.mock.calls[1][0] as any;
+      expect(normalRequest.requestId).not.toBe(fallbackRequest.requestId);
+      expect(normalRequest.targets[0].recordedValues.boundaryType).toBe('Inside');
+      expect(fallbackRequest.targets[0].recordedValues.boundaryType).toBeUndefined();
+      expect(fallbackRequest.targets[0].digitalStates.enable).toBe(false);
+      expect(errorLog).toHaveBeenCalledWith('[PI QUERY ERROR]', expect.objectContaining({
+        status: 500,
+        responseBody: { message: 'boundaryType is not supported' },
+        message: 'Internal Server Error',
+      }));
+      expect(infoLog).toHaveBeenCalledWith('[FALLBACK PI QUERY]', expect.objectContaining({
+        payloadEnviado: fallbackRequest,
+      }));
+      expect(infoLog).toHaveBeenCalledWith('[FALLBACK PI QUERY RESPONSE]', expect.objectContaining({
+        resultado: expect.objectContaining({ data: expect.any(Array) }),
+      }));
+    } finally {
+      errorLog.mockRestore();
+      infoLog.mockRestore();
+    }
+  });
+
+  it('não executa fallback quando a consulta gravada retorna HTTP 200 sem dados', async () => {
+    const query = jest.fn(async () => ({ data: [] }));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const { getPiTrendsRecordedHistoryForRange } = await import('../piDataSource');
+
+    const result = await getPiTrendsRecordedHistoryForRange([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID' },
+    ], { from: 1_000, to: 2_000 }, dataSourceSrv);
+
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(result['pi-default\u0000pims\u0000SINUSOID']).toMatchObject({ status: 'success', series: { points: [] } });
+  });
+
+  it('executa apenas um fallback quando a resposta da consulta gravada é inválida', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ data: [] });
+    const errorLog = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const infoLog = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const { getPiTrendsRecordedHistoryForRange } = await import('../piDataSource');
+
+    try {
+      const result = await getPiTrendsRecordedHistoryForRange([
+        { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID' },
+      ], { from: 1_000, to: 2_000 }, dataSourceSrv);
+
+      expect(query).toHaveBeenCalledTimes(2);
+      expect(result['pi-default\u0000pims\u0000SINUSOID']).toMatchObject({ status: 'success', series: { points: [] } });
+      expect(errorLog).toHaveBeenCalledWith('[PI QUERY ERROR]', expect.objectContaining({
+        message: 'Resposta histórica inválida: campo data ausente',
+      }));
+      expect(infoLog).toHaveBeenCalledWith('[FALLBACK PI QUERY RESPONSE]', {
+        resultado: { data: [] },
+      });
+    } finally {
+      errorLog.mockRestore();
+      infoLog.mockRestore();
+    }
+  });
+
+  it.each([
+    { data: [], error: { status: 500, message: 'Internal Server Error' } },
+    { data: [], status: 400, message: 'Bad Request' },
+    undefined,
+    { data: {} },
+    { data: [{ fields: [] }] },
+  ])('valida resposta emitida e fallback inválido sem repetir o lote: %j', async (response) => {
+    const query = jest.fn().mockReturnValueOnce(of(response)).mockReturnValue(of({ data: [], error: { status: 500, message: 'Fallback failed' } }));
+    const srv = makeDataSourceSrv({ query });
+    const { getPiTrendsRecordedHistoryForRange } = await import('../piDataSource');
+    const result = await getPiTrendsRecordedHistoryForRange([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID' },
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'OTHER' },
+    ], { from: 1000, to: 2000 }, srv);
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(Object.values(result)).toHaveLength(2);
+    for (const item of Object.values(result)) {
+      expect(item).toMatchObject({ status: 'error', error: expect.objectContaining({ message: 'Fallback failed', status: 500 }) });
+    }
+  });
+
+  it('valida estrutura do fallback e preserva exceptions do Observable', async () => {
+    const query = jest.fn().mockReturnValueOnce(throwError(() => ({ status: 500, message: 'HTTP 500' })))
+      .mockReturnValue(of({ data: [{ fields: [] }] }));
+    const { getPiTrendsRecordedHistoryForRange } = await import('../piDataSource');
+    const result = await getPiTrendsRecordedHistoryForRange([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID' },
+    ], { from: 1000, to: 2000 }, makeDataSourceSrv({ query }));
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(Object.values(result)[0]).toMatchObject({ status: 'error', error: expect.objectContaining({ message: 'Resposta histórica inválida: série sem campos Time/Value' }) });
   });
 
   it.each([8, 24, 7 * 24])('mantém maxDataPoints constante ao navegar por %i horas', async (hours) => {

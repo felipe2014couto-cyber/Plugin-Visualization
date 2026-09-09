@@ -1253,66 +1253,62 @@ async function queryPiTrendsHistory(
 
         const resolveBatch = async (selected: readonly PiPointBinding[], fallbackError: Error): Promise<void> => {
           let response: DataQueryResponse;
-          let request: any;
+          const request = buildHistoricalTrendRequest(selected, range, mode, options);
           try {
-            request = buildHistoricalTrendRequest(selected, range, mode, options);
             console.log("Historical datasource payload", JSON.stringify(request, null, 2));
-            
+
             response = await runHistoricalQuery(() => withTimeout(
               resolveQueryResponse(instance.query(request)),
               DATA_QUERY_HISTORICAL_TIMEOUT_MS,
               `Consulta histórica excedeu o tempo limite para ${selected.map(({ pointName }) => pointName).join(', ')}`,
             ));
-          } catch (error: any) {
-            console.error("Historical query error HTTP Response", error?.data || error?.response?.data || error?.message);
-            console.error("Historical query stack trace", error?.stack);
-            
-            // Tentar fallback automático se for consulta de valores gravados e não houver fallback ativo
-            if (mode === 'recorded' && (request.targets[0] as any).recordedValues?.boundaryType) {
-                console.log("[FALLBACK PI QUERY] preparing fallback format without boundaryType...");
-                const fallbackRequest = JSON.parse(JSON.stringify(request));
-                fallbackRequest.requestId = nextDataQueryRequestId('trend', selected[0].dataSourceUid);
-                fallbackRequest.targets.forEach((t: any) => {
-                    if (t.recordedValues) {
-                        delete t.recordedValues.boundaryType;
-                    }
-                    if (t.digitalStates) {
-                        delete t.digitalStates.enable;
-                    }
-                });
-                console.log("[FALLBACK PI QUERY] payload enviado", JSON.stringify(fallbackRequest, null, 2));
-                try {
-                    response = await runHistoricalQuery(() => withTimeout(
-                      resolveQueryResponse(instance.query(fallbackRequest)),
-                      DATA_QUERY_HISTORICAL_TIMEOUT_MS,
-                      `Fallback de consulta histórica excedeu o tempo limite`
-                    ));
-                    console.log("Fallback historical query succeeded!");
-                } catch (fallbackError: any) {
-                    console.error("Fallback query also failed", fallbackError?.data || fallbackError?.response?.data || fallbackError?.message);
-                    const queryError = toError(fallbackError);
-                    if (isHistoricalTrendTimeout(queryError) || selected.length === 1) {
-                      markTrendErrors(results, selected, queryError);
-                      return;
-                    }
-                    const middle = Math.ceil(selected.length / 2);
-                    await resolveBatch(selected.slice(0, middle), queryError);
-                    await resolveBatch(selected.slice(middle), queryError);
-                    return;
+            console.log('[PI QUERY RESPONSE]', { resultado: response });
+            const responseError = getHistoricalQueryResponseError(response);
+            if (responseError) {
+              throw responseError;
+            }
+          } catch (error: unknown) {
+            logPiQueryError(error);
+
+            if (mode === 'recorded' && hasRecordedBoundaryType(request)) {
+              const fallbackRequest = buildHistoricalFallbackRequest(request, selected[0].dataSourceUid);
+              console.log('[FALLBACK PI QUERY]', { payloadEnviado: fallbackRequest });
+              try {
+                response = await runHistoricalQuery(() => withTimeout(
+                  resolveQueryResponse(instance.query(fallbackRequest)),
+                  DATA_QUERY_HISTORICAL_TIMEOUT_MS,
+                  'Fallback de consulta histórica excedeu o tempo limite',
+                ));
+                console.log('[FALLBACK PI QUERY RESPONSE]', { resultado: response });
+                const fallbackResponseError = getHistoricalQueryResponseError(response);
+                if (fallbackResponseError) {
+                  throw fallbackResponseError;
                 }
-            } else {
-                const queryError = toError(error);
-                if (isHistoricalTrendTimeout(queryError) || selected.length === 1) {
-                  markTrendErrors(results, selected, queryError);
-                  return;
-                }
-                const middle = Math.ceil(selected.length / 2);
-                await resolveBatch(selected.slice(0, middle), queryError);
-                await resolveBatch(selected.slice(middle), queryError);
+              } catch (fallbackQueryError: unknown) {
+                logPiQueryError(fallbackQueryError);
+                const queryError = toError(fallbackQueryError);
+                markTrendErrors(results, selected, queryError);
                 return;
+              }
+            } else {
+              const queryError = toError(error);
+              if (isHistoricalTrendTimeout(queryError) || selected.length === 1) {
+                markTrendErrors(results, selected, queryError);
+                return;
+              }
+              const middle = Math.ceil(selected.length / 2);
+              await resolveBatch(selected.slice(0, middle), queryError);
+              await resolveBatch(selected.slice(middle), queryError);
+              return;
             }
           }
 
+          if (mode === 'recorded' && response.data.length === 0) {
+            for (const binding of selected) {
+              results[getBindingKey(binding)] = { status: 'success', series: { pointName: binding.pointName, points: [] } };
+            }
+            return;
+          }
           const batchResults = normalizeTrendResponse(response, selected);
           Object.assign(results, batchResults);
           const failed = selected.filter((binding) => batchResults[getBindingKey(binding)]?.status === 'error');
@@ -1447,6 +1443,99 @@ function buildHistoricalTrendRequest(
     startTime: timeRange.from,
     endTime: timeRange.to,
   };
+}
+
+function hasRecordedBoundaryType(request: DataQueryRequest<DataQuery>): boolean {
+  return request.targets.some((target) => {
+    const recordedValues = (target as DataQuery & { recordedValues?: { boundaryType?: unknown } }).recordedValues;
+    return recordedValues?.boundaryType !== undefined;
+  });
+}
+
+function buildHistoricalFallbackRequest(
+  request: DataQueryRequest<DataQuery>,
+  dataSourceUid: string,
+): DataQueryRequest<DataQuery> {
+  return {
+    ...request,
+    requestId: nextDataQueryRequestId('trend', dataSourceUid),
+    targets: request.targets.map((target) => {
+      const fallbackTarget = { ...target } as DataQuery & {
+        recordedValues?: Record<string, unknown>;
+        digitalStates?: Record<string, unknown>;
+      };
+      if (fallbackTarget.recordedValues) {
+        const recordedValues = { ...fallbackTarget.recordedValues };
+        // GPA 5.2.0 usa Inside por default: remover o campo não muda a fronteira no PI Web API.
+        delete recordedValues.boundaryType;
+        fallbackTarget.recordedValues = recordedValues;
+      }
+      if (fallbackTarget.digitalStates) {
+        fallbackTarget.digitalStates = { ...fallbackTarget.digitalStates, enable: false };
+      }
+      return fallbackTarget;
+    }),
+  };
+}
+
+function getHistoricalQueryResponseError(response: unknown): Error | undefined {
+  if (!response || typeof response !== 'object') {
+    return new Error('Resposta histórica inválida: resposta ausente');
+  }
+  const value = response as Record<string, unknown>;
+  const responseError = value.error;
+  const status = getPiQueryStatus(responseError) ?? getPiQueryStatus(value);
+  if (typeof status === 'number' && status >= 400) {
+    return createPiQueryResponseError(status, responseError ?? value);
+  }
+  if (responseError) {
+    return createPiQueryResponseError(status, responseError);
+  }
+  if (!Array.isArray(value.data)) {
+    return new Error('Resposta histórica inválida: campo data ausente');
+  }
+  if (value.data.some((frame) => !frame || !Array.isArray(frame.fields)
+    || !frame.fields.every((field: DataFrame['fields'][number]) => field && typeof field.name === 'string' && field.values != null)
+    || !frame.fields.some((field: DataFrame['fields'][number]) => field.name.toLowerCase() === 'time')
+    || frame.fields.length < 2)) {
+    return new Error('Resposta histórica inválida: série sem campos Time/Value');
+  }
+  return undefined;
+}
+
+function createPiQueryResponseError(status: number | undefined, body: unknown): Error {
+  const bodyRecord = body && typeof body === 'object' ? body as Record<string, unknown> : undefined;
+  const responseBody = bodyRecord?.data ?? body;
+  const responseBodyRecord = responseBody && typeof responseBody === 'object'
+    ? responseBody as Record<string, unknown>
+    : undefined;
+  const message = typeof bodyRecord?.message === 'string'
+    ? bodyRecord.message
+    : typeof responseBodyRecord?.message === 'string' ? responseBodyRecord.message
+    : typeof body === 'string' ? body : 'Falha na consulta histórica do PI';
+  const error = new Error(message) as Error & { status?: number; responseBody?: unknown };
+  error.status = status;
+  error.responseBody = responseBody;
+  return error;
+}
+
+function getPiQueryStatus(value: unknown): number | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const rawStatus = record.status ?? record.statusCode ?? (record.response && typeof record.response === 'object'
+    ? (record.response as Record<string, unknown>).status
+    : undefined);
+  const status = typeof rawStatus === 'number' ? rawStatus : Number(rawStatus);
+  return Number.isFinite(status) ? status : undefined;
+}
+
+function logPiQueryError(error: unknown): void {
+  const value = error && typeof error === 'object' ? error as Record<string, unknown> : undefined;
+  const response = value?.response && typeof value.response === 'object' ? value.response as Record<string, unknown> : undefined;
+  const status = getPiQueryStatus(error);
+  const responseBody = value?.responseBody ?? value?.data ?? response?.data;
+  const message = typeof value?.message === 'string' ? value.message : String(error);
+  console.error('[PI QUERY ERROR]', { status, responseBody, message });
 }
 
 async function resolveQueryResponse(
