@@ -29,7 +29,7 @@ export function evaluateCalculation(
   }
 
   let resolvedExpression = expression;
-  const variables = new Map<string, number>();
+  const variables = new Map<string, number | string>();
   const inputs = [...(calculation.inputs ?? [])].sort((left, right) => right.name.length - left.name.length);
 
   const now = Math.floor(Date.now() / 1000);
@@ -57,20 +57,17 @@ export function evaluateCalculation(
       throw e;
     }
 
+    let rawState: string | undefined;
     if (typeof rawValue !== 'number') {
-      resolvedExpressionTemp = replaceDigitalComparisons(resolvedExpressionTemp, input.name, rawValue);
-      if (containsToken(resolvedExpressionTemp, input.name)) {
+      rawState = getDigitalStateName(rawValue) ?? String(rawValue);
+      variables.set(key, rawState);
+    } else {
+      if (!Number.isFinite(rawValue)) {
         return { status: 'error', error: new Error(`O PI Point "${input.name}" não possui um valor numérico.`) };
       }
-      resolvedExpression = resolvedExpressionTemp;
-      continue;
+      variables.set(key, rawValue);
     }
     
-    if (!Number.isFinite(rawValue)) {
-      return { status: 'error', error: new Error(`O PI Point "${input.name}" não possui um valor numérico.`) };
-    }
-    
-    variables.set(key, rawValue);
     resolvedExpression = replaceToken(resolvedExpressionTemp, input.name, key);
   }
 
@@ -81,25 +78,9 @@ export function evaluateCalculation(
   }
 }
 
-function containsToken(expression: string, token: string): boolean {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?<![A-Za-z0-9_.:])${escaped}(?![A-Za-z0-9_.:])`, 'i').test(expression);
-}
 
-/** Replaces PI digital-state comparisons (for example, TAG == "On") with 1 or 0. */
-function replaceDigitalComparisons(expression: string, token: string, value: unknown): string {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const compare = (operator: string, expected: string) => {
-    const actual = getDigitalStateName(value);
-    const equals = actual !== undefined && actual.localeCompare(expected.trim(), undefined, { sensitivity: 'accent' }) === 0;
-    return String((operator === '==' ? equals : !equals) ? 1 : 0);
-  };
-  const tokenFirst = new RegExp(`${escaped}\\s*(==|!=)\\s*(["'])(.*?)\\2`, 'gi');
-  const valueFirst = new RegExp(`(["'])(.*?)\\1\\s*(==|!=)\\s*${escaped}`, 'gi');
-  return expression
-    .replace(tokenFirst, (_match, operator: string, _quote: string, expected: string) => compare(operator, expected))
-    .replace(valueFirst, (_match, _quote: string, expected: string, operator: string) => compare(operator, expected));
-}
+
+
 
 function getDigitalStateName(value: unknown): string | undefined {
   if (typeof value === 'string') {
@@ -118,10 +99,12 @@ function getDigitalStateName(value: unknown): string | undefined {
 
 function replaceToken(expression: string, token: string, replacement: string): string {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Se o usuário digitou 'TAG', token='TAG', replacement='__pi_X' => se quisermos preservar as aspas do template, o regex substitui TAG por __pi_X.
+  // Entao 'TAG' se tornará '__pi_X', e se ele digitou TAG, vai virar __pi_X. Ambos sao corretos se tratarmos isso no parsePrimary.
   return expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])${escaped}(?![A-Za-z0-9_.:])`, 'gi'), replacement);
 }
 
-function parseArithmeticExpression(expression: string, variables: ReadonlyMap<string, number>): number {
+function parseArithmeticExpression(expression: string, variables: ReadonlyMap<string, number | string>): number {
   let cursor = 0;
 
   const skipWhitespace = () => {
@@ -129,7 +112,7 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
       cursor += 1;
     }
   };
-  const parsePrimary = (): number => {
+  const parsePrimary = (): number | string => {
     skipWhitespace();
     if (expression[cursor] === '(') {
       cursor += 1;
@@ -141,20 +124,29 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
       cursor += 1;
       return value;
     }
-    const variable = expression.slice(cursor).match(/^__pi_\d+/)?.[0];
-    if (variable) {
-      cursor += variable.length;
+    
+    const variableMatch = expression.slice(cursor).match(/^(?:')?(__pi_\d+)(?:')?/);
+    if (variableMatch && variableMatch[1]) {
+      const variable = variableMatch[1];
+      cursor += variableMatch[0].length;
       const value = variables.get(variable);
       if (value === undefined) {
         throw new Error(`Variável desconhecida: ${variable}.`);
       }
       return value;
     }
-    // Parser de strings
-    const stringMatch = expression.slice(cursor).match(/^(["'])(.*?)\1/);
-    if (stringMatch) {
-      cursor += stringMatch[0].length;
-      return parsePiTime(stringMatch[2]);
+    // Parser de strings literais duplas
+    const doubleStringMatch = expression.slice(cursor).match(/^"(.*?)"/);
+    if (doubleStringMatch) {
+      cursor += doubleStringMatch[0].length;
+      return doubleStringMatch[1];
+    }
+    
+    // Antigo fallback: strings com aspas simples caso não seja variável (__pi_N) e for resolvido no PiTime
+    const singleStringMatch = expression.slice(cursor).match(/^'(.*?)'/);
+    if (singleStringMatch) {
+      cursor += singleStringMatch[0].length;
+      return parsePiTime(singleStringMatch[1]);
     }
     
     // Parser de abreviações temporais unquoted (*, t, y)
@@ -177,7 +169,7 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
         throw new Error(`Função inválida: ${functionName}.`);
       }
       cursor += 1;
-      const argumentsList: number[] = [];
+      const argumentsList: any[] = [];
       skipWhitespace();
       if (expression[cursor] !== ')') {
         while (true) {
@@ -203,24 +195,24 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
     }
     throw new Error(`Expressão inválida próxima de "${expression.slice(cursor, cursor + 12)}".`);
   };
-  const parsePower = (): number => {
+  const parsePower = (): number | string => {
     let value = parsePrimary();
     skipWhitespace();
     if (expression[cursor] === '^' || expression.slice(cursor, cursor + 2) === '**') {
       const isDouble = expression.slice(cursor, cursor + 2) === '**';
       cursor += isDouble ? 2 : 1;
       const right = parseUnary();
-      value = Math.pow(value, right);
+      value = Math.pow(Number(value), Number(right));
     }
     return value;
   };
-  const parseUnary = (): number => {
+  const parseUnary = (): number | string => {
     skipWhitespace();
-    if (expression[cursor] === '+') { cursor += 1; return parseUnary(); }
-    if (expression[cursor] === '-') { cursor += 1; return -parseUnary(); }
+    if (expression[cursor] === '+') { cursor += 1; return Number(parseUnary()); }
+    if (expression[cursor] === '-') { cursor += 1; return -Number(parseUnary()); }
     return parsePower();
   };
-  const parseMultiplicative = (): number => {
+  const parseMultiplicative = (): number | string => {
     let value = parseUnary();
     while (true) {
       skipWhitespace();
@@ -230,14 +222,16 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
       }
       cursor += 1;
       const right = parseUnary();
-      if ((operator === '/' || operator === '%') && right === 0) {
+      const valNum = Number(value);
+      const rightNum = Number(right);
+      if ((operator === '/' || operator === '%') && rightNum === 0) {
         throw new Error('Divisão por zero.');
       }
-      value = operator === '*' ? value * right : operator === '/' ? value / right : value % right;
+      value = operator === '*' ? valNum * rightNum : operator === '/' ? valNum / rightNum : valNum % rightNum;
     }
     return value;
   };
-  function parseAdditive(): number {
+  function parseAdditive(): number | string {
     let value = parseMultiplicative();
     while (true) {
       skipWhitespace();
@@ -247,12 +241,12 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
       }
       cursor += 1;
       const right = parseMultiplicative();
-      value = operator === '+' ? value + right : value - right;
+      value = operator === '+' ? Number(value) + Number(right) : Number(value) - Number(right);
     }
     return value;
   }
 
-  function parseComparison(): number {
+  function parseComparison(): number | string {
     let value = parseAdditive();
     while (true) {
       skipWhitespace();
@@ -266,30 +260,61 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
       }
       cursor += comparison.length;
       const right = parseAdditive();
-      value = comparison === '>' ? Number(value > right)
-        : comparison === '<' ? Number(value < right)
-          : comparison === '>=' ? Number(value >= right)
-            : Number(value <= right);
+      if (typeof value === 'string' || typeof right === 'string') {
+        const sValue = String(value);
+        const sRight = String(right);
+        value = comparison === '>' ? Number(sValue.localeCompare(sRight) > 0)
+          : comparison === '<' ? Number(sValue.localeCompare(sRight) < 0)
+            : comparison === '>=' ? Number(sValue.localeCompare(sRight) >= 0)
+              : Number(sValue.localeCompare(sRight) <= 0);
+      } else {
+        value = comparison === '>' ? Number(value > right)
+          : comparison === '<' ? Number(value < right)
+            : comparison === '>=' ? Number(value >= right)
+              : Number(value <= right);
+      }
     }
     return value;
   }
 
-  function parseEquality(): number {
+  function parseEquality(): number | string {
     let value = parseComparison();
     while (true) {
       skipWhitespace();
-      const operator = expression.slice(cursor, cursor + 2);
-      if (operator !== '==' && operator !== '!=' && operator !== '<>') {
-        break;
+      const operator2 = expression.slice(cursor, cursor + 2);
+      if (operator2 === '==' || operator2 === '!=' || operator2 === '<>') {
+        cursor += 2;
+        const right = parseComparison();
+        if (typeof value === 'string' || typeof right === 'string') {
+          const sValue = String(value);
+          const sRight = String(right);
+          const eq = sValue.localeCompare(sRight, undefined, { sensitivity: 'accent' }) === 0;
+          value = Number(operator2 === '==' ? eq : !eq);
+        } else {
+          value = Number(operator2 === '==' ? value === right : value !== right);
+        }
+        continue;
       }
-      cursor += 2;
-      const right = parseComparison();
-      value = Number(operator === '==' ? value === right : value !== right);
+      const operator1 = expression[cursor];
+      if (operator1 === '=') {
+        cursor += 1;
+        const right = parseComparison();
+        if (typeof value === 'string' || typeof right === 'string') {
+          const sValue = String(value);
+          const sRight = String(right);
+          const eq = sValue.localeCompare(sRight, undefined, { sensitivity: 'accent' }) === 0;
+          value = Number(eq);
+        } else {
+          value = Number(value === right);
+        }
+        continue;
+      }
+      break;
     }
     return value;
   }
 
-  function parseLogicalAnd(): number {
+  function parseLogicalAnd(): number | string {
     let value = parseEquality();
     while (true) {
       skipWhitespace();
@@ -297,12 +322,12 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
         break;
       }
       cursor += 2;
-      value = Number(Boolean(value) && Boolean(parseEquality()));
+      value = Number(Boolean(Number(value)) && Boolean(Number(parseEquality())));
     }
     return value;
   }
 
-  function parseLogicalOr(): number {
+  function parseLogicalOr(): number | string {
     let value = parseLogicalAnd();
     while (true) {
       skipWhitespace();
@@ -310,7 +335,7 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
         break;
       }
       cursor += 2;
-      value = Number(Boolean(value) || Boolean(parseLogicalAnd()));
+      value = Number(Boolean(Number(value)) || Boolean(Number(parseLogicalAnd())));
     }
     return value;
   }
@@ -320,10 +345,11 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
   if (cursor !== expression.length) {
     throw new Error('A expressão contém tokens inválidos.');
   }
-  if (!Number.isFinite(result)) {
+  const finalResult = Number(result);
+  if (!Number.isFinite(finalResult)) {
     throw new Error('O resultado não é um número finito.');
   }
-  return result;
+  return finalResult;
 }
 
 
@@ -365,8 +391,10 @@ function parsePiTime(str: string): number {
   }
 }
 
-function evaluateFunction(name: string, values: number[]): number {
+function evaluateFunction(name: string, args: any[]): number {
   const normalizedName = name.toLocaleUpperCase();
+  // Forçar conversoes numericas para funcoes matematicas
+  const values = args.map(a => typeof a === 'string' ? Number(a) : a);
   
   // Funcoes de tempo do PI
   if (['DAY', 'MONTH', 'YEAR', 'HOUR', 'MINUTE', 'SECOND'].includes(normalizedName)) {

@@ -138,8 +138,12 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
     event.preventDefault();
     const normalizedName = name.trim();
     const normalizedExpression = expression.trim();
-    if (!normalizedName || !normalizedExpression) {
-      setValidationError('Informe um nome e uma expressão para o cálculo.');
+    if (!normalizedName) {
+      setValidationError('Informe um nome para o cálculo antes de salvar.');
+      return;
+    }
+    if (!normalizedExpression) {
+      setValidationError('Informe uma expressão para o cálculo antes de salvar.');
       return;
     }
     if (isNameTaken?.(normalizedName)) {

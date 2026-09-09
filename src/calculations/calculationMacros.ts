@@ -68,38 +68,39 @@ export function getDigitalStateName(value: unknown): string | undefined {
 
 export function applyQualityMacros(expression: string, token: string, piPointValue: any): string {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const tokenPattern = `(?:')?${escaped}(?:')?`;
   
-  const isBadRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_BAD\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const isBadRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_BAD\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(isBadRegex, () => {
     const isBad = piPointValue && typeof piPointValue === 'object' && piPointValue.good === false;
     return isBad ? '1' : '0';
   });
 
-  const isGoodRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_GOOD\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const isGoodRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_GOOD\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(isGoodRegex, () => {
     const isGood = piPointValue && typeof piPointValue === 'object' ? piPointValue.good !== false : true;
     return isGood ? '1' : '0';
   });
 
-  const isNoDataRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_NO_DATA\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const isNoDataRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_NO_DATA\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(isNoDataRegex, () => {
     const noData = !piPointValue || (typeof piPointValue === 'object' && (!('value' in piPointValue) || piPointValue.value === undefined));
     return noData ? '1' : '0';
   });
 
-  const isSubRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_SUBSTITUTED\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const isSubRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_SUBSTITUTED\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(isSubRegex, () => {
     const isSub = piPointValue && typeof piPointValue === 'object' && piPointValue.quality && piPointValue.quality.substituted === true;
     return isSub ? '1' : '0';
   });
 
-  const isQuestRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_QUESTIONABLE\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const isQuestRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_QUESTIONABLE\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(isQuestRegex, () => {
     const isQuest = piPointValue && typeof piPointValue === 'object' && piPointValue.quality && piPointValue.quality.questionable === true;
     return isQuest ? '1' : '0';
   });
   
-  const qualityRegex = new RegExp(`(?<![A-Za-z0-9_.:])QUALITY\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const qualityRegex = new RegExp(`(?<![A-Za-z0-9_.:])QUALITY\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(qualityRegex, () => {
     if (!piPointValue || typeof piPointValue !== 'object') return '"Good"';
     if (piPointValue.quality?.substituted) return '"Substituted"';
@@ -108,13 +109,13 @@ export function applyQualityMacros(expression: string, token: string, piPointVal
     return '"Good"';
   });
   
-  const statusCodeRegex = new RegExp(`(?<![A-Za-z0-9_.:])STATUS_CODE\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const statusCodeRegex = new RegExp(`(?<![A-Za-z0-9_.:])STATUS_CODE\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(statusCodeRegex, () => {
     const status = piPointValue && typeof piPointValue === 'object' && piPointValue.quality && piPointValue.quality.status;
     return String(status ?? 0);
   });
 
-  const tsRegex = new RegExp(`(?<![A-Za-z0-9_.:])TIMESTAMP\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const tsRegex = new RegExp(`(?<![A-Za-z0-9_.:])TIMESTAMP\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(tsRegex, () => {
     if (piPointValue && typeof piPointValue === 'object' && piPointValue.timestamp) {
        return String(Math.floor(Date.parse(piPointValue.timestamp) / 1000));
@@ -122,7 +123,7 @@ export function applyQualityMacros(expression: string, token: string, piPointVal
     return String(Math.floor(Date.now() / 1000));
   });
 
-  const isStateRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_STATE\\s*\\(\\s*${escaped}\\s*,\\s*(["'])(.*?)\\1\\s*\\)`, 'gi');
+  const isStateRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_STATE\\s*\\(\\s*${tokenPattern}\\s*,\\s*(["'])(.*?)\\1\\s*\\)`, 'gi');
   expression = expression.replace(isStateRegex, (_match, _quote, expected) => {
     const rawValue = piPointValue && typeof piPointValue === 'object' && 'value' in piPointValue ? piPointValue.value : piPointValue;
     const actual = getDigitalStateName(rawValue);
@@ -130,26 +131,26 @@ export function applyQualityMacros(expression: string, token: string, piPointVal
     return equals ? '1' : '0';
   });
   
-  // DIGITAL_STATE, DIGITAL_VALUE, STATUS -> replace with tag to be handled by replaceDigitalComparisons later
-  const identityRegex = new RegExp(`(?<![A-Za-z0-9_.:])(?:DIGITAL_STATE|DIGITAL_VALUE|STATUS)\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
-  expression = expression.replace(identityRegex, token);
+  // DIGITAL_STATE, DIGITAL_VALUE, STATUS -> replace with token to be evaluated by variables in engine
+  const identityRegex = new RegExp(`(?<![A-Za-z0-9_.:])(?:DIGITAL_STATE|DIGITAL_VALUE|STATUS)\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
+  expression = expression.replace(identityRegex, `'${token}'`);
 
-  const coalesceRegex = new RegExp(`(?<![A-Za-z0-9_.:])(?:COALESCE|REPLACE_BAD)\\s*\\(\\s*${escaped}\\s*,\\s*(.+?)\\s*\\)`, 'gi');
+  const coalesceRegex = new RegExp(`(?<![A-Za-z0-9_.:])(?:COALESCE|REPLACE_BAD)\\s*\\(\\s*${tokenPattern}\\s*,\\s*(.+?)\\s*\\)`, 'gi');
   expression = expression.replace(coalesceRegex, (_match, defaultVal) => {
     const isBad = piPointValue && typeof piPointValue === 'object' && piPointValue.good === false;
-    return isBad ? defaultVal : token;
+    return isBad ? defaultVal : `'${token}'`;
   });
 
-  const filterBadRegex = new RegExp(`(?<![A-Za-z0-9_.:])FILTER_BAD\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const filterBadRegex = new RegExp(`(?<![A-Za-z0-9_.:])FILTER_BAD\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(filterBadRegex, () => {
     const isBad = piPointValue && typeof piPointValue === 'object' && piPointValue.good === false;
-    return isBad ? 'NaN' : token;
+    return isBad ? 'NaN' : `'${token}'`;
   });
 
-  const lastValueRegex = new RegExp(`(?<![A-Za-z0-9_.:])LAST_VALUE\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
-  expression = expression.replace(lastValueRegex, token);
+  const lastValueRegex = new RegExp(`(?<![A-Za-z0-9_.:])LAST_VALUE\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
+  expression = expression.replace(lastValueRegex, `'${token}'`);
 
-  const lastTsRegex = new RegExp(`(?<![A-Za-z0-9_.:])LAST_TIMESTAMP\\s*\\(\\s*${escaped}\\s*\\)`, 'gi');
+  const lastTsRegex = new RegExp(`(?<![A-Za-z0-9_.:])LAST_TIMESTAMP\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(lastTsRegex, () => {
     if (piPointValue && typeof piPointValue === 'object' && piPointValue.timestamp) {
        return String(Math.floor(Date.parse(piPointValue.timestamp) / 1000));
@@ -162,22 +163,23 @@ export function applyQualityMacros(expression: string, token: string, piPointVal
 
 export function applyTemporalMacros(expression: string, token: string, state: any): string {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const tokenPattern = `(?:')?${escaped}(?:')?`;
 
-  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])PREV\\s*\\(\\s*${escaped}\\s*\\)`, 'gi'), () => String(state.prevValue ?? 0));
-  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])DELTA\\s*\\(\\s*${escaped}\\s*\\)`, 'gi'), () => String((state.lastValue ?? 0) - (state.prevValue ?? 0)));
-  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])(?:RATE|DERIVATIVE)\\s*\\(\\s*${escaped}\\s*\\)`, 'gi'), () => {
+  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])PREV\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi'), () => String(state.prevValue ?? 0));
+  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])DELTA\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi'), () => String((state.lastValue ?? 0) - (state.prevValue ?? 0)));
+  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])(?:RATE|DERIVATIVE)\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi'), () => {
     const dt = Math.max(1, (state.lastTimestamp ?? 0) - (state.prevTimestamp ?? 0));
     return String(((state.lastValue ?? 0) - (state.prevValue ?? 0)) / dt);
   });
-  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])(?:CHANGE_COUNT|COUNT_CHANGE)\\s*\\(\\s*${escaped}\\s*\\)`, 'gi'), () => String(state.changeCount));
-  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])TIME_SINCE_CHANGE\\s*\\(\\s*${escaped}\\s*\\)`, 'gi'), () => {
+  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])(?:CHANGE_COUNT|COUNT_CHANGE)\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi'), () => String(state.changeCount));
+  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])TIME_SINCE_CHANGE\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi'), () => {
     const now = Math.floor(Date.now() / 1000);
     const changeTs = state.changeCount > 0 ? state.prevTimestamp : state.lastTimestamp;
     return String(Math.max(0, now - (changeTs ?? now)));
   });
-  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])(?:INTEGRAL|TOTAL)\\s*\\(\\s*${escaped}\\s*\\)`, 'gi'), () => String(state.integral ?? 0));
+  expression = expression.replace(new RegExp(`(?<![A-Za-z0-9_.:])(?:INTEGRAL|TOTAL)\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi'), () => String(state.integral ?? 0));
   
-  const timeInStateRegex = new RegExp(`(?<![A-Za-z0-9_.:])TIME_IN_STATE\\s*\\(\\s*${escaped}\\s*,\\s*(["'])(.*?)\\1\\s*\\)`, 'gi');
+  const timeInStateRegex = new RegExp(`(?<![A-Za-z0-9_.:])TIME_IN_STATE\\s*\\(\\s*${tokenPattern}\\s*,\\s*(["'])(.*?)\\1\\s*\\)`, 'gi');
   expression = expression.replace(timeInStateRegex, (_match, _quote, expected) => {
     return String(state.timeInState?.[expected.trim()] ?? 0);
   });
@@ -198,9 +200,10 @@ export function applyHistoricalMacros(
   now: number
 ): string {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const tokenPattern = `(?:')?${escaped}(?:')?`;
   
   const funcNames = 'PI_AVERAGE|PI_MIN|PI_MAX|PI_TOTAL|PI_STDDEV|FIRST_VALUE|STATE_DURATION|EVENT_COUNT|CYCLES|TIME_IN_RANGE|TIME_OUT_OF_RANGE|TIME_AVERAGE|MOVING_AVERAGE|AVERAGE_TIME|TIME_MIN|MOVING_MIN|MIN_TIME|TIME_MAX|MOVING_MAX|MAX_TIME|TIME_SUM|SUM_TIME|STDDEV_TIME|MOVING_STDDEV|PERCENTILE|INTERPOLATE|RECORDED_VALUES|EXCEPTION_FILTER|COMPRESSION_FILTER|SLOPE|TREND|RATE_OF_CHANGE|IS_STABLE|IS_INCREASING|IS_DECREASING|LINEAR_FORECAST|TIME_TO_LIMIT';
-  const histRegex = new RegExp(`(?<![A-Za-z0-9_.:])(${funcNames})\\s*\\(\\s*${escaped}\\s*,\\s*(.*?)\\s*\\)`, 'gi');
+  const histRegex = new RegExp(`(?<![A-Za-z0-9_.:])(${funcNames})\\s*\\(\\s*${tokenPattern}\\s*,\\s*(.*?)\\s*\\)`, 'gi');
   
   expression = expression.replace(histRegex, (_match, funcName, argsStr) => {
      const args = argsStr.split(',').map((s: string) => s.trim().replace(/^["']|["']$/g, ''));
