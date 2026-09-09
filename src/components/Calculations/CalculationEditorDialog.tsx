@@ -30,20 +30,7 @@ const CALCULATION_HELP_ITEMS: readonly CalculationHelpItem[] = [
 ];
 
 
-const PI_TIME_ABBREVIATIONS = new Set(['*', 't', 'y', 'today', 'yesterday', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
-function isPiTimeString(str: string): boolean {
-  const lower = str.trim().toLocaleLowerCase();
-  if (PI_TIME_ABBREVIATIONS.has(lower)) {
-    return true;
-  }
-  if (/^(\*|t|y|today|yesterday|sun|mon|tue|wed|thu|fri|sat)[+-]\d+[smhdwy]$/.test(lower)) {
-    return true;
-  }
-  if (/^\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/.test(lower)) {
-    return true;
-  }
-  return false;
-}
+import { isPiTimeString } from '../../calculations/calculationMacros';
 
 const CALCULATION_RESERVED_NAMES = new Set(['IF', 'SE', 'AND', 'OR', 'NOT', 'MIN', 'MAX', 'ABS', 'ROUND', 'CLAMP', 'WHILE', 'POW', 'POWER', 'SQRT', 'SQR', 'EXP', 'LOG', 'LN', 'LOG10', 'MOD', 'SIN', 'COS', 'TAN']);
 

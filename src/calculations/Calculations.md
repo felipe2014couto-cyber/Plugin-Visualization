@@ -449,7 +449,45 @@ O Motor de Cálculos é protegido, mas se um cálculo falhar, um erro será exib
 | **LOWER** | String | Transformar para minúsculas | `LOWER('Tag')` |
 | **TRIM** | String | Remover espaços nas pontas | `TRIM('Tag')` |
 
-### Macros Históricas (PI Vision/DataLink)
+### Macros Temporais e Históricas (Sintaxe Estrita PI Vision)
+
+As macros do Calculation Engine realizam buscas de histórico (Event/Recorded Values) de forma assíncrona antes de processarem o resultado das expressões.
+O Plugin suporta **exclusivamente a sintaxe nativa do PI Vision** para as funções baseadas em eventos.
+
+| Função PI Vision | Sintaxe | Exemplo (PI Vision) | Descrição |
+| --- | --- | --- | --- |
+| **TimeEq** | `TimeEq('Tag', start, end, "Estado")` | `TimeEq('STATUS', '-24h', '*', "On")` | Tempo total em que a tag esteve em um estado digital específico durante a janela de tempo informada. |
+| **TimeGT** | `TimeGT('Tag', start, end, Valor)` | `TimeGT('TEMP', '-8h', '*', 100)` | Tempo total (s) em que a tag esteve acima de um valor durante a janela. |
+| **TimeLT** | `TimeLT('Tag', start, end, Valor)` | `TimeLT('PRESSAO', 'y', 't', 50)` | Tempo total (s) em que a tag esteve abaixo de um valor durante a janela. |
+| **Average** | `Average('Tag', start, end)` | `Average('TEMP', '*-24h', '*')` | Média temporal dos valores da tag no período especificado. |
+| **Total** | `Total('Tag', start, end)` | `Total('VAZAO', '-1d', '*')` | Integral ponderada no tempo (Time-Weighted) computada em dias, replicando exatamente o Total nativo do PI. |
+| **Minimum** | `Minimum('Tag', start, end)` | `Minimum('TEMP', '-1h', '*')` | Menor valor alcançado na janela de tempo. |
+| **Maximum** | `Maximum('Tag', start, end)` | `Maximum('TEMP', '-1h', '*')` | Maior valor alcançado na janela de tempo. |
+| **Count** | `Count('Tag', start, end)` | `Count('TEMP', '-8h', '*')` | Quantidade total de eventos / registros salvos no histórico durante o período. |
+| **ValueAtTime** | `ValueAtTime('Tag', timestamp)` | `ValueAtTime('TEMP', 't')` | Obtém o valor interpolado na data/hora especificada. |
+| **PrevVal** | `PrevVal('Tag', timestamp)` | `PrevVal('TEMP', '*')` | Obtém o último valor registrado antes da data/hora especificada. |
+| **Moving_Average** | `Moving_Average('Tag', start, end)` | `Moving_Average('T', '-1h', '*')` | Média móvel dos valores da tag. |
+| **Moving_Min** | `Moving_Min('Tag', start, end)` | `Moving_Min('T', '-1h', '*')` | Mínimo móvel na janela de histórico. |
+| **Moving_Max** | `Moving_Max('Tag', start, end)` | `Moving_Max('T', '-1h', '*')` | Máximo móvel na janela de histórico. |
+| **Moving_StdDev**| `Moving_StdDev('Tag', start, end)`| `Moving_StdDev('T', '-1h', '*')`| Desvio padrão móvel. |
+
+### Resolução de Datas Especiais (PI Time)
+
+Qualquer macro histórica ou função de data que aceita um parâmetro de tempo consegue interpretar as abreviações literais do PI Data Archive:
+- `'*'` - O momento atual.
+- `'t'` ou `'today'` - Hoje à meia-noite.
+- `'y'` ou `'yesterday'` - Ontem à meia-noite.
+- `'-8h'` - 8 horas antes do momento atual (assume-se `*` como base).
+- `'*-24h'` - 24 horas antes do momento atual.
+- `'+1d'` - Adiciona 1 dia.
+
+| **SQRT** | Matemática | Raiz quadrada | `SQRT(Tag)` |
+| **YEAR** | Data/Tempo | Ano da data atual ou de evento | `YEAR('*')` |
+| **MONTH** | Data/Tempo | Mês da data atual ou de evento | `MONTH('*')` |
+| **DAY** | Data/Tempo | Dia do mês atual ou de evento | `DAY('*')` |
+| **HOUR** | Data/Tempo | Hora atual ou de evento | `HOUR('*')` |
+| **MINUTE** | Data/Tempo | Minuto atual ou de evento | `MINUTE('*')` |
+
 
 | Função | Uso | Exemplo |
 |--------|-----|---------|
@@ -458,6 +496,19 @@ O Motor de Cálculos é protegido, mas se um cálculo falhar, um erro será exib
 | **LAST_VALUE** | Último valor da janela | `LAST_VALUE('Tag', '-1d')` |
 | **EVENT_COUNT** | Contar os eventos (sinônimo: **COUNT_VALUES**) | `EVENT_COUNT('Tag', '-1d')` |
 | **STATE_DURATION**| Tempo contínuo no estado | `STATE_DURATION('Tag', "On", '-8h')` |
-| **TIME_EQ** | Tempo total no estado na janela inteira | `TIME_EQ('Tag', "On", '-8h')` |
-| **TIME_NE** | Tempo total fora do estado na janela inteira | `TIME_NE('Tag', "On", '-8h')` |
-| **IS_GOOD** / etc. | Funções de qualidade retornam 1 ou 0 | `IS_GOOD('Tag')` |
+| **TIME_EQ** | Tempo total igual ao estado na janela | `TIME_EQ('Tag', "On", '-8h')` |
+| **TIME_NE** | Tempo total diferente do estado na janela | `TIME_NE('Tag', "On", '-8h')` |
+| **TIME_GT** | Tempo total maior que um limite numérico na janela | `TIME_GT('Tag', 50, '-8h')` |
+| **TIME_LT** | Tempo total menor que um limite numérico na janela | `TIME_LT('Tag', 10, '-8h')` |
+| **MOVING_AVERAGE**| Média móvel temporal na janela | `MOVING_AVERAGE('Tag', '-1h')` |
+| **MOVING_MIN** | Mínimo móvel na janela | `MOVING_MIN('Tag', '-1h')` |
+| **MOVING_MAX** | Máximo móvel na janela | `MOVING_MAX('Tag', '-1h')` |
+
+### Funções de Qualidade PI
+Todas essas funções retornam 1 (verdadeiro) ou 0 (falso) para validar tags:
+- `IS_GOOD('Tag')`: O valor é confiável.
+- `IS_BAD('Tag')`: O valor não é confiável (ex: I/O Timeout).
+- `IS_QUESTIONABLE('Tag')`: O valor está com flag de questionável no PI.
+- `IS_SUBSTITUTED('Tag')`: O valor foi sobreescrito manualmente.
+- `IS_NO_DATA('Tag')`: A tag está sem dados (Pt Created / No Data).
+- `QUALITY('Tag')` e `STATUS_CODE('Tag')`: Recuperam o código interno do estado digital (Int32).

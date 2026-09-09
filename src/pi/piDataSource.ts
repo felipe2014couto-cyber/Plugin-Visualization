@@ -1253,22 +1253,64 @@ async function queryPiTrendsHistory(
 
         const resolveBatch = async (selected: readonly PiPointBinding[], fallbackError: Error): Promise<void> => {
           let response: DataQueryResponse;
+          let request: any;
           try {
+            request = buildHistoricalTrendRequest(selected, range, mode, options);
+            console.log("Historical datasource payload", JSON.stringify(request, null, 2));
+            
             response = await runHistoricalQuery(() => withTimeout(
-              resolveQueryResponse(instance.query(buildHistoricalTrendRequest(selected, range, mode, options))),
+              resolveQueryResponse(instance.query(request)),
               DATA_QUERY_HISTORICAL_TIMEOUT_MS,
               `Consulta histórica excedeu o tempo limite para ${selected.map(({ pointName }) => pointName).join(', ')}`,
             ));
-          } catch (error) {
-            const queryError = toError(error);
-            if (isHistoricalTrendTimeout(queryError) || selected.length === 1) {
-              markTrendErrors(results, selected, queryError);
-              return;
+          } catch (error: any) {
+            console.error("Historical query error HTTP Response", error?.data || error?.response?.data || error?.message);
+            console.error("Historical query stack trace", error?.stack);
+            
+            // Tentar fallback automático se for consulta de valores gravados e não houver fallback ativo
+            if (mode === 'recorded' && (request.targets[0] as any).recordedValues?.boundaryType) {
+                console.log("[FALLBACK PI QUERY] preparing fallback format without boundaryType...");
+                const fallbackRequest = JSON.parse(JSON.stringify(request));
+                fallbackRequest.requestId = nextDataQueryRequestId('trend', selected[0].dataSourceUid);
+                fallbackRequest.targets.forEach((t: any) => {
+                    if (t.recordedValues) {
+                        delete t.recordedValues.boundaryType;
+                    }
+                    if (t.digitalStates) {
+                        delete t.digitalStates.enable;
+                    }
+                });
+                console.log("[FALLBACK PI QUERY] payload enviado", JSON.stringify(fallbackRequest, null, 2));
+                try {
+                    response = await runHistoricalQuery(() => withTimeout(
+                      resolveQueryResponse(instance.query(fallbackRequest)),
+                      DATA_QUERY_HISTORICAL_TIMEOUT_MS,
+                      `Fallback de consulta histórica excedeu o tempo limite`
+                    ));
+                    console.log("Fallback historical query succeeded!");
+                } catch (fallbackError: any) {
+                    console.error("Fallback query also failed", fallbackError?.data || fallbackError?.response?.data || fallbackError?.message);
+                    const queryError = toError(fallbackError);
+                    if (isHistoricalTrendTimeout(queryError) || selected.length === 1) {
+                      markTrendErrors(results, selected, queryError);
+                      return;
+                    }
+                    const middle = Math.ceil(selected.length / 2);
+                    await resolveBatch(selected.slice(0, middle), queryError);
+                    await resolveBatch(selected.slice(middle), queryError);
+                    return;
+                }
+            } else {
+                const queryError = toError(error);
+                if (isHistoricalTrendTimeout(queryError) || selected.length === 1) {
+                  markTrendErrors(results, selected, queryError);
+                  return;
+                }
+                const middle = Math.ceil(selected.length / 2);
+                await resolveBatch(selected.slice(0, middle), queryError);
+                await resolveBatch(selected.slice(middle), queryError);
+                return;
             }
-            const middle = Math.ceil(selected.length / 2);
-            await resolveBatch(selected.slice(0, middle), queryError);
-            await resolveBatch(selected.slice(middle), queryError);
-            return;
           }
 
           const batchResults = normalizeTrendResponse(response, selected);
@@ -1331,7 +1373,7 @@ function buildCurrentValuesRequest(
     interval: '1s',
     intervalMs: 1000,
     maxDataPoints: 1,
-    range: { from: start, to: end, raw: { from: start, to: end } },
+    range: { from: start, to: end, raw: { from: start.toISOString(), to: end.toISOString() } },
     scopedVars: {},
     targets: bindings.map((binding, index) => buildCurrentValueTarget(binding, index)),
     timezone: 'browser',
@@ -1379,7 +1421,7 @@ function buildHistoricalTrendRequest(
     interval,
     intervalMs,
     maxDataPoints,
-    range: { from: start, to: end, raw: { from: start, to: end } },
+    range: { from: start, to: end, raw: { from: start.toISOString(), to: end.toISOString() } },
     scopedVars: {},
     targets: bindings.map((binding, index) => ({
       refId: refIdForIndex(index),

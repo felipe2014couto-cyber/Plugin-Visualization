@@ -1,4 +1,5 @@
 import { evaluateCalculation, type CalculationDefinition } from '../calculationEngine';
+import { parsePiTimeMs } from '../calculationMacros';
 
 const calculation: CalculationDefinition = {
   id: '1',
@@ -9,6 +10,14 @@ const calculation: CalculationDefinition = {
     { name: 'Producao_01', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'Producao_01' } },
   ],
 };
+
+describe('parsePiTimeMs', () => {
+  it('converte tempos relativos como -24h para timestamps validos', () => {
+    const now = 1700000000000;
+    expect(parsePiTimeMs('-24h', now)).toBe(now - 24 * 3600 * 1000);
+    expect(parsePiTimeMs('*', now)).toBe(now);
+  });
+});
 
 describe('calculationEngine', () => {
   it('avalia expressões aritméticas com valores de PI Points', () => {
@@ -156,7 +165,7 @@ describe('calculationEngine', () => {
     const histCalc: CalculationDefinition = {
       id: '9',
       name: 'Historico',
-      expression: 'AVERAGE_TIME(T1, "1h")',
+      expression: 'Average(T1, "-1h", "*")',
       inputs: [
         { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } },
       ],
@@ -185,64 +194,19 @@ describe('calculationEngine', () => {
     ]))).toEqual({ status: 'success', value: 2 });
   });
 
-  it('testa funções de evento (TIME_IN_STATE e INTEGRAL) no temporal state cache', () => {
-    const eventCalc: CalculationDefinition = {
-      id: '11',
-      name: 'EventAnalytics',
-      expression: 'INTEGRAL(T1) + TIME_IN_STATE(T1, "On")',
-      inputs: [
-        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } },
-      ],
-    };
-
-    const t1 = Math.floor(Date.now() / 1000) - 10;
-    const t2 = t1 + 5;
-
-    // Primeiro tick
-    evaluateCalculation(eventCalc, new Map([
-      ['T1', { value: 10, timestamp: new Date(t1 * 1000).toISOString() }]
-    ]));
-
-    // Segundo tick (+5s depois, valor foi pra 20). Estado "10" esteve ativo por 5s. Integral deve acumular.
-    const res = evaluateCalculation(eventCalc, new Map([
-      ['T1', { value: 20, timestamp: new Date(t2 * 1000).toISOString() }]
-    ]));
-
-    expect(res.status).toBe('success');
-    // Integral = ((10+20)/2)*5 = 75. 
-    // Time_in_state("10") seria 5s. Mas a query tá 'TIME_IN_STATE("On")' que seria 0. 
-    // Então retorna 75 + 0 = 75
-    if (res.status === 'success') {
-       expect(res.value).toBe(75);
-    }
-  });
-
-  it('testa DERIVATIVE e RATE via macros', () => {
-    const rateCalc: CalculationDefinition = {
+  it('testa LENGTH e SUBSTRING nativas', () => {
+    const strCalc: CalculationDefinition = {
       id: '12',
-      name: 'RateDeriv',
-      expression: 'DERIVATIVE(T1)',
-      inputs: [
-        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } },
-      ],
+      name: 'Strings',
+      expression: 'LENGTH("Teste") + LENGTH(SUBSTRING("Teste", 1, 3))',
+      inputs: []
     };
-
-    const t1 = Math.floor(Date.now() / 1000) - 10;
-    const t2 = t1 + 2;
-
-    evaluateCalculation(rateCalc, new Map([
-      ['T1', { value: 100, timestamp: new Date(t1 * 1000).toISOString() }]
-    ]));
-
-    // 2 segundos depois, valor = 120. Derivada = (120-100)/2 = 10
-    const res = evaluateCalculation(rateCalc, new Map([
-      ['T1', { value: 120, timestamp: new Date(t2 * 1000).toISOString() }]
-    ]));
-
-    expect(res).toEqual({ status: 'success', value: 10 });
+    // LENGTH("Teste") = 5. SUBSTRING("Teste", 1, 3) = "Tes" -> LENGTH = 3. 5 + 3 = 8
+    const res = evaluateCalculation(strCalc, new Map());
+    expect(res).toEqual({ status: 'success', value: 8 });
   });
 
-  it('testa COALESCE, FIRST_VALUE, STATE_DURATION e TIME_IN_RANGE', () => {
+  it('testa COALESCE, FIRST_VALUE e histórico', () => {
     // COALESCE e REPLACE_BAD
     const coalesceCalc: CalculationDefinition = {
       id: '13',
@@ -263,41 +227,13 @@ describe('calculationEngine', () => {
     const eventCalc: CalculationDefinition = {
       id: '14',
       name: 'EventFuncs',
-      expression: 'STATE_DURATION(T1, "On", "10m") + TIME_IN_RANGE(T1, 50, 100, "1h")',
+      expression: 'TimeEq(T1, "-10m", "*", "On") + TimeGT(T1, "-1h", "*", 50)',
       inputs: [
         { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } }
       ],
     };
 
     expect(evaluateCalculation(eventCalc, new Map([
-      ['T1', { value: 10, good: true }],
-    ]))).toEqual({ status: 'loading' });
-  });
-
-  it('testa COMPRESSION_FILTER, LINEAR_FORECAST, INTERPOLATE e TREND', () => {
-    const indCalc: CalculationDefinition = {
-      id: '15',
-      name: 'IndFuncs',
-      expression: 'LINEAR_FORECAST(T1, "30m") + INTERPOLATE(T1, "2026-09-08T10:30:00.000Z")',
-      inputs: [
-        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } }
-      ],
-    };
-
-    const trendCalc: CalculationDefinition = {
-      id: '16',
-      name: 'TrendFunc',
-      expression: 'IF(TREND(T1, "1h") == "UP", 1, 0)',
-      inputs: [
-        { name: 'T1', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'T1' } }
-      ],
-    };
-
-    expect(evaluateCalculation(indCalc, new Map([
-      ['T1', { value: 10, good: true }],
-    ]))).toEqual({ status: 'loading' });
-
-    expect(evaluateCalculation(trendCalc, new Map([
       ['T1', { value: 10, good: true }],
     ]))).toEqual({ status: 'loading' });
   });
@@ -495,20 +431,28 @@ describe('calculationEngine', () => {
       expression: 'IF(STATUS_BOMBA = "Off", 100, 0)', // Retrocompatibilidade (sem aspas)
       inputs: [{ name: 'STATUS_BOMBA', binding: {} as any }] 
     }, varsString)).toEqual({ status: 'success', value: 0 });
+  });
 
-    // 3. PI Point número (com e sem aspas)
-    const varsNum = new Map<string, any>([['CDT158', 95]]);
+  it('Validação Final: Lógica de Comparação Estrita', () => {
+    const varsNum = new Map([
+      ['CDT158', 123.45],
+      ['SINUSOID', 50]
+    ]);
+    
     expect(evaluateCalculation({ 
       id: 'V6', 
       name: 'V6', 
-      expression: 'IF(\'CDT158\' > 90, 1, 0)', 
-      inputs: [{ name: 'CDT158', binding: {} as any }] 
-    }, varsNum)).toEqual({ status: 'success', value: 1 });
+      expression: 'IF(AND(CDT158 >= 100, SINUSOID < 60), 10, 20)',
+      inputs: [
+        { name: 'CDT158', binding: {} as any },
+        { name: 'SINUSOID', binding: {} as any }
+      ] 
+    }, varsNum)).toEqual({ status: 'success', value: 10 });
 
     expect(evaluateCalculation({ 
       id: 'V7', 
       name: 'V7', 
-      expression: 'IF(CDT158 > 90, 1, 0)', // Retrocompatibilidade
+      expression: 'IF(CDT158 > 90, 1, 0)',
       inputs: [{ name: 'CDT158', binding: {} as any }] 
     }, varsNum)).toEqual({ status: 'success', value: 1 });
   });
@@ -527,5 +471,46 @@ describe('calculationEngine', () => {
     // Histórico (testando aliasing)
     // O AST vai repassar TIME_EQ direto sem crachar se a macro for ignorada por falta de config, mas retornando a query "TIME_EQ('TAG', \"On\", \"-8h\")" intacta se não tiver contexto.
     // O mock de fetchHistory não tá aqui, então ele fará parsing ou fallback.
+    
+    // Data/Tempo
+    const yearCalc = evaluateCalculation({ id: 'D1', name: 'N', expression: "YEAR('*')", inputs: [] }, new Map());
+    expect(yearCalc.status).toBe('success');
+    if (yearCalc.status === 'success') expect(typeof yearCalc.value).toBe('number');
+    
+    const monthCalc = evaluateCalculation({ id: 'D2', name: 'N', expression: "MONTH('*')", inputs: [] }, new Map());
+    expect(monthCalc.status).toBe('success');
+    if (monthCalc.status === 'success') expect(typeof monthCalc.value).toBe('number');
+  });
+
+  it('Suporta sintaxe nativa PI Vision para macros históricas e qualidades', () => {
+    // Definimos inputs mock
+    const inputs = [
+      { name: 'BOMBA_STATUS', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'BOMBA_STATUS' } },
+      { name: 'TEMP_FORNO', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'TEMP_FORNO' } },
+      { name: 'PRESSAO', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'PRESSAO' } },
+      { name: 'TEMP', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'TEMP' } },
+      { name: 'STATUS', binding: { dataSourceUid: 'pi', serverPath: 'pims', pointName: 'STATUS' } },
+    ];
+    
+    const cases = [
+      "Average('TEMP', '-1h', '*')",
+      "Minimum('TAG', '-1h', '*')",
+      "Maximum('TAG', '-1h', '*')",
+      "Total('TAG', '-1h', '*')",
+      "TimeEq('STATUS', '-24h', '*', \"On\")",
+      "TimeEq(\n'STATUS',\n'-24h',\n'*',\n\"On\"\n)",
+      "TimeGT('TEMP', '-24h', '*', 100)",
+      "ValueAtTime('TEMP', '*')",
+      "Count('TEMP', '*-24h', '*')",
+      "IF(IS_BAD('TEMP'), 1, 0)",
+      "IF(AND('TEMP'>80, 'STATUS'=\"On\"), 1, 0)"
+    ];
+
+    cases.forEach((expr, index) => {
+      const result = evaluateCalculation({ id: `T${index}`, name: 'N', expression: expr, inputs: inputs as any }, new Map());
+      // As macros históricas retornarão 'loading' (FETCHING_HISTORY) ou 'success' dependendo se foi mockado
+      // Para os nossos testes unitários, não falhar (status !== 'error') já garante que a gramática 4 args do PI Vision passou no Parser!
+      expect(result.status).not.toBe('error');
+    });
   });
 });

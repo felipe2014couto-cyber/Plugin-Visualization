@@ -1,5 +1,5 @@
 import type { PiPointBinding } from '../pi/piPointBinding';
-import { applyQualityMacros, applyTemporalMacros, applyHistoricalMacros, updateTemporalCache } from './calculationMacros';
+import { applyQualityMacros, applyTemporalMacros, applyHistoricalMacros, updateTemporalCache, parsePiTimeMs } from './calculationMacros';
 
 export interface CalculationInput {
   name: string;
@@ -353,42 +353,8 @@ function parseArithmeticExpression(expression: string, variables: ReadonlyMap<st
 }
 
 
-const WEEKDAY_MAP: Record<string, number> = {
-  sun: 0,
-  mon: 1,
-  tue: 2,
-  wed: 3,
-  thu: 4,
-  fri: 5,
-  sat: 6,
-};
-
 function parsePiTime(str: string): number {
-  const lower = str.toLowerCase();
-  const now = new Date();
-  switch (lower) {
-    case '*':
-      return Math.floor(now.getTime() / 1000);
-    case 't':
-    case 'today':
-      return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000);
-    case 'y':
-    case 'yesterday':
-      return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime() / 1000);
-    default: {
-      if (lower in WEEKDAY_MAP) {
-        const targetDay = WEEKDAY_MAP[lower];
-        const currentDay = now.getDay();
-        const delta = (currentDay - targetDay + 7) % 7;
-        return Math.floor(new Date(now.getFullYear(), now.getMonth(), now.getDate() - delta).getTime() / 1000);
-      }
-      const parsed = Date.parse(str);
-      if (!Number.isNaN(parsed)) {
-        return Math.floor(parsed / 1000);
-      }
-      throw new Error(`Expressão de tempo PI desconhecida: "${str}".`);
-    }
-  }
+  return Math.floor(parsePiTimeMs(str, Date.now()) / 1000);
 }
 
 function evaluateFunction(name: string, args: any[]): number | string {
@@ -418,15 +384,15 @@ function evaluateFunction(name: string, args: any[]): number | string {
     requireArgumentCount(name, values, 3);
     return values[0] !== 0 ? values[1] : values[2];
   }
-  if (normalizedName === 'MIN') {
+  if (normalizedName === 'MIN' || normalizedName === 'MINIMUM') {
     requireMinimumArgumentCount(name, values, 1);
     return Math.min(...values);
   }
-  if (normalizedName === 'MAX') {
+  if (normalizedName === 'MAX' || normalizedName === 'MAXIMUM') {
     requireMinimumArgumentCount(name, values, 1);
     return Math.max(...values);
   }
-  if (normalizedName === 'SUM') {
+  if (normalizedName === 'SUM' || normalizedName === 'TOTAL') {
     requireMinimumArgumentCount(name, values, 1);
     return values.reduce((a, b) => a + b, 0);
   }
@@ -658,9 +624,24 @@ function evaluateFunction(name: string, args: any[]): number | string {
     requireArgumentCount(name, args, 1);
     return String(args[0]).trim();
   }
+  if (normalizedName === 'LENGTH') {
+    requireArgumentCount(name, args, 1);
+    return String(args[0]).length;
+  }
+  if (normalizedName === 'SUBSTRING') {
+    requireArgumentCount(name, args, 3);
+    const text = String(args[0]);
+    const start = Math.max(0, Number(args[1]) - 1); // PI Vision is 1-indexed for substring
+    const length = Number(args[2]);
+    return text.substring(start, start + length);
+  }
 
   if (normalizedName === 'WHILE') {
     throw new Error('WHILE não é suportado em cálculos, pois a expressão precisa sempre terminar. Use IF para condições.');
+  }
+  
+  if (['TIMEEQ', 'TIMEGT', 'TIMELT', 'VALUEATTIME', 'PREVVAL', 'MOVING_AVERAGE', 'MOVING_MIN', 'MOVING_MAX', 'MOVING_STDDEV', 'MOVINGAVERAGE', 'MOVINGMINIMUM', 'MOVINGMAXIMUM'].includes(normalizedName)) {
+    throw new Error(`A função ${name} requer uma referência válida de PI Point (entre aspas simples) no primeiro argumento e conectividade com o servidor histórico.`);
   }
   throw new Error(`Função desconhecida: ${name}.`);
 }

@@ -1007,4 +1007,24 @@ describe('PI data source integration', () => {
         ],
       });
   });
+
+  it('constrói corretamente o payload para consulta de tendências do histórico PI Vision com datas ISO (TimeEq payload validation)', async () => {
+    let capturedRequest: any;
+    const query = jest.fn(async (request) => {
+      capturedRequest = request;
+      return { data: [] };
+    });
+    
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource()], query });
+    const bindings = [{ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'LFI_PRB24_TRANSLACAO_FRENTE' }];
+    const timeRange = { from: 1700000000000, to: 1700086400000 };
+    
+    const { getPiTrendsRecordedHistoryForRange } = await import('../piDataSource');
+    await getPiTrendsRecordedHistoryForRange(bindings, timeRange, dataSourceSrv);
+    
+    expect(query).toHaveBeenCalled();
+    expect(capturedRequest).toBeDefined();
+    expect(capturedRequest.range.raw.from).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/); // it's an ISO string, NOT -24h
+    expect(capturedRequest.range.raw.to).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/); // it's an ISO string, NOT *
+  });
 });

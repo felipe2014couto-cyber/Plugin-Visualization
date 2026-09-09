@@ -112,6 +112,8 @@ export function applyQualityMacros(expression: string, token: string, piPointVal
   const statusCodeRegex = new RegExp(`(?<![A-Za-z0-9_.:])STATUS_CODE\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(statusCodeRegex, () => {
     const status = piPointValue && typeof piPointValue === 'object' && piPointValue.quality && piPointValue.quality.status;
+    if (typeof status === 'boolean') return status ? '1' : '0';
+    if (typeof status === 'string') return `"${status}"`;
     return String(status ?? 0);
   });
 
@@ -192,6 +194,66 @@ import type { PiPointBinding } from '../pi/piPointBinding';
 export const globalHistoricalResultCache = new Map<string, {value: number | string, timestamp: number}>();
 export const globalHistoricalPromiseLock = new Map<string, Promise<void>>();
 
+export const PI_TIME_ABBREVIATIONS = new Set(['*', 't', 'y', 'today', 'yesterday', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
+
+export function isPiTimeString(str: string): boolean {
+  const lower = str.trim().toLocaleLowerCase();
+  if (PI_TIME_ABBREVIATIONS.has(lower)) return true;
+  if (/^(\*|t|y|today|yesterday|sun|mon|tue|wed|thu|fri|sat)?[+-]\d+[smhdwy]$/.test(lower)) return true;
+  if (/^\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/.test(lower)) return true;
+  return false;
+}
+
+export type ParsedArgument = 
+  | { type: 'PiPointReference', value: string }
+  | { type: 'TimeExpression', value: string }
+  | { type: 'StringLiteral', value: string }
+  | { type: 'NumberLiteral', value: number };
+
+export function parseHistoricalArguments(argsStr: string): ParsedArgument[] {
+  const args: ParsedArgument[] = [];
+  let currentArg = '';
+  let inQuotes = false;
+  let quoteChar = '';
+
+  for (let i = 0; i < argsStr.length; i++) {
+    const char = argsStr[i];
+    if ((char === '"' || char === "'") && (i === 0 || argsStr[i - 1] !== '\\')) {
+      if (!inQuotes) {
+        inQuotes = true;
+        quoteChar = char;
+        currentArg += char;
+      } else if (quoteChar === char) {
+        inQuotes = false;
+        currentArg += char;
+      } else {
+        currentArg += char;
+      }
+    } else if (char === ',' && !inQuotes) {
+      args.push(classifyArgument(currentArg.trim()));
+      currentArg = '';
+    } else {
+      currentArg += char;
+    }
+  }
+  if (currentArg.trim() !== '') {
+    args.push(classifyArgument(currentArg.trim()));
+  }
+  return args;
+}
+
+function classifyArgument(arg: string): ParsedArgument {
+  const num = Number(arg);
+  if (!isNaN(num) && arg !== '') return { type: 'NumberLiteral', value: num };
+  if (arg.startsWith('"') && arg.endsWith('"')) return { type: 'StringLiteral', value: arg.slice(1, -1) };
+  
+  // If it's single quoted, or not quoted, we check if it is a Time Expression or PI Point
+  const inner = (arg.startsWith("'") && arg.endsWith("'")) ? arg.slice(1, -1) : arg;
+  if (isPiTimeString(inner)) return { type: 'TimeExpression', value: inner };
+  
+  return { type: 'PiPointReference', value: inner };
+}
+
 export function applyHistoricalMacros(
   expression: string, 
   token: string, 
@@ -199,17 +261,48 @@ export function applyHistoricalMacros(
   binding: PiPointBinding, 
   now: number
 ): string {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const tokenPattern = `(?:')?${escaped}(?:')?`;
+  const funcNames = 'TimeEq|TimeGT|TimeLT|Average|Minimum|Maximum|Total|Count|ValueAtTime|PrevVal|Moving_Average|Moving_Min|Moving_Max|Moving_StdDev';
+  const histRegex = new RegExp(`(?<![A-Za-z0-9_.:])(${funcNames})\\s*\\((.*?)\\)`, 'gis');
   
-  const funcNames = 'PI_AVERAGE|PI_MIN|PI_MAX|PI_TOTAL|PI_STDDEV|FIRST_VALUE|LAST_VALUE|STATE_DURATION|EVENT_COUNT|COUNT_VALUES|CYCLES|TIME_IN_RANGE|TIME_OUT_OF_RANGE|TIME_AVERAGE|MOVING_AVERAGE|AVERAGE_TIME|TIME_MIN|MOVING_MIN|MIN_TIME|TIME_MAX|MOVING_MAX|MAX_TIME|TIME_SUM|SUM_TIME|STDDEV_TIME|MOVING_STDDEV|PERCENTILE|INTERPOLATE|VALUE_AT_TIME|RECORDED_VALUES|EXCEPTION_FILTER|COMPRESSION_FILTER|SLOPE|TREND|RATE_OF_CHANGE|IS_STABLE|IS_INCREASING|IS_DECREASING|LINEAR_FORECAST|TIME_TO_LIMIT|TIME_EQ|TIME_NE';
-  const histRegex = new RegExp(`(?<![A-Za-z0-9_.:])(${funcNames})\\s*\\(\\s*${tokenPattern}\\s*,\\s*(.*?)\\s*\\)`, 'gi');
-  
-  expression = expression.replace(histRegex, (_match, funcName, argsStr) => {
-     const args = argsStr.split(',').map((s: string) => s.trim().replace(/^["']|["']$/g, ''));
-     const interval = args[args.length - 1]; // Assume interval is always the last argument
+  expression = expression.replace(histRegex, (match, funcName, argsStr) => {
+     const parsedArgs = parseHistoricalArguments(argsStr);
+     if (parsedArgs.length === 0) return match;
+     const firstArg = parsedArgs[0];
      
-     const cacheKey = `${funcName}:${args.join(':')}`;
+     // Validar que o primeiro argumento é uma referência a PI Point
+     if (firstArg.type !== 'PiPointReference') return match;
+     
+     // Somente prosseguir se for a tag correspondente ao token atual iterado pelo motor
+     if (firstArg.value.toLocaleUpperCase() !== token.toLocaleUpperCase()) return match;
+     
+     const fnUp = funcName.toUpperCase();
+     const isEventFunc = ['TIMEEQ', 'TIMEGT', 'TIMELT'].includes(fnUp);
+     
+     let startStr = '';
+     let endStr = '';
+     let remainingArgs: (string | number)[] = [];
+     
+     if (isEventFunc) {
+       if (parsedArgs.length !== 4) throw new Error(`${funcName} exige 4 parâmetros (Tag, Start, End, Valor).`);
+       if (parsedArgs[1].type !== 'TimeExpression' && parsedArgs[1].type !== 'StringLiteral') throw new Error(`Parâmetro Start inválido para ${funcName}.`);
+       if (parsedArgs[2].type !== 'TimeExpression' && parsedArgs[2].type !== 'StringLiteral') throw new Error(`Parâmetro End inválido para ${funcName}.`);
+       startStr = String(parsedArgs[1].value);
+       endStr = String(parsedArgs[2].value);
+       remainingArgs = [parsedArgs[3].value];
+     } else if (fnUp === 'VALUEATTIME' || fnUp === 'PREVVAL') {
+       if (parsedArgs.length !== 2) throw new Error(`${funcName} exige 2 parâmetros (Tag, Time).`);
+       if (parsedArgs[1].type !== 'TimeExpression' && parsedArgs[1].type !== 'StringLiteral') throw new Error(`Parâmetro Time inválido para ${funcName}.`);
+       startStr = String(parsedArgs[1].value);
+       endStr = String(parsedArgs[1].value);
+     } else {
+       if (parsedArgs.length !== 3) throw new Error(`${funcName} exige 3 parâmetros (Tag, Start, End).`);
+       if (parsedArgs[1].type !== 'TimeExpression' && parsedArgs[1].type !== 'StringLiteral') throw new Error(`Parâmetro Start inválido para ${funcName}.`);
+       if (parsedArgs[2].type !== 'TimeExpression' && parsedArgs[2].type !== 'StringLiteral') throw new Error(`Parâmetro End inválido para ${funcName}.`);
+       startStr = String(parsedArgs[1].value);
+       endStr = String(parsedArgs[2].value);
+     }
+     
+     const cacheKey = `${funcName}:${startStr}:${endStr}:${remainingArgs.join(':')}`;
      const globalKey = `${binding.dataSourceUid}:${binding.serverPath}:${binding.pointName}:${cacheKey}`;
      
      const cachedData = globalHistoricalResultCache.get(globalKey);
@@ -218,7 +311,7 @@ export function applyHistoricalMacros(
      }
      
      if (!globalHistoricalPromiseLock.has(globalKey)) {
-        const promise = fetchHistoryGlobal(globalKey, binding, interval, funcName, args).catch(console.error).finally(() => {
+        const promise = fetchHistoryGlobal(globalKey, binding, startStr, endStr, funcName, remainingArgs.map(String)).catch(console.error).finally(() => {
             globalHistoricalPromiseLock.delete(globalKey);
         });
         globalHistoricalPromiseLock.set(globalKey, promise);
@@ -233,20 +326,25 @@ export function applyHistoricalMacros(
   return expression;
 }
 
-async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, interval: string, funcName: string, args: string[]) {
+async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, startStr: string, endStr: string, funcName: string, args: string[]) {
   try {
-    let to = Date.now();
-    let from = to - parseIntervalMs(interval);
+    const now = Date.now();
+    let { from, to } = resolvePiWindow(startStr, endStr, now);
     
-    if (funcName.toUpperCase() === 'INTERPOLATE' || funcName.toUpperCase() === 'VALUE_AT_TIME') {
-       const targetTime = Date.parse(interval);
-       if (!isNaN(targetTime)) {
-          from = targetTime - 60000;
-          to = targetTime + 60000;
-       }
+    if (funcName.toUpperCase() === 'VALUEATTIME' || funcName.toUpperCase() === 'PREVVAL') {
+       from = from - 60000;
+       to = to + 60000;
     }
     
     const { getPiTrendsRecordedHistoryForRange } = await import('../pi/piDataSource');
+    
+    console.log("Historical request", {
+      tag: binding.pointName,
+      start: startStr,
+      end: endStr,
+      functionName: funcName
+    });
+    
     const response = await getPiTrendsRecordedHistoryForRange([binding], { from, to });
     
     const result = response[binding.pointName];
@@ -257,25 +355,8 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, in
        
        const fn = funcName.toUpperCase();
        
-       const getLinearRegression = () => {
-         const n = pts.length;
-         if (n < 2) return { m: 0, b: typeof pts[0]?.value === 'number' ? pts[0].value : 0 };
-         let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
-         for (const p of pts) {
-           const x = p.time / 1000;
-           const y = typeof p.value === 'number' ? p.value : 0;
-           sumX += x;
-           sumY += y;
-           sumXY += x * y;
-           sumX2 += x * x;
-         }
-         const m = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX || 1);
-         const b = (sumY - m * sumX) / n;
-         return { m, b };
-       };
-       
-       if (fn === 'INTERPOLATE' || fn === 'VALUE_AT_TIME') {
-         const targetTime = Date.parse(interval);
+       if (fn === 'VALUEATTIME' || fn === 'PREVVAL') {
+         const targetTime = parsePiTimeMs(startStr, Date.now());
          if (!isNaN(targetTime) && pts.length > 0) {
            const exact = pts.find((p: any) => p.time === targetTime);
            if (exact) res = typeof exact.value === 'number' ? exact.value : 0;
@@ -287,121 +368,63 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, in
              res = typeof pts[0].value === 'number' ? pts[0].value : 0;
            }
          }
-       } else if (fn === 'RECORDED_VALUES') {
-         res = JSON.stringify(pts);
-       } else if (fn === 'EXCEPTION_FILTER') {
-         let removed = 0;
-         if (pts.length > 2) {
-           let lastArchived = typeof pts[0].value === 'number' ? pts[0].value : 0;
-           for (let i = 1; i < pts.length - 1; i++) {
-             const v = typeof pts[i].value === 'number' ? pts[i].value : 0;
-             if (Math.abs(v - lastArchived) < 0.05) removed++; else lastArchived = v;
-           }
-         }
-         res = String(removed);
-       } else if (fn === 'COMPRESSION_FILTER') {
-         let removed = 0;
-         if (pts.length > 2) {
-           let lastArchived = typeof pts[0].value === 'number' ? pts[0].value : 0;
-           for (let i = 1; i < pts.length - 1; i++) {
-             const v = typeof pts[i].value === 'number' ? pts[i].value : 0;
-             if (Math.abs(v - lastArchived) < 0.1) removed++; else lastArchived = v;
-           }
-         }
-         res = JSON.stringify({ removidos: removed, mantidos: pts.length - removed, erro: 0.1 });
-       } else if (fn === 'SLOPE') {
-         res = getLinearRegression().m;
-       } else if (fn === 'RATE_OF_CHANGE') {
-         if (pts.length > 1) {
-           const first = typeof pts[0].value === 'number' ? pts[0].value : 0;
-           const last = typeof pts[pts.length-1].value === 'number' ? pts[pts.length-1].value : 0;
-           const dt = (pts[pts.length-1].time - pts[0].time) / 1000 || 1;
-           res = (last - first) / dt;
-         }
-       } else if (fn === 'TREND') {
-         const m = getLinearRegression().m;
-         if (m > 0.001) res = 'UP';
-         else if (m < -0.001) res = 'DOWN';
-         else res = 'STABLE';
-       } else if (fn === 'IS_STABLE') {
-         res = Math.abs(getLinearRegression().m) <= 0.001 ? 1 : 0;
-       } else if (fn === 'IS_INCREASING') {
-         res = getLinearRegression().m > 0.001 ? 1 : 0;
-       } else if (fn === 'IS_DECREASING') {
-         res = getLinearRegression().m < -0.001 ? 1 : 0;
-       } else if (fn === 'LINEAR_FORECAST') {
-         const { m, b } = getLinearRegression();
-         const targetTimeStr = args[args.length - 1] || '0s';
-         const targetTimeMs = Date.now() + parseIntervalMs(targetTimeStr);
-         res = m * (targetTimeMs / 1000) + b;
-       } else if (fn === 'TIME_TO_LIMIT') {
-         const { m, b } = getLinearRegression();
-         const limit = parseFloat(args[args.length - 2] || '0');
-         if (Math.abs(m) > 0.000001) {
-           const targetX = (limit - b) / m;
-           res = Math.max(0, targetX - (Date.now() / 1000));
-         } else res = NaN;
-       } else if (['AVERAGE_TIME', 'TIME_AVERAGE', 'MOVING_AVERAGE', 'PI_AVERAGE'].includes(fn) && vals.length > 0) {
+       } else if (['AVERAGE', 'MOVING_AVERAGE'].includes(fn) && vals.length > 0) {
          res = vals.reduce((a: number, b: number)=>a+b,0)/vals.length;
-       } else if (['MIN_TIME', 'TIME_MIN', 'MOVING_MIN', 'PI_MIN'].includes(fn) && vals.length > 0) {
+       } else if (['MINIMUM', 'MOVING_MIN'].includes(fn) && vals.length > 0) {
          res = Math.min(...vals);
-       } else if (['MAX_TIME', 'TIME_MAX', 'MOVING_MAX', 'PI_MAX'].includes(fn) && vals.length > 0) {
+       } else if (['MAXIMUM', 'MOVING_MAX'].includes(fn) && vals.length > 0) {
          res = Math.max(...vals);
-       } else if (['SUM_TIME', 'TIME_SUM', 'PI_TOTAL'].includes(fn)) {
-         res = vals.reduce((a: number, b: number)=>a+b,0);
-       } else if (['STDDEV_TIME', 'MOVING_STDDEV', 'PI_STDDEV'].includes(fn) && vals.length > 0) {
+       } else if (fn === 'TOTAL') {
+         let integral = 0;
+         for (let i = 0; i < pts.length - 1; i++) {
+            const dtDays = Math.max(0, pts[i+1].time - pts[i].time) / 86400000;
+            const v1 = typeof pts[i].value === 'number' ? pts[i].value : 0;
+            const v2 = typeof pts[i+1].value === 'number' ? pts[i+1].value : v1;
+            integral += ((v1 + v2) / 2) * dtDays;
+         }
+         res = integral;
+       } else if (['MOVING_STDDEV'].includes(fn) && vals.length > 0) {
          const mean = vals.reduce((a: number, b: number)=>a+b,0)/vals.length;
          res = Math.sqrt(vals.reduce((a: number, b: number)=>a+Math.pow(b-mean,2),0)/(vals.length-1 || 1));
-       } else if (fn === 'PERCENTILE' && vals.length > 0) {
-         const perc = parseFloat(args[args.length - 2] || '50');
-         const sorted = [...vals].sort((a: number, b: number) => a - b);
-         const idx = Math.floor((sorted.length - 1) * (Math.max(0, Math.min(100, perc)) / 100));
-         res = sorted[idx] ?? 0;
-       } else if (fn === 'FIRST_VALUE' && pts.length > 0) {
-         res = typeof pts[0].value === 'number' ? pts[0].value : (typeof pts[0].value === 'string' ? pts[0].value : 0);
-       } else if (fn === 'LAST_VALUE' && pts.length > 0) {
-         res = typeof pts[pts.length-1].value === 'number' ? pts[pts.length-1].value : (typeof pts[pts.length-1].value === 'string' ? pts[pts.length-1].value : 0);
-       } else if (fn === 'EVENT_COUNT' || fn === 'COUNT_VALUES') {
+       } else if (fn === 'COUNT') {
          res = Math.max(0, pts.length - 1);
-       } else if (fn === 'STATE_DURATION' || fn === 'TIME_EQ' || fn === 'TIME_NE') {
-         const targetState = args[args.length - 2] || '';
+       } else if (fn === 'TIMEEQ') {
+         const targetState = args[0] || '';
          for (let i = 0; i < pts.length - 1; i++) {
            const sName = getDigitalStateName(pts[i].value) ?? String(pts[i].value);
-           const isEqual = sName.localeCompare(targetState, undefined, { sensitivity: 'accent' }) === 0;
-           if ((fn === 'TIME_NE' && !isEqual) || (fn !== 'TIME_NE' && isEqual)) {
+           if (sName.localeCompare(targetState, undefined, { sensitivity: 'accent' }) === 0) {
              const dt = Math.max(0, pts[i+1].time - pts[i].time) / 1000;
              if (typeof res === 'number') res += dt;
            }
          }
-       } else if (fn === 'TIME_IN_RANGE' || fn === 'TIME_OUT_OF_RANGE') {
-         const min = parseFloat(args[args.length - 3] || '0');
-         const max = parseFloat(args[args.length - 2] || '100');
+       } else if (fn === 'TIMEGT' || fn === 'TIMELT') {
+         const limit = parseFloat(args[0] || '0');
          for (let i = 0; i < pts.length - 1; i++) {
            const v = pts[i].value;
            if (typeof v === 'number') {
-             const inRange = v >= min && v <= max;
-             if ((fn === 'TIME_IN_RANGE' && inRange) || (fn === 'TIME_OUT_OF_RANGE' && !inRange)) {
+             const conditionMet = (fn === 'TIMEGT' && v > limit) || (fn === 'TIMELT' && v < limit);
+             if (conditionMet) {
                const dt = Math.max(0, pts[i+1].time - pts[i].time) / 1000;
                if (typeof res === 'number') res += dt;
              }
            }
          }
-       } else if (fn === 'CYCLES') {
-         if (pts.length > 0) {
-           const initialState = getDigitalStateName(pts[0].value) ?? String(pts[0].value);
-           let departed = false;
-           for (let i = 1; i < pts.length; i++) {
-             const sName = getDigitalStateName(pts[i].value) ?? String(pts[i].value);
-             if (sName !== initialState) departed = true;
-             else if (departed && sName === initialState) {
-               if (typeof res === 'number') res++;
-               departed = false;
-             }
-           }
-         }
        }
        
-       globalHistoricalResultCache.set(globalKey, { value: res, timestamp: Math.floor(Date.now()/1000) });
+       console.log("Historical response", {
+          tag: binding.pointName,
+          pointsCount: pts.length,
+          firstPoint: pts.length > 0 ? pts[0] : null,
+          lastPoint: pts.length > 0 ? pts[pts.length - 1] : null
+        });
+        
+        globalHistoricalResultCache.set(globalKey, { value: res, timestamp: Math.floor(Date.now()/1000) });
+    } else {
+        console.log("Historical response (Failed or No Data)", {
+          tag: binding.pointName,
+          resultStatus: result?.status
+        });
+        globalHistoricalResultCache.set(globalKey, { value: 0, timestamp: Math.floor(Date.now()/1000) });
     }
   } catch (err) {
     const cachedData = globalHistoricalResultCache.get(globalKey);
@@ -409,17 +432,55 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, in
   }
 }
 
-function parseIntervalMs(str: string): number {
-  const match = str.match(/^(\d+)(s|m|h|d|w|mo)$/);
-  if (!match) return 3600000;
-  const val = parseInt(match[1]);
-  switch(match[2]) {
-    case 's': return val * 1000;
-    case 'm': return val * 60000;
-    case 'h': return val * 3600000;
-    case 'd': return val * 86400000;
-    case 'w': return val * 604800000;
-    case 'mo': return val * 2592000000;
-    default: return 3600000;
+export function parsePiTimeMs(str: string, referenceTime: number): number {
+  str = str.trim().toLowerCase();
+  
+  if (str === '*') return referenceTime;
+  if (str === 't' || str === 'today') {
+    const d = new Date(referenceTime);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   }
+  if (str === 'y' || str === 'yesterday') {
+    const d = new Date(referenceTime);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1).getTime();
+  }
+  
+  const WEEKDAY_MAP: Record<string, number> = {
+    sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
+  };
+  if (str in WEEKDAY_MAP) {
+    const targetDay = WEEKDAY_MAP[str];
+    const d = new Date(referenceTime);
+    const currentDay = d.getDay();
+    const delta = (currentDay - targetDay + 7) % 7;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - delta).getTime();
+  }
+
+  // Se tiver um formato como *-24h ou -24h (assumindo * como base)
+  const relativeMatch = str.match(/^(\*)?([+-])(\d+)(s|m|h|d|w|mo)$/);
+  if (relativeMatch) {
+    const isNegative = relativeMatch[2] === '-';
+    const val = parseInt(relativeMatch[3]);
+    let ms = 0;
+    switch(relativeMatch[4]) {
+      case 's': ms = val * 1000; break;
+      case 'm': ms = val * 60000; break;
+      case 'h': ms = val * 3600000; break;
+      case 'd': ms = val * 86400000; break;
+      case 'w': ms = val * 604800000; break;
+      case 'mo': ms = val * 2592000000; break;
+    }
+    return isNegative ? referenceTime - ms : referenceTime + ms;
+  }
+
+  const parsed = Date.parse(str);
+  if (!Number.isNaN(parsed)) return parsed;
+
+  return referenceTime - 3600000; // Fallback: 1h atrás
+}
+
+export function resolvePiWindow(startStr: string, endStr: string, now: number): {from: number, to: number} {
+  const to = endStr ? parsePiTimeMs(endStr, now) : now;
+  const from = startStr ? parsePiTimeMs(startStr, to) : (to - 3600000);
+  return { from, to };
 }
