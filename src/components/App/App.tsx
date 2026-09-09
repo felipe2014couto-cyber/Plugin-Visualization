@@ -53,6 +53,7 @@ import {
 import { serializePersistableDocument } from './unsavedChanges';
 import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
+import { PiChatPopover, PiChatIcon } from '../PiChat';
 
 const MiniSheetsPanel = React.lazy(async () => {
   const module = await import('../MiniSheets/MiniSheetsPanel');
@@ -178,6 +179,7 @@ export function App() {
   const styles = useStyles2(getStyles);
   const [authenticationState, setAuthenticationState] = useState<AuthenticationState>('checking');
   const [activeModule, setActiveModule] = useState<ActiveModule>('visualization');
+  const [piChatOpen, setPiChatOpen] = useState(false);
   // Carrega os modulos secundarios somente no primeiro acesso e os mantem
   // montados depois disso para preservar sessoes e rascunhos ao alternar abas.
   const loadedModulesRef = useRef(new Set<ActiveModule>(['visualization']));
@@ -1030,6 +1032,15 @@ export function App() {
               data-testid="pims-vision-programming-tab"
               onClick={() => handleModuleToggle('programming')}
             ><ProgrammingIcon /></button>
+            <button
+              type="button"
+              className={piChatOpen ? styles.assetsRailActive : styles.assetsRailButton}
+              title="PiChat"
+              aria-label="PiChat"
+              aria-pressed={piChatOpen}
+              data-testid="pims-vision-pichat-tab"
+              onClick={() => setPiChatOpen((prev) => !prev)}
+            ><PiChatIcon /></button>
           </div>
           {isAssetsPanelOpen && (
             <div className={styles.assetsBody}>
@@ -1292,6 +1303,7 @@ export function App() {
         onChange={setTimeSelection}
         presentationMode={presentationMode}
       />
+      <PiChatPopover open={piChatOpen} onClose={() => setPiChatOpen(false)} />
     </div>
   );
 }

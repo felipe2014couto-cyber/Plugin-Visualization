@@ -141,8 +141,58 @@ docs/                             DEPLOYMENT_PLAN, SIP_SECURITY,
 - Nao usar emojis em codigo ou arquivos tecnicos.
 - Preservar a compatibilidade declarada com Grafana 9.3.16+.
 - Toda alteracao deve passar por `typecheck`, `lint`, `test:ci` e
-  `build` antes de ser considera pronta; em alteracoes com risco
+  `build` antes de ser considerada pronta; em alteracoes com risco
   visual, validar tambem o editor abrindo o Docker local.
+
+## Principios de governanca e workflow do agente
+
+O agente de IA e os desenvolvedores devem seguir estritamente o ciclo de
+vida dos workflows especializados definidos no projeto (`.agents/`):
+
+- `/specify`: delimita requisitos funcionais, restricoes e criterios de
+  aceite sem propor implementacao detalhada e sem alterar arquivos.
+- `/clarify`: identifica ambiguidades, riscos tecnicos e perguntas
+  necessarias antes de qualquer etapa de planejamento ou execucao.
+- `/planning`: elabora plano tecnico incremental, mapeando arquivos
+  impactados, riscos e estrategia, sem alterar arquivos ou implementar.
+- `/tasks`: decompõe o plano aprovado em tarefas pequenas, sequenciais,
+  verificaveis e reversiveis. `/tasks` nunca executa nenhuma tarefa.
+- `/checklist`: gera criterios objetivos e verificaveis de inspecao,
+  qualidade, qualidade de codigo e aceite. Nao altera arquivos nem implementa.
+- `/implement`: executa estritamente uma unica tarefa previamente aprovada,
+  com escopo minimo e confirmacao explicita antes de editar arquivos.
+- `/validate`: revisa a mudanca aplicada, inspeciona diffs, executa
+  testes e compara o resultado contra os criterios de aceite. Nao aplica
+  correcoes automaticas.
+- `/constitution`: cria, revisa ou atualiza documentos de governanca
+  atraves de proposta previa e confirmacao explicita.
+- `/result`: registra solicitacoes e respostas consolidadas no arquivo de
+  historico sem alterar regras operacionais.
+
+## Gates de aprovacao e restricoes operacionais
+
+- Nenhuma alteracao de codigo de aplicacao ou de governanca pode ser
+  realizada sem aprovacao previa e explicita do usuario.
+- Mudancas devem ser pequenas, atomicas, testaveis e facilmente reversiveis.
+- Nunca documentar ou assumir arquitetura futura/desejada como se ja
+  estivesse implementada no estado atual.
+- Nunca alterar prompts, contratos publicos, APIs, Dockerfiles,
+  docker-compose, dependencias, bancos ou scripts de infraestrutura sem
+  autorizacao expressa.
+- Problemas fora do escopo (bugs preexistentes, divida tecnica, lints
+  legados) devem ser registrados como pendencias e nao corrigidos
+  oportunisticamente.
+
+## Criterios de conclusao de tarefas (Definition of Done)
+
+Para que qualquer tarefa seja considerada concluida:
+
+1. Apenas os arquivos do escopo aprovado foram modificados.
+2. `npm run typecheck` executou sem erros.
+3. `npm run test:ci` passou com sucesso.
+4. `npm run build` gerou o bundle sem falhas.
+5. Todos os criterios de aceite da tarefa foram verificados.
+6. A documentacao do projeto reflete com precisao o codigo real.
 
 ## Onde estao os detalhes que costumam confundir
 
@@ -154,3 +204,4 @@ docs/                             DEPLOYMENT_PLAN, SIP_SECURITY,
   `docs/SIP_SECURITY_BACKEND_REQUIREMENTS.md`.
 - Estado do produto, funcionalidades atuais, validacao de QA com 100
   clientes: `PROJECT.md`, `QA_LOAD_TEST.md`, `CHANGELOG.md`.
+
