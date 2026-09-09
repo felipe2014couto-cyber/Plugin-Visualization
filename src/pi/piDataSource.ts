@@ -1255,14 +1255,11 @@ async function queryPiTrendsHistory(
           let response: DataQueryResponse;
           const request = buildHistoricalTrendRequest(selected, range, mode, options);
           try {
-            console.log("Historical datasource payload", JSON.stringify(request, null, 2));
-
             response = await runHistoricalQuery(() => withTimeout(
               resolveQueryResponse(instance.query(request)),
               DATA_QUERY_HISTORICAL_TIMEOUT_MS,
               `Consulta histórica excedeu o tempo limite para ${selected.map(({ pointName }) => pointName).join(', ')}`,
             ));
-            console.log('[PI QUERY RESPONSE]', { resultado: response });
             const responseError = getHistoricalQueryResponseError(response);
             if (responseError) {
               throw responseError;
@@ -1272,14 +1269,12 @@ async function queryPiTrendsHistory(
 
             if (mode === 'recorded' && hasRecordedBoundaryType(request)) {
               const fallbackRequest = buildHistoricalFallbackRequest(request, selected[0].dataSourceUid);
-              console.log('[FALLBACK PI QUERY]', { payloadEnviado: fallbackRequest });
               try {
                 response = await runHistoricalQuery(() => withTimeout(
                   resolveQueryResponse(instance.query(fallbackRequest)),
                   DATA_QUERY_HISTORICAL_TIMEOUT_MS,
                   'Fallback de consulta histórica excedeu o tempo limite',
                 ));
-                console.log('[FALLBACK PI QUERY RESPONSE]', { resultado: response });
                 const fallbackResponseError = getHistoricalQueryResponseError(response);
                 if (fallbackResponseError) {
                   throw fallbackResponseError;

@@ -1022,12 +1022,8 @@ describe('PI data source integration', () => {
         responseBody: { message: 'boundaryType is not supported' },
         message: 'Internal Server Error',
       }));
-      expect(infoLog).toHaveBeenCalledWith('[FALLBACK PI QUERY]', expect.objectContaining({
-        payloadEnviado: fallbackRequest,
-      }));
-      expect(infoLog).toHaveBeenCalledWith('[FALLBACK PI QUERY RESPONSE]', expect.objectContaining({
-        resultado: expect.objectContaining({ data: expect.any(Array) }),
-      }));
+      expect(infoLog).not.toHaveBeenCalledWith('[FALLBACK PI QUERY]', expect.anything());
+      expect(infoLog).not.toHaveBeenCalledWith('[FALLBACK PI QUERY RESPONSE]', expect.anything());
     } finally {
       errorLog.mockRestore();
       infoLog.mockRestore();
@@ -1066,9 +1062,7 @@ describe('PI data source integration', () => {
       expect(errorLog).toHaveBeenCalledWith('[PI QUERY ERROR]', expect.objectContaining({
         message: 'Resposta histórica inválida: campo data ausente',
       }));
-      expect(infoLog).toHaveBeenCalledWith('[FALLBACK PI QUERY RESPONSE]', {
-        resultado: { data: [] },
-      });
+      expect(infoLog).not.toHaveBeenCalledWith('[FALLBACK PI QUERY RESPONSE]', expect.anything());
     } finally {
       errorLog.mockRestore();
       infoLog.mockRestore();

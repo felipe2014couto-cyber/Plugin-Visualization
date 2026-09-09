@@ -323,7 +323,7 @@ export function applyHistoricalMacros(
      }
      
      if (!globalHistoricalPromiseLock.has(globalKey)) {
-        const promise = fetchHistoryGlobal(globalKey, binding, startStr, endStr, funcName, remainingArgs.map(String)).catch(console.error).finally(() => {
+        const promise = fetchHistoryGlobal(globalKey, binding, startStr, endStr, funcName, remainingArgs.map(String)).finally(() => {
             globalHistoricalPromiseLock.delete(globalKey);
         });
         globalHistoricalPromiseLock.set(globalKey, promise);
@@ -349,13 +349,6 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
     }
     
     const { getPiTrendsRecordedHistoryForRange } = await import('../pi/piDataSource');
-    
-    console.log("Historical request", {
-      tag: binding.pointName,
-      start: startStr,
-      end: endStr,
-      functionName: funcName
-    });
     
     const response = await getPiTrendsRecordedHistoryForRange([binding], { from, to });
     
@@ -425,13 +418,6 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
          }
        }
        
-       console.log("Historical response", {
-          tag: binding.pointName,
-          pointsCount: pts.length,
-          firstPoint: pts.length > 0 ? pts[0] : null,
-          lastPoint: pts.length > 0 ? pts[pts.length - 1] : null
-        });
-        
         globalHistoricalResultCache.set(globalKey, { value: res, timestamp: Math.floor(Date.now()/1000) });
     } else {
         throw result?.status === 'error' ? result.error : new Error('Resposta histórica inválida ou ausente');
