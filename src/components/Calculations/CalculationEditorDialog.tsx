@@ -7,6 +7,8 @@ import { createPiPointBinding } from '../../pi/piPointBinding';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../pi/piPointDrag';
 import { evaluateCalculation, type CalculationDefinition, type CalculationInput } from '../../calculations/calculationEngine';
 import { hasPendingHistoricalRequests, waitForPendingHistoricalRequests, hasPendingMetadataRequests, waitForPendingMetadataRequests, hasPendingDigitalStateRequests, waitForPendingDigitalStateRequests } from '../../calculations/calculationMacros';
+import { classifyPiExpression, evaluatePiExpression, PiCalculationUnavailableError, probePiCalculationController } from '../../pi/piCalculation';
+import { expressionRequiresSchedulerContext, expressionRequiresStatefulScheduler, peScheduleIdentity, requirePeSchedulerContext, PeSchedulerError, validatePeSchedule, type PeCalculationSchedule } from '../../calculations/peSchedulerRuntime';
 
 interface CalculationHelpItem {
   name: string;
@@ -40,6 +42,7 @@ export interface CalculationDraft {
   description: string;
   expression: string;
   inputs: CalculationInput[];
+  schedule?: PeCalculationSchedule;
 }
 
 export interface CalculationEditorDialogProps {
@@ -64,6 +67,11 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
   const [executionResult, setExecutionResult] = useState<{ value: number | string; timestamp?: string }>();
   const [isFunctionHelpOpen, setIsFunctionHelpOpen] = useState(false);
   const [expandedFunctionName, setExpandedFunctionName] = useState<string>();
+  const [scheduleType, setScheduleType] = useState<'' | PeCalculationSchedule['type']>(initialCalculation?.schedule?.type ?? '');
+  const [clockInterval, setClockInterval] = useState(initialCalculation?.schedule?.type === 'clock' ? String(initialCalculation.schedule.intervalSeconds) : '');
+  const [scheduleAnchor, setScheduleAnchor] = useState(initialCalculation?.schedule?.anchor ?? '');
+  const [eventTrigger, setEventTrigger] = useState(initialCalculation?.schedule?.type === 'event' ? initialCalculation.schedule.trigger.pointName : '');
+  const requiresScheduler = expressionRequiresSchedulerContext(expression);
 
   useEffect(() => {
     setName(initialCalculation?.name ?? '');
@@ -73,6 +81,10 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
     setValidationError('');
     setExecutionState('idle');
     setExecutionResult(undefined);
+    setScheduleType(initialCalculation?.schedule?.type ?? '');
+    setClockInterval(initialCalculation?.schedule?.type === 'clock' ? String(initialCalculation.schedule.intervalSeconds) : '');
+    setScheduleAnchor(initialCalculation?.schedule?.anchor ?? '');
+    setEventTrigger(initialCalculation?.schedule?.type === 'event' ? initialCalculation.schedule.trigger.pointName : '');
   }, [initialCalculation]);
 
   const appendToken = (token: string) => {
@@ -142,12 +154,28 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
     setValidationError('');
     try {
       const resolvedInputs = await resolveInputs(normalizedExpression);
+      let schedule: PeCalculationSchedule | undefined;
+      if (expressionRequiresSchedulerContext(normalizedExpression)) {
+        if (scheduleType === '') throw new Error('Scheduler context required: selecione Clock ou Event.');
+        if (scheduleType === 'clock') {
+          schedule = { type: 'clock', intervalSeconds: Number(clockInterval), anchor: scheduleAnchor.trim() };
+        } else {
+          const triggerName = eventTrigger.trim();
+          const existing = resolvedInputs.find((input) => input.name.toLocaleLowerCase() === triggerName.toLocaleLowerCase());
+          const point = existing ? undefined : await resolvePiPoint?.(triggerName);
+          const trigger = existing?.binding ?? (point ? createPiPointBinding(point) : undefined);
+          if (!trigger) throw new Error('Schedule Event requer um PI Point trigger válido.');
+          schedule = { type: 'event', trigger, ...(scheduleAnchor.trim() ? { anchor: scheduleAnchor.trim() } : {}) };
+        }
+        validatePeSchedule(schedule);
+      }
       setIsResolvingInputs(false);
       onSave({
         name: normalizedName,
         description: description.trim(),
         expression: normalizedExpression,
         inputs: resolvedInputs,
+        ...(schedule === undefined ? {} : { schedule }),
       });
     } catch (error) {
       setValidationError(error instanceof Error ? error.message : 'Não foi possível resolver os PI Points da expressão.');
@@ -162,11 +190,56 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
       return;
     }
     setExecutionState('loading');
-    setExecutionResult(undefined);
     setValidationError('');
     try {
       const resolvedInputs = await resolveInputs(normalizedExpression);
       setInputs(resolvedInputs);
+      let scheduler: PeCalculationSchedule | undefined;
+      if (expressionRequiresStatefulScheduler(normalizedExpression)) {
+        if (scheduleType === '') {
+          requirePeSchedulerContext(normalizedExpression, undefined);
+        }
+        if (scheduleType === 'clock') {
+          scheduler = { type: 'clock', intervalSeconds: Number(clockInterval), anchor: scheduleAnchor.trim() };
+        } else {
+          const triggerName = eventTrigger.trim();
+          const existing = resolvedInputs.find((input) => input.name.toLocaleLowerCase() === triggerName.toLocaleLowerCase());
+          const point = existing ? undefined : await resolvePiPoint?.(triggerName);
+          const trigger = existing?.binding ?? (point ? createPiPointBinding(point) : undefined);
+          if (!trigger) throw new PeSchedulerError('INVALID_SCHEDULE', 'Schedule Event requer um PI Point trigger válido.');
+          scheduler = { type: 'event', trigger, ...(scheduleAnchor.trim() ? { anchor: scheduleAnchor.trim() } : {}) };
+        }
+        requirePeSchedulerContext(normalizedExpression, scheduler);
+        // Establish the scheduler route before any server-first decision. The
+        // stateful AST evaluator is intentionally still a separate blocker.
+        peScheduleIdentity(scheduler);
+        throw new PeSchedulerError('STATEFUL_FUNCTION_NOT_READY', 'O PE Scheduler foi validado, mas o runtime stateful desta expressão ainda não está disponível para avaliação.');
+      }
+      const serverClassification = classifyPiExpression(normalizedExpression);
+      if (serverClassification.target === 'pi' && resolvedInputs.length > 0) {
+        const dataSources = new Set(resolvedInputs.map((input) => `${input.binding.dataSourceUid}\u0000${input.binding.serverPath}`));
+        if (dataSources.size !== 1) {
+          throw new Error('O Calculation Controller PI requer que todos os PI Points pertençam ao mesmo PI Data Server.');
+        }
+        try {
+          const capabilities = await probePiCalculationController(resolvedInputs[0].binding);
+          if (capabilities.times !== 'supported') {
+            throw new PiCalculationUnavailableError(`PI Calculation Controller /calculation/times indisponível (${capabilities.times}).`);
+          }
+          const result = await evaluatePiExpression({ binding: resolvedInputs[0].binding, expression: normalizedExpression, mode: 'times', time: '*' });
+          if ('kind' in result && result.kind === 'no-output') {
+            setExecutionState('success');
+            return;
+          }
+          if (!('value' in result)) throw new Error('Resultado do PI sem valor.');
+          const value = typeof result.value === 'object' ? result.value.name : result.value;
+          setExecutionResult({ value, timestamp: result.timestamp });
+          setExecutionState('success');
+          return;
+        } catch (error) {
+          if (!(error instanceof PiCalculationUnavailableError) || !serverClassification.localFallbackSafe) throw error;
+        }
+      }
       if (resolvedInputs.length > 0 && !loadValue) {
         throw new Error('A consulta de valores PI não está disponível.');
       }
@@ -246,6 +319,36 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
             onChange={(event) => setDescription(event.target.value)}
             rows={2}
           />
+
+          {requiresScheduler && (
+            <div className={styles.inputs} data-testid="calculation-scheduler-config">
+              <span className={styles.inputsLabel}>PE Scheduler</span>
+              <label className={styles.label} htmlFor="calculation-schedule-type">Tipo</label>
+              <select id="calculation-schedule-type" className={styles.input} data-testid="calculation-schedule-type" value={scheduleType} onChange={(event) => setScheduleType(event.target.value as '' | PeCalculationSchedule['type'])}>
+                <option value="">Selecione</option>
+                <option value="clock">Clock</option>
+                <option value="event">Event</option>
+              </select>
+              {scheduleType === 'clock' && (
+                <>
+                  <label className={styles.label} htmlFor="calculation-schedule-interval">Intervalo em segundos</label>
+                  <input id="calculation-schedule-interval" className={styles.input} data-testid="calculation-schedule-interval" inputMode="decimal" value={clockInterval} onChange={(event) => setClockInterval(event.target.value)} />
+                </>
+              )}
+              {scheduleType === 'event' && (
+                <>
+                  <label className={styles.label} htmlFor="calculation-schedule-trigger">PI Point trigger</label>
+                  <input id="calculation-schedule-trigger" className={styles.input} data-testid="calculation-schedule-trigger" value={eventTrigger} onChange={(event) => setEventTrigger(event.target.value)} />
+                </>
+              )}
+              {scheduleType !== '' && (
+                <>
+                  <label className={styles.label} htmlFor="calculation-schedule-anchor">Anchor ISO{scheduleType === 'event' ? ' (opcional)' : ''}</label>
+                  <input id="calculation-schedule-anchor" className={styles.input} data-testid="calculation-schedule-anchor" placeholder="2026-01-01T00:00:00Z" value={scheduleAnchor} onChange={(event) => setScheduleAnchor(event.target.value)} />
+                </>
+              )}
+            </div>
+          )}
 
           {inputs.length > 0 && (
             <div className={styles.inputs} data-testid="calculation-editor-inputs">

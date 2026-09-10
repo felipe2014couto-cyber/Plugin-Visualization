@@ -62,6 +62,7 @@ export function CalculationsPanel({ document, onChange, resolvePiPoint, loadValu
       ...(draft.description ? { description: draft.description } : {}),
       expression: draft.expression,
       inputs: draft.inputs,
+      ...(draft.schedule === undefined ? {} : { schedule: draft.schedule }),
     };
     updateCalculations(editingCalculation
       ? calculations.map((item) => item.id === editingCalculation.id ? calculation : item)

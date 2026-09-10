@@ -52,6 +52,22 @@ function makeDocument() {
 }
 
 describe('displayTransfer', () => {
+  it('preserva schedule opcional e mantém cálculos antigos sem alteração', () => {
+    const scheduled = createDisplayDocument({ id: 'scheduled-calculation' });
+    scheduled.calculations = [{
+      id: 'calc-1',
+      name: 'Delay test',
+      expression: 'Delay(SINUSOID, 1, 2)',
+      inputs: [{ name: 'SINUSOID', binding }],
+      schedule: { type: 'clock', intervalSeconds: 60, anchor: '2026-01-01T00:00:00.000Z' },
+    }];
+    expect(parseImportedDisplay(serializeDisplay(scheduled)).calculations).toEqual(scheduled.calculations);
+
+    const legacy = createDisplayDocument({ id: 'legacy-calculation' });
+    legacy.calculations = [{ id: 'calc-old', name: 'Old', expression: 'SINUSOID + 1', inputs: [{ name: 'SINUSOID', binding }] }];
+    expect(parseImportedDisplay(serializeDisplay(legacy)).calculations).toEqual(legacy.calculations);
+  });
+
   it('serializa envelope versionado sem estado runtime e não altera o documento', () => {
     const document = makeDocument();
     (document.elements[1].properties as Record<string, unknown>).currentValue = 42;

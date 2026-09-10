@@ -1,3 +1,5 @@
+import type { PiHistoricalValue, PiTrendSeries } from '../pi/piDataSource';
+
 export const temporalStateCache = new Map<string, Map<string, any>>();
 
 export function updateTemporalCache(calcId: string, token: string, piPointValue: any) {
@@ -105,6 +107,23 @@ export function applyQualityMacros(expression: string, token: string, piPointVal
   const badValRegex = new RegExp(`(?<![A-Za-z0-9_.:])BADVAL\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(badValRegex, () => isBadPiPointValue(piPointValue) ? '1' : '0');
 
+  const tagBadRegex = new RegExp(`(?<![A-Za-z0-9_.:])TAGBAD\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
+  expression = expression.replace(tagBadRegex, () => isBadPiPointValue(piPointValue) ? '1' : '0');
+
+  const isSetRegex = new RegExp(`(?<![A-Za-z0-9_.:])ISSET\\s*\\(\\s*${tokenPattern}\\s*,\\s*(["'])(.*?)\\1\\s*\\)`, 'gi');
+  expression = expression.replace(isSetRegex, (_match, _quote, selector: string) => {
+    const normalizedSelector = selector.trim().toLocaleLowerCase().charAt(0);
+    if (!['a', 's', 'q'].includes(normalizedSelector)) {
+      throw new Error('IsSet aceita os seletores "a" (Annotated), "s" (Substituted) ou "q" (Questionable).');
+    }
+    const flag = normalizedSelector === 'a' ? 'annotated' : normalizedSelector === 's' ? 'substituted' : 'questionable';
+    const available = getQualityFlag(piPointValue, flag);
+    if (available === undefined && piPointValue && typeof piPointValue === 'object') {
+      throw new Error(`IsSet: flag ${flag} não disponível para "${token}".`);
+    }
+    return available === true ? '1' : '0';
+  });
+
   const isGoodRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_GOOD\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(isGoodRegex, () => {
     return isBadPiPointValue(piPointValue) ? '0' : '1';
@@ -148,9 +167,9 @@ export function applyQualityMacros(expression: string, token: string, piPointVal
   const tsRegex = new RegExp(`(?<![A-Za-z0-9_.:])TIMESTAMP\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(tsRegex, () => {
     if (piPointValue && typeof piPointValue === 'object' && piPointValue.timestamp) {
-       return String(Math.floor(Date.parse(piPointValue.timestamp) / 1000));
+       return `__PE_TIMESTAMP(${Math.floor(Date.parse(piPointValue.timestamp) / 1000)})`;
     }
-    return String(Math.floor(Date.now() / 1000));
+    return `__PE_TIMESTAMP(${Math.floor(Date.now() / 1000)})`;
   });
 
   const isStateRegex = new RegExp(`(?<![A-Za-z0-9_.:])IS_STATE\\s*\\(\\s*${tokenPattern}\\s*,\\s*(["'])(.*?)\\1\\s*\\)`, 'gi');
@@ -181,9 +200,9 @@ export function applyQualityMacros(expression: string, token: string, piPointVal
   const lastTsRegex = new RegExp(`(?<![A-Za-z0-9_.:])LAST_TIMESTAMP\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
   expression = expression.replace(lastTsRegex, () => {
     if (piPointValue && typeof piPointValue === 'object' && piPointValue.timestamp) {
-       return String(Math.floor(Date.parse(piPointValue.timestamp) / 1000));
+       return `__PE_TIMESTAMP(${Math.floor(Date.parse(piPointValue.timestamp) / 1000)})`;
     }
-    return String(Math.floor(Date.now() / 1000));
+    return `__PE_TIMESTAMP(${Math.floor(Date.now() / 1000)})`;
   });
 
   return expression;
@@ -216,7 +235,7 @@ export function applyTemporalMacros(expression: string, token: string, state: an
 }
 
 import type { PiPointBinding } from '../pi/piPointBinding';
-import { getPiPointDigitalStates, getPiPointMetadata, type PiDigitalState, type PiPointMetadata } from '../pi/piDataSource';
+import { decodePiAlarmState, getPiDigitalStateSets, getPiPointDigitalStates, getPiPointMetadata, type PiDigitalState, type PiPointMetadata } from '../pi/piDataSource';
 
 export const globalHistoricalResultCache = new Map<string, {value?: number | string, error?: Error, timestamp: number}>();
 export const globalHistoricalPromiseLock = new Map<string, Promise<void>>();
@@ -224,6 +243,58 @@ export const globalMetadataResultCache = new Map<string, { metadata?: PiPointMet
 export const globalMetadataPromiseLock = new Map<string, Promise<void>>();
 export const globalDigitalStateResultCache = new Map<string, { states?: PiDigitalState[]; error?: Error }>();
 export const globalDigitalStatePromiseLock = new Map<string, Promise<void>>();
+
+type HistoricalRequestPlan = {
+  normalHistory: boolean;
+  rawRecorded: boolean;
+  boundary: boolean;
+  quality: boolean;
+  recordedOrigin: boolean;
+  step: boolean;
+  interpolatedValue: boolean;
+  previousEvent: boolean;
+  nextEvent: boolean;
+};
+
+const HISTORICAL_REQUEST_PLANS: Record<string, HistoricalRequestPlan> = {
+  TAGAVG: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: false, previousEvent: false, nextEvent: false },
+  TAGTOT: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: false, previousEvent: false, nextEvent: false },
+  TIMEEQ: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: false, previousEvent: false, nextEvent: false },
+  TIMENE: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: false, previousEvent: false, nextEvent: false },
+  TIMEGT: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: false, previousEvent: false, nextEvent: false },
+  TIMEGE: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: false, previousEvent: false, nextEvent: false },
+  TIMELT: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: false, previousEvent: false, nextEvent: false },
+  TIMELE: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: false, previousEvent: false, nextEvent: false },
+  FINDEQ: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: true, previousEvent: false, nextEvent: false },
+  FINDNE: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: true, previousEvent: false, nextEvent: false },
+  FINDGT: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: true, previousEvent: false, nextEvent: false },
+  FINDGE: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: true, previousEvent: false, nextEvent: false },
+  FINDLT: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: true, previousEvent: false, nextEvent: false },
+  FINDLE: { normalHistory: true, rawRecorded: false, boundary: true, quality: true, recordedOrigin: false, step: true, interpolatedValue: true, previousEvent: false, nextEvent: false },
+  EVENTCOUNT: { normalHistory: true, rawRecorded: false, boundary: false, quality: true, recordedOrigin: true, step: false, interpolatedValue: false, previousEvent: false, nextEvent: false },
+  TAGVAL: { normalHistory: true, rawRecorded: false, boundary: false, quality: true, recordedOrigin: false, step: false, interpolatedValue: true, previousEvent: false, nextEvent: false },
+  VALUEATTIME: { normalHistory: true, rawRecorded: false, boundary: false, quality: true, recordedOrigin: false, step: false, interpolatedValue: true, previousEvent: false, nextEvent: false },
+  PREVVAL: { normalHistory: true, rawRecorded: false, boundary: false, quality: true, recordedOrigin: false, step: false, interpolatedValue: false, previousEvent: true, nextEvent: false },
+  NEXTVAL: { normalHistory: true, rawRecorded: false, boundary: false, quality: true, recordedOrigin: false, step: false, interpolatedValue: false, previousEvent: false, nextEvent: true },
+};
+
+function getHistoricalRequestPlan(functionName: string): HistoricalRequestPlan {
+  return HISTORICAL_REQUEST_PLANS[functionName.toUpperCase()] ?? {
+    normalHistory: true, rawRecorded: false, boundary: false, quality: true,
+    recordedOrigin: false, step: false, interpolatedValue: false,
+    previousEvent: false, nextEvent: false,
+  };
+}
+
+function serializeHistoricalValue(functionName: string, value: number | string | undefined, typedResult: boolean): string {
+  if (typeof value === 'string') return `'${value.replace(/'/g, "\\'")}'`;
+  const numeric = String(value);
+  if (!typedResult) return numeric;
+  const normalized = functionName.toUpperCase();
+  if (['FINDEQ', 'FINDNE', 'FINDGT', 'FINDGE', 'FINDLT', 'FINDLE', 'PREVEVENT', 'NEXTEVENT'].includes(normalized)) return `__PE_TIMESTAMP(${numeric})`;
+  if (['TIMEEQ', 'TIMENE', 'TIMEGT', 'TIMEGE', 'TIMELT', 'TIMELE'].includes(normalized)) return `__PE_TIMESPAN(${numeric})`;
+  return numeric;
+}
 
 export function hasPendingHistoricalRequests(): boolean {
   return globalHistoricalPromiseLock.size > 0;
@@ -275,6 +346,7 @@ function metadataProperty(functionName: string, metadata: PiPointMetadata): stri
     case 'TAGZERO': return metadata.zero === undefined ? undefined : String(metadata.zero);
     case 'TAGTYPE': return metadata.pointType;
     case 'TAGTYPVAL': return metadata.typicalValue;
+    case 'TAGNUM': return metadata.pointId;
     default: return undefined;
   }
 }
@@ -311,11 +383,10 @@ export function applyMetadataMacros(
     }
 
     const value = metadataProperty(funcName, cached.metadata);
-    if (funcName.toUpperCase() === 'TAGNUM') {
-      throw new Error('TagNum: número/PointID não é exposto pelo datasource PI atual.');
-    }
     if (value === undefined) {
-      throw new Error(`${funcName}: metadado não disponível para o PI Point "${token}".`);
+      throw new Error(funcName.toUpperCase() === 'TAGNUM'
+        ? 'TagNum: PointID não disponível para este PI Point/datasource.'
+        : `${funcName}: metadado não disponível para o PI Point "${token}".`);
     }
     if (typeof value === 'number' || funcName.toUpperCase() === 'TAGSPAN' || funcName.toUpperCase() === 'TAGZERO' || funcName.toUpperCase() === 'TAGTYPVAL' && cached.metadata.pointType?.toLocaleLowerCase() !== 'digital') return String(value);
     return quoteMetadataValue(value);
@@ -334,6 +405,14 @@ function resolveDigitalState(states: readonly PiDigitalState[], value: unknown):
 
 function quoteDigitalState(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function serializeDigitalState(state: PiDigitalState): string {
+  const code = Number(state.value);
+  if (!Number.isFinite(code)) throw new Error(`Estado digital "${state.name}" não possui código numérico PI.`);
+  const setWebId = state.setWebId ? `, ${quoteDigitalState(state.setWebId)}` : '';
+  const setName = state.setName ? `, ${quoteDigitalState(state.setName)}` : '';
+  return `__PE_DIGITAL_STATE(${quoteDigitalState(state.name)}, ${code}${setWebId}${setName})`;
 }
 
 function escapeRegex(value: string): string {
@@ -369,34 +448,100 @@ export function applyDigitalStateMacros(
     throw new Error('FETCHING_DIGITAL_STATES');
   };
 
+  const getGlobalStates = (): readonly PiDigitalState[] => {
+    const globalKey = `global\u0000${binding.dataSourceUid}\u0000${binding.serverPath}`;
+    const cached = globalDigitalStateResultCache.get(globalKey);
+    if (cached?.error) throw cached.error;
+    if (cached?.states) return cached.states;
+    if (!globalDigitalStatePromiseLock.has(globalKey)) {
+      const request = getPiDigitalStateSets(binding)
+        .then((sets) => {
+          globalDigitalStateResultCache.set(globalKey, { states: sets.flatMap((set) => set.states) });
+        })
+        .catch((error) => {
+          globalDigitalStateResultCache.set(globalKey, { error: error instanceof Error ? error : new Error(String(error)) });
+        })
+        .finally(() => globalDigitalStatePromiseLock.delete(globalKey));
+      globalDigitalStatePromiseLock.set(globalKey, request);
+    }
+    throw new Error('FETCHING_DIGITAL_STATES');
+  };
+
   const digStateRegex = new RegExp(`(?<![A-Za-z0-9_.:])DigState\\s*\\(\\s*("[^"]*")\\s*,\\s*${pointPattern}\\s*\\)`, 'gi');
   expression = expression.replace(digStateRegex, (_match, literal: string) => {
     const state = resolveDigitalState(getStates(), literal.slice(1, -1));
     if (!state) throw new Error(`DigState: estado "${literal.slice(1, -1)}" não existe no Digital State Set de "${token}".`);
-    return quoteDigitalState(state.name);
+    return serializeDigitalState(state);
+  });
+
+  const globalDigStateRegex = new RegExp(`(?<![A-Za-z0-9_.:])DigState\\s*\\(\\s*("[^"]*")\\s*\\)`, 'gi');
+  expression = expression.replace(globalDigStateRegex, (_match, literal: string) => {
+    const state = resolveDigitalState(getGlobalStates(), literal.slice(1, -1));
+    if (!state) throw new Error(`DigState: estado "${literal.slice(1, -1)}" não existe nos Digital State Sets do PI Data Server.`);
+    return serializeDigitalState(state);
   });
 
   const digTextRegex = new RegExp(`(?<![A-Za-z0-9_.:])DigText\\s*\\(\\s*${pointPattern}\\s*\\)`, 'gi');
   expression = expression.replace(digTextRegex, () => {
-    const state = resolveDigitalState(getStates(), (piPointValue as any)?.value ?? piPointValue);
+    const currentValue = (piPointValue as any)?.value ?? piPointValue;
+    const state = resolveDigitalState(getStates(), currentValue)
+      ?? getGlobalStates().find((candidate) => candidate.isSystem && resolveDigitalState([candidate], currentValue));
     if (!state) throw new Error(`DigText: valor atual não existe no Digital State Set de "${token}".`);
     return quoteDigitalState(state.name);
   });
 
   const stateNoRegex = /(?<![A-Za-z0-9_.:])StateNo\s*\(\s*((?:"[^"]*")|(?:'[^']*'))\s*\)/gi;
-  expression = expression.replace(stateNoRegex, (_match, literal: string) => {
+  expression = expression.replace(stateNoRegex, (match, literal: string) => {
     const requested = literal.slice(1, -1);
-    const lookup = literal.startsWith("'")
-      ? (piPointValue as any)?.value ?? piPointValue
-      : requested;
-    const state = resolveDigitalState(getStates(), lookup);
-    if (state?.value === undefined) throw new Error(`StateNo: estado "${requested}" não possui código no Digital State Set.`);
-    const numeric = Number(state.value);
-    if (!Number.isFinite(numeric)) throw new Error(`StateNo: código do estado "${literal.slice(1, -1)}" não é numérico.`);
-    return String(numeric);
+    if (!literal.startsWith("'") || requested.toLocaleUpperCase() !== token.toLocaleUpperCase()) return match;
+    const state = resolveDigitalState(getStates(), (piPointValue as any)?.value ?? piPointValue);
+    if (!state) throw new Error(`StateNo: valor atual de "${token}" não existe no Digital State Set.`);
+    return `StateNo(${serializeDigitalState(state)})`;
   });
 
   return expression;
+}
+
+/** Resolves PE Alarm State functions from a structurally validated PI set. */
+export function applyAlarmMacros(
+  expression: string,
+  token: string,
+  binding: PiPointBinding,
+  piPointValue: unknown,
+): string {
+  const escapedToken = escapeRegex(token);
+  const pointPattern = `(?:'${escapedToken}'|${escapedToken})`;
+  const alarmRegex = new RegExp(`(?<![A-Za-z0-9_.:])Alm(AckStat|Condition|CondText|Priority)\\s*\\(\\s*${pointPattern}\\s*\\)`, 'gi');
+  if (!alarmRegex.test(expression)) return expression;
+  const key = digitalStateKey(binding);
+  const cached = globalDigitalStateResultCache.get(key);
+  if (cached?.error) throw cached.error;
+  if (!cached?.states) {
+    if (!globalDigitalStatePromiseLock.has(key)) {
+      const request = getPiPointDigitalStates(binding)
+        .then((result) => {
+          if (!result.isDigital) throw new Error(`PI Point "${token}" não é digital.`);
+          globalDigitalStateResultCache.set(key, { states: result.states });
+        })
+        .catch((error) => {
+          globalDigitalStateResultCache.set(key, { error: error instanceof Error ? error : new Error(String(error)) });
+        })
+        .finally(() => globalDigitalStatePromiseLock.delete(key));
+      globalDigitalStatePromiseLock.set(key, request);
+    }
+    throw new Error('FETCHING_DIGITAL_STATES');
+  }
+
+  const info = decodePiAlarmState(cached.states, piPointValue);
+  return expression.replace(alarmRegex, (_match, operation: string) => {
+    switch (operation.toLocaleLowerCase()) {
+      case 'ackstat': return String(info.acknowledgementStatus);
+      case 'condition': return String(info.conditionCode);
+      case 'priority': return String(info.priority);
+      case 'condtext': return quoteDigitalState(info.conditionText);
+      default: return _match;
+    }
+  });
 }
 
 export const PI_TIME_ABBREVIATIONS = new Set(['*', 't', 'y', 'today', 'yesterday', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']);
@@ -464,9 +609,10 @@ export function applyHistoricalMacros(
   token: string, 
   calcId: string, 
   binding: PiPointBinding, 
-  now: number
+  now: number,
+  typedResult = false,
 ): string {
-  const funcNames = 'TimeEq|TimeNE|TimeGT|TimeGE|TimeLT|TimeLE|FindEq|FindNE|FindGT|FindGE|FindLT|FindLE|Average|Minimum|Maximum|Total|Count|TagAvg|TagMean|TagMin|TagMax|TagTot|EventCount|Range|TagVal|ValueAtTime|PrevVal|NextVal|Moving_Average|Moving_Min|Moving_Max|Moving_StdDev';
+  const funcNames = 'TimeEq|TimeNE|TimeGT|TimeGE|TimeLT|TimeLE|FindEq|FindNE|FindGT|FindGE|FindLT|FindLE|Average|Minimum|Maximum|Total|Count|TagAvg|TagMean|TagMin|TagMax|TagTot|EventCount|PctGood|StDev|Range|TagVal|ValueAtTime|PrevVal|NextVal|PrevEvent|NextEvent|Moving_Average|Moving_Min|Moving_Max|Moving_StdDev';
   const histRegex = new RegExp(`(?<![A-Za-z0-9_.:])(${funcNames})\\s*\\((.*?)\\)`, 'gis');
   
   expression = expression.replace(histRegex, (match, funcName, argsStr) => {
@@ -498,8 +644,11 @@ export function applyHistoricalMacros(
        startStr = String(parsedArgs[1].value);
        endStr = String(parsedArgs[2].value);
        remainingArgs = [parsedArgs[3].value];
-     } else if (['TAGVAL', 'VALUEATTIME', 'PREVVAL', 'NEXTVAL'].includes(fnUp)) {
-       if (parsedArgs.length !== 1 && parsedArgs.length !== 2) throw new Error(`${funcName} exige Tag e, opcionalmente, Time.`);
+     } else if (['TAGVAL', 'VALUEATTIME', 'PREVVAL', 'NEXTVAL', 'PREVEVENT', 'NEXTEVENT'].includes(fnUp)) {
+       const requiresTime = ['PREVEVENT', 'NEXTEVENT'].includes(fnUp);
+       if (requiresTime ? parsedArgs.length !== 2 : parsedArgs.length !== 1 && parsedArgs.length !== 2) {
+         throw new Error(requiresTime ? `${funcName} exige Tag e Time.` : `${funcName} exige Tag e, opcionalmente, Time.`);
+       }
        const timeArg = parsedArgs.length === 2 ? parsedArgs[1] : { type: 'TimeExpression', value: '*' } as const;
        if (timeArg.type !== 'TimeExpression' && timeArg.type !== 'StringLiteral') throw new Error(`Parâmetro Time inválido para ${funcName}.`);
        startStr = String(timeArg.value);
@@ -518,7 +667,7 @@ export function applyHistoricalMacros(
      const cachedData = globalHistoricalResultCache.get(globalKey);
      if (cachedData && (now - cachedData.timestamp) < 15) {
        if (cachedData.error) throw cachedData.error;
-       return typeof cachedData.value === 'string' ? `'${cachedData.value.replace(/'/g, "\\'")}'` : String(cachedData.value);
+       return serializeHistoricalValue(funcName, cachedData.value, typedResult);
      }
      
      if (!globalHistoricalPromiseLock.has(globalKey)) {
@@ -529,7 +678,7 @@ export function applyHistoricalMacros(
      }
      
      if (cachedData && cachedData.value !== undefined) {
-       return typeof cachedData.value === 'string' ? `'${cachedData.value.replace(/'/g, "\\'")}'` : String(cachedData.value);
+       return serializeHistoricalValue(funcName, cachedData.value, typedResult);
      }
      throw new Error("FETCHING_HISTORY");
   });
@@ -542,7 +691,7 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
     const now = Date.now();
     let { from, to } = resolvePiWindow(startStr, endStr, now);
     
-    if (['TAGVAL', 'VALUEATTIME', 'PREVVAL', 'NEXTVAL'].includes(funcName.toUpperCase())) {
+    if (['TAGVAL', 'VALUEATTIME', 'PREVVAL', 'NEXTVAL', 'PREVEVENT', 'NEXTEVENT'].includes(funcName.toUpperCase())) {
        from = from - 60000;
        to = to + 60000;
     }
@@ -552,13 +701,42 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
     const queryRange = ['FINDEQ', 'FINDNE', 'FINDGT', 'FINDGE', 'FINDLT', 'FINDLE'].includes(funcName.toUpperCase())
       ? { from: Math.min(from, to), to: Math.max(from, to) }
       : { from, to };
+    const functionName = funcName.toUpperCase();
+    const requestPlan = getHistoricalRequestPlan(functionName);
+    let stepped: boolean | undefined;
+    if (requestPlan.step) {
+      try {
+        stepped = (await getPiPointMetadata(binding))?.stepped;
+      } catch {
+        // Metadata is optional; undefined preserves the current continuous fallback.
+      }
+    }
     const response = await getPiTrendsRecordedHistoryForRange([binding], queryRange);
     
     // Esta consulta contém somente uma binding; a chave do datasource é composta.
     const result = Object.values(response)[0];
     if (result && result.status === 'success' && result.series && result.series.points) {
-       const pts = result.series.points;
-       const vals = pts.map((p: any) => p.value).filter((v: any) => Number.isFinite(v));
+       const historicalValues = getHistoricalValues(result.series);
+       const usableValues = selectHistoricalValues(historicalValues, 'numeric-value');
+       const timelinePts = historicalValues.flatMap((point) => (
+         typeof point.value === 'number' && Number.isFinite(point.value)
+           ? [{ time: point.timestamp, value: point.value, qualityState: classifyHistoricalQuality(point) }]
+           : []
+       ));
+       const pts = usableValues.flatMap((point) => (
+         typeof point.value === 'number' && Number.isFinite(point.value)
+           ? [{ time: point.timestamp, value: point.value }]
+           : []
+       ));
+       const vals = pts.map((point) => point.value);
+       const statePoints = usableValues.flatMap((point) => (
+         typeof point.value === 'string' ? [{ time: point.timestamp, value: point.value }] : []
+       ));
+       const timelineStatePoints = historicalValues.flatMap((point) => (
+         typeof point.value === 'string'
+           ? [{ time: point.timestamp, value: point.value, qualityState: classifyHistoricalQuality(point) }]
+           : []
+       ));
        let res: number | string = 0;
        
        const fn = funcName.toUpperCase();
@@ -566,6 +744,30 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
        const isPhaseThreeFunction = ['TAGAVG', 'TAGMEAN', 'TAGMIN', 'TAGMAX', 'TAGTOT', 'EVENTCOUNT', 'RANGE'].includes(fn);
        if (isPhaseThreeFunction && vals.length === 0) {
          throw new Error(`${funcName}: histórico sem valores numéricos válidos`);
+       } else if (['PREVEVENT', 'NEXTEVENT'].includes(fn)) {
+         const targetTime = parsePiTimeMs(startStr, Date.now());
+         const events = historicalValues.filter((point) => point.origin === 'recorded' && classifyHistoricalQuality(point) !== 'known-bad');
+         if (!events.some((point) => point.origin === 'recorded')) {
+           throw new Error(`${funcName}: origem dos eventos arquivados não foi garantida pela datasource`);
+         }
+         const event = fn === 'PREVEVENT'
+           ? [...events].reverse().find((point) => point.timestamp < targetTime)
+           : events.find((point) => point.timestamp > targetTime);
+         if (!event) throw new Error(`${funcName}: não há evento arquivado no sentido solicitado`);
+         res = Math.floor(event.timestamp / 1000);
+       } else if (fn === 'PCTGOOD') {
+         if (timelinePts.length < 2) throw new Error(`${funcName}: qualidade histórica insuficiente`);
+         if (timelinePts.some((point) => point.qualityState === 'unknown')) {
+           throw new Error(`${funcName}: qualidade histórica desconhecida`);
+         }
+         const coveredMs = calculateQualityDuration(timelinePts, from, to, 'covered');
+         const goodMs = calculateQualityDuration(timelinePts, from, to, 'good');
+         if (coveredMs < Math.abs(to - from)) throw new Error(`${funcName}: boundary/qualidade insuficiente para cobrir toda a janela`);
+         res = goodMs / Math.abs(to - from) * 100;
+       } else if (fn === 'STDEV') {
+         const deviation = calculateTimeWeightedStandardDeviation(timelinePts, from, to, stepped);
+         if (deviation === undefined) throw new Error(`${funcName}: histórico sem intervalo calculável`);
+         res = deviation;
        } else if (['TAGVAL', 'VALUEATTIME', 'PREVVAL', 'NEXTVAL'].includes(fn)) {
          const targetTime = parsePiTimeMs(startStr, Date.now());
          if (!isNaN(targetTime) && pts.length > 0) {
@@ -598,7 +800,7 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
            throw new Error(`${funcName}: não há valor histórico no instante solicitado`);
          }
        } else if (fn === 'TAGAVG') {
-         const weighted = calculateTimeWeightedAverage(pts, from, to);
+         const weighted = calculateTimeWeightedAverage(timelinePts, from, to, stepped);
          if (weighted === undefined) throw new Error(`${funcName}: histórico sem intervalo calculável`);
          res = weighted;
        } else if (fn === 'TAGMEAN') {
@@ -608,11 +810,14 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
        } else if (fn === 'TAGMAX') {
          res = Math.max(...vals);
        } else if (fn === 'TAGTOT') {
-         const integral = calculateTimeIntegral(pts, from, to);
+         const integral = calculateTimeIntegral(timelinePts, from, to, stepped);
          if (integral === undefined) throw new Error(`${funcName}: histórico sem intervalo calculável`);
          res = integral;
        } else if (fn === 'EVENTCOUNT') {
-         res = pts.length;
+         const hasOrigin = requestPlan.recordedOrigin && historicalValues.some((point) => point.origin !== undefined);
+         res = hasOrigin
+           ? selectHistoricalValues(historicalValues, 'archived-event').filter((point) => point.origin === 'recorded').length
+           : pts.length;
        } else if (fn === 'RANGE') {
          res = Math.max(...vals) - Math.min(...vals);
        } else if (['AVERAGE', 'MOVING_AVERAGE'].includes(fn) && vals.length > 0) {
@@ -637,33 +842,32 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
          res = Math.max(0, pts.length - 1);
        } else if (['FINDEQ', 'FINDNE', 'FINDGT', 'FINDGE', 'FINDLT', 'FINDLE'].includes(fn)) {
          const target = args[0] ?? '';
-         const isDigital = Boolean(result.series.states?.length);
+         const isDigital = statePoints.length > 0;
          if (isDigital) {
            if (!['FINDEQ', 'FINDNE'].includes(fn)) {
              throw new Error(`${funcName}: comparação numérica incompatível com série digital`);
            }
-           res = findSteppedConditionMatch(result.series.states!, from, to, target, fn === 'FINDEQ') / 1000;
+           res = findSteppedConditionMatch(statePoints, from, to, target, fn === 'FINDEQ') / 1000;
          } else {
            if (pts.length === 0) throw new Error(`${funcName}: histórico sem valores numéricos válidos`);
            const comparator = fn === 'FINDEQ' ? 'eq' : fn === 'FINDNE' ? 'ne'
              : fn === 'FINDGT' ? 'gt' : fn === 'FINDGE' ? 'ge' : fn === 'FINDLT' ? 'lt' : 'le';
-           res = findContinuousConditionMatch(pts, from, to, Number(target), comparator) / 1000;
+           res = findContinuousConditionMatch(timelinePts, from, to, Number(target), comparator, stepped) / 1000;
          }
        } else if (['TIMEEQ', 'TIMENE', 'TIMEGT', 'TIMEGE', 'TIMELT', 'TIMELE'].includes(fn)) {
          const targetState = args[0] || '';
-         const statePoints = result.series.states;
-         if (statePoints?.length) {
+        if (statePoints?.length) {
            if (!['TIMEEQ', 'TIMENE'].includes(fn)) {
              throw new Error(`${funcName}: comparação numérica incompatível com série digital`);
            }
-           res = calculateSteppedConditionDuration(statePoints, from, to, targetState, fn === 'TIMEEQ') / 1000;
+           res = calculateSteppedConditionDuration(timelineStatePoints, from, to, targetState, fn === 'TIMEEQ') / 1000;
          } else {
            if (pts.length === 0) throw new Error(`${funcName}: histórico sem valores numéricos válidos`);
            const limit = parseFloat(args[0] || '0');
            if (!Number.isFinite(limit)) throw new Error(`${funcName}: limite numérico inválido`);
            const comparator = fn === 'TIMEEQ' ? 'eq' : fn === 'TIMENE' ? 'ne'
              : fn === 'TIMEGT' ? 'gt' : fn === 'TIMEGE' ? 'ge' : fn === 'TIMELT' ? 'lt' : 'le';
-           res = calculateContinuousConditionDuration(pts, from, to, limit, comparator) / 1000;
+           res = calculateContinuousConditionDuration(timelinePts, from, to, limit, comparator, stepped) / 1000;
          }
        }
        
@@ -678,31 +882,124 @@ async function fetchHistoryGlobal(globalKey: string, binding: PiPointBinding, st
   }
 }
 
-function calculateTimeWeightedAverage(points: Array<{ time: number; value: number }>, from: number, to: number): number | undefined {
-  const integral = calculateTimeIntegral(points, from, to);
+function getHistoricalValues(series: PiTrendSeries): PiHistoricalValue[] {
+  if (series.historicalValues) return series.historicalValues;
+  if (series.states?.length) {
+    return series.states.map(({ time, value }) => ({ timestamp: time, value }));
+  }
+  return series.points.map(({ time, value }) => ({ timestamp: time, value }));
+}
+
+type HistoricalQualityState = 'known-good' | 'known-bad' | 'unknown';
+type HistoricalQualityPolicy = 'numeric-value' | 'archived-event' | 'condition-interval';
+
+function classifyHistoricalQuality(point: PiHistoricalValue): HistoricalQualityState {
+  if (point.quality?.good === false) return 'known-bad';
+  if (point.quality?.good === true) return 'known-good';
+  return 'unknown';
+}
+
+function selectHistoricalValues(
+  values: PiHistoricalValue[],
+  policy: HistoricalQualityPolicy,
+): PiHistoricalValue[] {
+  // Policies stay explicit: archived-event consumers decide how to treat a
+  // bad event at their operation boundary; numeric interval consumers filter
+  // bad endpoints before doing interpolation/integration.
+  switch (policy) {
+    case 'numeric-value':
+    case 'condition-interval':
+      return values.filter((point) => classifyHistoricalQuality(point) !== 'known-bad');
+    case 'archived-event':
+      return values;
+  }
+}
+
+type HistoricalNumericPoint = { time: number; value: number; qualityState?: HistoricalQualityState };
+
+function calculateTimeWeightedAverage(points: HistoricalNumericPoint[], from: number, to: number, stepped?: boolean): number | undefined {
+  const integral = calculateTimeIntegral(points, from, to, stepped);
   const duration = points.reduce((total, point, index) => {
     const next = points[index + 1];
     if (!next) return total;
+    if (point.qualityState === 'known-bad' || next.qualityState === 'known-bad') return total;
     return total + Math.max(0, Math.min(to, next.time) - Math.max(from, point.time));
   }, 0);
   return integral === undefined || duration <= 0 ? undefined : integral / (duration / 86400000);
 }
 
-function calculateTimeIntegral(points: Array<{ time: number; value: number }>, from: number, to: number): number | undefined {
+function calculateTimeIntegral(points: HistoricalNumericPoint[], from: number, to: number, stepped?: boolean): number | undefined {
   let integral = 0;
   let coveredMs = 0;
   for (let index = 0; index < points.length - 1; index += 1) {
     const left = points[index];
     const right = points[index + 1];
+    if (left.qualityState === 'known-bad' || right.qualityState === 'known-bad') continue;
     const segmentFrom = Math.max(from, left.time);
     const segmentTo = Math.min(to, right.time);
     if (segmentTo <= segmentFrom) continue;
-    const fraction = (segmentTo - segmentFrom) / (right.time - left.time || 1);
-    const endValue = left.value + (right.value - left.value) * fraction;
-    integral += ((left.value + endValue) / 2) * (segmentTo - segmentFrom) / 86400000;
+    if (stepped) {
+      integral += left.value * (segmentTo - segmentFrom) / 86400000;
+    } else {
+      const span = right.time - left.time || 1;
+      const startValue = left.value + (right.value - left.value) * ((segmentFrom - left.time) / span);
+      const endValue = left.value + (right.value - left.value) * ((segmentTo - left.time) / span);
+      integral += ((startValue + endValue) / 2) * (segmentTo - segmentFrom) / 86400000;
+    }
     coveredMs += segmentTo - segmentFrom;
   }
   return coveredMs > 0 ? integral : undefined;
+}
+
+function calculateQualityDuration(
+  points: HistoricalNumericPoint[],
+  from: number,
+  to: number,
+  kind: 'covered' | 'good',
+): number {
+  let duration = 0;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const left = points[index];
+    const right = points[index + 1];
+    const segmentFrom = Math.max(Math.min(from, to), left.time);
+    const segmentTo = Math.min(Math.max(from, to), right.time);
+    if (segmentTo <= segmentFrom) continue;
+    if (kind === 'covered') {
+      duration += segmentTo - segmentFrom;
+    } else if (left.qualityState === 'known-good') {
+      duration += segmentTo - segmentFrom;
+    }
+  }
+  return duration;
+}
+
+function calculateTimeWeightedStandardDeviation(
+  points: HistoricalNumericPoint[],
+  from: number,
+  to: number,
+  stepped?: boolean,
+): number | undefined {
+  const duration = calculateQualityDuration(points, from, to, 'covered');
+  if (duration <= 0 || points.some((point) => point.qualityState === 'unknown')) return undefined;
+  let weightedSum = 0;
+  let weightedSquareSum = 0;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const left = points[index];
+    const right = points[index + 1];
+    if (left.qualityState === 'known-bad' || right.qualityState === 'known-bad') continue;
+    const segmentFrom = Math.max(Math.min(from, to), left.time);
+    const segmentTo = Math.min(Math.max(from, to), right.time);
+    if (segmentTo <= segmentFrom) continue;
+    const span = right.time - left.time || 1;
+    const startValue = stepped ? left.value : left.value + (right.value - left.value) * ((segmentFrom - left.time) / span);
+    const endValue = stepped ? left.value : left.value + (right.value - left.value) * ((segmentTo - left.time) / span);
+    const segmentMs = segmentTo - segmentFrom;
+    const segmentDays = segmentMs / 86400000;
+    weightedSum += ((startValue + endValue) / 2) * segmentDays;
+    weightedSquareSum += ((startValue * startValue + endValue * endValue) / 2) * segmentDays;
+  }
+  const mean = weightedSum / (duration / 86400000);
+  return Math.sqrt(Math.max(0, weightedSquareSum / (duration / 86400000) - mean * mean));
 }
 
 type Comparison = 'eq' | 'ne' | 'gt' | 'ge' | 'lt' | 'le';
@@ -719,19 +1016,25 @@ function compareValue(value: number, threshold: number, comparison: Comparison):
 }
 
 function calculateContinuousConditionDuration(
-  points: Array<{ time: number; value: number }>,
+  points: HistoricalNumericPoint[],
   from: number,
   to: number,
   threshold: number,
   comparison: Comparison,
+  stepped?: boolean,
 ): number {
   let duration = 0;
   for (let index = 0; index < points.length - 1; index += 1) {
     const left = points[index];
     const right = points[index + 1];
+    if (left.qualityState === 'known-bad' || right.qualityState === 'known-bad') continue;
     const segmentFrom = Math.max(from, left.time);
     const segmentTo = Math.min(to, right.time);
     if (segmentTo <= segmentFrom) continue;
+    if (stepped) {
+      if (compareValue(left.value, threshold, comparison)) duration += segmentTo - segmentFrom;
+      continue;
+    }
     const span = right.time - left.time || 1;
     const startRatio = (segmentFrom - left.time) / span;
     const endRatio = (segmentTo - left.time) / span;
@@ -755,21 +1058,25 @@ function calculateContinuousConditionDuration(
 }
 
 function findContinuousConditionMatch(
-  points: Array<{ time: number; value: number }>,
+  points: HistoricalNumericPoint[],
   start: number,
   end: number,
   threshold: number,
   comparison: Comparison,
+  stepped?: boolean,
 ): number {
   if (!Number.isFinite(threshold)) throw new Error('Find*: limite numérico inválido');
   const direction = end >= start ? 1 : -1;
   const ordered = [...points].sort((left, right) => direction * (left.time - right.time));
   for (let index = 0; index < ordered.length; index += 1) {
     const left = ordered[index];
+    if (left.qualityState === 'known-bad') continue;
     if ((direction === 1 && (left.time < start || left.time > end)) || (direction === -1 && (left.time > start || left.time < end))) continue;
     if (compareValue(left.value, threshold, comparison)) return left.time;
     const right = ordered[index + 1];
     if (!right) continue;
+    if (right.qualityState === 'known-bad') continue;
+    if (stepped && compareValue(right.value, threshold, comparison)) return right.time;
     const segmentFrom = direction === 1 ? Math.max(start, left.time) : Math.min(start, left.time);
     const segmentTo = direction === 1 ? Math.min(end, right.time) : Math.max(end, right.time);
     if ((direction === 1 && segmentTo <= segmentFrom) || (direction === -1 && segmentTo >= segmentFrom)) continue;
@@ -801,7 +1108,7 @@ function findSteppedConditionMatch(
 }
 
 function calculateSteppedConditionDuration(
-  points: Array<{ time: number; value: string }>,
+  points: Array<{ time: number; value: string; qualityState?: HistoricalQualityState }>,
   from: number,
   to: number,
   target: string,
@@ -812,59 +1119,90 @@ function calculateSteppedConditionDuration(
     const segmentFrom = Math.max(from, points[index].time);
     const segmentTo = Math.min(to, points[index + 1].time);
     if (segmentTo <= segmentFrom) continue;
+    if (points[index].qualityState === 'known-bad' || points[index + 1].qualityState === 'known-bad') continue;
     const state = points[index].value.trim().localeCompare(target.trim(), undefined, { sensitivity: 'accent' }) === 0;
     if (state === equals) duration += segmentTo - segmentFrom;
   }
   return duration;
 }
 
+/**
+ * PI relative forms use the browser's local timezone until the configured
+ * datasource exposes a PI Server timezone. Invalid input is never converted
+ * into an arbitrary query time.
+ */
 export function parsePiTimeMs(str: string, referenceTime: number): number {
   str = str.trim().toLowerCase();
-  
+
+  if (!str) throw new Error('Expressão de tempo PI vazia.');
   if (str === '*') return referenceTime;
+  const startOfToday = (time: number) => {
+    const date = new Date(time);
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  };
   if (str === 't' || str === 'today') {
-    const d = new Date(referenceTime);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    return startOfToday(referenceTime);
   }
   if (str === 'y' || str === 'yesterday') {
-    const d = new Date(referenceTime);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1).getTime();
+    const date = new Date(referenceTime);
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1).getTime();
   }
-  
+
   const WEEKDAY_MAP: Record<string, number> = {
     sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6,
   };
-  if (str in WEEKDAY_MAP) {
-    const targetDay = WEEKDAY_MAP[str];
-    const d = new Date(referenceTime);
-    const currentDay = d.getDay();
-    const delta = (currentDay - targetDay + 7) % 7;
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - delta).getTime();
+  const relativeBase = (value: string): number | undefined => {
+    if (value === '*') return referenceTime;
+    if (value === 't' || value === 'today') return startOfToday(referenceTime);
+    if (value === 'y' || value === 'yesterday') {
+      const date = new Date(referenceTime);
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1).getTime();
+    }
+    if (value in WEEKDAY_MAP) {
+      const targetDay = WEEKDAY_MAP[value];
+      const date = new Date(referenceTime);
+      const delta = (date.getDay() - targetDay + 7) % 7;
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate() - delta).getTime();
+    }
+    return undefined;
+  };
+  const applyOffset = (base: number, sign: string, amount: string, unit: string) => {
+    const direction = sign === '-' ? -1 : 1;
+    const value = Number(amount);
+    if (unit === 'mo') {
+      const date = new Date(base);
+      date.setMonth(date.getMonth() + direction * value);
+      return date.getTime();
+    }
+    const milliseconds: Record<string, number> = {
+      s: 1000,
+      m: 60000,
+      h: 3600000,
+      d: 86400000,
+      w: 604800000,
+    };
+    return base + direction * value * milliseconds[unit];
+  };
+
+  const combinedMatch = str.match(/^(\*|t|today|y|yesterday|sun|mon|tue|wed|thu|fri|sat)\s*([+-])(\d+)(s|m|h|d|w|mo)$/);
+  if (combinedMatch) {
+    const base = relativeBase(combinedMatch[1]);
+    if (base !== undefined) return applyOffset(base, combinedMatch[2], combinedMatch[3], combinedMatch[4]);
   }
 
-  // Se tiver um formato como *-24h ou -24h (assumindo * como base)
-  const relativeMatch = str.match(/^(\*)?([+-])(\d+)(s|m|h|d|w|mo)$/);
+  const relativeMatch = str.match(/^([+-])(\d+)(s|m|h|d|w|mo)$/);
   if (relativeMatch) {
-    const isNegative = relativeMatch[2] === '-';
-    const val = parseInt(relativeMatch[3]);
-    let ms = 0;
-    switch(relativeMatch[4]) {
-      case 's': ms = val * 1000; break;
-      case 'm': ms = val * 60000; break;
-      case 'h': ms = val * 3600000; break;
-      case 'd': ms = val * 86400000; break;
-      case 'w': ms = val * 604800000; break;
-      case 'mo': ms = val * 2592000000; break;
-    }
-    return isNegative ? referenceTime - ms : referenceTime + ms;
+    return applyOffset(referenceTime, relativeMatch[1], relativeMatch[2], relativeMatch[3]);
   }
+
+  const base = relativeBase(str);
+  if (base !== undefined) return base;
 
   const parsed = Date.parse(str);
   if (!Number.isNaN(parsed)) return parsed;
 
-  return referenceTime - 3600000; // Fallback: 1h atrás
+  throw new Error(`Expressão de tempo PI inválida: ${str}`);
 }
-
 export function resolvePiWindow(startStr: string, endStr: string, now: number): {from: number, to: number} {
   const to = endStr ? parsePiTimeMs(endStr, now) : now;
   const from = startStr ? parsePiTimeMs(startStr, to) : (to - 3600000);
