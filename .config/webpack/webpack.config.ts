@@ -8,10 +8,11 @@
 import CopyWebpackPlugin from 'copy-webpack-plugin';
 import ESLintPlugin from 'eslint-webpack-plugin';
 import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
+import fs from 'fs';
 import path from 'path';
 import ReplaceInFileWebpackPlugin from 'replace-in-file-webpack-plugin';
 import TerserPlugin from 'terser-webpack-plugin';
-import { type Configuration, BannerPlugin } from 'webpack';
+import { type Configuration, BannerPlugin, DefinePlugin } from 'webpack';
 import LiveReloadPlugin from 'webpack-livereload-plugin';
 import VirtualModulesPlugin from 'webpack-virtual-modules';
 
@@ -31,6 +32,31 @@ __webpack_public_path__ =
     : 'public/plugins/${pluginJson.id}/';
 `,
 });
+
+function getEnvVariable(varName: string): string {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    try {
+      const lines = fs.readFileSync(envPath, 'utf-8').split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) {
+          continue;
+        }
+        const eqIdx = trimmed.indexOf('=');
+        if (eqIdx !== -1) {
+          const key = trimmed.slice(0, eqIdx).trim();
+          if (key === varName) {
+            return trimmed.slice(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+          }
+        }
+      }
+    } catch {
+      // Ignora erro de leitura do .env
+    }
+  }
+  return process.env[varName] || '';
+}
 
 const config = async (env): Promise<Configuration> => {
   const baseConfig: Configuration = {
@@ -181,6 +207,10 @@ const config = async (env): Promise<Configuration> => {
 
     plugins: [
       virtualPublicPath,
+      new DefinePlugin({
+        '__PIMS_PICHAT_API_BASE_URL_FROM_ENV__': JSON.stringify(getEnvVariable('PIMS_PICHAT_API_BASE_URL')),
+        'process.env.PIMS_PICHAT_API_BASE_URL': JSON.stringify(getEnvVariable('PIMS_PICHAT_API_BASE_URL')),
+      }),
       // Insert create plugin version information into the bundle
       new BannerPlugin({
         banner: '/* [create-plugin] version: ' + cpVersion + ' */',

@@ -842,6 +842,35 @@ describe('conversao de Value', () => {
     expect(props.multistate).toMatchObject({ enabled: true, rules: [{ color: '#ff0000' }, { color: '#ffff00' }, { color: '#00ff00' }] });
     expect(props.backgroundMultistate).toBeUndefined();
   });
+
+  it('define fundo preto e texto verde para Value por padrao quando cores nao sao declaradas ou sao pretas/azuis', () => {
+    const sym: PiVisionSymbol = {
+      SymbolType: 'Value',
+      Configuration: {
+        DataSources: ['pi:\\\\SERVER\\TAG_VAL'],
+        ForeColor: 'blue',
+      },
+    };
+    const { elements } = convertPiVisionDisplay(makeDisplay(sym), 'my-uid');
+    const props = elements[0].properties as any;
+    expect(props.visual.backgroundColor).toBe('#000000');
+    expect(props.visual.color).toBe('#00ff00');
+    expect(props._piVisionSquareBackground).toBe(true);
+  });
+
+  it('respeita transparencia explicita quando Transparent: true', () => {
+    const sym: PiVisionSymbol = {
+      SymbolType: 'Value',
+      Configuration: {
+        DataSources: ['pi:\\\\SERVER\\TAG_VAL'],
+        Transparent: true,
+      },
+    };
+    const { elements } = convertPiVisionDisplay(makeDisplay(sym), 'my-uid');
+    const props = elements[0].properties as any;
+    expect(props.visual.backgroundColor).toBe('transparent');
+    expect(props._piVisionExplicitTransparent).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

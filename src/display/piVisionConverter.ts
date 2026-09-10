@@ -444,13 +444,15 @@ function propagateMultistateToValues(elements: DisplayElement[]) {
 
     // 2. Se nao encontrou por binding, procura forma geometricamente envolvente/sobreposta com multistate
     if (!donorShape) {
-      donorShape = elements.find((other) => {
+      const candidates = elements.filter((other) => {
         if (other.id === el.id) return false;
         if (other.type !== RECTANGLE_TYPE && other.type !== 'ellipse' && other.type !== 'polygon') return false;
         const oProps = other.properties as any;
         if (!oProps?.multistate?.enabled || !Array.isArray(oProps.multistate.rules) || oProps.multistate.rules.length === 0) return false;
         return isInside(el, other);
       });
+      candidates.sort((a, b) => (a.width * a.height) - (b.width * b.height));
+      donorShape = candidates[0];
     }
 
     if (donorShape) {
@@ -464,8 +466,18 @@ function propagateMultistateToValues(elements: DisplayElement[]) {
         vProps.binding = donorProps.binding;
       }
       const normalColor = donorMultistate.rules[0]?.color;
-      if (normalColor && (!vProps.visual.color || vProps.visual.color === '#000000' || vProps.visual.color === '#000' || vProps.visual.color === 'rgba(0,0,0,1)')) {
+      const isBlackOrBlue = !vProps.visual.color ||
+        vProps.visual.color === '#000000' ||
+        vProps.visual.color === '#000' ||
+        vProps.visual.color === 'rgba(0,0,0,1)' ||
+        vProps.visual.color === '#0000ff' ||
+        vProps.visual.color === 'blue' ||
+        vProps.visual.color === 'rgba(0,0,255,1)';
+      if (normalColor && isBlackOrBlue) {
         vProps.visual.color = normalColor;
+      }
+      if (donorProps.fill && donorProps.fill !== 'transparent' && (!vProps.visual.backgroundColor || vProps.visual.backgroundColor === 'transparent')) {
+        vProps.visual.backgroundColor = donorProps.fill;
       }
     }
   }
@@ -651,13 +663,20 @@ function convertValue(
 
   const multistate = extractAnyMultistate(symbol, cfg);
   const rawColor = normalizeColor(cfg.ForeColor ?? cfg.ValueStroke ?? cfg.Stroke);
-  const isBlackStroke = !rawColor || rawColor === '#000000' || rawColor === '#000' || rawColor === 'rgba(0,0,0,1)';
-  const color = isBlackStroke && multistate.multistate?.rules?.[0]?.color
-    ? multistate.multistate.rules[0].color
-    : (rawColor ?? DEFAULT_VALUE_VISUAL_OPTIONS.color);
+  const isBlackOrBlue = !rawColor ||
+    rawColor === '#000000' ||
+    rawColor === '#000' ||
+    rawColor === '#0000ff' ||
+    rawColor === 'blue' ||
+    rawColor === 'rgba(0,0,255,1)';
+  const color = multistate.multistate?.rules?.[0]?.color
+    ?? (isBlackOrBlue ? '#00ff00' : (rawColor ?? DEFAULT_VALUE_VISUAL_OPTIONS.color));
+
   const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
-  const isDefaultWhiteOrTransparent = !rawBg || rawBg.toLowerCase() === '#ffffff' || rawBg.toLowerCase() === '#fff' || rawBg === 'transparent' || cfg.Transparent === true;
-  const backgroundColor = isDefaultWhiteOrTransparent ? 'transparent' : rawBg;
+  const isExplicitTransparent = cfg.Transparent === true || cfg.IsTransparent === true || rawBg === 'transparent';
+  const backgroundColor = isExplicitTransparent
+    ? 'transparent'
+    : (rawBg && rawBg.toLowerCase() !== '#ffffff' && rawBg.toLowerCase() !== '#fff' ? rawBg : '#000000');
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize);
   const textAlign = normalizeTextAlign(cfg.TextAlignment);
 
@@ -680,6 +699,7 @@ function convertValue(
     },
     _piVisionPreserveFontSize: fontSize !== undefined,
     _piVisionSquareBackground: true,
+    ...(isExplicitTransparent ? { _piVisionExplicitTransparent: true } : {}),
     ...multistate,
   };
 

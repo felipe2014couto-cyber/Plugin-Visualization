@@ -81,6 +81,32 @@ describe('ValueElementView', () => {
     element.properties._piVisionSquareBackground = true;
     render(<svg><ValueElementView element={element} runtimeState={{ status: 'success', result: { value: 10 } }} /></svg>);
     expect(screen.getByTestId('value-background-value-pi-vision-square')).toHaveAttribute('rx', '0');
+    expect(screen.getByTestId('value-background-value-pi-vision-square')).toHaveAttribute('fill', '#000000');
+  });
+
+  it('aplica fundo preto e texto verde para Value importado do PI Vision por padrão', () => {
+    const element = createValue({
+      binding,
+      id: 'value-pi-vision-black-bg',
+      visual: { color: '#000000' },
+    });
+    element.properties._piVisionSquareBackground = true;
+    render(<svg><ValueElementView element={element} runtimeState={{ status: 'success', result: { value: 10 } }} /></svg>);
+    expect(screen.getByTestId('value-background-value-pi-vision-black-bg')).toHaveAttribute('fill', '#000000');
+    expect(screen.getByTestId('value-background-value-pi-vision-black-bg')).toHaveAttribute('rx', '0');
+    expect(screen.getByTestId('display-value-value-pi-vision-black-bg')).toHaveAttribute('fill', '#00ff00');
+  });
+
+  it('substitui texto azul por verde em Value importado do PI Vision quando sem multistate', () => {
+    const element = createValue({
+      binding,
+      id: 'value-pi-vision-blue-text',
+      visual: { color: '#0000ff' },
+    });
+    element.properties._piVisionSquareBackground = true;
+    render(<svg><ValueElementView element={element} runtimeState={{ status: 'success', result: { value: 1.0 } }} /></svg>);
+    expect(screen.getByTestId('display-value-value-pi-vision-blue-text')).toHaveAttribute('fill', '#00ff00');
+    expect(screen.getByTestId('value-background-value-pi-vision-blue-text')).toHaveAttribute('fill', '#000000');
   });
 
   it('aplica somente a cor do primeiro estado correspondente e preserva o valor', async () => {

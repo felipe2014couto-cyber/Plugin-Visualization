@@ -7,6 +7,7 @@ describe('piChatApi', () => {
   beforeEach(() => {
     delete (window as any).__PIMS_PICHAT_API_BASE_URL__;
     delete (window as any).PIMS_PICHAT_API_BASE_URL;
+    delete (process.env as any).PIMS_PICHAT_API_BASE_URL;
     jest.clearAllMocks();
   });
 
@@ -21,6 +22,11 @@ describe('piChatApi', () => {
   it('deve priorizar window.__PIMS_PICHAT_API_BASE_URL__ quando definido', () => {
     (window as any).__PIMS_PICHAT_API_BASE_URL__ = 'http://custom-host:8015/';
     expect(getPiChatApiBaseUrl()).toBe('http://custom-host:8015');
+  });
+
+  it('deve priorizar process.env.PIMS_PICHAT_API_BASE_URL quando definido', () => {
+    process.env.PIMS_PICHAT_API_BASE_URL = 'http://custom-env-host:8012/';
+    expect(getPiChatApiBaseUrl()).toBe('http://custom-env-host:8012');
   });
 
   it('deve resolver dinamicamente pelo hostname do Grafana', () => {

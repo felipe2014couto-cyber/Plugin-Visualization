@@ -1342,7 +1342,12 @@ export function DisplaySurface({
               ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
               : runtimeStates.get(element.id);
             const runtimeVal = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
-            const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, resolveThemeForeground(textElement.properties.color));
+            const normalTextColor = textElement.properties.multistate?.enabled && textElement.properties.multistate.rules.length > 0
+              ? textElement.properties.multistate.rules[0].color
+              : undefined;
+            const isColorBlack = !textElement.properties.color || textElement.properties.color === '#000000' || textElement.properties.color === '#000' || textElement.properties.color === 'rgba(0,0,0,1)';
+            const baseTextColor = isColorBlack && normalTextColor ? normalTextColor : resolveThemeForeground(textElement.properties.color);
+            const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, baseTextColor);
             const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
             const textBlink = evaluateMultistate(runtimeVal, textElement.properties.multistate)?.rule.blink === true;
             const bgBlink = evaluateMultistate(runtimeVal, textElement.properties.backgroundMultistate)?.rule.blink === true;
@@ -1700,7 +1705,13 @@ function getLibrarySymbolSource(element: LibrarySymbolElement): string {
 function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRuntimeState, parentElementId?: string) {
   const baseFill = getElementFill(element);
   const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
-  const fill = getMultistateColor(value, element.properties.multistate, baseFill);
+  const normalMultistateColor = element.properties.multistate?.enabled && element.properties.multistate.rules.length > 0
+    ? element.properties.multistate.rules[0].color
+    : undefined;
+  const effectiveBaseFill = (!baseFill || baseFill === 'transparent') && normalMultistateColor
+    ? normalMultistateColor
+    : baseFill;
+  const fill = getMultistateColor(value, element.properties.multistate, effectiveBaseFill);
   const blink = evaluateMultistate(value, element.properties.multistate)?.rule.blink === true;
   const common = {
     key: element.id,

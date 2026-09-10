@@ -6,12 +6,38 @@ declare global {
   }
 }
 
+declare const __PIMS_PICHAT_API_BASE_URL_FROM_ENV__: string | undefined;
+
 export function getPiChatApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     const win = window as any;
     if (win.__PIMS_PICHAT_API_BASE_URL__) {
       return String(win.__PIMS_PICHAT_API_BASE_URL__).replace(/\/$/, '');
     }
+    if (win.PIMS_PICHAT_API_BASE_URL) {
+      return String(win.PIMS_PICHAT_API_BASE_URL).replace(/\/$/, '');
+    }
+  }
+
+  let envUrl: string | undefined;
+  try {
+    if (typeof __PIMS_PICHAT_API_BASE_URL_FROM_ENV__ !== 'undefined' && __PIMS_PICHAT_API_BASE_URL_FROM_ENV__) {
+      envUrl = __PIMS_PICHAT_API_BASE_URL_FROM_ENV__;
+    }
+  } catch {
+    // Ignore ReferenceError if undefined
+  }
+
+  if (!envUrl && typeof process !== 'undefined' && process.env?.PIMS_PICHAT_API_BASE_URL) {
+    envUrl = process.env.PIMS_PICHAT_API_BASE_URL;
+  }
+
+  if (envUrl && envUrl.trim()) {
+    return String(envUrl).trim().replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    const win = window as any;
     if (win.location?.hostname) {
       const protocol = win.location.protocol || 'http:';
       const hostname = win.location.hostname;

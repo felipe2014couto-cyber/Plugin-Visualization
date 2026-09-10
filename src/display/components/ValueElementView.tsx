@@ -55,15 +55,34 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const isCalculation = !element.properties.binding && !!element.properties.calculationId;
   const lines = getValueLines(currentState, visual, label ?? binding?.pointName ?? '', isCalculation, element.width);
   const runtimeVal = getRuntimeValue(runtimeState ?? state);
+  const isPiVision = element.properties._piVisionSquareBackground === true || element.properties._piVisionPreserveFontSize === true;
   const normalMultistateColor = element.properties.multistate?.enabled && element.properties.multistate.rules.length > 0
     ? element.properties.multistate.rules[0].color
     : undefined;
   const isColorBlack = !visual.color || visual.color === '#000000' || visual.color === '#000' || visual.color === 'rgba(0,0,0,1)';
-  const baseTextColor = isColorBlack && normalMultistateColor
-    ? normalMultistateColor
-    : resolveThemeForeground(visual.color);
+  const isColorBlue = visual.color === '#0000ff' || visual.color === 'blue' || visual.color === 'rgba(0,0,255,1)';
+  const isUnreadableDark = isColorBlack || isColorBlue;
+
+  let baseTextColor: string;
+  if (isPiVision) {
+    if (normalMultistateColor) {
+      baseTextColor = normalMultistateColor;
+    } else if (isUnreadableDark) {
+      baseTextColor = '#00ff00';
+    } else {
+      baseTextColor = resolveThemeForeground(visual.color);
+    }
+  } else {
+    baseTextColor = isColorBlack && normalMultistateColor
+      ? normalMultistateColor
+      : resolveThemeForeground(visual.color);
+  }
+
   const textColor = getMultistateColor(runtimeVal, element.properties.multistate, baseTextColor);
-  const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, visual.backgroundColor || 'transparent');
+  const defaultBg = isPiVision && element.properties._piVisionExplicitTransparent !== true && (!visual.backgroundColor || visual.backgroundColor === 'transparent')
+    ? '#000000'
+    : (visual.backgroundColor || 'transparent');
+  const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, defaultBg);
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
   const responsiveFontSize = element.properties._piVisionPreserveFontSize === true
