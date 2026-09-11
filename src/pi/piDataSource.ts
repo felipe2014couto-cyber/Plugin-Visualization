@@ -32,6 +32,12 @@ export interface PiDataSourceIdentity {
   type: string;
 }
 
+export interface PiCalculationDataServerContext {
+  dataSourceUid: string;
+  serverPath: string;
+  webId: string;
+}
+
 export interface PiConnectionState {
   status: PiConnectionStatus;
   dataSource?: PiDataSourceIdentity;
@@ -55,6 +61,8 @@ export interface PiPointSearchRequest {
   engineeringUnits?: string[];
   pointSources?: string[];
   limit?: number;
+  /** Explicit read-only pagination offset for PI Web API point searches. */
+  startIndex?: number;
 }
 
 export interface PiPointSearchResponse {
@@ -93,6 +101,8 @@ export interface PiPointValue {
 export interface PiPointMetadata {
   name: string;
   description?: string;
+  extendedDescriptor?: string;
+  pointSource?: string;
   instrumentTag?: string;
   pointType?: string;
   zero?: number;
@@ -100,12 +110,34 @@ export interface PiPointMetadata {
   compDev?: number;
   excDev?: number;
   engineeringUnit?: string;
+  typicalValue?: number | string;
+  stepped?: boolean;
+  pointId?: number | string;
+}
+
+/** Raw PI Point attributes needed to discover configured Performance Equations. */
+export interface PiPerformanceEquationPointAttributes {
+  name: string;
+  webId: string;
+  pointSource?: unknown;
+  exDesc?: unknown;
+  location1?: unknown;
+  location3?: unknown;
+  location4?: unknown;
+  scan?: unknown;
+  shutdown?: unknown;
+  pointClass?: unknown;
+  pointType?: unknown;
 }
 
 /** A compact representation of a state configured in a PI Digital State Set. */
 export interface PiDigitalState {
   name: string;
   value?: number | string;
+  /** Present only when a state was resolved from a server-wide set lookup. */
+  setWebId?: string;
+  setName?: string;
+  isSystem?: boolean;
 }
 
 export interface PiDigitalStatesResult {
@@ -114,6 +146,22 @@ export interface PiDigitalStatesResult {
 }
 
 const piDigitalStatesCache = new Map<string, Promise<PiDigitalStatesResult>>();
+
+export interface PiDigitalStateSet {
+  name: string;
+  webId?: string;
+  isSystem: boolean;
+  states: PiDigitalState[];
+}
+
+export interface PiAlarmStateInfo {
+  conditionCode: number;
+  conditionText: string;
+  acknowledgementStatus: 0 | 1 | 2;
+  priority: number;
+}
+
+const piDigitalStateSetsCache = new Map<string, Promise<PiDigitalStateSet[]>>();
 
 export type PiPointValueResult =
   | { status: 'success'; value: PiPointValue }
@@ -133,6 +181,7 @@ export interface PiTrendSeries {
   pointName: string;
   points: TrendPoint[];
   states?: TrendStatePoint[];
+  historicalValues?: PiHistoricalValue[];
 }
 
 export interface PiTrendTimeRange {
@@ -142,6 +191,169 @@ export interface PiTrendTimeRange {
 
 export interface PiTrendQueryOptions {
   maxDataPoints?: number;
+}
+
+export type PiCapabilityStatus = 'confirmed' | 'unsupported' | 'permission-denied' | 'invalid' | 'error' | 'not-tested';
+
+export interface PiCapabilityResourceReport {
+  status: PiCapabilityStatus;
+  message?: string;
+  fields: string[];
+}
+
+export interface PiCapabilityRecordedReport extends PiCapabilityResourceReport {
+  itemCount: number;
+  qualityFlagsDetected: string[];
+  firstTimestamp?: string;
+  lastTimestamp?: string;
+}
+
+export interface PiCapabilityBoundaryReport {
+  mode: string;
+  status: PiCapabilityStatus;
+  itemCount: number;
+  firstTimestamp?: string;
+  lastTimestamp?: string;
+  message?: string;
+}
+
+export interface PiCapabilityReport {
+  pointResource: PiCapabilityResourceReport & { webId?: string; pointId?: number | string };
+  stepped: { available: boolean; field?: string; value?: unknown };
+  pointId: { available: boolean; value?: number | string };
+  recordedRaw: PiCapabilityRecordedReport;
+  historicalQuality: { available: boolean; flags: string[] };
+  boundaryModes: PiCapabilityBoundaryReport[];
+  timezone: { available: false; status: 'not-tested'; message: string };
+  digitalStateSet: { available: boolean; status: PiCapabilityStatus; message?: string };
+}
+
+export interface PiCapabilityProbeOptions {
+  from?: number;
+  to?: number;
+  boundaryModes?: readonly string[];
+}
+
+export interface PiRecordedRawQuality {
+  good?: boolean;
+  questionable?: boolean;
+  substituted?: boolean;
+  annotated?: boolean;
+}
+
+export type PiHistoricalOrigin = 'recorded' | 'boundary' | 'interpolated';
+
+/** Common historical value representation. Optional fields are intentionally not defaulted. */
+export interface PiHistoricalValue {
+  timestamp: number;
+  value: number | string;
+  quality?: PiRecordedRawQuality;
+  origin?: PiHistoricalOrigin;
+}
+
+export interface PiRecordedRawPoint {
+  time: number;
+  value: unknown;
+  quality?: PiRecordedRawQuality;
+  recorded?: boolean;
+  origin?: PiHistoricalOrigin;
+}
+
+export interface PiRecordedRawHistoryOptions {
+  boundaryType?: string;
+  selectedFields?: readonly string[];
+}
+
+const piRecordedCapabilityCache = new Map<string, 'supported' | 'unsupported'>();
+const piRecordedPromiseLock = new Map<string, Promise<readonly PiRecordedRawPoint[]>>();
+const piRecordedResultCache = new Map<string, readonly PiRecordedRawPoint[]>();
+
+function rawField(value: Record<string, unknown>, ...names: string[]): unknown {
+  const actual = Object.keys(value).find((key) => names.some((name) => key.toLocaleLowerCase() === name.toLocaleLowerCase()));
+  return actual ? value[actual] : undefined;
+}
+
+function normalizeRawRecordedPoint(value: unknown): PiRecordedRawPoint {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Resposta recorded inválida: item não é objeto.');
+  const item = value as Record<string, unknown>;
+  const rawTime = rawField(item, 'Timestamp', 'Time');
+  const time = typeof rawTime === 'number' ? rawTime : typeof rawTime === 'string' ? Date.parse(rawTime) : NaN;
+  if (!Number.isFinite(time)) throw new Error('Resposta recorded inválida: timestamp ausente.');
+  const qualityEntries = (['Good', 'Questionable', 'Substituted', 'Annotated'] as const).flatMap((name) => {
+    const candidate = rawField(item, name);
+    return typeof candidate === 'boolean' ? [[name.toLocaleLowerCase(), candidate] as const] : [];
+  });
+  const quality = qualityEntries.length > 0 ? Object.fromEntries(qualityEntries) as PiRecordedRawQuality : undefined;
+  const recorded = rawField(item, 'Recorded');
+  const rawOrigin = rawField(item, 'Origin', 'ValueOrigin');
+  const origin = rawOrigin === 'recorded' || rawOrigin === 'boundary' || rawOrigin === 'interpolated'
+    ? rawOrigin
+    : recorded === true ? 'recorded' : undefined;
+  return {
+    time,
+    value: rawField(item, 'Value'),
+    ...(quality ? { quality } : {}),
+    ...(typeof recorded === 'boolean' ? { recorded } : {}),
+    ...(origin ? { origin } : {}),
+  };
+}
+
+function normalizeRawRecordedHistory(value: unknown): readonly PiRecordedRawPoint[] {
+  const items = Array.isArray(value) ? value : getResourceItems(value);
+  if (!Array.isArray(value) && (!value || typeof value !== 'object' || !('Items' in (value as Record<string, unknown>)))) {
+    throw new Error('Resposta recorded inválida: coleção ausente.');
+  }
+  return items.map(normalizeRawRecordedPoint);
+}
+
+export function hasPendingPiRecordedRawRequests(): boolean {
+  return piRecordedPromiseLock.size > 0;
+}
+
+export async function waitForPendingPiRecordedRawRequests(): Promise<void> {
+  await Promise.allSettled([...piRecordedPromiseLock.values()]);
+}
+
+/** Reads raw recorded values only when explicitly requested by a capability-aware path. */
+export async function getPiRecordedRawHistory(
+  binding: PiPointBinding,
+  range: PiTrendTimeRange,
+  options: PiRecordedRawHistoryOptions = {},
+  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+): Promise<readonly PiRecordedRawPoint[]> {
+  if (!binding.webId) throw new Error('Histórico raw requer WebId do PI Point.');
+  const capabilityKey = `${binding.dataSourceUid}:recorded`;
+  if (piRecordedCapabilityCache.get(capabilityKey) === 'unsupported') {
+    throw new Error('O recurso recorded não é suportado pela datasource GPA.');
+  }
+  const fields = options.selectedFields?.join(';') ?? '';
+  const key = `${binding.dataSourceUid}\u0000${binding.webId}\u0000${range.from}\u0000${range.to}\u0000${options.boundaryType ?? ''}\u0000${fields}`;
+  const cached = piRecordedResultCache.get(key);
+  if (cached) return cached;
+  const existing = piRecordedPromiseLock.get(key);
+  if (existing) return existing;
+  const params = new URLSearchParams({
+    startTime: new Date(range.from).toISOString(),
+    endTime: new Date(range.to).toISOString(),
+    maxCount: '100',
+  });
+  if (options.boundaryType) params.set('boundaryType', options.boundaryType);
+  if (fields) params.set('selectedFields', fields);
+  const request = getPiResource<unknown>(binding.dataSourceUid, `/streams/${encodeURIComponent(binding.webId)}/recorded?${params.toString()}`, dataSourceSrv)
+    .then((response) => {
+      const result = normalizeRawRecordedHistory(response);
+      piRecordedCapabilityCache.set(capabilityKey, 'supported');
+      piRecordedResultCache.set(key, result);
+      return result;
+    })
+    .catch((error) => {
+      const status = getPiQueryStatus(error);
+      if (status === 404 || status === 405 || status === 501) piRecordedCapabilityCache.set(capabilityKey, 'unsupported');
+      throw error;
+    })
+    .finally(() => piRecordedPromiseLock.delete(key));
+  piRecordedPromiseLock.set(key, request);
+  return request;
 }
 
 export const TREND_QUERY_MIN_DATA_POINTS = 100;
@@ -161,6 +373,127 @@ export function resolvePiDataSource(
     ?? (compatible.length === 1 ? compatible[0] : undefined);
 
   return selected ? toPiDataSourceIdentity(selected) : undefined;
+}
+
+function capabilityMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/https?:\/\/\S+/gi, '[URL]').replace(/(authorization|cookie|token|password)\s*[:=]\s*\S+/gi, '$1=[redacted]');
+}
+
+function capabilityStatus(error: unknown): PiCapabilityStatus {
+  const status = getPiQueryStatus(error);
+  if (status === 401 || status === 403) return 'permission-denied';
+  if (status === 404 || status === 405 || status === 501) return 'unsupported';
+  return 'error';
+}
+
+function capabilityObjectFields(value: unknown): string[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.keys(value as Record<string, unknown>);
+}
+
+function capabilityField(value: unknown, ...names: string[]): unknown {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as Record<string, unknown>;
+  const actual = Object.keys(record).find((key) => names.some((name) => key.toLocaleLowerCase() === name.toLocaleLowerCase()));
+  return actual ? record[actual] : undefined;
+}
+
+function capabilityItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  return getResourceItems(value);
+}
+
+function inspectRecordedCapability(value: unknown): PiCapabilityRecordedReport {
+  const items = capabilityItems(value);
+  if (!Array.isArray(value) && (!value || typeof value !== 'object' || !('Items' in (value as Record<string, unknown>)))) {
+    return { status: 'invalid', message: 'Resposta recorded inválida.', fields: [], itemCount: 0, qualityFlagsDetected: [] };
+  }
+  const fields = [...new Set(items.flatMap(capabilityObjectFields))];
+  const qualityFlagsDetected = fields.filter((field) => ['good', 'questionable', 'substituted', 'annotated'].includes(field.toLocaleLowerCase()));
+  const timestamps = items.map((item) => capabilityField(item, 'Timestamp', 'Time')).map(normalizeTimestamp).filter((item): item is string => Boolean(item));
+  return {
+    status: 'confirmed',
+    fields,
+    itemCount: items.length,
+    qualityFlagsDetected,
+    ...(timestamps[0] ? { firstTimestamp: timestamps[0] } : {}),
+    ...(timestamps.at(-1) ? { lastTimestamp: timestamps.at(-1) } : {}),
+  };
+}
+
+/**
+ * Performs an explicit, side-effect-free capability check through the
+ * configured GPA datasource. It is diagnostic only and is never called by a
+ * normal calculation.
+ */
+export async function probePiCapabilities(
+  binding: PiPointBinding,
+  options: PiCapabilityProbeOptions = {},
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
+): Promise<PiCapabilityReport> {
+  const webId = binding.webId;
+  const emptyRecorded: PiCapabilityRecordedReport = { status: 'not-tested', fields: [], itemCount: 0, qualityFlagsDetected: [] };
+  const base: PiCapabilityReport = {
+    pointResource: { status: 'not-tested', fields: [], ...(webId ? { webId } : {}) },
+    stepped: { available: false },
+    pointId: { available: false },
+    recordedRaw: emptyRecorded,
+    historicalQuality: { available: false, flags: [] },
+    boundaryModes: [],
+    timezone: { available: false, status: 'not-tested', message: 'Não testado pelo capability probe.' },
+    digitalStateSet: { available: false, status: 'not-tested' },
+  };
+  if (!webId) {
+    base.pointResource = { status: 'invalid', message: 'O binding não possui WebId.', fields: [] };
+    return base;
+  }
+
+  let point: unknown;
+  try {
+    point = await getPiResource(binding.dataSourceUid, `/points/${encodeURIComponent(webId)}`, dataSourceSrv);
+    if (!point || typeof point !== 'object' || Array.isArray(point)) {
+      base.pointResource = { status: 'invalid', message: 'Resposta do recurso point inválida.', fields: [], webId };
+      return base;
+    }
+    const fields = capabilityObjectFields(point);
+    const pointId = capabilityField(point, 'PointID', 'Id');
+    const stepField = Object.keys(point as Record<string, unknown>).find((field) => ['step', 'stepped', 'stepflag', 'interpolation'].includes(field.toLocaleLowerCase()));
+    const stepValue = stepField ? (point as Record<string, unknown>)[stepField] : undefined;
+    base.pointResource = { status: 'confirmed', fields, webId, ...(pointId !== undefined && (typeof pointId === 'string' || typeof pointId === 'number') ? { pointId } : {}) };
+    base.pointId = pointId !== undefined && (typeof pointId === 'string' || typeof pointId === 'number') ? { available: true, value: pointId } : { available: false };
+    base.stepped = stepField ? { available: true, field: stepField, value: stepValue } : { available: false };
+  } catch (error) {
+    base.pointResource = { status: capabilityStatus(error), message: capabilityMessage(error), fields: [], webId };
+    return base;
+  }
+
+  const from = options.from ?? Date.now() - 10 * 60 * 1000;
+  const to = options.to ?? Date.now();
+  const modes = options.boundaryModes ?? ['Inside'];
+  for (const mode of modes) {
+    const path = `/streams/${encodeURIComponent(webId)}/recorded?startTime=${encodeURIComponent(new Date(from).toISOString())}&endTime=${encodeURIComponent(new Date(to).toISOString())}&maxCount=100&boundaryType=${encodeURIComponent(mode)}`;
+    try {
+      const recorded = inspectRecordedCapability(await getPiResource(binding.dataSourceUid, path, dataSourceSrv));
+      base.boundaryModes.push({ mode, status: recorded.status, itemCount: recorded.itemCount, ...(recorded.firstTimestamp ? { firstTimestamp: recorded.firstTimestamp } : {}), ...(recorded.lastTimestamp ? { lastTimestamp: recorded.lastTimestamp } : {}), ...(recorded.message ? { message: recorded.message } : {}) });
+      if (mode === modes[0]) {
+        base.recordedRaw = recorded;
+        base.historicalQuality = { available: recorded.qualityFlagsDetected.length > 0, flags: recorded.qualityFlagsDetected };
+      }
+    } catch (error) {
+      const status = capabilityStatus(error);
+      base.boundaryModes.push({ mode, status, itemCount: 0, message: capabilityMessage(error) });
+      if (mode === modes[0]) base.recordedRaw = { status, message: capabilityMessage(error), fields: [], itemCount: 0, qualityFlagsDetected: [] };
+    }
+  }
+
+  try {
+    const digital = await getPiPointDigitalStates(binding, dataSourceSrv);
+    base.digitalStateSet = { available: digital.isDigital && digital.states.length > 0, status: digital.isDigital && digital.states.length > 0 ? 'confirmed' : 'invalid', ...(digital.states.length === 0 ? { message: 'Nenhum estado foi retornado.' } : {}) };
+  } catch (error) {
+    base.digitalStateSet = { available: false, status: capabilityStatus(error), message: capabilityMessage(error) };
+  }
+  return base;
 }
 
 export async function checkPiConnection(
@@ -289,7 +622,7 @@ async function searchPiPointsByDataServer(
   const basePath = `/dataservers/${encodeURIComponent(serverWebId)}/points`;
   const results: PiPointSearchResult[] = [];
   const identities = new Set<string>();
-  let startIndex = 0;
+  let startIndex = request.startIndex;
 
   while (results.length < request.limit) {
     const params = new URLSearchParams(baseParams);
@@ -331,7 +664,7 @@ async function searchPiPointsByDataServer(
   return { results, hasMore };
 }
 
-function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Required<Pick<PiPointSearchRequest, 'term' | 'description' | 'pointTypes' | 'engineeringUnits' | 'pointSources' | 'limit'>> {
+function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Required<Pick<PiPointSearchRequest, 'term' | 'description' | 'pointTypes' | 'engineeringUnits' | 'pointSources' | 'limit' | 'startIndex'>> {
   const request = typeof value === 'string' ? { term: value } : value;
   return {
     term: request.term?.trim() ?? '',
@@ -340,6 +673,7 @@ function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Re
     engineeringUnits: normalizeSearchValues(request.engineeringUnits),
     pointSources: normalizeSearchValues(request.pointSources),
     limit: Math.min(PI_POINT_SEARCH_MAX_RESULTS, Math.max(1, request.limit ?? PI_POINT_SEARCH_DEFAULT_LIMIT)),
+    startIndex: Math.max(0, Math.floor(request.startIndex ?? 0)),
   };
 }
 
@@ -365,7 +699,7 @@ async function searchPiPointsAdvanced(
 
   const results: PiPointSearchResult[] = [];
   const identities = new Set<string>();
-  let startIndex = 0;
+  let startIndex = request.startIndex;
   let knownTotal: number | undefined;
 
   while (results.length < request.limit) {
@@ -394,7 +728,7 @@ async function searchPiPointsAdvanced(
     if (added === 0) break;
   }
 
-  let hasMore = knownTotal !== undefined && knownTotal > request.limit;
+  let hasMore = knownTotal !== undefined && knownTotal > request.startIndex + results.length;
   if (!hasMore && results.length === request.limit) {
     const probeParams = new URLSearchParams(baseParams);
     probeParams.set('startIndex', String(startIndex));
@@ -640,6 +974,52 @@ export async function getPiPointMetadata(
   return request;
 }
 
+/**
+ * Reads the unmodified PI Point attribute values used by PE configuration.
+ * This is deliberately a GET-only datasource resource call; no PI write path
+ * is available from this helper.
+ */
+export async function getPiPerformanceEquationPointAttributes(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+): Promise<PiPerformanceEquationPointAttributes> {
+  if (!binding.webId) throw new Error('Descoberta de Performance Equation exige WebId do PI Point.');
+  const pointPath = `/points/${encodeURIComponent(binding.webId)}`;
+  const response = await getPiResource<unknown>(
+    binding.dataSourceUid,
+    `${pointPath}/attributes?selectedFields=Items.Name;Items.Value`,
+    dataSourceSrv,
+  );
+  const attributes = rawPiPointAttributes(response);
+  if (Object.keys(attributes).length === 0) {
+    throw new Error('Resposta de atributos PE inválida ou vazia.');
+  }
+  return {
+    name: binding.pointName,
+    webId: binding.webId,
+    ...(attributes.pointsource !== undefined ? { pointSource: attributes.pointsource } : {}),
+    ...(attributes.exdesc !== undefined ? { exDesc: attributes.exdesc } : {}),
+    ...(attributes.location1 !== undefined ? { location1: attributes.location1 } : {}),
+    ...(attributes.location3 !== undefined ? { location3: attributes.location3 } : {}),
+    ...(attributes.location4 !== undefined ? { location4: attributes.location4 } : {}),
+    ...(attributes.scan !== undefined ? { scan: attributes.scan } : {}),
+    ...(attributes.shutdown !== undefined ? { shutdown: attributes.shutdown } : {}),
+    ...(attributes.pointclass !== undefined ? { pointClass: attributes.pointclass } : attributes.ptclassname !== undefined ? { pointClass: attributes.ptclassname } : {}),
+    ...(attributes.pointtype !== undefined ? { pointType: attributes.pointtype } : {}),
+  };
+}
+
+function rawPiPointAttributes(response: unknown): Record<string, unknown> {
+  const entries = getResourceItems(response).flatMap((item): Array<[string, unknown]> => {
+    if (!item || typeof item !== 'object') return [];
+    const fields = item as Record<string, unknown>;
+    const name = getUnknownString(fields.Name) ?? getUnknownString(fields.name);
+    const value = unwrapPiAttributeValue(fields.Value ?? fields.value);
+    return name && value !== undefined ? [[name.toLocaleLowerCase(), value]] : [];
+  });
+  return Object.fromEntries(entries);
+}
+
 async function loadPiPointMetadata(
   binding: PiPointBinding,
   dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'>,
@@ -654,16 +1034,23 @@ async function loadPiPointMetadata(
     : {};
   const fields = { ...(metadata ?? {}), ...attributes };
   const description = getMetadataString(fields, 'Description', 'Descriptor');
+  const extendedDescriptor = getMetadataString(fields, 'ExtendedDescriptor', 'ExDesc');
   const instrumentTag = getMetadataString(fields, 'InstrumentTag', 'SourceTag', 'PointSource');
+  const pointSource = getMetadataString(fields, 'PointSource');
   const pointType = getMetadataString(fields, 'PointType') ?? binding.pointType;
   const engineeringUnit = getMetadataString(fields, 'EngineeringUnits', 'EngUnits');
   const zero = getMetadataNumber(fields, 'Zero');
   const span = getMetadataNumber(fields, 'Span');
   const compDev = getMetadataNumber(fields, 'CompDev', 'CompressionDeviation');
   const excDev = getMetadataNumber(fields, 'ExcDev', 'ExceptionDeviation');
+  const typicalValue = getMetadataScalar(fields, 'TypicalValue', 'TypicalVal');
+  const stepped = getMetadataBoolean(fields, 'Step', 'Stepped');
+  const pointId = getMetadataPointId(fields);
   return {
     name: getMetadataString(fields, 'Name', 'text') ?? binding.pointName,
     ...(description ? { description } : {}),
+    ...(extendedDescriptor ? { extendedDescriptor } : {}),
+    ...(pointSource ? { pointSource } : {}),
     ...(instrumentTag ? { instrumentTag } : {}),
     ...(pointType ? { pointType } : {}),
     ...(zero !== undefined ? { zero } : {}),
@@ -671,6 +1058,9 @@ async function loadPiPointMetadata(
     ...(compDev !== undefined ? { compDev } : {}),
     ...(excDev !== undefined ? { excDev } : {}),
     ...(engineeringUnit ? { engineeringUnit } : {}),
+    ...(typicalValue !== undefined ? { typicalValue } : {}),
+    ...(stepped !== undefined ? { stepped } : {}),
+    ...(pointId !== undefined ? { pointId } : {}),
   };
 }
 
@@ -684,7 +1074,7 @@ async function getPiPointAttributes(resourceApi: PiDataSourceResourceApi, webId:
       // Try the next representation supported by this PI Web API version.
     }
   }
-  const names = ['descriptor', 'instrumenttag', 'sourcetag', 'pointsource', 'compdev', 'excdev', 'engunits'];
+  const names = ['descriptor', 'exdesc', 'instrumenttag', 'sourcetag', 'pointsource', 'compdev', 'excdev', 'engunits', 'typicalvalue', 'pointid'];
   const responses = await Promise.all(names.map(async (name) => {
     try {
       const response = await resourceApi.getResource(`${pointPath}/${encodeURIComponent(name)}`);
@@ -749,19 +1139,24 @@ async function loadPiPointDigitalStates(
   if (!isDigital) return { isDigital: false, states: [] };
 
   const embeddedStates = normalizePiDigitalStates(metadata);
-  if (embeddedStates.length > 0) return { isDigital: true, states: embeddedStates };
+  const digitalSet = getDigitalSetReference(metadata);
+  const withSetIdentity = (states: PiDigitalState[]): PiDigitalState[] => states.map((state) => ({
+    ...state,
+    ...(digitalSet.webId ? { setWebId: digitalSet.webId } : {}),
+    ...(digitalSet.name ? { setName: digitalSet.name } : {}),
+  }));
+  if (embeddedStates.length > 0) return { isDigital: true, states: withSetIdentity(embeddedStates) };
   if (typeof resourceApi.getResource !== 'function') {
     throw new Error('A Data Source PI não expõe estados digitais');
   }
 
-  const digitalSet = getDigitalSetReference(metadata);
   if (digitalSet.webId) {
     const states = await loadDigitalStatesBySetWebId(resourceApi, digitalSet.webId);
-    if (states.length > 0) return { isDigital: true, states };
+    if (states.length > 0) return { isDigital: true, states: withSetIdentity(states) };
   }
   if (digitalSet.name) {
     const states = await loadDigitalStatesByName(instance, resourceApi, digitalSet.name);
-    if (states.length > 0) return { isDigital: true, states };
+    if (states.length > 0) return { isDigital: true, states: withSetIdentity(states) };
   }
   throw new Error('Não foi possível localizar o conjunto de estados digitais da PI Point');
 }
@@ -832,6 +1227,124 @@ async function loadDigitalStatesByName(
   return [];
 }
 
+/**
+ * Lists the Digital State Sets of the Data Server identified by a binding.
+ * The order returned by PI Web API is preserved, except that the documented
+ * SYSTEM set is placed first for DigState(s) resolution.
+ */
+export function getPiDigitalStateSets(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
+): Promise<PiDigitalStateSet[]> {
+  const cacheKey = `${binding.dataSourceUid}:${binding.serverPath}`;
+  const cached = piDigitalStateSetsCache.get(cacheKey);
+  if (cached) return cached;
+
+  const request = loadPiDigitalStateSets(binding, dataSourceSrv).catch((error) => {
+    piDigitalStateSetsCache.delete(cacheKey);
+    throw error;
+  });
+  setBoundedCache(piDigitalStateSetsCache, cacheKey, request);
+  return request;
+}
+
+async function loadPiDigitalStateSets(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'>,
+): Promise<PiDigitalStateSet[]> {
+  const dataSource = resolvePiDataSource(dataSourceSrv);
+  if (!dataSource) throw new Error('PI Data Source não configurada');
+  const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
+  const resourceApi = instance as PiDataSourceResourceApi;
+  if (typeof resourceApi.getResource !== 'function') {
+    throw new Error('DigState sem tag requer listagem de Enumeration Sets, não exposta pela Data Source PI.');
+  }
+  const serverWebId = await getPiDataServerWebIdForBinding(instance, binding);
+  if (!serverWebId) {
+    throw new Error(`DigState sem tag não pôde identificar o Data Server de "${binding.serverPath}".`);
+  }
+
+  let response: unknown;
+  try {
+    response = await resourceApi.getResource(`/dataservers/${encodeURIComponent(serverWebId)}/enumerationsets`);
+  } catch (error) {
+    const status = getPiQueryStatus(error);
+    if (status === 404 || status === 405 || status === 501) {
+      throw new Error('DigState sem tag não é suportado pela versão atual da Data Source PI.');
+    }
+    throw error;
+  }
+  if (!Array.isArray(response) && (!response || typeof response !== 'object' || !Array.isArray((response as Record<string, unknown>).Items))) {
+    throw new Error('Resposta inválida ao listar Enumeration Sets do PI Data Server.');
+  }
+
+  const rawSets = getResourceItems(response);
+  const sets = await runLimited(rawSets.map((set) => async (): Promise<PiDigitalStateSet | undefined> => {
+    if (!set || typeof set !== 'object') return undefined;
+    const fields = set as Record<string, unknown>;
+    const name = getUnknownString(fields.Name);
+    if (!name) return undefined;
+    const webId = getUnknownString(fields.WebId);
+    const inline = normalizePiDigitalStates(set);
+    const linked = inline.length > 0 ? inline : await loadDigitalStatesFromLinkStrict(resourceApi, set);
+    const states = linked.length > 0 || !webId ? linked : await loadDigitalStatesBySetWebIdStrict(resourceApi, webId);
+    const isSystem = name.toLocaleUpperCase() === 'SYSTEM';
+    return {
+      name,
+      ...(webId ? { webId } : {}),
+      isSystem,
+      states: states.map((state) => ({ ...state, setName: name, ...(webId ? { setWebId: webId } : {}), ...(isSystem ? { isSystem: true } : {}) })),
+    };
+  }), PI_POINT_METADATA_CONCURRENCY);
+  const resolved = sets.filter((set): set is PiDigitalStateSet => Boolean(set));
+  const systemIndex = resolved.findIndex((set) => set.isSystem);
+  if (systemIndex < 0) {
+    throw new Error('DigState sem tag requer o Enumeration Set SYSTEM retornado pelo PI Data Server.');
+  }
+  return [resolved[systemIndex], ...resolved.filter((_set, index) => index !== systemIndex)];
+}
+
+async function loadDigitalStatesBySetWebIdStrict(resourceApi: PiDataSourceResourceApi, webId: string): Promise<PiDigitalState[]> {
+  const paths = [
+    `/enumerationsets/${encodeURIComponent(webId)}/enumerationvalues`,
+    `/enumerationsets/${encodeURIComponent(webId)}`,
+    `/digitalstatesets/${encodeURIComponent(webId)}/digitalstates`,
+    `/digitalstatesets/${encodeURIComponent(webId)}`,
+  ];
+  let lastUnsupported: unknown;
+  for (const path of paths) {
+    try {
+      const response = await resourceApi.getResource(path);
+      const states = normalizePiDigitalStates(response);
+      if (states.length > 0) return states;
+      const linked = await loadDigitalStatesFromLinkStrict(resourceApi, response);
+      if (linked.length > 0) return linked;
+      return [];
+    } catch (error) {
+      const status = getPiQueryStatus(error);
+      if (status === 404 || status === 405 || status === 501) {
+        lastUnsupported = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+  if (lastUnsupported) throw new Error(`Enumeration Values não são suportados para o set ${webId}.`);
+  return [];
+}
+
+async function loadDigitalStatesFromLinkStrict(resourceApi: PiDataSourceResourceApi, source: unknown): Promise<PiDigitalState[]> {
+  if (!source || typeof source !== 'object') return [];
+  const links = (source as Record<string, unknown>).Links;
+  const linkRecord = links && typeof links === 'object' ? links as Record<string, unknown> : undefined;
+  const path = getUnknownString(linkRecord?.EnumerationValues)
+    ?? getUnknownString(linkRecord?.Values)
+    ?? getUnknownString(linkRecord?.DigitalStates)
+    ?? getUnknownString(linkRecord?.States);
+  if (!path) return [];
+  return normalizePiDigitalStates(await resourceApi.getResource(toPiResourcePath(path)));
+}
+
 async function getPiDataServerWebId(instance: PiDataSourceApi): Promise<string | undefined> {
   if (typeof instance.metricFindQuery !== 'function') return undefined;
   try {
@@ -840,6 +1353,72 @@ async function getPiDataServerWebId(instance: PiDataSourceApi): Promise<string |
   } catch {
     return undefined;
   }
+}
+
+function normalizePiDataServerPath(value: string): string {
+  return value.trim().replace(/^\\+|\\+$/g, '').toLocaleLowerCase();
+}
+
+async function getPiDataServerWebIdForBinding(instance: PiDataSourceApi, binding: PiPointBinding): Promise<string | undefined> {
+  if (typeof instance.metricFindQuery !== 'function') return undefined;
+  try {
+    const servers = await instance.metricFindQuery({ type: 'dataserver' }, { isPiPoint: true });
+    const expected = normalizePiDataServerPath(binding.serverPath);
+    const candidates = servers.flatMap((server) => {
+      const fields = server as MetricFindValue & Record<string, unknown>;
+      const webId = getMetricField(server, 'WebId') ?? getMetricField(server, 'value');
+      if (!webId) return [];
+      const names = [fields.Name, fields.name, fields.Path, fields.path, fields.text, fields.value]
+        .filter((value): value is string => typeof value === 'string')
+        .map(normalizePiDataServerPath);
+      return [{ webId, matches: names.includes(expected) }];
+    });
+    const matches = candidates.filter((candidate) => candidate.matches);
+    if (matches.length === 1) return matches[0].webId;
+    return candidates.length === 1 ? candidates[0].webId : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Resolves the PI Data Server WebId used by PI Web API Calculation Controller.
+ * It deliberately uses the configured GPA datasource, just like the other
+ * PI Web API resource helpers in this module.
+ */
+export async function getPiCalculationDataServerWebId(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+): Promise<string | undefined> {
+  const instance = await getResolvedPiDataSource(dataSourceSrv, {
+    uid: binding.dataSourceUid,
+    name: '',
+    type: PI_DATASOURCE_TYPE,
+  });
+  return getPiDataServerWebIdForBinding(instance, binding);
+}
+
+/** Resolves an unambiguous PI Data Server without manufacturing a point binding. */
+export async function resolvePiCalculationDataServerContext(
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
+  dataSourceUid?: string,
+): Promise<PiCalculationDataServerContext> {
+  const configured = dataSourceSrv.getList({ type: PI_DATASOURCE_TYPE })
+    .filter((dataSource) => !dataSourceUid || dataSource.uid === dataSourceUid);
+  const identity = configured.find((dataSource) => dataSource.isDefault)
+    ?? (configured.length === 1 ? configured[0] : undefined);
+  if (!identity) throw new Error('Não foi possível determinar unicamente o PI Data Server para esta expressão.');
+  const instance = await getResolvedPiDataSource(dataSourceSrv, toPiDataSourceIdentity(identity));
+  if (typeof instance.metricFindQuery !== 'function') throw new Error('A Data Source PI não expõe pesquisa de PI Data Servers.');
+  const servers = await instance.metricFindQuery({ type: 'dataserver' }, { isPiPoint: true });
+  const contexts = servers.flatMap((server) => {
+    const webId = getMetricField(server, 'WebId') ?? getMetricField(server, 'value');
+    if (!webId) return [];
+    const serverPath = getMetricField(server, 'Name') ?? getMetricField(server, 'Path') ?? getMetricField(server, 'text') ?? '';
+    return [{ dataSourceUid: identity.uid, serverPath, webId }];
+  });
+  if (contexts.length !== 1) throw new Error('Não foi possível determinar unicamente o PI Data Server para esta expressão.');
+  return contexts[0];
 }
 
 async function loadDigitalStatesFromLink(resourceApi: PiDataSourceResourceApi, source: unknown): Promise<PiDigitalState[]> {
@@ -876,7 +1455,7 @@ async function getPiPointMetadataForBinding(
   if (binding.webId && typeof resourceApi.getResource === 'function') {
     const pointPath = `/points/${encodeURIComponent(binding.webId)}`;
     const paths = [
-      `${pointPath}?selectedFields=WebId;Name;Path;Description;Descriptor;InstrumentTag;SourceTag;PointSource;PointType;Zero;Span;CompDev;ExcDev;EngineeringUnits;EngUnits;DigitalSetName;Links`,
+      `${pointPath}?selectedFields=WebId;Id;PointID;Name;Path;Description;Descriptor;InstrumentTag;SourceTag;PointSource;PointType;Step;Zero;Span;CompDev;ExcDev;EngineeringUnits;EngUnits;DigitalSetName;Links`,
       pointPath,
     ];
     let merged: Record<string, unknown> | undefined;
@@ -893,11 +1472,11 @@ async function getPiPointMetadataForBinding(
     }
     if (merged) return merged;
   }
-  const serverWebId = await getPiDataServerWebId(instance);
+  const serverWebId = await getPiDataServerWebIdForBinding(instance, binding);
   if (serverWebId && typeof resourceApi.getResource === 'function') {
     try {
       const response = await resourceApi.getResource(
-        `/dataservers/${encodeURIComponent(serverWebId)}/points?nameFilter=${encodeURIComponent(binding.pointName)}&selectedFields=Items.WebId;Items.Name;Items.Path;Items.Description;Items.Descriptor;Items.InstrumentTag;Items.SourceTag;Items.PointSource;Items.PointType;Items.Zero;Items.Span;Items.CompDev;Items.ExcDev;Items.EngineeringUnits;Items.EngUnits;Items.DigitalSetName;Items.Links`,
+        `/dataservers/${encodeURIComponent(serverWebId)}/points?nameFilter=${encodeURIComponent(binding.pointName)}&selectedFields=Items.WebId;Items.Id;Items.PointID;Items.Name;Items.Path;Items.Description;Items.Descriptor;Items.InstrumentTag;Items.SourceTag;Items.PointSource;Items.PointType;Items.Step;Items.Zero;Items.Span;Items.CompDev;Items.ExcDev;Items.EngineeringUnits;Items.EngUnits;Items.DigitalSetName;Items.Links`,
       );
       const point = getResourceItems(response).find((item) => (
         getUnknownString((item as Record<string, unknown>)?.Name)?.toLocaleLowerCase() === binding.pointName.toLocaleLowerCase()
@@ -962,6 +1541,73 @@ function normalizePiDigitalStates(response: unknown): PiDigitalState[] {
     unique.set(key, { name, ...(value === undefined ? {} : { value }) });
   }
   return [...unique.values()];
+}
+
+/**
+ * Decodes the documented PI Alarm State Set layout.  A regular enumeration
+ * set is deliberately rejected: the terminal Nack/MaxPriority marker and the
+ * condition-only states are required evidence of the alarm encoding.
+ */
+export function decodePiAlarmState(states: readonly PiDigitalState[], value: unknown): PiAlarmStateInfo {
+  const markerName = states.find((state) => /^\s*\d+\s+\d+\s*$/.test(state.name))?.name;
+  if (!markerName) {
+    throw new Error('O Digital State Set não possui a estrutura de Alarm State Set reconhecível.');
+  }
+  const markerParts = markerName.trim().split(/\s+/).map(Number);
+  const nackCount = markerParts[0];
+  const maxPriority = markerParts[1];
+  if (nackCount !== 3 || maxPriority < 1 || !Number.isInteger(maxPriority)) {
+    throw new Error('Alarm State Set requer três estados de acknowledgement e prioridade máxima inteira.');
+  }
+
+  const numericStates = states
+    .filter((state): state is PiDigitalState & { value: number } => typeof state.value === 'number')
+    .sort((left, right) => left.value - right.value);
+  const marker = numericStates.find((state) => state.name === markerName);
+  if (!marker) throw new Error('Marcador do Alarm State Set sem código numérico.');
+  const noAlarm = numericStates.find((state) => /^(----|no alarm|\.)$/i.test(state.name.trim()));
+  if (!noAlarm) throw new Error('Alarm State Set sem estado estrutural de ausência de alarme.');
+  const offset = (candidate: PiDigitalState & { value: number }) => candidate.value - noAlarm.value;
+  if (offset(marker) <= 0) throw new Error('Alarm State Set possui marcador inválido.');
+
+  const statesPerCondition = nackCount * maxPriority;
+  const conditionOnlyCount = (offset(marker) - 1) / (statesPerCondition + 1);
+  if (!Number.isInteger(conditionOnlyCount) || conditionOnlyCount < 1) {
+    throw new Error('Alarm State Set sem quantidade de condições determinística.');
+  }
+  const conditionStates = numericStates.filter((state) => {
+    const code = offset(state);
+    return code > conditionOnlyCount * statesPerCondition
+      && code < offset(marker);
+  });
+  if (conditionStates.length !== conditionOnlyCount) {
+    throw new Error('Alarm State Set sem estados de condição estruturalmente válidos.');
+  }
+
+  const rawValue = value && typeof value === 'object' && 'value' in value
+    ? (value as { value?: unknown }).value
+    : value;
+  const numericValue = typeof rawValue === 'number' ? rawValue : Number(rawValue);
+  const current = numericStates.find((state) => state.value === numericValue);
+  if (!current) throw new Error('O valor atual não existe no Alarm State Set resolvido.');
+  const code = offset(current);
+  if (code === 0) return { conditionCode: 0, conditionText: noAlarm.name, acknowledgementStatus: 0, priority: 0 };
+
+  const activeStates = conditionOnlyCount * statesPerCondition;
+  if (code > activeStates) {
+    const conditionCode = code - activeStates;
+    const condition = conditionStates.find((state) => offset(state) === activeStates + conditionCode);
+    if (!condition) throw new Error('Estado de condição de alarme não resolvido.');
+    return { conditionCode, conditionText: condition.name, acknowledgementStatus: 0, priority: 0 };
+  }
+
+  const conditionCode = Math.floor((code - 1) / statesPerCondition) + 1;
+  const withinCondition = (code - 1) % statesPerCondition;
+  const acknowledgementStatus = Math.floor(withinCondition / maxPriority) as 0 | 1 | 2;
+  const priority = (withinCondition % maxPriority) + 1;
+  const condition = conditionStates.find((state) => offset(state) === activeStates + conditionCode);
+  if (!condition) throw new Error('Condição de alarme não resolvida para o estado atual.');
+  return { conditionCode, conditionText: condition.name, acknowledgementStatus, priority };
 }
 
 export async function getPiPointsCurrentValues(
@@ -1304,7 +1950,7 @@ async function queryPiTrendsHistory(
             }
             return;
           }
-          const batchResults = normalizeTrendResponse(response, selected);
+          const batchResults = normalizeTrendResponse(response, selected, mode);
           Object.assign(results, batchResults);
           const failed = selected.filter((binding) => batchResults[getBindingKey(binding)]?.status === 'error');
           if (failed.length === 0) {
@@ -1636,6 +2282,7 @@ function resolveCurrentValueFrame(
 function normalizeTrendResponse(
   response: DataQueryResponse,
   bindings: readonly PiPointBinding[],
+  mode: 'plot' | 'preview' | 'recorded' = 'plot',
 ): Record<string, PiTrendSeriesResult> {
   const results: Record<string, PiTrendSeriesResult> = {};
   const frames = Array.isArray(response.data) ? response.data as DataFrame[] : [];
@@ -1655,7 +2302,9 @@ function normalizeTrendResponse(
       } else {
         results[key] = {
           status: 'success',
-          series: normalizeTrendFrame(frame, binding.pointName),
+            // The recorded request uses boundaryType "Inside"; only that
+            // contract permits treating returned values as archived events.
+            series: normalizeTrendFrame(frame, binding.pointName, mode === 'recorded' ? 'recorded' : undefined),
         };
       }
     } catch (error) {
@@ -1691,9 +2340,11 @@ function resolveTrendFrame(
     ?? (frames.length === bindingCount ? frames[index] : undefined);
 }
 
-function normalizeTrendFrame(frame: DataFrame, pointName: string): PiTrendSeries {
+function normalizeTrendFrame(frame: DataFrame, pointName: string, origin?: PiHistoricalOrigin): PiTrendSeries {
   const timeField = frame.fields.find((field) => field.name.toLocaleLowerCase() === 'time');
-  const valueFields = frame.fields.filter((field) => field !== timeField);
+  const qualityFields = frame.fields.filter((field) => ['good', 'questionable', 'substituted', 'annotated']
+    .includes(field.name.toLocaleLowerCase()));
+  const valueFields = frame.fields.filter((field) => field !== timeField && !qualityFields.includes(field));
   if (!timeField || valueFields.length === 0) {
     throw new Error('Série histórica sem campos Time/Value');
   }
@@ -1706,11 +2357,12 @@ function normalizeTrendFrame(frame: DataFrame, pointName: string): PiTrendSeries
     if (valueFields.every((field) => getFieldValues(field).length === 0)) {
       return { pointName, points: [] };
     }
-    return normalizeStateTrendFrame(pointName, getFieldValues(timeField), values);
+    return normalizeStateTrendFrame(pointName, getFieldValues(timeField), values, qualityFields, origin);
   }
 
   const times = getFieldValues(timeField);
   const points: TrendPoint[] = [];
+  const historicalValues: PiHistoricalValue[] = [];
   const length = Math.min(times.length, values.length);
   for (let index = 0; index < length; index += 1) {
     const time = normalizeTrendTimestamp(times[index]);
@@ -1719,10 +2371,13 @@ function normalizeTrendFrame(frame: DataFrame, pointName: string): PiTrendSeries
       continue;
     }
     points.push({ time, value });
+    const quality = normalizeHistoricalQuality(qualityFields, index);
+    historicalValues.push({ timestamp: time, value, ...(quality ? { quality } : {}), ...(origin ? { origin } : {}) });
   }
 
   points.sort((left, right) => left.time - right.time);
-  return { pointName, points };
+  historicalValues.sort((left, right) => left.timestamp - right.timestamp);
+  return { pointName, points, ...(historicalValues.length > 0 ? { historicalValues } : {}) };
 }
 
 function normalizePlotDataResponse(response: unknown, pointName: string): PiTrendSeries {
@@ -1755,8 +2410,11 @@ function normalizeStateTrendFrame(
   pointName: string,
   times: unknown[],
   values: unknown[],
+  qualityFields: DataFrame['fields'][number][] = [],
+  origin?: PiHistoricalOrigin,
 ): PiTrendSeries {
   const states: TrendStatePoint[] = [];
+  const historicalValues: PiHistoricalValue[] = [];
   const length = Math.min(times.length, values.length);
   for (let index = 0; index < length; index += 1) {
     const time = normalizeTrendTimestamp(times[index]);
@@ -1765,9 +2423,26 @@ function normalizeStateTrendFrame(
       continue;
     }
     states.push({ time, value: String(value) });
+    const quality = normalizeHistoricalQuality(qualityFields, index);
+    historicalValues.push({ timestamp: time, value: String(value), ...(quality ? { quality } : {}), ...(origin ? { origin } : {}) });
   }
   states.sort((left, right) => left.time - right.time);
-  return { pointName, points: [], states };
+  historicalValues.sort((left, right) => left.timestamp - right.timestamp);
+  return { pointName, points: [], states, ...(historicalValues.length > 0 ? { historicalValues } : {}) };
+}
+
+function normalizeHistoricalQuality(
+  fields: DataFrame['fields'][number][],
+  index: number,
+): PiRecordedRawQuality | undefined {
+  const quality = fields.reduce<PiRecordedRawQuality>((result, field) => {
+    const value = getFieldValues(field)[index];
+    if (typeof value !== 'boolean') return result;
+    const name = field.name.toLocaleLowerCase() as keyof PiRecordedRawQuality;
+    result[name] = value;
+    return result;
+  }, {});
+  return Object.keys(quality).length > 0 ? quality : undefined;
 }
 
 function getTrendResponseError(response: DataQueryResponse, refId: string): Error {
@@ -2087,6 +2762,15 @@ function getResourceNumber(value: unknown, field: string): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
+/** Accept only the numeric PI PointID; WebId/GUID values are not PointIDs. */
+function getMetadataPointId(value: Record<string, unknown>): number | undefined {
+  const raw = getMetadataScalar(value, 'PointID', 'Id');
+  const pointId = typeof raw === 'number'
+    ? raw
+    : typeof raw === 'string' && /^\d+$/.test(raw.trim()) ? Number(raw) : NaN;
+  return Number.isSafeInteger(pointId) && pointId >= 0 ? pointId : undefined;
+}
+
 function getMetadataString(value: Record<string, unknown>, ...fields: string[]): string | undefined {
   for (const field of fields) {
     const exact = getUnknownString(value[field]);
@@ -2105,6 +2789,30 @@ function getMetadataNumber(value: Record<string, unknown>, ...fields: string[]):
     const actualField = Object.keys(value).find((key) => key.toLocaleLowerCase() === field.toLocaleLowerCase());
     const candidate = actualField ? getResourceNumber(value, actualField) : undefined;
     if (candidate !== undefined) return candidate;
+  }
+  return undefined;
+}
+
+function getMetadataBoolean(value: Record<string, unknown>, ...fields: string[]): boolean | undefined {
+  for (const field of fields) {
+    const actualField = Object.keys(value).find((key) => key.toLocaleLowerCase() === field.toLocaleLowerCase());
+    if (!actualField) continue;
+    const candidate = value[actualField];
+    if (typeof candidate === 'boolean') return candidate;
+    if (typeof candidate === 'string' && /^(true|false)$/i.test(candidate.trim())) return candidate.trim().toLocaleLowerCase() === 'true';
+  }
+  return undefined;
+}
+
+function getMetadataScalar(value: Record<string, unknown>, ...fields: string[]): number | string | undefined {
+  for (const field of fields) {
+    const actualField = Object.keys(value).find((key) => key.toLocaleLowerCase() === field.toLocaleLowerCase());
+    const raw = actualField ? value[actualField] : undefined;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (typeof raw === 'string' && raw.trim()) {
+      const numeric = Number(raw);
+      return Number.isFinite(numeric) && raw.trim() !== '' ? numeric : raw.trim();
+    }
   }
   return undefined;
 }
@@ -2137,4 +2845,28 @@ export type PiDataSourceApi = Pick<DataSourceApi, 'uid' | 'type' | 'testDatasour
 
 interface PiDataSourceResourceApi extends PiDataSourceApi {
   getResource(path: string): Promise<unknown>;
+}
+
+/**
+ * Reads a PI Web API resource through the already configured GPA datasource.
+ * Credentials and transport remain owned by Grafana/the datasource plugin.
+ */
+export async function getPiResource<T = unknown>(
+  datasourceUid: string,
+  path: string,
+  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+): Promise<T> {
+  if (!path.startsWith('/') || path.startsWith('//') || /^[a-z][a-z\d+.-]*:/i.test(path)) {
+    throw new Error('O recurso PI deve ser um caminho relativo.');
+  }
+  const instance = await getResolvedPiDataSource(dataSourceSrv, {
+    uid: datasourceUid,
+    name: '',
+    type: PI_DATASOURCE_TYPE,
+  });
+  const resourceApi = instance as PiDataSourceResourceApi;
+  if (typeof resourceApi.getResource !== 'function') {
+    throw new Error('A Data Source GPA não expõe recursos PI Web API.');
+  }
+  return resourceApi.getResource(path) as Promise<T>;
 }

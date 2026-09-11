@@ -6,7 +6,10 @@ import type { PiPointSearchResult, PiPointValue } from '../../pi/piDataSource';
 import { createPiPointBinding } from '../../pi/piPointBinding';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../pi/piPointDrag';
 import { evaluateCalculation, type CalculationDefinition, type CalculationInput } from '../../calculations/calculationEngine';
-import { hasPendingHistoricalRequests, waitForPendingHistoricalRequests } from '../../calculations/calculationMacros';
+import { hasPendingHistoricalRequests, waitForPendingHistoricalRequests, hasPendingMetadataRequests, waitForPendingMetadataRequests, hasPendingDigitalStateRequests, waitForPendingDigitalStateRequests } from '../../calculations/calculationMacros';
+import { classifyPiExpression, evaluatePiExpression, piExpressionFunctionNames, PiCalculationUnavailableError, probePiCalculationController } from '../../pi/piCalculation';
+import { expressionRequiresSchedulerContext, expressionRequiresStatefulScheduler, peScheduleIdentity, requirePeSchedulerContext, PeSchedulerError, validatePeSchedule, type PeCalculationSchedule } from '../../calculations/peSchedulerRuntime';
+import { capturePiGoldenRuntime, discoverPiGoldenAlarmStateSets, discoverPiGoldenPerformanceEquations, inspectPiGoldenQualityEvidence, normalizePiGoldenTimestamp } from '../../calculations/piGoldenRuntime';
 
 interface CalculationHelpItem {
   name: string;
@@ -34,12 +37,18 @@ const CALCULATION_HELP_ITEMS: readonly CalculationHelpItem[] = [
 import { isPiTimeString } from '../../calculations/calculationMacros';
 
 const CALCULATION_RESERVED_NAMES = new Set(['IF', 'SE', 'AND', 'OR', 'NOT', 'MIN', 'MAX', 'ABS', 'ROUND', 'CLAMP', 'WHILE', 'POW', 'POWER', 'SQRT', 'SQR', 'EXP', 'LOG', 'LN', 'LOG10', 'MOD', 'SIN', 'COS', 'TAN']);
+const PI_GOLDEN_FUNCTIONS = new Set(['SQR', 'TAGVAL', 'HOUR', 'BADVAL', 'TAGBAD', 'ISSET', 'ALMACKSTAT', 'ALMCONDITION', 'ALMCONDTEXT', 'ALMPRIORITY']);
+const PI_GOLDEN_FUNCTION_NAMES = {
+  SQR: 'Sqr', TAGVAL: 'TagVal', HOUR: 'Hour', BADVAL: 'BadVal', TAGBAD: 'TagBad', ISSET: 'IsSet',
+  ALMACKSTAT: 'AlmAckStat', ALMCONDITION: 'AlmCondition', ALMCONDTEXT: 'AlmCondText', ALMPRIORITY: 'AlmPriority',
+} as const;
 
 export interface CalculationDraft {
   name: string;
   description: string;
   expression: string;
   inputs: CalculationInput[];
+  schedule?: PeCalculationSchedule;
 }
 
 export interface CalculationEditorDialogProps {
@@ -61,9 +70,27 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
   const [isDropActive, setIsDropActive] = useState(false);
   const [isResolvingInputs, setIsResolvingInputs] = useState(false);
   const [executionState, setExecutionState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [executionResult, setExecutionResult] = useState<{ value: number | string; timestamp?: string }>();
+  const [executionResult, setExecutionResult] = useState<{ value: number | string; timestamp?: string; valueKind?: 'timestamp' | 'timespan' | 'digital-state' }>();
   const [isFunctionHelpOpen, setIsFunctionHelpOpen] = useState(false);
   const [expandedFunctionName, setExpandedFunctionName] = useState<string>();
+  const [scheduleType, setScheduleType] = useState<'' | PeCalculationSchedule['type']>(initialCalculation?.schedule?.type ?? '');
+  const [clockInterval, setClockInterval] = useState(initialCalculation?.schedule?.type === 'clock' ? String(initialCalculation.schedule.intervalSeconds) : '');
+  const [scheduleAnchor, setScheduleAnchor] = useState(initialCalculation?.schedule?.anchor ?? '');
+  const [eventTrigger, setEventTrigger] = useState(initialCalculation?.schedule?.type === 'event' ? initialCalculation.schedule.trigger.pointName : '');
+  const [goldenExpression, setGoldenExpression] = useState('Sqr(9)');
+  const [goldenTimestamp, setGoldenTimestamp] = useState('');
+  const [goldenCapture, setGoldenCapture] = useState('');
+  const [goldenError, setGoldenError] = useState('');
+  const [qualityRangeFrom, setQualityRangeFrom] = useState('');
+  const [qualityRangeTo, setQualityRangeTo] = useState('');
+  const [qualityEvidence, setQualityEvidence] = useState('');
+  const [alarmStateSetDiscovery, setAlarmStateSetDiscovery] = useState('');
+  const [peNameFilter, setPeNameFilter] = useState('*');
+  const [peDiscoveryLimit, setPeDiscoveryLimit] = useState('100');
+  const [peDiscoveryStartIndex, setPeDiscoveryStartIndex] = useState(0);
+  const [peDiscovery, setPeDiscovery] = useState<{ hasMore: boolean; count: number; output: string }>();
+  const requiresScheduler = expressionRequiresSchedulerContext(expression);
+  const isDevelopment = process.env.NODE_ENV === 'development';
 
   useEffect(() => {
     setName(initialCalculation?.name ?? '');
@@ -73,6 +100,10 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
     setValidationError('');
     setExecutionState('idle');
     setExecutionResult(undefined);
+    setScheduleType(initialCalculation?.schedule?.type ?? '');
+    setClockInterval(initialCalculation?.schedule?.type === 'clock' ? String(initialCalculation.schedule.intervalSeconds) : '');
+    setScheduleAnchor(initialCalculation?.schedule?.anchor ?? '');
+    setEventTrigger(initialCalculation?.schedule?.type === 'event' ? initialCalculation.schedule.trigger.pointName : '');
   }, [initialCalculation]);
 
   const appendToken = (token: string) => {
@@ -142,12 +173,28 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
     setValidationError('');
     try {
       const resolvedInputs = await resolveInputs(normalizedExpression);
+      let schedule: PeCalculationSchedule | undefined;
+      if (expressionRequiresSchedulerContext(normalizedExpression)) {
+        if (scheduleType === '') throw new Error('Scheduler context required: selecione Clock ou Event.');
+        if (scheduleType === 'clock') {
+          schedule = { type: 'clock', intervalSeconds: Number(clockInterval), anchor: scheduleAnchor.trim() };
+        } else {
+          const triggerName = eventTrigger.trim();
+          const existing = resolvedInputs.find((input) => input.name.toLocaleLowerCase() === triggerName.toLocaleLowerCase());
+          const point = existing ? undefined : await resolvePiPoint?.(triggerName);
+          const trigger = existing?.binding ?? (point ? createPiPointBinding(point) : undefined);
+          if (!trigger) throw new Error('Schedule Event requer um PI Point trigger válido.');
+          schedule = { type: 'event', trigger, ...(scheduleAnchor.trim() ? { anchor: scheduleAnchor.trim() } : {}) };
+        }
+        validatePeSchedule(schedule);
+      }
       setIsResolvingInputs(false);
       onSave({
         name: normalizedName,
         description: description.trim(),
         expression: normalizedExpression,
         inputs: resolvedInputs,
+        ...(schedule === undefined ? {} : { schedule }),
       });
     } catch (error) {
       setValidationError(error instanceof Error ? error.message : 'Não foi possível resolver os PI Points da expressão.');
@@ -162,11 +209,59 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
       return;
     }
     setExecutionState('loading');
-    setExecutionResult(undefined);
     setValidationError('');
     try {
       const resolvedInputs = await resolveInputs(normalizedExpression);
       setInputs(resolvedInputs);
+      let scheduler: PeCalculationSchedule | undefined;
+      if (expressionRequiresStatefulScheduler(normalizedExpression)) {
+        if (scheduleType === '') {
+          requirePeSchedulerContext(normalizedExpression, undefined);
+        }
+        if (scheduleType === 'clock') {
+          scheduler = { type: 'clock', intervalSeconds: Number(clockInterval), anchor: scheduleAnchor.trim() };
+        } else {
+          const triggerName = eventTrigger.trim();
+          const existing = resolvedInputs.find((input) => input.name.toLocaleLowerCase() === triggerName.toLocaleLowerCase());
+          const point = existing ? undefined : await resolvePiPoint?.(triggerName);
+          const trigger = existing?.binding ?? (point ? createPiPointBinding(point) : undefined);
+          if (!trigger) throw new PeSchedulerError('INVALID_SCHEDULE', 'Schedule Event requer um PI Point trigger válido.');
+          scheduler = { type: 'event', trigger, ...(scheduleAnchor.trim() ? { anchor: scheduleAnchor.trim() } : {}) };
+        }
+        requirePeSchedulerContext(normalizedExpression, scheduler);
+        // Establish the scheduler route before any server-first decision. The
+        // stateful AST evaluator is intentionally still a separate blocker.
+        peScheduleIdentity(scheduler);
+        throw new PeSchedulerError('STATEFUL_FUNCTION_NOT_READY', 'O PE Scheduler foi validado, mas o runtime stateful desta expressão ainda não está disponível para avaliação.');
+      }
+      const serverClassification = classifyPiExpression(normalizedExpression);
+      const metadataFunctions = new Set(['TAGDESC', 'TAGEU', 'TAGEXDESC', 'TAGNAME', 'TAGNUM', 'TAGSOURCE', 'TAGSPAN', 'TAGTYPE', 'TAGTYPVAL', 'TAGZERO']);
+      const usesMetadataExecutor = piExpressionFunctionNames(normalizedExpression)
+        .some((name) => metadataFunctions.has(name.toLocaleUpperCase()));
+      if (serverClassification.target === 'pi' && !usesMetadataExecutor && resolvedInputs.length > 0) {
+        const dataSources = new Set(resolvedInputs.map((input) => `${input.binding.dataSourceUid}\u0000${input.binding.serverPath}`));
+        if (dataSources.size !== 1) {
+          throw new Error('O Calculation Controller PI requer que todos os PI Points pertençam ao mesmo PI Data Server.');
+        }
+        try {
+          const capabilities = await probePiCalculationController(resolvedInputs[0].binding);
+          if (capabilities.times !== 'supported') {
+            throw new PiCalculationUnavailableError(`PI Calculation Controller /calculation/times indisponível (${capabilities.times}).`);
+          }
+          const result = await evaluatePiExpression({ binding: resolvedInputs[0].binding, expression: normalizedExpression, mode: 'times', time: '*' });
+          if ('kind' in result && result.kind === 'no-output') {
+            setExecutionState('success');
+            return;
+          }
+          if (!('value' in result)) throw new Error('Resultado do PI sem valor.');
+          const value = typeof result.value === 'object' ? result.value.name : result.value;
+          setExecutionResult({ value, timestamp: result.timestamp, valueKind: result.valueKind });
+          setExecutionState('success');
+          return;
+        } catch (error) {
+          if (!(error instanceof PiCalculationUnavailableError) || !serverClassification.localFallbackSafe) throw error;
+        }
+      }
       if (resolvedInputs.length > 0 && !loadValue) {
         throw new Error('A consulta de valores PI não está disponível.');
       }
@@ -175,7 +270,7 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
         input,
         value: await loadValue?.(input.binding),
       })));
-      pointValues.forEach(({ input, value }) => values.set(input.name, value?.value));
+      pointValues.forEach(({ input, value }) => values.set(input.name, value));
       const calculation = {
         id: '__preview__',
         name: name.trim() || 'Cálculo',
@@ -184,9 +279,9 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
       };
       let evaluation = evaluateCalculation(calculation, values);
       let attempts = 0;
-      while (evaluation.status === 'loading' && hasPendingHistoricalRequests() && attempts < 10) {
+      while (evaluation.status === 'loading' && (hasPendingHistoricalRequests() || hasPendingMetadataRequests() || hasPendingDigitalStateRequests()) && attempts < 10) {
         attempts += 1;
-        await waitForPendingHistoricalRequests();
+        await Promise.all([waitForPendingHistoricalRequests(), waitForPendingMetadataRequests(), waitForPendingDigitalStateRequests()]);
         evaluation = evaluateCalculation(calculation, values);
       }
       if (evaluation.status === 'loading') {
@@ -199,11 +294,108 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
         .map(({ value }) => value?.timestamp)
         .filter((timestamp): timestamp is string => Boolean(timestamp))
         .sort();
-      setExecutionResult({ value: evaluation.value, timestamp: timestamps.at(-1) });
+      setExecutionResult({ value: evaluation.value, timestamp: timestamps.at(-1), valueKind: evaluation.valueKind });
       setExecutionState('success');
     } catch (error) {
       setExecutionState('error');
       setValidationError(error instanceof Error ? error.message : 'Não foi possível executar o cálculo.');
+    }
+  };
+
+  const handleGoldenCapture = async () => {
+    setGoldenCapture('');
+    setGoldenError('');
+    const normalizedExpression = goldenExpression.trim();
+    const functionName = piExpressionFunctionNames(normalizedExpression)[0]?.toLocaleUpperCase();
+    if (!normalizedExpression || !goldenTimestamp.trim()) {
+      setGoldenError('Informe a expressão e o timestamp ISO da avaliação.');
+      return;
+    }
+    let normalizedGoldenTimestamp: string;
+    try {
+      normalizedGoldenTimestamp = normalizePiGoldenTimestamp(goldenTimestamp);
+    } catch (error) {
+      setGoldenError(error instanceof Error ? error.message : 'Evaluation timestamp deve ser um timestamp ISO válido.');
+      return;
+    }
+    if (!functionName || !PI_GOLDEN_FUNCTIONS.has(functionName)) {
+      setGoldenError('Runner disponível apenas para Sqr, TagVal, Hour, BadVal, TagBad, IsSet e Alm* nesta captura.');
+      return;
+    }
+    try {
+      const goldenInputs = await resolveInputs(normalizedExpression);
+      const binding = goldenInputs[0]?.binding;
+      if (extractTagNames(normalizedExpression).length > 0 && !binding) {
+        throw new Error('Não foi possível resolver os PI Points da Golden Expression.');
+      }
+      const capture = await capturePiGoldenRuntime({
+        runtime: 'grafana-gpa',
+        functionName: PI_GOLDEN_FUNCTION_NAMES[functionName as keyof typeof PI_GOLDEN_FUNCTION_NAMES],
+        binding,
+        expression: normalizedExpression,
+        evaluationTimestamp: normalizedGoldenTimestamp,
+        input: normalizedExpression,
+      });
+      setGoldenCapture(JSON.stringify(capture, null, 2));
+    } catch (error) {
+      setGoldenError(error instanceof Error ? error.message : 'Não foi possível capturar o golden PI.');
+    }
+  };
+
+  const handleQualityEvidenceScan = async () => {
+    setQualityEvidence('');
+    setGoldenError('');
+    const normalizedExpression = goldenExpression.trim();
+    if (!normalizedExpression || !qualityRangeFrom.trim() || !qualityRangeTo.trim()) {
+      setGoldenError('Informe uma expressão com um PI Point e o intervalo ISO da varredura de quality.');
+      return;
+    }
+    try {
+      const resolvedInputs = await resolveInputs(normalizedExpression);
+      if (resolvedInputs.length !== 1) {
+        throw new Error('A varredura de quality exige exatamente um PI Point na Golden Expression.');
+      }
+      const evidence = await inspectPiGoldenQualityEvidence({
+        runtime: 'grafana-gpa',
+        binding: resolvedInputs[0].binding,
+        from: qualityRangeFrom,
+        to: qualityRangeTo,
+      });
+      setQualityEvidence(JSON.stringify(evidence, null, 2));
+    } catch (error) {
+      setGoldenError(error instanceof Error ? error.message : 'Não foi possível buscar evidências reais de quality.');
+    }
+  };
+
+  const handleAlarmStateSetDiscovery = async () => {
+    setAlarmStateSetDiscovery('');
+    setGoldenError('');
+    try {
+      const resolvedInputs = await resolveInputs(goldenExpression.trim());
+      if (resolvedInputs.length !== 1) {
+        throw new Error('A descoberta de Alarm State Set exige exatamente um PI Point na Golden Expression.');
+      }
+      const discovery = await discoverPiGoldenAlarmStateSets({ runtime: 'grafana-gpa', binding: resolvedInputs[0].binding });
+      setAlarmStateSetDiscovery(JSON.stringify(discovery, null, 2));
+    } catch (error) {
+      setGoldenError(error instanceof Error ? error.message : 'Não foi possível descobrir Alarm State Sets reais.');
+    }
+  };
+
+  const handlePerformanceEquationDiscovery = async (startIndex = 0) => {
+    setPeDiscovery(undefined);
+    setGoldenError('');
+    try {
+      const discovery = await discoverPiGoldenPerformanceEquations({
+        runtime: 'grafana-gpa',
+        nameFilter: peNameFilter,
+        limit: Number(peDiscoveryLimit),
+        startIndex,
+      });
+      setPeDiscoveryStartIndex(startIndex);
+      setPeDiscovery({ hasMore: discovery.hasMore, count: discovery.candidates.length, output: JSON.stringify(discovery, null, 2) });
+    } catch (error) {
+      setGoldenError(error instanceof Error ? error.message : 'Não foi possível descobrir PI Points de Performance Equation.');
     }
   };
 
@@ -246,6 +438,36 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
             onChange={(event) => setDescription(event.target.value)}
             rows={2}
           />
+
+          {requiresScheduler && (
+            <div className={styles.inputs} data-testid="calculation-scheduler-config">
+              <span className={styles.inputsLabel}>PE Scheduler</span>
+              <label className={styles.label} htmlFor="calculation-schedule-type">Tipo</label>
+              <select id="calculation-schedule-type" className={styles.input} data-testid="calculation-schedule-type" value={scheduleType} onChange={(event) => setScheduleType(event.target.value as '' | PeCalculationSchedule['type'])}>
+                <option value="">Selecione</option>
+                <option value="clock">Clock</option>
+                <option value="event">Event</option>
+              </select>
+              {scheduleType === 'clock' && (
+                <>
+                  <label className={styles.label} htmlFor="calculation-schedule-interval">Intervalo em segundos</label>
+                  <input id="calculation-schedule-interval" className={styles.input} data-testid="calculation-schedule-interval" inputMode="decimal" value={clockInterval} onChange={(event) => setClockInterval(event.target.value)} />
+                </>
+              )}
+              {scheduleType === 'event' && (
+                <>
+                  <label className={styles.label} htmlFor="calculation-schedule-trigger">PI Point trigger</label>
+                  <input id="calculation-schedule-trigger" className={styles.input} data-testid="calculation-schedule-trigger" value={eventTrigger} onChange={(event) => setEventTrigger(event.target.value)} />
+                </>
+              )}
+              {scheduleType !== '' && (
+                <>
+                  <label className={styles.label} htmlFor="calculation-schedule-anchor">Anchor ISO{scheduleType === 'event' ? ' (opcional)' : ''}</label>
+                  <input id="calculation-schedule-anchor" className={styles.input} data-testid="calculation-schedule-anchor" placeholder="2026-01-01T00:00:00Z" value={scheduleAnchor} onChange={(event) => setScheduleAnchor(event.target.value)} />
+                </>
+              )}
+            </div>
+          )}
 
           {inputs.length > 0 && (
             <div className={styles.inputs} data-testid="calculation-editor-inputs">
@@ -304,8 +526,35 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
 
           {executionState === 'success' && executionResult && (
             <div className={styles.executionResult} data-testid="calculation-editor-result">
-              <strong>Último valor: {formatExecutionValue(executionResult.value)}</strong>
+              <strong>Último valor: {formatExecutionValue(executionResult.value, executionResult.valueKind)}</strong>
               {executionResult.timestamp && <span>Atualizado em {formatExecutionTimestamp(executionResult.timestamp)}</span>}
+            </div>
+          )}
+          {isDevelopment && (
+            <div className={styles.goldenRunner} data-testid="calculation-golden-runner">
+              <strong>PI Golden Capture — DEV ONLY</strong>
+              <label className={styles.label} htmlFor="calculation-golden-expression">Expression</label>
+              <input id="calculation-golden-expression" className={styles.input} data-testid="calculation-golden-expression" value={goldenExpression} onChange={(event) => setGoldenExpression(event.target.value)} />
+              <label className={styles.label} htmlFor="calculation-golden-timestamp">Evaluation timestamp (ISO)</label>
+              <input id="calculation-golden-timestamp" className={styles.input} data-testid="calculation-golden-timestamp" placeholder="2026-09-10T13:45:30Z" value={goldenTimestamp} onChange={(event) => setGoldenTimestamp(event.target.value)} />
+              <button type="button" className={styles.executeButton} data-testid="calculation-golden-capture" onClick={() => void handleGoldenCapture()}>Capturar Golden PI</button>
+              <label className={styles.label} htmlFor="calculation-golden-quality-from">Quality scan start (ISO)</label>
+              <input id="calculation-golden-quality-from" className={styles.input} data-testid="calculation-golden-quality-from" placeholder="2026-09-01T00:00:00Z" value={qualityRangeFrom} onChange={(event) => setQualityRangeFrom(event.target.value)} />
+              <label className={styles.label} htmlFor="calculation-golden-quality-to">Quality scan end (ISO)</label>
+              <input id="calculation-golden-quality-to" className={styles.input} data-testid="calculation-golden-quality-to" placeholder="2026-09-11T00:00:00Z" value={qualityRangeTo} onChange={(event) => setQualityRangeTo(event.target.value)} />
+              <button type="button" className={styles.executeButton} data-testid="calculation-golden-quality-scan" onClick={() => void handleQualityEvidenceScan()}>Buscar evidências Quality</button>
+              <button type="button" className={styles.executeButton} data-testid="calculation-golden-alarm-discovery" onClick={() => void handleAlarmStateSetDiscovery()}>Descobrir Alarm State Sets</button>
+              <label className={styles.label} htmlFor="calculation-golden-pe-filter">PE Point name filter</label>
+              <input id="calculation-golden-pe-filter" className={styles.input} data-testid="calculation-golden-pe-filter" value={peNameFilter} onChange={(event) => { setPeNameFilter(event.target.value); setPeDiscoveryStartIndex(0); }} />
+              <label className={styles.label} htmlFor="calculation-golden-pe-limit">PE page limit</label>
+              <input id="calculation-golden-pe-limit" className={styles.input} data-testid="calculation-golden-pe-limit" inputMode="numeric" value={peDiscoveryLimit} onChange={(event) => { setPeDiscoveryLimit(event.target.value); setPeDiscoveryStartIndex(0); }} />
+              <button type="button" className={styles.executeButton} data-testid="calculation-golden-pe-discovery" onClick={() => void handlePerformanceEquationDiscovery(0)}>Descobrir PE Points</button>
+              {peDiscovery?.hasMore && <button type="button" className={styles.executeButton} data-testid="calculation-golden-pe-next" onClick={() => void handlePerformanceEquationDiscovery(peDiscoveryStartIndex + Number(peDiscoveryLimit))}>Próxima página PE</button>}
+              {goldenError && <span className={styles.error} role="alert">{goldenError}</span>}
+              {goldenCapture && <pre className={styles.goldenOutput} data-testid="calculation-golden-output">{goldenCapture}</pre>}
+              {qualityEvidence && <pre className={styles.goldenOutput} data-testid="calculation-golden-quality-output">{qualityEvidence}</pre>}
+              {alarmStateSetDiscovery && <pre className={styles.goldenOutput} data-testid="calculation-golden-alarm-output">{alarmStateSetDiscovery}</pre>}
+              {peDiscovery && <pre className={styles.goldenOutput} data-testid="calculation-golden-pe-output">{peDiscovery.output}</pre>}
             </div>
           )}
           {validationError && <span className={styles.error} role="alert">{validationError}</span>}
@@ -453,6 +702,22 @@ const getStyles = (theme: GrafanaTheme2) => ({
     line-height: 1.45;
     &::placeholder { color: var(--text-secondary); opacity: 1; }
     box-shadow: 0 0 0 2px var(--focus-ring);
+  `,
+  goldenRunner: css`
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 12px;
+    border: 1px dashed var(--border-color);
+    background: var(--background-secondary);
+  `,
+  goldenOutput: css`
+    max-height: 240px;
+    overflow: auto;
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 11px;
   `,
   operatorRow: css`display: flex; gap: 6px;`,
   operatorButton: css`
@@ -614,7 +879,7 @@ const getStyles = (theme: GrafanaTheme2) => ({
   `,
 });
 
-function extractTagNames(expression: string): string[] {
+export function extractTagNames(expression: string): string[] {
   const names = new Set<string>();
   
   // 1. Extrair tags entre aspas simples, ignorando strings de tempo
@@ -649,7 +914,11 @@ function extractTagNames(expression: string): string[] {
   return [...names];
 }
 
-function formatExecutionValue(value: number | string): string {
+function formatExecutionValue(value: number | string, valueKind?: 'timestamp' | 'timespan' | 'digital-state'): string {
+  if (valueKind === 'timestamp') {
+    const milliseconds = typeof value === 'number' ? value * 1000 : Date.parse(value);
+    if (Number.isFinite(milliseconds)) return new Date(milliseconds).toISOString();
+  }
   if (typeof value === 'string') return value;
   return value.toLocaleString(undefined, { maximumFractionDigits: 6 });
 }

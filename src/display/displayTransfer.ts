@@ -21,6 +21,7 @@ import { PROGRAMMING_TYPE } from './createProgramming';
 import { getLibrarySymbolColor, LIBRARY_SYMBOL_TYPE } from './createLibrarySymbol';
 import { findIndustrialSymbol, getIndustrialSymbolAssetUrl } from '../library';
 import type { CalculationDefinition } from '../calculations/calculationEngine';
+import { validatePeSchedule, type PeCalculationSchedule } from '../calculations/peSchedulerRuntime';
 import { CALCULATION_TYPE } from './createCalculation';
 import { GROUP_TYPE } from './createGroup';
 import { defaultTableColumns, TABLE_COLUMNS, TABLE_TYPE, type TableColumnAlign, type TableColumnConfig, type TableDataItem } from './createTable';
@@ -228,8 +229,24 @@ function portableCalculations(input: unknown): CalculationDefinition[] {
       ...(typeof item.description === 'string' ? { description: item.description } : {}),
       expression: item.expression,
       inputs,
+      ...(item.schedule === undefined ? {} : { schedule: portablePeSchedule(item.schedule) }),
     };
   });
+}
+
+function portablePeSchedule(input: unknown): PeCalculationSchedule {
+  if (!isRecord(input) || (input.type !== 'clock' && input.type !== 'event')) {
+    throw new DisplayImportError('Schedule de cálculo inválido.');
+  }
+  const schedule: PeCalculationSchedule = input.type === 'clock'
+    ? { type: 'clock', intervalSeconds: input.intervalSeconds as number, anchor: input.anchor as string }
+    : { type: 'event', trigger: portableBinding(input.trigger), ...(typeof input.anchor === 'string' ? { anchor: input.anchor } : {}) };
+  try {
+    validatePeSchedule(schedule);
+  } catch {
+    throw new DisplayImportError('Schedule de cálculo inválido.');
+  }
+  return schedule;
 }
 
 function portableElement(input: unknown): DisplayElement {

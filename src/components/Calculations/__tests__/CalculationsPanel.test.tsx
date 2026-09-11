@@ -36,7 +36,7 @@ describe('CalculationsPanel', () => {
 
     fireEvent.click(screen.getByTestId('calculation-new'));
     fireEvent.click(screen.getByTestId('calculation-editor-save'));
-    expect(screen.getByRole('alert')).toHaveTextContent('Informe um nome e uma expressão');
+    expect(screen.getByRole('alert')).toHaveTextContent('Informe um nome para o cálculo antes de salvar.');
     expect(screen.getByTestId('calculations-empty')).toBeInTheDocument();
   });
 

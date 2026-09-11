@@ -1,6 +1,6 @@
 import type { DataSourceSrv } from '@grafana/runtime';
 import { of, throwError, type Observable } from 'rxjs';
-import { checkPiConnection, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, PI_DATASOURCE_TYPE, resolvePiDataSource } from '../piDataSource';
+import { checkPiConnection, decodePiAlarmState, getPiDigitalStateSets, getPiPerformanceEquationPointAttributes, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, getPiRecordedRawHistory, getPiResource, PI_DATASOURCE_TYPE, probePiCapabilities, resolvePiDataSource, searchPiPointsWithStatus } from '../piDataSource';
 
 function makeDataSource(overrides: Partial<{ uid: string; name: string; isDefault: boolean }> = {}) {
   return {
@@ -33,7 +33,143 @@ function makeDataSourceSrv(options: {
   return { getList, get } as unknown as Pick<DataSourceSrv, 'getList' | 'get'>;
 }
 
+it('decodifica o encoding documentado do Pialarm33 e rejeita set digital comum', () => {
+  const states = [
+    { value: 0, name: '----' },
+    ...Array.from({ length: 18 }, (_, index) => ({ value: index + 1, name: `alarm-${index + 1}` })),
+    { value: 19, name: 'LOW' }, { value: 20, name: 'HIGH' }, { value: 21, name: '3 3' },
+  ];
+  expect(decodePiAlarmState(states, { value: 0 })).toEqual({ conditionCode: 0, conditionText: '----', acknowledgementStatus: 0, priority: 0 });
+  expect(decodePiAlarmState(states, { value: 1 })).toMatchObject({ conditionCode: 1, acknowledgementStatus: 0, priority: 1 });
+  expect(decodePiAlarmState(states, { value: 5 })).toMatchObject({ conditionCode: 1, acknowledgementStatus: 1, priority: 2 });
+  expect(decodePiAlarmState(states, { value: 8 })).toMatchObject({ conditionCode: 1, acknowledgementStatus: 2, priority: 2 });
+  expect(decodePiAlarmState(states, { value: 20 })).toEqual({ conditionCode: 2, conditionText: 'HIGH', acknowledgementStatus: 0, priority: 0 });
+  expect(() => decodePiAlarmState([{ value: 0, name: 'Off' }, { value: 1, name: 'On' }], { value: 1 })).toThrow('estrutura de Alarm State Set');
+});
+
 describe('PI data source integration', () => {
+  it('lê atributos de candidato PE somente pelo recurso GET e preserva Location/ExDesc brutos', async () => {
+    const getResource = jest.fn().mockResolvedValue({ Items: [
+      { Name: 'pointsource', Value: 'R' }, { Name: 'exdesc', Value: "event=TRIGGER, Delay('INPUT',1,2)" },
+      { Name: 'location3', Value: 17 }, { Name: 'location4', Value: 2 }, { Name: 'scan', Value: 1 },
+      { Name: 'shutdown', Value: 0 }, { Name: 'ptclassname', Value: 'classic' }, { Name: 'pointtype', Value: 'Float32' },
+    ] });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    await expect(getPiPerformanceEquationPointAttributes(
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'PE_OUT', webId: 'point-webid' }, dataSourceSrv,
+    )).resolves.toEqual({
+      name: 'PE_OUT', webId: 'point-webid', pointSource: 'R', exDesc: "event=TRIGGER, Delay('INPUT',1,2)",
+      location3: 17, location4: 2, scan: 1, shutdown: 0, pointClass: 'classic', pointType: 'Float32',
+    });
+    expect(getResource).toHaveBeenCalledWith('/points/point-webid/attributes?selectedFields=Items.Name;Items.Value');
+    expect(getResource.mock.calls.every(([path]) => typeof path === 'string' && path.startsWith('/'))).toBe(true);
+  });
+
+  it('envia startIndex explícito ao listar uma página limitada de PI Points', async () => {
+    const getResource = jest.fn(async (path: string) => {
+      if (path.startsWith('/points/search')) throw new Error('advanced unavailable');
+      if (path.includes('startIndex=25')) return { Items: [{ Name: 'PE_OUT', WebId: 'out', Path: '\\PIServers[pims]\\PE_OUT', PointType: 'Float32' }] };
+      return { Items: [] };
+    });
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })], getResource,
+      metricFindQuery: async (query) => query && typeof query === 'object' && (query as { type?: string }).type === 'dataserver' ? [{ WebId: 'server' }] : [],
+    });
+    await expect(searchPiPointsWithStatus({ term: 'PE_*', limit: 1, startIndex: 25 }, dataSourceSrv))
+      .resolves.toMatchObject({ results: [expect.objectContaining({ name: 'PE_OUT', webId: 'out' })], hasMore: false });
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('startIndex=25'));
+  });
+
+  it('normaliza recorded raw, preserva quality opcional e compartilha requests idênticos', async () => {
+    const getResource = jest.fn().mockResolvedValue({ Items: [
+      { Timestamp: '2026-01-01T00:00:00Z', Value: 'On', Good: true, Questionable: false },
+      { Timestamp: '2026-01-01T00:01:00Z', Value: 'Off', Good: false, Substituted: true, Origin: 'recorded' },
+    ] });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    const binding = { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'STATUS', webId: 'point-webid' };
+    const range = { from: Date.parse('2026-01-01T00:00:00Z'), to: Date.parse('2026-01-01T00:02:00Z') };
+    const [first, second] = await Promise.all([
+      getPiRecordedRawHistory(binding, range, {}, dataSourceSrv),
+      getPiRecordedRawHistory(binding, range, {}, dataSourceSrv),
+    ]);
+    expect(first).toEqual(second);
+    expect(first).toEqual([
+      { time: range.from, value: 'On', quality: { good: true, questionable: false } },
+      { time: range.from + 60_000, value: 'Off', quality: { good: false, substituted: true }, origin: 'recorded' },
+    ]);
+    expect(getResource).toHaveBeenCalledTimes(1);
+  });
+
+  it('classifica erro de rota raw como unsupported e não mascara 403/500', async () => {
+    const notFound = Object.assign(new Error('Not Found'), { status: 404 });
+    const getResource = jest.fn().mockRejectedValue(notFound);
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    const binding = { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG', webId: 'point-webid' };
+    const range = { from: 1, to: 2 };
+    await expect(getPiRecordedRawHistory(binding, range, {}, dataSourceSrv)).rejects.toThrow('Not Found');
+    await expect(getPiRecordedRawHistory(binding, range, {}, dataSourceSrv)).rejects.toThrow('não é suportado');
+    expect(getResource).toHaveBeenCalledTimes(1);
+  });
+
+  it('produz relatório estruturado do recurso point e do recorded raw sem expor a série', async () => {
+    const getResource = jest.fn(async (path: string) => {
+      if (path === '/points/point-webid') return { Name: 'SINUSOID', PointType: 'Float32', Step: true, Id: 12345 };
+      if (path.includes('/streams/point-webid/recorded')) return { Items: [
+        { Timestamp: '2026-01-01T00:00:01Z', Value: 40, Good: true, Questionable: false },
+        { Timestamp: '2026-01-01T00:01:01Z', Value: 60, Good: false, Substituted: true },
+      ] };
+      return {};
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    const report = await probePiCapabilities(
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' },
+      { from: Date.parse('2026-01-01T00:00:00Z'), to: Date.parse('2026-01-01T00:02:00Z') },
+      dataSourceSrv,
+    );
+    expect(report.pointResource.fields).toEqual(['Name', 'PointType', 'Step', 'Id']);
+    expect(report.pointId).toEqual({ available: true, value: 12345 });
+    expect(report.stepped).toEqual({ available: true, field: 'Step', value: true });
+    expect(report.recordedRaw).toMatchObject({ itemCount: 2, qualityFlagsDetected: ['Good', 'Questionable', 'Substituted'] });
+    expect(report.recordedRaw).not.toHaveProperty('items');
+    expect(report.historicalQuality).toEqual({ available: true, flags: ['Good', 'Questionable', 'Substituted'] });
+  });
+
+  it('classifica rota recorded não suportada sem converter para No Data', async () => {
+    const error = Object.assign(new Error('Not Found'), { status: 404 });
+    const getResource = jest.fn(async (path: string) => {
+      if (path === '/points/point-webid') return { Name: 'SINUSOID', PointType: 'Float32' };
+      if (path.includes('/streams/point-webid/recorded')) throw error;
+      return {};
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    const report = await probePiCapabilities({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' }, {}, dataSourceSrv);
+    expect(report.recordedRaw.status).toBe('unsupported');
+    expect(report.recordedRaw.itemCount).toBe(0);
+  });
+
+  it('acessa recurso relativo pelo proxy da datasource GPA e preserva erros', async () => {
+    const getResource = jest.fn().mockResolvedValue({ PointID: 12345 });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+
+    await expect(getPiResource('pi-default', '/points/point-webid', dataSourceSrv)).resolves.toEqual({ PointID: 12345 });
+    expect(getResource).toHaveBeenCalledWith('/points/point-webid');
+  });
+
+  it('não aceita URL absoluta nem mascara ausência do resource handler', async () => {
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })] });
+    await expect(getPiResource('pi-default', 'https://pi.local/points/x', dataSourceSrv)).rejects.toThrow('caminho relativo');
+
+    const get = jest.fn(async () => ({ uid: 'pi-default', type: PI_DATASOURCE_TYPE, query: jest.fn(), testDatasource: jest.fn(), metricFindQuery: jest.fn() }));
+    await expect(getPiResource('pi-default', '/points/x', { get } as unknown as Pick<DataSourceSrv, 'get'>))
+      .rejects.toThrow('não expõe recursos');
+  });
+
+  it('propaga erro HTTP do resource handler', async () => {
+    const getResource = jest.fn().mockRejectedValue(new Error('HTTP 403'));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    await expect(getPiResource('pi-default', '/points/point-webid', dataSourceSrv)).rejects.toThrow('HTTP 403');
+  });
+
   it('obtém Zero e Span pelos metadados do PI Point', async () => {
     const getResource = jest.fn(async () => ({ Zero: -50, Span: 100 }));
     const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
@@ -72,7 +208,7 @@ describe('PI data source integration', () => {
     const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
     const binding = { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'MOTOR_STATUS', webId: 'digital-point', pointType: 'Digital' };
 
-    await expect(getPiPointDigitalStates(binding, dataSourceSrv)).resolves.toEqual({
+    await expect(getPiPointDigitalStates(binding, dataSourceSrv)).resolves.toMatchObject({
       isDigital: true,
       states: [{ name: 'Parado', value: 0 }, { name: 'Ligado', value: 1 }, { name: 'Falha', value: 2 }],
     });
@@ -95,7 +231,7 @@ describe('PI data source integration', () => {
     const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource, metricFindQuery });
 
     await expect(getPiPointDigitalStates({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'MOTOR', webId: 'gpa-digital-point' }, dataSourceSrv))
-      .resolves.toEqual({ isDigital: true, states: [{ name: 'Off', value: 0 }, { name: 'On', value: 1 }] });
+      .resolves.toMatchObject({ isDigital: true, states: [{ name: 'Off', value: 0 }, { name: 'On', value: 1 }] });
     expect(getResource).toHaveBeenCalledWith('/dataservers/server-webid/enumerationsets?nameFilter=MOTOR%20STATES');
   });
 
@@ -115,7 +251,7 @@ describe('PI data source integration', () => {
     const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource, metricFindQuery });
 
     await expect(getPiPointDigitalStates({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG_ESTADO_01', webId: 'filter-digital-point' }, dataSourceSrv))
-      .resolves.toEqual({ isDigital: true, states: [{ name: 'Desligado', value: 0 }, { name: 'Ligado', value: 1 }] });
+      .resolves.toMatchObject({ isDigital: true, states: [{ name: 'Desligado', value: 0 }, { name: 'Ligado', value: 1 }] });
   });
 
   it('não trata PI Points Float ou String como Digital', async () => {
@@ -125,6 +261,52 @@ describe('PI data source integration', () => {
     });
     await expect(getPiPointDigitalStates({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'FLOAT', webId: 'float-point' }, dataSourceSrv)).resolves.toEqual({ isDigital: false, states: [] });
     await expect(getPiPointDigitalStates({ dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TEXT', webId: 'string-point' }, dataSourceSrv)).resolves.toEqual({ isDigital: false, states: [] });
+  });
+
+  it('lista Enumeration Sets do Data Server correto, prioriza SYSTEM e preserva a ordem PI restante', async () => {
+    const getResource = jest.fn(async (path: string) => {
+      if (path === '/dataservers/server-pims/enumerationsets') return { Items: [
+        { WebId: 'set-a', Name: 'Set A' }, { WebId: 'system', Name: 'SYSTEM' }, { WebId: 'set-b', Name: 'Set B' },
+      ] };
+      if (path === '/enumerationsets/set-a/enumerationvalues') return { Items: [{ Name: 'Running', Value: 10 }] };
+      if (path === '/enumerationsets/system/enumerationvalues') return { Items: [{ Name: 'Shutdown', Value: 248 }] };
+      if (path === '/enumerationsets/set-b/enumerationvalues') return { Items: [{ Name: 'Running', Value: 200 }] };
+      return {};
+    });
+    const metricFindQuery = jest.fn(async (query: unknown) => (
+      (query as { type?: string }).type === 'dataserver'
+        ? [{ WebId: 'other-server', Name: 'OTHER' }, { WebId: 'server-pims', Name: 'pims' }]
+        : []
+    ));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource, metricFindQuery });
+    const binding = { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'STATUS' };
+
+    const [first, second] = await Promise.all([getPiDigitalStateSets(binding, dataSourceSrv), getPiDigitalStateSets(binding, dataSourceSrv)]);
+    expect(first).toEqual(second);
+    expect(first.map((set) => set.name)).toEqual(['SYSTEM', 'Set A', 'Set B']);
+    expect(first[1].states[0]).toMatchObject({ name: 'Running', value: 10, setWebId: 'set-a', setName: 'Set A' });
+    expect(getResource).toHaveBeenCalledTimes(4);
+  });
+
+  it('propaga 403/500 e rejeita resposta inválida da listagem global de Enumeration Sets', async () => {
+    const binding = { dataSourceUid: 'pi-default', serverPath: 'pims-denied', pointName: 'STATUS' };
+    const metricFindQuery = jest.fn(async () => [{ WebId: 'server-pims', Name: 'pims-denied' }]);
+    const denied = Object.assign(new Error('Forbidden'), { status: 403 });
+    const deniedSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource: jest.fn().mockRejectedValue(denied) });
+    await expect(getPiDigitalStateSets(binding, deniedSrv)).rejects.toThrow('Forbidden');
+
+    const invalidSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], metricFindQuery, getResource: jest.fn().mockResolvedValue({ Name: 'SYSTEM' }) });
+    await expect(getPiDigitalStateSets({ ...binding, serverPath: 'pims-invalid' }, invalidSrv)).rejects.toThrow('Resposta inválida');
+  });
+
+  it('aceita apenas PointID inteiro real e nunca converte WebId/GUID em TagNum', async () => {
+    const makeSrv = (point: unknown) => makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      getResource: jest.fn(async () => point),
+    });
+    const binding = { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'TAG', webId: 'point' };
+    await expect(getPiPointMetadata(binding, makeSrv({ Name: 'TAG', PointID: 67890 }))).resolves.toMatchObject({ pointId: 67890 });
+    await expect(getPiPointMetadata({ ...binding, webId: 'guid' }, makeSrv({ Name: 'TAG', Id: 'A0B1-C2D3', WebId: 'A0B1-C2D3' }))).resolves.not.toHaveProperty('pointId');
   });
 
   it('resolve a Data Source PI padrão pela identidade estável', () => {
@@ -635,6 +817,10 @@ describe('PI data source integration', () => {
         { time: Date.parse('2026-08-06T12:00:01.000Z'), value: -1.25 },
         { time: Date.parse('2026-08-06T12:00:02.000Z'), value: 3.5 },
       ],
+      historicalValues: [
+        { timestamp: Date.parse('2026-08-06T12:00:01.000Z'), value: -1.25 },
+        { timestamp: Date.parse('2026-08-06T12:00:02.000Z'), value: 3.5 },
+      ],
     });
 
     const request = query.mock.calls[0][0] as { targets: Array<Record<string, unknown>>; startTime: number; endTime: number; range: unknown };
@@ -1006,6 +1192,7 @@ describe('PI data source integration', () => {
           series: {
             pointName: 'SINUSOID',
             points: [{ time: from, value: 10 }],
+            historicalValues: [{ timestamp: from, value: 10, origin: 'recorded' }],
           },
         },
       });
@@ -1135,6 +1322,10 @@ describe('PI data source integration', () => {
         states: [
           { time: Date.parse('2026-08-06T12:00:00.000Z'), value: 'Running' },
           { time: Date.parse('2026-08-06T12:05:00.000Z'), value: 'Stopped' },
+        ],
+        historicalValues: [
+          { timestamp: Date.parse('2026-08-06T12:00:00.000Z'), value: 'Running' },
+          { timestamp: Date.parse('2026-08-06T12:05:00.000Z'), value: 'Stopped' },
         ],
       });
   });
