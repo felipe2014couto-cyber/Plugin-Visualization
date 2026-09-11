@@ -1,7 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { CalculationEditorDialog, type CalculationEditorDialogProps } from '../CalculationEditorDialog';
+import { CalculationEditorDialog, extractTagNames, type CalculationEditorDialogProps } from '../CalculationEditorDialog';
 import { globalHistoricalPromiseLock, globalHistoricalResultCache, globalMetadataPromiseLock, globalMetadataResultCache } from '../../../calculations/calculationMacros';
 import { getPiPointMetadata, getPiTrendsRecordedHistoryForRange } from '../../../pi/piDataSource';
 import { classifyPiExpression, evaluatePiExpression, probePiCalculationController } from '../../../pi/piCalculation';
@@ -14,6 +14,7 @@ jest.mock('@grafana/ui', () => {
 jest.mock('../../../pi/piDataSource', () => ({ getPiTrendsRecordedHistoryForRange: jest.fn(), getPiPointMetadata: jest.fn() }));
 jest.mock('../../../pi/piCalculation', () => ({
   classifyPiExpression: jest.fn(() => ({ target: 'local', localFallbackSafe: true })),
+  piExpressionFunctionNames: jest.fn((expression: string) => [...expression.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)].map((match) => match[1])),
   evaluatePiExpression: jest.fn(),
   probePiCalculationController: jest.fn(),
   PiCalculationUnavailableError: class PiCalculationUnavailableError extends Error {},
@@ -40,6 +41,28 @@ beforeEach(() => {
   classify.mockReturnValue({ target: 'local', localFallbackSafe: true });
   evaluatePi.mockReset();
   probePi.mockReset();
+});
+
+it.each([
+  ["Bod('10-Sep-26 13:45:30')", []],
+  ["Bom('10-Sep-26 13:45:30')", []],
+  ["TagVal('sinusoid','*')", ['sinusoid']],
+  ["TagAvg('sinusoid','*-1h','*')", ['sinusoid']],
+  ["FindGT('sinusoid','*-1h','*',50)", ['sinusoid']],
+  ["Day(FindGT('sinusoid','*-24h','*',50))", ['sinusoid']],
+] as const)('extrai somente PI Points de argumentos temporais: %s', (expression, expected) => {
+  expect(extractTagNames(expression)).toEqual(expected);
+});
+
+it('apresenta o resultado temporal como data, sem heurística pelo valor Unix', async () => {
+  render(<CalculationEditorDialog initialCalculation={{
+    ...calculation, expression: "Bod('10-Sep-26 13:45:30')", inputs: [],
+  }} onCancel={jest.fn()} onSave={jest.fn()} />);
+
+  fireEvent.click(screen.getByTestId('calculation-editor-execute'));
+
+  await waitFor(() => expect(screen.getByTestId('calculation-editor-result')).toHaveTextContent('2026-09-10T'));
+  expect(screen.getByTestId('calculation-editor-result')).not.toHaveTextContent('1789009200');
 });
 
 it('mostra Scheduler somente para expressão stateful e salva Clock explícito', async () => {
@@ -96,6 +119,19 @@ it('aguarda metadata e calcula após um único clique', async () => {
   fireEvent.click(screen.getByTestId('calculation-editor-execute'));
   await waitFor(() => expect(screen.getByTestId('calculation-editor-result')).toHaveTextContent('Último valor: 8'));
   expect(queryMetadata).toHaveBeenCalledTimes(1);
+});
+
+it('executa TagNum pelo executor de metadata sem enviar ao Controller', async () => {
+  queryMetadata.mockResolvedValue({ name: 'SINUSOID', pointId: 12345 });
+  classify.mockReturnValue({ target: 'pi', localFallbackSafe: false });
+  render(<CalculationEditorDialog initialCalculation={{
+    ...calculation, expression: "TagNum('SINUSOID')",
+  }} loadValue={async () => ({ value: 1 })} onCancel={jest.fn()} onSave={jest.fn()} />);
+
+  fireEvent.click(screen.getByTestId('calculation-editor-execute'));
+  await waitFor(() => expect(screen.getByTestId('calculation-editor-result')).toHaveTextContent(/Último valor: 12.?345/));
+  expect(probePi).not.toHaveBeenCalled();
+  expect(evaluatePi).not.toHaveBeenCalled();
 });
 
 it('preserva a qualidade do valor atual no cálculo de um único clique', async () => {

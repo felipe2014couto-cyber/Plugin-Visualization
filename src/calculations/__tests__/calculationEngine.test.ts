@@ -292,11 +292,11 @@ describe('calculationEngine', () => {
     expect(timestamp).not.toEqual(timespan);
 
     expect(evaluateCalculation({ ...calculation, expression: 'Avg(ParseTime("1970-01-01T00:00:00.000Z"), ParseTime("1970-01-01T00:00:02.000Z"))', inputs: [] }, new Map()))
-      .toEqual({ status: 'success', value: 1 });
+      .toMatchObject({ status: 'success', value: 1, valueKind: 'timestamp' });
     expect(evaluateCalculation({ ...calculation, expression: 'Trunc(ParseTime("1970-01-01T00:00:01.900Z"))', inputs: [] }, new Map()))
-      .toEqual({ status: 'success', value: 1 });
+      .toMatchObject({ status: 'success', value: 1, valueKind: 'timestamp' });
     expect(evaluateCalculation({ ...calculation, expression: 'Trunc(__PE_TIMESPAN(11.9), __PE_TIMESPAN(10))', inputs: [] }, new Map()))
-      .toEqual({ status: 'success', value: 10 });
+      .toMatchObject({ status: 'success', value: 10, valueKind: 'timespan' });
     expect(evaluateCalculation({ ...calculation, expression: 'Avg(__PE_TIMESTAMP(10), __PE_TIMESPAN(10))', inputs: [] }, new Map()))
       .toMatchObject({ status: 'error' });
     expect(evaluateCalculation({ ...calculation, expression: 'Round(12.8, 10)', inputs: [] }, new Map()))
@@ -326,9 +326,17 @@ describe('calculationEngine', () => {
     expect(evaluateCalculation({ ...calculation, expression: `DaySec(${timestamp})`, inputs: [] }, new Map()))
       .toEqual({ status: 'success', value: 13 * 3600 + 14 * 60 + 15 });
     expect(evaluateCalculation({ ...calculation, expression: `Bod(${timestamp})`, inputs: [] }, new Map()))
-      .toEqual({ status: 'success', value: new Date(2024, 1, 29).getTime() / 1000 });
+      .toMatchObject({ status: 'success', value: new Date(2024, 1, 29).getTime() / 1000, valueKind: 'timestamp' });
     expect(evaluateCalculation({ ...calculation, expression: `Noon(${timestamp})`, inputs: [] }, new Map()))
-      .toEqual({ status: 'success', value: new Date(2024, 1, 29, 12).getTime() / 1000 });
+      .toMatchObject({ status: 'success', value: new Date(2024, 1, 29, 12).getTime() / 1000, valueKind: 'timestamp' });
+  });
+
+  it('preserva o tipo temporal no resultado final sem alterar o valor numérico', () => {
+    const timestamp = new Date(2024, 1, 29, 13, 14, 15).getTime() / 1000;
+    expect(evaluateCalculation({ ...calculation, expression: `Bod(${timestamp})`, inputs: [] }, new Map()))
+      .toMatchObject({ status: 'success', value: new Date(2024, 1, 29).getTime() / 1000, valueKind: 'timestamp' });
+    expect(evaluateCalculation({ ...calculation, expression: `Hour(Bod(${timestamp}))`, inputs: [] }, new Map()))
+      .toMatchObject({ status: 'success', value: 0 });
   });
   it('suporta novas funções trigonométricas e estatísticas', () => {
     const mathCalc2: CalculationDefinition = {

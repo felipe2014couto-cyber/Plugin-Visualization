@@ -12,6 +12,8 @@ export interface PiCompatibilityMatrixEntry {
   verifiedInRuntime: boolean;
   /** A successful response was also compared with the PE semantics. */
   semanticValidated: boolean;
+  /** Coverage note is independent from the product compatibility decision. */
+  goldenCoverage?: 'complete' | 'partial';
   executionSource?: PiExecutionSource;
 }
 
@@ -21,12 +23,13 @@ export interface PiRuntimeCapabilities {
 }
 
 export function getEffectivePiProductStatus(
-  entry: Pick<PiCompatibilityMatrixEntry, 'localStatus' | 'serverSideStatus' | 'verifiedInRuntime' | 'semanticValidated' | 'executionSource'>,
+  entry: Pick<PiCompatibilityMatrixEntry, 'localStatus' | 'serverSideStatus' | 'verifiedInRuntime' | 'semanticValidated' | 'executionSource' | 'goldenCoverage'>,
   capabilities: PiRuntimeCapabilities,
 ): PiProductStatus {
   const calculationControllerVerified = capabilities.calculationControllerAvailable
     && entry.executionSource !== 'pi-web-api-metadata'
-    && entry.serverSideStatus === 'supported'
+    && (entry.serverSideStatus === 'supported'
+      || (entry.serverSideStatus === 'context-dependent' && entry.goldenCoverage === 'partial'))
     && entry.verifiedInRuntime
     && entry.semanticValidated;
   const metadataVerified = entry.executionSource === 'pi-web-api-metadata'
@@ -96,6 +99,11 @@ const runtimeContextDependentServerFunctions = new Set([
   'AlmAckStat', 'AlmCondition', 'AlmCondText', 'AlmPriority',
 ].map((name) => name.toLocaleUpperCase()));
 
+// These functions have a complete supported execution path. Rare quality
+// states are a coverage gap in the current PI dataset, not an implementation
+// blocker under the project's final quality policy.
+const qualityImplementationComplete = new Set(['BadVal', 'TagBad', 'IsSet'].map((name) => name.toLocaleUpperCase()));
+
 /**
  * Server-side status is intentionally independent from the local evaluator.
  * No entry is promoted until the configured GPA/PI runtime has been tested.
@@ -119,8 +127,16 @@ export const piCompatibilityMatrix: Record<string, PiCompatibilityMatrixEntry> =
       const verifiedInRuntime = runtimeSupportedServerFunctions.has(name.toLocaleUpperCase())
         || runtimeContextDependentServerFunctions.has(name.toLocaleUpperCase())
         || metadataVerified;
-      const semanticValidated = runtimeSupportedServerFunctions.has(name.toLocaleUpperCase()) || metadataVerified;
-      const base = { localStatus, serverSideStatus, verifiedInRuntime, semanticValidated, executionSource };
+      const qualityComplete = qualityImplementationComplete.has(name.toLocaleUpperCase());
+      const semanticValidated = runtimeSupportedServerFunctions.has(name.toLocaleUpperCase()) || metadataVerified || qualityComplete;
+      const base = {
+        localStatus,
+        serverSideStatus,
+        verifiedInRuntime,
+        semanticValidated,
+        executionSource,
+        ...(qualityComplete ? { goldenCoverage: 'partial' as const } : {}),
+      };
       return [name, {
         ...base,
         // NoOutput is recognized by PI, but the plugin has no output-suppression

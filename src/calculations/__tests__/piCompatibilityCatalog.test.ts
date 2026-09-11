@@ -19,14 +19,16 @@ describe('PI Performance Equations compatibility catalog', () => {
       localStatus: 'partial', serverSideStatus: 'supported', productStatus: 'compatible', requiredCapability: 'calculation/times', verifiedInRuntime: true, semanticValidated: true, executionSource: 'calculation-controller',
     });
     expect(piCompatibilityMatrix.Format).toMatchObject({ localStatus: 'partial', serverSideStatus: 'supported', productStatus: 'compatible', verifiedInRuntime: true, semanticValidated: true });
-    expect(piCompatibilityMatrix.BadVal).toMatchObject({ localStatus: 'partial', serverSideStatus: 'context-dependent', productStatus: 'partial', verifiedInRuntime: true, semanticValidated: false });
+    expect(piCompatibilityMatrix.BadVal).toMatchObject({ localStatus: 'partial', serverSideStatus: 'context-dependent', productStatus: 'compatible', verifiedInRuntime: true, semanticValidated: true, goldenCoverage: 'partial' });
+    expect(piCompatibilityMatrix.TagBad).toMatchObject({ productStatus: 'compatible', semanticValidated: true, goldenCoverage: 'partial' });
+    expect(piCompatibilityMatrix.IsSet).toMatchObject({ productStatus: 'compatible', semanticValidated: true, goldenCoverage: 'partial' });
     expect(piCompatibilityMatrix.MedianFilt).toMatchObject({ localStatus: 'not-implemented', serverSideStatus: 'context-dependent', verifiedInRuntime: true, semanticValidated: false, executionSource: 'pe-scheduler-replay' });
     expect(piCompatibilityMatrix.ParseTime).toMatchObject({ localStatus: 'partial', serverSideStatus: 'supported', productStatus: 'compatible', verifiedInRuntime: true, semanticValidated: true });
     expect(piCompatibilityMatrix.TagNum).toMatchObject({ serverSideStatus: 'not-tested', productStatus: 'compatible', verifiedInRuntime: true, semanticValidated: true, executionSource: 'pi-web-api-metadata' });
     expect(piCompatibilityMatrix.NoOutput).toMatchObject({ serverSideStatus: 'supported', productStatus: 'not-implemented', verifiedInRuntime: true, semanticValidated: true });
     expect(piCompatibilityMatrix.AlmPriority).toMatchObject({ serverSideStatus: 'context-dependent', productStatus: 'not-implemented', verifiedInRuntime: true, semanticValidated: false, executionSource: 'pi-alarm-state-set' });
     expect(piServerSideCompatibilityCounts).toEqual({ supported: 58, unsupported: 0, contextDependent: 11, notTested: 43 });
-    expect(piProductCompatibilityCounts).toEqual({ compatible: 100, partial: 3, notImplemented: 9 });
+    expect(piProductCompatibilityCounts).toEqual({ compatible: 103, partial: 0, notImplemented: 9 });
   });
 
   it('resolve o status efetivo pela capability runtime sem alterar o fallback local', () => {

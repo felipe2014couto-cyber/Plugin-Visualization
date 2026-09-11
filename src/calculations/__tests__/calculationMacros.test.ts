@@ -550,10 +550,10 @@ it('calcula StDev histórico como desvio padrão ponderado no tempo', async () =
   expect(Number(evaluate(expression))).toBeCloseTo(Math.sqrt(0.5));
 });
 
-it('implementa IsSet e TagBad com as flags PI disponíveis', () => {
+it('implementa IsSet com as flags PI disponíveis e não aproxima TagBad de BadVal', () => {
   const value = { value: 1, quality: { good: true, annotated: true, substituted: false, questionable: false } };
   expect(applyQualityMacros('IsSet(\'SINUSOID\', "a")', 'SINUSOID', value)).toBe('1');
   expect(applyQualityMacros('IsSet(\'SINUSOID\', "s")', 'SINUSOID', value)).toBe('0');
-  expect(applyQualityMacros('TagBad(\'SINUSOID\')', 'SINUSOID', value)).toBe('0');
+  expect(() => applyQualityMacros('TagBad(\'SINUSOID\')', 'SINUSOID', value)).toThrow('PI Calculation Controller');
   expect(() => applyQualityMacros('IsSet(\'SINUSOID\', "q")', 'SINUSOID', { value: 1 })).toThrow('não disponível');
 });

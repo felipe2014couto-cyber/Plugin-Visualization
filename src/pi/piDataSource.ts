@@ -32,6 +32,12 @@ export interface PiDataSourceIdentity {
   type: string;
 }
 
+export interface PiCalculationDataServerContext {
+  dataSourceUid: string;
+  serverPath: string;
+  webId: string;
+}
+
 export interface PiConnectionState {
   status: PiConnectionStatus;
   dataSource?: PiDataSourceIdentity;
@@ -55,6 +61,8 @@ export interface PiPointSearchRequest {
   engineeringUnits?: string[];
   pointSources?: string[];
   limit?: number;
+  /** Explicit read-only pagination offset for PI Web API point searches. */
+  startIndex?: number;
 }
 
 export interface PiPointSearchResponse {
@@ -105,6 +113,21 @@ export interface PiPointMetadata {
   typicalValue?: number | string;
   stepped?: boolean;
   pointId?: number | string;
+}
+
+/** Raw PI Point attributes needed to discover configured Performance Equations. */
+export interface PiPerformanceEquationPointAttributes {
+  name: string;
+  webId: string;
+  pointSource?: unknown;
+  exDesc?: unknown;
+  location1?: unknown;
+  location3?: unknown;
+  location4?: unknown;
+  scan?: unknown;
+  shutdown?: unknown;
+  pointClass?: unknown;
+  pointType?: unknown;
 }
 
 /** A compact representation of a state configured in a PI Digital State Set. */
@@ -599,7 +622,7 @@ async function searchPiPointsByDataServer(
   const basePath = `/dataservers/${encodeURIComponent(serverWebId)}/points`;
   const results: PiPointSearchResult[] = [];
   const identities = new Set<string>();
-  let startIndex = 0;
+  let startIndex = request.startIndex;
 
   while (results.length < request.limit) {
     const params = new URLSearchParams(baseParams);
@@ -641,7 +664,7 @@ async function searchPiPointsByDataServer(
   return { results, hasMore };
 }
 
-function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Required<Pick<PiPointSearchRequest, 'term' | 'description' | 'pointTypes' | 'engineeringUnits' | 'pointSources' | 'limit'>> {
+function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Required<Pick<PiPointSearchRequest, 'term' | 'description' | 'pointTypes' | 'engineeringUnits' | 'pointSources' | 'limit' | 'startIndex'>> {
   const request = typeof value === 'string' ? { term: value } : value;
   return {
     term: request.term?.trim() ?? '',
@@ -650,6 +673,7 @@ function normalizePiPointSearchRequest(value: string | PiPointSearchRequest): Re
     engineeringUnits: normalizeSearchValues(request.engineeringUnits),
     pointSources: normalizeSearchValues(request.pointSources),
     limit: Math.min(PI_POINT_SEARCH_MAX_RESULTS, Math.max(1, request.limit ?? PI_POINT_SEARCH_DEFAULT_LIMIT)),
+    startIndex: Math.max(0, Math.floor(request.startIndex ?? 0)),
   };
 }
 
@@ -675,7 +699,7 @@ async function searchPiPointsAdvanced(
 
   const results: PiPointSearchResult[] = [];
   const identities = new Set<string>();
-  let startIndex = 0;
+  let startIndex = request.startIndex;
   let knownTotal: number | undefined;
 
   while (results.length < request.limit) {
@@ -704,7 +728,7 @@ async function searchPiPointsAdvanced(
     if (added === 0) break;
   }
 
-  let hasMore = knownTotal !== undefined && knownTotal > request.limit;
+  let hasMore = knownTotal !== undefined && knownTotal > request.startIndex + results.length;
   if (!hasMore && results.length === request.limit) {
     const probeParams = new URLSearchParams(baseParams);
     probeParams.set('startIndex', String(startIndex));
@@ -948,6 +972,52 @@ export async function getPiPointMetadata(
   });
   setBoundedCache(piPointDetailsMetadataCache, cacheKey, request);
   return request;
+}
+
+/**
+ * Reads the unmodified PI Point attribute values used by PE configuration.
+ * This is deliberately a GET-only datasource resource call; no PI write path
+ * is available from this helper.
+ */
+export async function getPiPerformanceEquationPointAttributes(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+): Promise<PiPerformanceEquationPointAttributes> {
+  if (!binding.webId) throw new Error('Descoberta de Performance Equation exige WebId do PI Point.');
+  const pointPath = `/points/${encodeURIComponent(binding.webId)}`;
+  const response = await getPiResource<unknown>(
+    binding.dataSourceUid,
+    `${pointPath}/attributes?selectedFields=Items.Name;Items.Value`,
+    dataSourceSrv,
+  );
+  const attributes = rawPiPointAttributes(response);
+  if (Object.keys(attributes).length === 0) {
+    throw new Error('Resposta de atributos PE inválida ou vazia.');
+  }
+  return {
+    name: binding.pointName,
+    webId: binding.webId,
+    ...(attributes.pointsource !== undefined ? { pointSource: attributes.pointsource } : {}),
+    ...(attributes.exdesc !== undefined ? { exDesc: attributes.exdesc } : {}),
+    ...(attributes.location1 !== undefined ? { location1: attributes.location1 } : {}),
+    ...(attributes.location3 !== undefined ? { location3: attributes.location3 } : {}),
+    ...(attributes.location4 !== undefined ? { location4: attributes.location4 } : {}),
+    ...(attributes.scan !== undefined ? { scan: attributes.scan } : {}),
+    ...(attributes.shutdown !== undefined ? { shutdown: attributes.shutdown } : {}),
+    ...(attributes.pointclass !== undefined ? { pointClass: attributes.pointclass } : attributes.ptclassname !== undefined ? { pointClass: attributes.ptclassname } : {}),
+    ...(attributes.pointtype !== undefined ? { pointType: attributes.pointtype } : {}),
+  };
+}
+
+function rawPiPointAttributes(response: unknown): Record<string, unknown> {
+  const entries = getResourceItems(response).flatMap((item): Array<[string, unknown]> => {
+    if (!item || typeof item !== 'object') return [];
+    const fields = item as Record<string, unknown>;
+    const name = getUnknownString(fields.Name) ?? getUnknownString(fields.name);
+    const value = unwrapPiAttributeValue(fields.Value ?? fields.value);
+    return name && value !== undefined ? [[name.toLocaleLowerCase(), value]] : [];
+  });
+  return Object.fromEntries(entries);
 }
 
 async function loadPiPointMetadata(
@@ -1328,6 +1398,29 @@ export async function getPiCalculationDataServerWebId(
   return getPiDataServerWebIdForBinding(instance, binding);
 }
 
+/** Resolves an unambiguous PI Data Server without manufacturing a point binding. */
+export async function resolvePiCalculationDataServerContext(
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
+  dataSourceUid?: string,
+): Promise<PiCalculationDataServerContext> {
+  const configured = dataSourceSrv.getList({ type: PI_DATASOURCE_TYPE })
+    .filter((dataSource) => !dataSourceUid || dataSource.uid === dataSourceUid);
+  const identity = configured.find((dataSource) => dataSource.isDefault)
+    ?? (configured.length === 1 ? configured[0] : undefined);
+  if (!identity) throw new Error('Não foi possível determinar unicamente o PI Data Server para esta expressão.');
+  const instance = await getResolvedPiDataSource(dataSourceSrv, toPiDataSourceIdentity(identity));
+  if (typeof instance.metricFindQuery !== 'function') throw new Error('A Data Source PI não expõe pesquisa de PI Data Servers.');
+  const servers = await instance.metricFindQuery({ type: 'dataserver' }, { isPiPoint: true });
+  const contexts = servers.flatMap((server) => {
+    const webId = getMetricField(server, 'WebId') ?? getMetricField(server, 'value');
+    if (!webId) return [];
+    const serverPath = getMetricField(server, 'Name') ?? getMetricField(server, 'Path') ?? getMetricField(server, 'text') ?? '';
+    return [{ dataSourceUid: identity.uid, serverPath, webId }];
+  });
+  if (contexts.length !== 1) throw new Error('Não foi possível determinar unicamente o PI Data Server para esta expressão.');
+  return contexts[0];
+}
+
 async function loadDigitalStatesFromLink(resourceApi: PiDataSourceResourceApi, source: unknown): Promise<PiDigitalState[]> {
   if (!source || typeof source !== 'object') return [];
   const links = (source as Record<string, unknown>).Links;
@@ -1379,7 +1472,7 @@ async function getPiPointMetadataForBinding(
     }
     if (merged) return merged;
   }
-  const serverWebId = await getPiDataServerWebId(instance);
+  const serverWebId = await getPiDataServerWebIdForBinding(instance, binding);
   if (serverWebId && typeof resourceApi.getResource === 'function') {
     try {
       const response = await resourceApi.getResource(

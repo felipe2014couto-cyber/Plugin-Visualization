@@ -1,6 +1,6 @@
 import type { DataSourceSrv } from '@grafana/runtime';
 import { of, throwError, type Observable } from 'rxjs';
-import { checkPiConnection, decodePiAlarmState, getPiDigitalStateSets, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, getPiRecordedRawHistory, getPiResource, PI_DATASOURCE_TYPE, probePiCapabilities, resolvePiDataSource } from '../piDataSource';
+import { checkPiConnection, decodePiAlarmState, getPiDigitalStateSets, getPiPerformanceEquationPointAttributes, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, getPiRecordedRawHistory, getPiResource, PI_DATASOURCE_TYPE, probePiCapabilities, resolvePiDataSource, searchPiPointsWithStatus } from '../piDataSource';
 
 function makeDataSource(overrides: Partial<{ uid: string; name: string; isDefault: boolean }> = {}) {
   return {
@@ -48,6 +48,38 @@ it('decodifica o encoding documentado do Pialarm33 e rejeita set digital comum',
 });
 
 describe('PI data source integration', () => {
+  it('lê atributos de candidato PE somente pelo recurso GET e preserva Location/ExDesc brutos', async () => {
+    const getResource = jest.fn().mockResolvedValue({ Items: [
+      { Name: 'pointsource', Value: 'R' }, { Name: 'exdesc', Value: "event=TRIGGER, Delay('INPUT',1,2)" },
+      { Name: 'location3', Value: 17 }, { Name: 'location4', Value: 2 }, { Name: 'scan', Value: 1 },
+      { Name: 'shutdown', Value: 0 }, { Name: 'ptclassname', Value: 'classic' }, { Name: 'pointtype', Value: 'Float32' },
+    ] });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+    await expect(getPiPerformanceEquationPointAttributes(
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'PE_OUT', webId: 'point-webid' }, dataSourceSrv,
+    )).resolves.toEqual({
+      name: 'PE_OUT', webId: 'point-webid', pointSource: 'R', exDesc: "event=TRIGGER, Delay('INPUT',1,2)",
+      location3: 17, location4: 2, scan: 1, shutdown: 0, pointClass: 'classic', pointType: 'Float32',
+    });
+    expect(getResource).toHaveBeenCalledWith('/points/point-webid/attributes?selectedFields=Items.Name;Items.Value');
+    expect(getResource.mock.calls.every(([path]) => typeof path === 'string' && path.startsWith('/'))).toBe(true);
+  });
+
+  it('envia startIndex explícito ao listar uma página limitada de PI Points', async () => {
+    const getResource = jest.fn(async (path: string) => {
+      if (path.startsWith('/points/search')) throw new Error('advanced unavailable');
+      if (path.includes('startIndex=25')) return { Items: [{ Name: 'PE_OUT', WebId: 'out', Path: '\\PIServers[pims]\\PE_OUT', PointType: 'Float32' }] };
+      return { Items: [] };
+    });
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })], getResource,
+      metricFindQuery: async (query) => query && typeof query === 'object' && (query as { type?: string }).type === 'dataserver' ? [{ WebId: 'server' }] : [],
+    });
+    await expect(searchPiPointsWithStatus({ term: 'PE_*', limit: 1, startIndex: 25 }, dataSourceSrv))
+      .resolves.toMatchObject({ results: [expect.objectContaining({ name: 'PE_OUT', webId: 'out' })], hasMore: false });
+    expect(getResource).toHaveBeenCalledWith(expect.stringContaining('startIndex=25'));
+  });
+
   it('normaliza recorded raw, preserva quality opcional e compartilha requests idênticos', async () => {
     const getResource = jest.fn().mockResolvedValue({ Items: [
       { Timestamp: '2026-01-01T00:00:00Z', Value: 'On', Good: true, Questionable: false },

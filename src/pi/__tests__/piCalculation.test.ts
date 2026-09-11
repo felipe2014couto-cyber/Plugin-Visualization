@@ -1,5 +1,5 @@
 import type { DataSourceSrv } from '@grafana/runtime';
-import { classifyPiExpression, evaluatePiExpression, PiCalculationExecutionError, probePiCalculationController, resetPiCalculationCachesForTests } from '../piCalculation';
+import { classifyPiExpression, evaluatePiExpression, PiCalculationExecutionError, PiCalculationNoMatchError, probePiCalculationController, resetPiCalculationCachesForTests } from '../piCalculation';
 import { PI_DATASOURCE_TYPE } from '../piDataSource';
 
 const binding = { dataSourceUid: 'pi-default', serverPath: 'PIMS', pointName: 'SINUSOID' };
@@ -59,6 +59,18 @@ describe('PI Calculation Controller adapter', () => {
       await expect(evaluatePiExpression({ binding, expression: 'TagAvg(\'SINUSOID\', \'*-1h\', \'*\')', dataSourceSrv: dataSourceSrv(async () => response) }))
         .rejects.toBeInstanceOf(PiCalculationExecutionError);
     }
+  });
+
+  it('distingue no-match de erro real em Find', async () => {
+    const response = { Items: [{ Value: { Name: 'No Data', Value: 249, IsSystem: true }, Good: false }] };
+    await expect(evaluatePiExpression({ binding, expression: "FindGT('SINUSOID','*-1h','*',50)", dataSourceSrv: dataSourceSrv(async () => response) }))
+      .rejects.toBeInstanceOf(PiCalculationNoMatchError);
+  });
+
+  it('marca o resultado de Find como timestamp sem inferir pelo tamanho do número', async () => {
+    const response = { Items: [{ Timestamp: '2026-09-10T16:00:00Z', Value: 1789009200, Good: true }] };
+    await expect(evaluatePiExpression({ binding, expression: "FindLT('SINUSOID','*-1h','*',50)", dataSourceSrv: dataSourceSrv(async () => response) }))
+      .resolves.toMatchObject({ value: 1789009200, valueKind: 'timestamp' });
   });
 
   it('normaliza somente o marcador PI comprovado de NoOutput', async () => {

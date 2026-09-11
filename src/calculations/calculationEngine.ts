@@ -17,13 +17,13 @@ export interface CalculationDefinition {
 }
 
 export type CalculationEvaluation =
-  | { status: 'success'; value: number | string }
+  | { status: 'success'; value: number | string; valueKind?: 'timestamp' | 'timespan' | 'digital-state' }
   | { status: 'loading' }
   | { status: 'error'; error: Error };
 
 /**
- * Internal PE value categories. They are never exposed by evaluateCalculation:
- * the public result is always unwrapped to a number or string.
+ * Internal PE value categories. The final numeric value is unwrapped, while
+ * its kind is exposed separately so presentation can format timestamps safely.
  */
 export type PiExpressionValue =
   | { kind: 'timestamp'; value: number }
@@ -133,7 +133,11 @@ export function evaluateCalculation(
 
   try {
     const value = parseArithmeticExpression(resolvedExpression, variables, peContext);
-    return { status: 'success', value: unwrapPiExpressionValue(value) };
+    return {
+      status: 'success',
+      value: unwrapPiExpressionValue(value),
+      ...(isPiExpressionValue(value) ? { valueKind: value.kind } : {}),
+    };
   } catch (error) {
     return { status: 'error', error: error instanceof Error ? error : new Error(String(error)) };
   }

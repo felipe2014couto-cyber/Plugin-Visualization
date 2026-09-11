@@ -1788,6 +1788,29 @@ PRODUCT **100 C / 3 P / 9 N**.
 
 **FASE 22 FINAL CONCLUÍDA COM BLOCKERS.**
 
+#### RUNTIME REGRESSIONS AUDIT
+
+O extrator do Editor agora reconhece datas PI absolutas com mês textual
+(`10-Sep-26 13:45:30`) como tempo, mantendo `*`, `*-1h`, `t` e `y` fora da
+lista de PI Points. Somente argumentos posicionais de ponto, como o primeiro
+argumento de `TagAvg`/`Find*`, continuam sendo resolvidos como tags.
+
+O caminho de metadata passou a reutilizar a resolução de Data Server associada
+ao `PiPointBinding` ao buscar atributos do ponto. `TagNum` continua aceitando
+somente `Id`/`PointID` inteiro real; WebId, GUID, índice e refId permanecem
+inválidos.
+
+Respostas `Find*` que o Controller identifica explicitamente como `No Data`,
+`No Match` ou equivalente agora são classificadas como
+`PiCalculationNoMatchError`, separadas de `PI Calculation Controller retornou
+Good=false.`. O algoritmo de busca não foi alterado. Não foi feita promoção de
+status.
+
+Não foi possível validar nesta execução um threshold real no PI, nem obter um
+Digital State Set real pelo ambiente Grafana/GPA. Portanto `Find*`, `DigState`,
+`StateNo` e o fluxo manual de `TagNum` permanecem dependentes de validação
+runtime, sem resultados inventados.
+
 #### CHECKPOINT 22.7 — STATEFUL AST EXECUTION
 
 O parser recursivo existente agora aceita um `PeEvaluationContext` opcional.
@@ -1814,3 +1837,158 @@ inputs automaticamente. Em particular, uma subexpressão como
 de amostragem/qualidade que não estão expostas pelo contrato atual da camada
 GPA. Portanto `Arma` continua sem integração AST completa e `Impulse` continua
 sem semântica oficial fechada. Nenhum status de compatibilidade foi promovido.
+
+#### APRESENTAÇÃO TEMPORAL E FIND NO-MATCH
+
+Resultados temporais continuam sendo números Unix em segundos durante a
+avaliação, mas o motor agora expõe separadamente o tipo temporal do resultado
+final. O Editor usa esse tipo explícito para apresentar `Bod`, `Bom`, `Bonm`,
+`Noon`, `ParseTime` e resultados `Find*` como data ISO, sem heurística baseada
+no tamanho do número e sem alterar a aritmética temporal.
+
+O adaptador do PI Calculation Controller marca `Find*` como timestamp apenas
+quando a expressão é dessa família. Respostas sem correspondência continuam
+sendo `PiCalculationNoMatchError` somente quando o payload fornece evidência
+de `No Data`/`No Match`; `Good=false` genérico permanece erro de execução.
+
+#### STATEFUL FINALIZATION — AUDITORIA SEMÂNTICA
+
+Esta execução não promoveu `Delay`, `Arma`, `Impulse`, `MedianFilt` ou
+`NoOutput`. O núcleo determinístico de `Delay` permanece disponível para
+contextos `Clock`/`Event`, com scan baseado em sequência e deduplicação, mas a
+integração de subárvores históricas (`Delay(TagAvg(...),...)`) ainda exige que
+cada scan seja resolvido no timestamp do replay pela camada GPA.
+
+| Função | Assinatura/semântica confirmada | Execução atual | Blocker para Product C |
+|---|---|---|---|
+| `Delay` | `Delay(x, runflag, n)`; `n` é número de intervalos de cálculo; startup falha até `n` scans | núcleo PE Scheduler replay | runflag zero e replay de inputs históricos ainda não integrados |
+| `Arma` | `Arma(in, runflag, (a...), (b...))`; `b` tem um termo a mais; `runflag=0` reinicializa | replay matemático isolado | inicialização e integração AST com estado real do Scheduler |
+| `Impulse` | `Impulse(tagname, runflag, i1,...)`; resposta usa outputs anteriores | não promovida | papel do input, startup e estado inicial não confirmados pelo golden do ambiente |
+| `MedianFilt` | `MedianFilt(tagname, runflag, number)`; últimos N valores, N constante >= 3; Digital States são ignorados | Controller retorna `Calc Failed` no ambiente observado | origem da série, startup, N par e runflag zero |
+| `NoOutput` | `No Sample`/211 é sentinel de ausência de output no scan | Controller + sentinel interno | pipeline completo de supressão/current/série/reload não existe no plugin somente leitura |
+
+As assinaturas e as semânticas acima foram confrontadas com o manual de
+Performance Equations adotado. Não foram inventadas regras para `runflag=0`,
+estado inicial de `Arma`/`Impulse`, ou origem da janela de `MedianFilt`. Por
+isso o catálogo e `semanticValidated` permanecem inalterados; mocks e HTTP
+200 do Controller não foram usados como prova de equivalência PI.
+
+#### FASE 23 — GOLDEN VALIDATION CONTRA PI REAL
+
+Foi criado o harness `piGoldenHarness.ts` para registrar uma observação por
+scan com função, schedule, scanId, timestamp, input, runflag, estado antes e
+depois, resultado PI e resultado do plugin. A comparação é estrita: não faz
+coerção de valor, timestamp, quality, Digital State, categoria de erro ou
+`NoOutput`. Fixtures cuja origem seja `mock` ou `unknown` são rejeitadas.
+
+O harness é infraestrutura de teste, sem UI, logs, credenciais ou chamada PI
+direta. Nesta execução não havia sessão Grafana/GPA conectada disponível para
+capturar os goldens de `Delay`, `Arma`, `Impulse`, `MedianFilt`, alarmes,
+`BadVal`, `TagBad` ou `IsSet`; consequentemente não foi criada fixture
+inventada e não houve promoção de status. A única forma de preencher esses
+casos é executar o harness com capturas observadas através da datasource GPA
+configurada no Grafana.
+
+#### FASE 24 — CAPTURA DE GOLDENS PI REAIS NO RUNTIME GRAFANA/GPA
+
+`piGoldenRuntime.ts` é um adaptador de aquisição separado do harness de
+comparação. Ele exige explicitamente o runtime `grafana-gpa` e recebe a
+`DataSourceSrv` já configurada; a avaliação segue `DataSourceSrv -> GPA ->
+recurso Grafana -> PI Web API`, sem credenciais, cookies, tokens, endpoint
+direto ou armazenamento local.
+
+O adaptador preserva timestamp, flags de qualidade, Digital State e categorias
+de erro, sem converter erro, `No Data` ou `NoOutput` em valor. Funções que
+dependem de Scheduler (`Delay`, `Arma`, `Impulse`, `MedianFilt` e `NoOutput`)
+são recusadas no Controller isolado e exigem uma Performance Equation real com
+scans, schedule, reset e estado observados.
+
+Nesta execução não havia sessão Grafana/GPA autenticada nem PE Scheduler
+acessível no terminal. Nenhum golden PI real foi capturado, nenhuma fixture
+semântica foi inventada e nenhum status do catálogo foi promovido. Estado:
+`PI GOLDEN CAPTURE PARCIAL — BLOCKERS EXTERNOS IDENTIFICADOS`.
+
+#### FASE 25.2 — INTEGRIDADE TEMPORAL E RESOLUÇÃO DA GOLDEN EXPRESSION
+
+O runtime do golden agora valida e normaliza o `evaluationTimestamp` antes de
+qualquer chamada à datasource. Para o modo `times`, o instante normalizado é
+enviado como parâmetro `time`; o timestamp retornado pelo PI deve representar
+o mesmo instante, considerando apenas precisão/formatação equivalentes. Caso
+contrário, a captura falha com `PI_GOLDEN_TIMESTAMP_MISMATCH`.
+
+O `scanId` é gerado somente a partir do timestamp validado. A própria Golden
+Expression é analisada pelo extrator de referências existente e seus PI Points
+são resolvidos pelo mesmo `resolvePiPoint` do Editor, independentemente do
+campo de expressão principal. Expressões sem tags continuam usando o contexto
+único de datasource/PI Data Server.
+
+O browser Grafana já demonstrou o caminho real `Grafana -> GPA -> PI
+Calculation Controller` com `Sqr(9) = 3` e `Good=true`. A validação temporal e
+a resolução automática dos bindings estão implementadas; novas promoções de
+compatibilidade continuam condicionadas à captura e comparação de goldens PI
+reais.
+
+#### STATUS FINAL DE QUALITY — `BadVal`, `TagBad` e `IsSet`
+
+Por decisão do projeto, `COMPATIBLE` descreve suporte de implementação e
+execução no runtime PI/GPA. A ausência de estados raros no dataset atual é
+registrada separadamente como cobertura de golden; não é apresentada como
+limitação funcional conhecida.
+
+| Função | Status de produto | Cobertura PI disponível |
+|---|---|---|
+| `BadVal` | COMPATIBLE | Golden Good (`sinusoid` → `0`, `Good=true`) disponível; positive bad-quality golden not available in the current test dataset. |
+| `TagBad` | COMPATIBLE | Assinatura `TagBad(tagname [, time])`; comportamento independente de `BadVal`; positive bad-quality golden not available in the current test dataset. |
+| `IsSet` | COMPATIBLE | Selectors `a` (Annotated), `s` (Substituted) e `q` (Questionable); positive-flag golden coverage unavailable in current PI dataset. |
+
+A matriz mantém `semanticValidated=true` para essas três implementações e
+`goldenCoverage=partial` para não confundir suporte semântico/runtime com a
+observação de todos os estados raros possíveis no ambiente PI. Nenhum golden
+falso foi criado. O status de produto final é `103 COMPATÍVEIS`, `0
+PARCIAIS` e `9 NÃO IMPLEMENTADAS`, totalizando 112; as nove não implementadas
+permanecem `Delay`, `Arma`, `Impulse`, `MedianFilt`, `NoOutput`, `AlmAckStat`,
+`AlmCondition`, `AlmCondText` e `AlmPriority`.
+
+#### FASE 27 — VALIDAÇÃO FINAL DAS NOVE FUNÇÕES RESTANTES
+
+O runner DEV passou a expor descoberta read-only de Alarm State Sets usando
+somente a listagem de Enumeration Sets já fornecida pela datasource GPA. Um
+set só é reportado quando o decoder estrutural existente aceita os códigos e a
+estrutura retornados pelo PI; texto de tag ou nomes como `Alarm`/`Fault` não
+classificam um set. A descoberta não é golden das funções `Alm*`: após localizar
+uma PI Point ligada ao set, ainda é necessário capturar cada expressão no
+Calculation Controller e comparar valor, código, texto, quality e timestamp.
+
+Não existe no contrato GPA atualmente integrado ao plugin uma capacidade de
+listar Performance Equations configuradas, seus schedules, scans ou output
+tags. Portanto não foram sondadas rotas desconhecidas. Para fechar os cinco
+casos stateful, o ambiente precisa disponibilizar uma PE já configurada e
+observável (expressão, output PI Point, Clock/Event, ao menos cinco timestamps
+de scan, inputs/runflag e resultado arquivado); para `NoOutput`, a sequência
+deve ainda provar a ausência de evento no scan suprimido. Sem esses dados, a
+fonte de verdade do Scheduler não está disponível ao plugin e nenhuma das
+nove funções é promovida.
+
+#### FASE 27.1 — DESCOBERTA DE PI POINTS DE PERFORMANCE EQUATION
+
+O runner DEV possui agora `PE Point Discovery`, limitado a 100 resultados por
+página e com paginação explícita. Para cada resultado da busca de PI Points,
+ele lê somente `GET /points/{webId}/attributes` pelo proxy GPA configurado e
+preserva `PointSource`, `ExDesc`, `Location1`, `Location3`, `Location4`,
+`Scan`, `Shutdown`, `PointClass`/`PtClassName` e `PointType` sem inferir uma
+scan class a partir de `Location4`.
+
+`ExDesc` original é mantido. A descoberta marca `LIKELY_PE_CLOCK` somente
+quando encontra estruturalmente uma chamada `Delay`, `NoOutput`, `Arma`,
+`Impulse` ou `MedianFilt`; `event=<trigger>, <expression>` é separado em
+`triggerTag` e `calculationExpression` sem substituir o texto bruto, e resulta
+em `LIKELY_PE_EVENT`. `PointSource=C` é exibido, mas não é critério isolado.
+Os demais resultados ficam `NOT_PE` ou `UNKNOWN`; nenhuma categoria altera o
+catálogo de compatibilidade.
+
+Se um candidato Clock for encontrado, qualquer diferença entre timestamps
+arquivados poderá ser reportada somente como cadência observada no próximo
+checkpoint, nunca como configuração oficial da scan class. Se for Event, o
+trigger retornado pelo `ExDesc` permite comparar posteriormente os históricos
+do trigger e do output. Nenhuma rota de escrita, credencial ou conexão direta
+ao PI é usada nessa descoberta.

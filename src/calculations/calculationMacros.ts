@@ -108,7 +108,9 @@ export function applyQualityMacros(expression: string, token: string, piPointVal
   expression = expression.replace(badValRegex, () => isBadPiPointValue(piPointValue) ? '1' : '0');
 
   const tagBadRegex = new RegExp(`(?<![A-Za-z0-9_.:])TAGBAD\\s*\\(\\s*${tokenPattern}\\s*\\)`, 'gi');
-  expression = expression.replace(tagBadRegex, () => isBadPiPointValue(piPointValue) ? '1' : '0');
+  expression = expression.replace(tagBadRegex, () => {
+    throw new Error(`TagBad exige avaliação pelo PI Calculation Controller para determinar o estado anormal de "${token}".`);
+  });
 
   const isSetRegex = new RegExp(`(?<![A-Za-z0-9_.:])ISSET\\s*\\(\\s*${tokenPattern}\\s*,\\s*(["'])(.*?)\\1\\s*\\)`, 'gi');
   expression = expression.replace(isSetRegex, (_match, _quote, selector: string) => {
@@ -551,6 +553,7 @@ export function isPiTimeString(str: string): boolean {
   if (PI_TIME_ABBREVIATIONS.has(lower)) return true;
   if (/^(\*|t|y|today|yesterday|sun|mon|tue|wed|thu|fri|sat)?[+-]\d+[smhdwy]$/.test(lower)) return true;
   if (/^\d{1,4}[-/]\d{1,2}[-/]\d{1,4}/.test(lower)) return true;
+  if (/^\d{1,2}[-/][a-z]{3,9}[-/]\d{1,4}(?:\s+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?$/.test(lower)) return true;
   return false;
 }
 
