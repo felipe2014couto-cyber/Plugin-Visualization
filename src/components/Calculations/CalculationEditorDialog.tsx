@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -10,28 +10,8 @@ import { hasPendingHistoricalRequests, waitForPendingHistoricalRequests, hasPend
 import { classifyPiExpression, evaluatePiExpression, piExpressionFunctionNames, PiCalculationUnavailableError, probePiCalculationController } from '../../pi/piCalculation';
 import { expressionRequiresSchedulerContext, expressionRequiresStatefulScheduler, peScheduleIdentity, requirePeSchedulerContext, PeSchedulerError, validatePeSchedule, type PeCalculationSchedule } from '../../calculations/peSchedulerRuntime';
 import { capturePiGoldenRuntime, discoverPiGoldenAlarmStateSets, discoverPiGoldenPerformanceEquations, inspectPiGoldenQualityEvidence, normalizePiGoldenTimestamp } from '../../calculations/piGoldenRuntime';
-
-interface CalculationHelpItem {
-  name: string;
-  template?: string;
-  description: string;
-  example: string;
-  unsupported?: boolean;
-}
-
-const CALCULATION_HELP_ITEMS: readonly CalculationHelpItem[] = [
-  { name: 'IF / ELSE', template: 'IF(0, 0, 0)', description: 'Retorna um valor quando a condição é verdadeira e outro quando é falsa.', example: 'IF(Temperatura > 80, 1, 0)' },
-  { name: 'AND', template: 'AND(0, 0)', description: 'Retorna 1 quando todas as condições forem verdadeiras.', example: 'AND(Pressao > 5, Vazao > 10)' },
-  { name: 'OR', template: 'OR(0, 0)', description: 'Retorna 1 quando pelo menos uma condição for verdadeira.', example: 'OR(Alarme_A == 1, Alarme_B == 1)' },
-  { name: 'NOT', template: 'NOT(0)', description: 'Inverte uma condição: 0 vira 1 e qualquer valor diferente de zero vira 0.', example: 'NOT(Bomba_Ligada == 1)' },
-  { name: 'MIN / MAX', template: 'MAX(0, 0)', description: 'Retorna o menor ou maior valor entre os argumentos.', example: 'MAX(Vazao_A, Vazao_B)' },
-  { name: 'ABS', template: 'ABS(0)', description: 'Retorna o valor absoluto, sem sinal negativo.', example: 'ABS(Setpoint - Medida)' },
-  { name: 'ROUND', template: 'ROUND(0, 2)', description: 'Arredonda um valor para a quantidade desejada de casas decimais.', example: 'ROUND(Eficiencia, 2)' },
-  { name: 'CLAMP', template: 'CLAMP(0, 0, 100)', description: 'Limita um valor entre mínimo e máximo.', example: 'CLAMP(Nivel, 0, 100)' },
-  { name: 'POWER', template: 'POWER(0, 2)', description: 'Eleva um número a uma potência (ex.: base ^ expoente).', example: 'POWER(Pressao, 2)' },
-  { name: 'SQRT', template: 'SQRT(0)', description: 'Retorna a raiz quadrada de um número.', example: 'SQRT(Vazao)' },
-  { name: 'WHILE', description: 'Não é permitido em cálculos para evitar expressões sem término. Use IF para decisões condicionais.', example: 'Use IF(Condicao, valor_se_sim, valor_se_nao)', unsupported: true },
-];
+import { calculationFunctionCategories, calculationFunctionHelpItems } from '../../calculations/calculationFunctionHelp';
+import { piCompatibilityMatrix } from '../../calculations/piCompatibilityCatalog';
 
 
 import { isPiTimeString } from '../../calculations/calculationMacros';
@@ -72,6 +52,7 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
   const [executionState, setExecutionState] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [executionResult, setExecutionResult] = useState<{ value: number | string; timestamp?: string; valueKind?: 'timestamp' | 'timespan' | 'digital-state' }>();
   const [isFunctionHelpOpen, setIsFunctionHelpOpen] = useState(false);
+  const [functionHelpSearch, setFunctionHelpSearch] = useState('');
   const [expandedFunctionName, setExpandedFunctionName] = useState<string>();
   const [scheduleType, setScheduleType] = useState<'' | PeCalculationSchedule['type']>(initialCalculation?.schedule?.type ?? '');
   const [clockInterval, setClockInterval] = useState(initialCalculation?.schedule?.type === 'clock' ? String(initialCalculation.schedule.intervalSeconds) : '');
@@ -91,6 +72,16 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
   const [peDiscovery, setPeDiscovery] = useState<{ hasMore: boolean; count: number; output: string }>();
   const requiresScheduler = expressionRequiresSchedulerContext(expression);
   const isDevelopment = process.env.NODE_ENV === 'development';
+  const groupedFunctionHelp = useMemo(() => {
+    const query = functionHelpSearch.trim().toLocaleLowerCase();
+    return calculationFunctionCategories.map((category) => ({
+      category,
+      items: calculationFunctionHelpItems
+        .filter((item) => item.category === category)
+        .filter((item) => !query || [item.name, item.category, item.signature, item.description].join(' ').toLocaleLowerCase().includes(query))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+    })).filter((group) => group.items.length > 0);
+  }, [functionHelpSearch]);
 
   useEffect(() => {
     setName(initialCalculation?.name ?? '');
@@ -499,7 +490,7 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
           </div>
 
           <div className={styles.functionHelpContainer}>
-            <button type="button" className={styles.functionHelpButton} aria-expanded={isFunctionHelpOpen} aria-controls="calculation-function-help" onClick={() => setIsFunctionHelpOpen((current) => !current)}>
+            <button type="button" className={styles.functionHelpButton} data-testid="calculation-function-help-toggle" aria-expanded={isFunctionHelpOpen} aria-controls="calculation-function-help" onClick={() => setIsFunctionHelpOpen((current) => !current)}>
               Funções e lógica <InfoIcon />
             </button>
             {isFunctionHelpOpen && (
@@ -508,18 +499,36 @@ export function CalculationEditorDialog({ initialCalculation, resolvePiPoint, lo
                   <strong>Funções disponíveis</strong>
                   <button type="button" aria-label="Fechar funções disponíveis" onClick={() => setIsFunctionHelpOpen(false)}>×</button>
                 </div>
-                {CALCULATION_HELP_ITEMS.map((item) => (
-                  <div key={item.name} className={styles.functionHelpItem}>
-                    <button type="button" className={styles.functionInsertButton} aria-label={`Inserir ${item.name}`} disabled={item.unsupported} onClick={() => item.template && insertFunction(item.template)}>{item.name}</button>
-                    <button type="button" className={styles.functionInfoButton} aria-label={`Explicação de ${item.name}`} aria-expanded={expandedFunctionName === item.name} onClick={() => setExpandedFunctionName((current) => current === item.name ? undefined : item.name)}><InfoIcon /></button>
-                    {expandedFunctionName === item.name && (
-                      <div className={styles.functionExplanation}>
-                        <span>{item.description}</span>
-                        <span className={styles.functionExample}>Ex.: {item.example}</span>
-                      </div>
-                    )}
-                  </div>
+                <input
+                  className={styles.functionHelpSearch}
+                  data-testid="calculation-function-search"
+                  aria-label="Pesquisar função"
+                  placeholder="Pesquisar função..."
+                  value={functionHelpSearch}
+                  onChange={(event) => setFunctionHelpSearch(event.target.value)}
+                />
+                {groupedFunctionHelp.map((group) => (
+                  <section key={group.category} aria-label={group.category}>
+                    <strong className={styles.functionCategory}>{group.category}</strong>
+                    {group.items.map((item) => {
+                      const unavailable = piCompatibilityMatrix[item.name]?.productStatus === 'not-implemented';
+                      return (
+                        <div key={item.name} className={styles.functionHelpItem}>
+                          <button type="button" className={styles.functionInsertButton} aria-label={`Inserir ${item.name}`} disabled={unavailable} onClick={() => insertFunction(item.template)}>{item.name}</button>
+                          <button type="button" className={styles.functionInfoButton} aria-label={`Explicação de ${item.name}`} aria-expanded={expandedFunctionName === item.name} onClick={() => setExpandedFunctionName((current) => current === item.name ? undefined : item.name)}><InfoIcon /></button>
+                          {expandedFunctionName === item.name && (
+                            <div className={styles.functionExplanation}>
+                              <span>{item.description}</span>
+                              <span className={styles.functionSignature}>Sintaxe: {item.signature}</span>
+                              <span className={styles.functionExample}>Ex.: {item.example}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </section>
                 ))}
+                {groupedFunctionHelp.length === 0 && <span className={styles.functionNoResults}>Nenhuma função encontrada.</span>}
               </div>
             )}
           </div>
@@ -769,6 +778,25 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-size: 12px;
     button { border: 0; color: var(--text-secondary); background: transparent; cursor: pointer; font-size: 18px; line-height: 1; }
   `,
+  functionHelpSearch: css`
+    box-sizing: border-box;
+    width: 100%;
+    margin-bottom: 6px;
+    padding: 6px 7px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    font-size: 11px;
+  `,
+  functionCategory: css`
+    display: block;
+    padding: 6px 0 2px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  `,
   functionHelpItem: css`
     display: grid;
     grid-template-columns: minmax(0, 1fr) 26px;
@@ -810,6 +838,13 @@ const getStyles = (theme: GrafanaTheme2) => ({
     font-size: 10px;
     line-height: 1.35;
   `,
+  functionSignature: css`
+    display: block;
+    color: var(--text-primary);
+    font-family: monospace;
+    font-size: 10px;
+  `,
+  functionNoResults: css`display: block; padding: 8px 0; color: var(--text-secondary); font-size: 11px;`,
   functionExplanation: css`
     grid-column: 1 / -1;
     display: flex;
