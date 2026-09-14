@@ -70,8 +70,7 @@ function Harness({
 
 function selectElement(id: string): void {
   const element = screen.getByTestId(`display-element-${id}`);
-  fireEvent.pointerDown(element, { clientX: 20, clientY: 20, pointerId: 1 });
-  fireEvent.pointerUp(element, { clientX: 20, clientY: 20, pointerId: 1 });
+  fireEvent.doubleClick(element);
 }
 
 describe('DisplayEditor - cor do Gauge', () => {
@@ -85,11 +84,11 @@ describe('DisplayEditor - cor do Gauge', () => {
     render(<Harness initial={initial} loadValue={loadValue} onChange={(next) => changes.push(next)} />);
 
     selectElement('gauge');
-    await waitFor(() => expect(screen.getByTestId('gauge-fill-gauge')).toHaveAttribute('stroke', '#00a2e8'));
+    await waitFor(() => expect(screen.getByTestId('gauge-needle-gauge').querySelector('line')).toHaveAttribute('stroke', '#00a2e8'));
 
     fireEvent.change(screen.getByTestId('gauge-color'), { target: { value: '#ff9830' } });
 
-    expect(screen.getByTestId('gauge-fill-gauge')).toHaveAttribute('stroke', '#ff9830');
+    expect(screen.getByTestId('gauge-needle-gauge').querySelector('line')).toHaveAttribute('stroke', '#ff9830');
     expect(changes.at(-1)?.elements[0].properties).toMatchObject({ color: '#ff9830' });
     expect(changes.at(-1)?.elements[0].properties).toMatchObject({ minimum: 0, maximum: 100 });
   });
@@ -129,12 +128,12 @@ describe('DisplayEditor - cor do Gauge', () => {
     render(<Harness initial={initial} loadValue={loadValue} onChange={(next) => changes.push(next)} />);
 
     selectElement('gauge');
-    await waitFor(() => expect(screen.getByTestId('gauge-fill-gauge')).toHaveAttribute('stroke', '#0000ff'));
+    await waitFor(() => expect(screen.getByTestId('gauge-needle-gauge').querySelector('line')).toHaveAttribute('stroke', '#0000ff'));
 
     fireEvent.change(screen.getByTestId('gauge-color'), { target: { value: '#00ff00' } });
 
     expect(changes.at(-1)?.elements[0].properties).toMatchObject({ color: '#00ff00' });
-    expect(screen.getByTestId('gauge-fill-gauge')).toHaveAttribute('stroke', '#0000ff');
+    expect(screen.getByTestId('gauge-needle-gauge').querySelector('line')).toHaveAttribute('stroke', '#0000ff');
   });
 });
 

@@ -346,6 +346,7 @@ export function DisplaySurface({
   }, [editable]);
 
   const calculations = useMemo(() => displayDocument.calculations ?? [], [displayDocument.calculations]);
+  // Collect main value consumers
   const valueConsumers: ValueRuntimeConsumer[] = allElements.flatMap((element) => {
     if (element.type === CALCULATION_TYPE) {
       const calculation = calculations.find((item) => item.id === element.properties.calculationId);
@@ -404,6 +405,26 @@ export function DisplaySurface({
     }
     return [];
   }));
+
+  // Collect sourceBinding consumers for multistate color evaluation
+  const sourceBindingConsumers: ValueRuntimeConsumer[] = allElements.flatMap((element) => {
+    const props = element.properties as Record<string, unknown>;
+    const consumers: ValueRuntimeConsumer[] = [];
+
+    // Check multistate.sourceBinding
+    const multistateConfig = props.multistate as { sourceBinding?: PiPointBinding } | undefined;
+    if (multistateConfig?.sourceBinding && isPiPointBinding(multistateConfig.sourceBinding)) {
+      consumers.push({ elementId: `${element.id}:multistate-source`, binding: multistateConfig.sourceBinding });
+    }
+
+    // Check backgroundMultistate.sourceBinding
+    const bgMultistateConfig = props.backgroundMultistate as { sourceBinding?: PiPointBinding } | undefined;
+    if (bgMultistateConfig?.sourceBinding && isPiPointBinding(bgMultistateConfig.sourceBinding)) {
+      consumers.push({ elementId: `${element.id}:bg-multistate-source`, binding: bgMultistateConfig.sourceBinding });
+    }
+
+    return consumers;
+  });
   const fallbackLoader = useCallback<LoadCurrentValues>(async (bindings) => {
     if (!loadValue) {
       return Object.fromEntries(bindings.map((binding) => [
@@ -426,7 +447,27 @@ export function DisplaySurface({
     }));
     return Object.fromEntries(entries);
   }, [loadValue]);
-  const runtimeStates = useValueRuntime(valueConsumers, loadValues ?? fallbackLoader);
+  // Combine main value consumers with sourceBinding consumers
+  const allValueConsumers = useMemo(() => [...valueConsumers, ...sourceBindingConsumers], [valueConsumers, sourceBindingConsumers]);
+  const runtimeStates = useValueRuntime(allValueConsumers, loadValues ?? fallbackLoader);
+
+  // Build a map of sourceBinding values for multistate color evaluation
+  const sourceBindingValues = useMemo(() => {
+    const map = new Map<string, unknown>();
+    for (const consumer of sourceBindingConsumers) {
+      const state = runtimeStates.get(consumer.elementId);
+      if (state?.status === 'success') {
+        map.set(consumer.elementId, state.result?.value);
+      }
+    }
+    return map;
+  }, [runtimeStates, sourceBindingConsumers]);
+
+  // Helper to get source value for an element's multistate config
+  const getSourceValueForMultistate = useCallback((elementId: string, bindingType: 'multistate' | 'bg-multistate'): unknown => {
+    const key = `${elementId}:${bindingType}-source`;
+    return sourceBindingValues.get(key);
+  }, [sourceBindingValues]);
   const trendConsumers: TrendRuntimeConsumer[] = allElements.flatMap((element) => {
     if (element.type === XY_PLOT_TYPE) {
       const xy = element as XYPlotElement;
@@ -813,8 +854,8 @@ export function DisplaySurface({
     if (editable) {
       e.preventDefault();
       e.stopPropagation();
-      onDoubleClick?.(rawId);
       onSelect(rawId);
+      onDoubleClick?.(rawId);
       return;
     }
 
@@ -903,8 +944,8 @@ export function DisplaySurface({
         ?? target.closest('[data-element-id]')?.getAttribute('data-element-id');
 
       if (rawId && e.detail >= 2) {
-        onDoubleClick?.(rawId);
         onSelect(rawId);
+        onDoubleClick?.(rawId);
         return;
       }
 
@@ -1331,7 +1372,7 @@ export function DisplaySurface({
             const runtimeState = calculation
               ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
               : runtimeStates.get(element.id);
-            return renderGeometricShape(shape, runtimeState);
+            return renderGeometricShape(shape, runtimeState, undefined, sourceBindingValues);
           }
           if (element.type === TEXT_TYPE) {
             const textElement = element as TextElement;
@@ -1347,10 +1388,12 @@ export function DisplaySurface({
               : undefined;
             const isColorBlack = !textElement.properties.color || textElement.properties.color === '#000000' || textElement.properties.color === '#000' || textElement.properties.color === 'rgba(0,0,0,1)';
             const baseTextColor = isColorBlack && normalTextColor ? normalTextColor : resolveThemeForeground(textElement.properties.color);
-            const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, baseTextColor);
-            const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent');
-            const textBlink = evaluateMultistate(runtimeVal, textElement.properties.multistate)?.rule.blink === true;
-            const bgBlink = evaluateMultistate(runtimeVal, textElement.properties.backgroundMultistate)?.rule.blink === true;
+            const textSourceValue = getSourceValueForMultistate(element.id, 'multistate');
+            const bgSourceValue = getSourceValueForMultistate(element.id, 'bg-multistate');
+            const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, baseTextColor, textSourceValue);
+            const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent', bgSourceValue);
+            const textBlink = evaluateMultistate(runtimeVal, textElement.properties.multistate, textSourceValue)?.rule.blink === true;
+            const bgBlink = evaluateMultistate(runtimeVal, textElement.properties.backgroundMultistate, bgSourceValue)?.rule.blink === true;
             const anchor = textElement.properties.textAlign === 'left' ? 'start' : textElement.properties.textAlign === 'right' ? 'end' : 'middle';
             const x = textElement.properties.textAlign === 'left' ? textElement.x + 6 : textElement.properties.textAlign === 'right' ? textElement.x + textElement.width - 6 : textElement.x + textElement.width / 2;
             const rotation = textElement.properties.rotation ?? 0;
@@ -1432,8 +1475,9 @@ export function DisplaySurface({
               ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
               : runtimeStates.get(element.id);
             const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
-            const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties));
-            const blink = evaluateMultistate(value, symbol.properties.multistate)?.rule.blink === true;
+            const sourceValue = getSourceValueForMultistate(element.id, 'multistate');
+            const color = getMultistateColor(value, symbol.properties.multistate, getLibrarySymbolColor(symbol.properties), sourceValue);
+            const blink = evaluateMultistate(value, symbol.properties.multistate, sourceValue)?.rule.blink === true;
             const cx = element.x + element.width / 2;
             const cy = element.y + element.height / 2;
             const rotation = symbol.properties.rotation ?? 0;
@@ -1702,7 +1746,7 @@ function getLibrarySymbolSource(element: LibrarySymbolElement): string {
   return definition ? getIndustrialSymbolAssetUrl(definition) : element.properties.src;
 }
 
-function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRuntimeState, parentElementId?: string) {
+function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRuntimeState, parentElementId?: string, sourceBindingValues?: Map<string, unknown>) {
   const baseFill = getElementFill(element);
   const value = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
   const normalMultistateColor = element.properties.multistate?.enabled && element.properties.multistate.rules.length > 0
@@ -1711,8 +1755,10 @@ function renderGeometricShape(element: RectangleElement, runtimeState?: ValueRun
   const effectiveBaseFill = (!baseFill || baseFill === 'transparent') && normalMultistateColor
     ? normalMultistateColor
     : baseFill;
-  const fill = getMultistateColor(value, element.properties.multistate, effectiveBaseFill);
-  const blink = evaluateMultistate(value, element.properties.multistate)?.rule.blink === true;
+  const sourceKey = `${element.id}:multistate-source`;
+  const sourceValue = sourceBindingValues?.get(sourceKey);
+  const fill = getMultistateColor(value, element.properties.multistate, effectiveBaseFill, sourceValue);
+  const blink = evaluateMultistate(value, element.properties.multistate, sourceValue)?.rule.blink === true;
   const common = {
     key: element.id,
     'data-testid': `display-element-${element.id}`,

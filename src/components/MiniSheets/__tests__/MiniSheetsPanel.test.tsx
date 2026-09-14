@@ -138,11 +138,14 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
     // A1 = 10
     fireEvent.change(input, { target: { value: '10' } });
     fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('10'));
 
     // B1 = 25
     fireEvent.click(screen.getByTestId('mini-sheets-cell-B1'));
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('B1'));
     fireEvent.change(input, { target: { value: '25' } });
     fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-B1')).toHaveTextContent('25'));
 
     // C1 = =A1+B1
     fireEvent.click(screen.getByTestId('mini-sheets-cell-C1'));
@@ -160,13 +163,18 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
 
     fireEvent.change(input, { target: { value: '15' } });
     fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('15'));
     fireEvent.click(screen.getByTestId('mini-sheets-cell-B2'));
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('B2'));
     fireEvent.change(input, { target: { value: '20' } });
     fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-B2')).toHaveTextContent('20'));
 
     fireEvent.click(screen.getByTestId('mini-sheets-cell-C1'));
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('C1'));
     fireEvent.change(input, { target: { value: '=' } });
     fireEvent.click(screen.getByTestId('mini-sheets-cell-A1'));
+    await waitFor(() => expect(input).toHaveValue('=A1'));
     fireEvent.change(input, { target: { value: '=A1+' } });
     fireEvent.click(screen.getByTestId('mini-sheets-cell-B2'));
 
@@ -183,21 +191,28 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
 
     // A1 = 10
     fireEvent.click(screen.getByTestId('mini-sheets-cell-A1'));
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A1'));
     fireEvent.change(input, { target: { value: '10' } });
     fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('10'));
 
     // A2 = 20
     fireEvent.click(screen.getByTestId('mini-sheets-cell-A2'));
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A2'));
     fireEvent.change(input, { target: { value: '20' } });
     fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A2')).toHaveTextContent('20'));
 
     // A3 = 30
     fireEvent.click(screen.getByTestId('mini-sheets-cell-A3'));
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A3'));
     fireEvent.change(input, { target: { value: '30' } });
     fireEvent.submit(input.closest('form')!);
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-cell-A3')).toHaveTextContent('30'));
 
     // A4 = =SUM(A1:A3)
     fireEvent.click(screen.getByTestId('mini-sheets-cell-A4'));
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A4'));
     fireEvent.change(input, { target: { value: '=SUM(A1:A3)' } });
     fireEvent.submit(input.closest('form')!);
 
@@ -428,11 +443,16 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
 
     // Enter manual data in B1
     fireEvent.click(screen.getByTestId('mini-sheets-cell-B1'));
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('B1'));
     fireEvent.change(input, { target: { value: 'Bloqueio' } });
     fireEvent.submit(input.closest('form')!);
+    await waitFor(() => {
+      expect(screen.getByTestId('mini-sheets-cell-B1')).toHaveTextContent('Bloqueio');
+    });
 
     // Enter PICompDat in A1
     fireEvent.click(screen.getByTestId('mini-sheets-cell-A1'));
+    await waitFor(() => expect(screen.getByTestId('mini-sheets-active-cell')).toHaveTextContent('A1'));
     fireEvent.change(input, { target: { value: '=PICompDat("LFS_RB2_TAG", "*-1h", "*")' } });
     fireEvent.submit(input.closest('form')!);
 
@@ -808,8 +828,9 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
       await waitFor(() => {
         const cellA1 = screen.getByTestId('mini-sheets-cell-A1');
         expect(cellA1).toHaveTextContent('');
-        expect(cellA1).not.toHaveStyle('font-weight: bold');
-        expect(cellA1).not.toHaveStyle('font-style: italic');
+        // Clearing a cell preserves its explicitly configured format.
+        expect(cellA1).toHaveStyle('font-weight: bold');
+        expect(cellA1).toHaveStyle('font-style: italic');
       });
     });
 
@@ -1244,7 +1265,7 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
       expect(screen.queryByTestId('mini-sheets-inline-input')).not.toBeInTheDocument();
       expect(screen.getByTestId('mini-sheets-cell-A1')).toHaveTextContent('Test');
       // A2 should be active (Enter moves down)
-      expect(screen.getByTestId('mini-sheets-cell-A2')).toHaveClass('cellActive');
+      expect(screen.getByTestId('mini-sheets-cell-A2')).toHaveAttribute('aria-selected', 'true');
 
       // Now test Tab
       const cellA2 = screen.getByTestId('mini-sheets-cell-A2');
@@ -1256,7 +1277,7 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
       expect(screen.queryByTestId('mini-sheets-inline-input')).not.toBeInTheDocument();
       expect(cellA2).toHaveTextContent('TabTest');
       // B2 should be active (Tab moves right)
-      expect(screen.getByTestId('mini-sheets-cell-B2')).toHaveClass('cellActive');
+      expect(screen.getByTestId('mini-sheets-cell-B2')).toHaveAttribute('aria-selected', 'true');
     });
 
     it('Escape cancels edit and restores previous value', () => {

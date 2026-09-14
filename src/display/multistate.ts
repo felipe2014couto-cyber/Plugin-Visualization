@@ -1,4 +1,5 @@
 import type { DisplayDocument } from './displayDocument';
+import { isPiPointBinding, isStatePiPointBinding, type PiPointBinding } from '../pi/piPointBinding';
 
 export type MultistateOperator = 'lt' | 'lte' | 'gt' | 'gte' | 'eq' | 'between';
 
@@ -19,6 +20,8 @@ export interface MultistateRule {
 export interface MultistateConfig {
   enabled: boolean;
   rules: MultistateRule[];
+  /** Optional PI Point used as the value source for color evaluation. */
+  sourceBinding?: PiPointBinding;
 }
 
 export interface MultistateMatch {
@@ -36,6 +39,19 @@ export interface NormalizedDigitalValue {
   value?: number | string;
 }
 
+/**
+ * Validates whether a sourceBinding is suitable for numeric multistate evaluation.
+ * Returns true if the binding is numeric or type is unknown (will be validated at runtime).
+ * Returns false if the binding is explicitly String/Digital.
+ */
+export function isValidNumericSourceBinding(binding?: PiPointBinding | null): boolean {
+  if (!binding || !isPiPointBinding(binding)) {
+    return false;
+  }
+  // Reject String/Digital types - multistate by limits requires numeric
+  return !isStatePiPointBinding(binding);
+}
+
 export function normalizeMultistateConfig(config?: Partial<MultistateConfig> | null): MultistateConfig | undefined {
   if (!config) {
     return undefined;
@@ -43,9 +59,12 @@ export function normalizeMultistateConfig(config?: Partial<MultistateConfig> | n
   const rules = Array.isArray(config.rules)
     ? config.rules.map((rule, index) => normalizeRule(rule, index)).filter((rule): rule is MultistateRule => rule !== undefined)
     : [];
+  // Validate sourceBinding: must be a valid PiPointBinding and not a String/Digital type
+  const sourceBinding = isValidNumericSourceBinding(config.sourceBinding) ? config.sourceBinding as PiPointBinding : undefined;
   return {
     enabled: config.enabled === true,
     rules,
+    ...(sourceBinding ? { sourceBinding } : {}),
   };
 }
 
@@ -71,11 +90,20 @@ function extractRawCandidates(val: unknown): unknown[] {
   return [val];
 }
 
-export function evaluateMultistate(value: unknown, config?: MultistateConfig | null): MultistateMatch | undefined {
-  if (!config?.enabled || value === undefined || value === null) {
+export function evaluateMultistate(
+  value: unknown,
+  config?: MultistateConfig | null,
+  sourceValue?: unknown,
+): MultistateMatch | undefined {
+  if (!config?.enabled) {
     return undefined;
   }
-  const candidates = extractRawCandidates(value);
+  // Use sourceBinding value if present, otherwise use main value
+  const effectiveValue = sourceValue !== undefined ? sourceValue : value;
+  if (effectiveValue === undefined || effectiveValue === null) {
+    return undefined;
+  }
+  const candidates = extractRawCandidates(effectiveValue);
   for (const rule of config.rules) {
     if (candidates.some((candidate) => matchesRule(candidate, rule))) {
       return { rule, color: rule.color };
@@ -88,8 +116,9 @@ export function getMultistateColor(
   value: unknown,
   config: MultistateConfig | undefined,
   fallbackColor: string,
+  sourceValue?: unknown,
 ): string {
-  return evaluateMultistate(value, config)?.color ?? fallbackColor;
+  return evaluateMultistate(value, config, sourceValue)?.color ?? fallbackColor;
 }
 
 /** Normalizes the different digital-value shapes returned by PI datasources. */

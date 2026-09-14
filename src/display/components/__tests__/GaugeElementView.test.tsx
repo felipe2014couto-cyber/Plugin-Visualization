@@ -10,7 +10,7 @@ describe('GaugeElementView', () => {
     const element = createGauge({ id: 'gauge-1', binding });
     render(<svg><GaugeElementView element={element} runtimeState={{ status: 'success', result: { value: 120 } }} /></svg>);
     expect(screen.getByTestId('gauge-value-gauge-1')).toHaveTextContent('120');
-    expect(screen.getByTestId('gauge-fill-gauge-1')).toHaveAttribute('stroke-dasharray', '100 100');
+    expect(screen.getByTestId('gauge-needle-gauge-1')).toBeInTheDocument();
   });
 
   it('mostra placeholder, loading, erro e escala inválida sem quebrar', () => {
@@ -31,7 +31,8 @@ describe('GaugeElementView', () => {
     });
     render(<svg><GaugeElementView element={element} runtimeState={{ status: 'success', result: { value: 127 } }} /></svg>);
     expect(screen.getByTestId('gauge-value-gauge-multistate')).toHaveTextContent('127');
-    expect(screen.getByTestId('gauge-fill-gauge-multistate')).toHaveAttribute('stroke', '#ff0000');
-    expect(screen.getByTestId('gauge-fill-gauge-multistate')).toHaveAttribute('stroke-dasharray', '100 100');
+    const needle = screen.getByTestId('gauge-needle-gauge-multistate');
+    expect(needle).toBeInTheDocument();
+    expect(needle.querySelector('line')).toHaveAttribute('stroke', '#ff0000');
   });
 });

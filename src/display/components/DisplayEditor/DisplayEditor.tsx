@@ -1004,7 +1004,8 @@ export function DisplayEditor({
     const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
     const currentDocument = documentRef.current;
-    const target = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
+    const resolvedTarget = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
+    const target = resolvedTarget?.type === 'trend' && dropSymbolType !== 'trend' ? undefined : resolvedTarget;
     if (!binding || (!point && !target)) {
       return;
     }
@@ -1013,7 +1014,19 @@ export function DisplayEditor({
     if (target) {
       const capability = getElementDataSourceCapability(target);
       if (capability === 'single') {
-        commitDocument(replaceElementPiBinding(currentDocument, target.id, binding));
+        const linkedDocument = replaceElementPiBinding(currentDocument, target.id, binding);
+        const nextDocument = target.type === 'library-symbol'
+          ? updateElementInDocument(linkedDocument, target.id, (element) => ({
+              ...element,
+              properties: {
+                ...element.properties,
+                multistate: element.properties.multistate
+                  ? { ...(element.properties.multistate as any), enabled: true }
+                  : { enabled: true, rules: [] },
+              },
+            }))
+          : linkedDocument;
+        commitDocument(nextDocument);
         dispatch({ type: 'SELECT', elementId: target.id });
         return;
       }
@@ -2555,8 +2568,8 @@ function createPiPointDragPreview(
         valid: true,
         label: capability === 'single' ? `Substituir ${target.type}` : label,
         symbolType: target.type as PiPointDropSymbolType,
-        targetTrend: target.type === 'trend',
-        targetTrendId: target.type === 'trend' ? target.id : undefined,
+        targetTrend: symbolType === 'trend' && target.type === 'trend',
+        targetTrendId: symbolType === 'trend' && target.type === 'trend' ? target.id : undefined,
         targetBarChart: target.type === 'bar-chart',
         targetBarChartId: target.type === 'bar-chart' ? target.id : undefined,
       };

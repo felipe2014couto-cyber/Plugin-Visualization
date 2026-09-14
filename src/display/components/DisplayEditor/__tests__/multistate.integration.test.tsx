@@ -52,8 +52,7 @@ function setMultistateRuleColor(ruleId: string, color: string, prefix = 'multist
 
 function selectElement(id: string): void {
   const element = screen.getByTestId(`display-element-${id}`);
-  fireEvent.pointerDown(element, { clientX: 20, clientY: 20, pointerId: 1 });
-  fireEvent.pointerUp(element, { clientX: 20, clientY: 20, pointerId: 1 });
+  fireEvent.doubleClick(element);
 }
 
 describe('Multistate no editor', () => {
