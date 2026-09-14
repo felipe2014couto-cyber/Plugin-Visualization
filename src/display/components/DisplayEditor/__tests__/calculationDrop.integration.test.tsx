@@ -139,6 +139,7 @@ describe('DisplayEditor - drop de cálculo', () => {
 
     fireEvent(screen.getByTestId('display-editor-surface-wrapper'), event);
 
+    fireEvent.doubleClick(screen.getByTestId('display-element-library-symbol-drop'));
     expect(screen.getByTestId('library-symbol-properties-panel')).toBeInTheDocument();
     expect(screen.getByText('Cálculo: Teste Calc')).toBeInTheDocument();
     expect(screen.getByTestId('multistate-enabled')).toBeChecked();
@@ -163,6 +164,7 @@ describe('DisplayEditor - drop de cálculo', () => {
 
     fireEvent(screen.getByTestId('display-editor-surface-wrapper'), event);
 
+    fireEvent.doubleClick(screen.getByTestId('display-element-rectangle-drop'));
     expect(screen.getByTestId('rectangle-properties-panel')).toBeInTheDocument();
     expect(screen.getByText('Cálculo: Teste Calc')).toBeInTheDocument();
     expect(screen.getByTestId('multistate-enabled')).toBeChecked();

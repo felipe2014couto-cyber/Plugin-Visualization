@@ -110,6 +110,7 @@ describe('DisplayEditor - inserção de Rectangle', () => {
     fireEvent.click(screen.getByTestId('display-insert-rectangle'));
 
     expect(screen.queryByTestId('multistate-properties')).toBeNull();
+    fireEvent.doubleClick(screen.getByTestId(/^display-element-/));
     expect(screen.getByTestId('rectangle-properties-panel')).toBeInTheDocument();
   });
 

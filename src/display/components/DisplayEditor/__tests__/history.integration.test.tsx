@@ -163,6 +163,7 @@ describe('DisplayEditor - histórico de edição', () => {
     fireEvent.click(screen.getByTestId('display-insert-text'));
     const text = screen.getByTestId(/^display-element-/);
     const id = text.getAttribute('data-element-id');
+    fireEvent.doubleClick(text);
     expect(screen.getByTestId('text-properties-panel')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('display-undo'));
     expect(screen.queryByTestId(`display-element-${id}`)).toBeNull();

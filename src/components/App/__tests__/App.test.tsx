@@ -41,6 +41,7 @@ describe('App', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    checkPiConnectionMock.mockReset();
     mockPostBackendSrv.mockReset();
     mockGetBackendSrv.mockImplementation((url: string) => {
       if (url === '/api/user') {

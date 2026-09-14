@@ -40,7 +40,7 @@ describe('DisplayEditor - Gauge e Bar', () => {
       binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID' },
     }));
     render(<Harness initial={initial} />);
-    fireEvent.pointerDown(screen.getByTestId('display-element-gauge-1'));
+    fireEvent.doubleClick(screen.getByTestId('display-element-gauge-1'));
     expect(screen.getByTestId('gauge-properties-panel')).toBeInTheDocument();
     fireEvent.change(screen.getByTestId('gauge-maximum'), { target: { value: '200' } });
     expect(screen.getByTestId('gauge-value-gauge-1')).toBeInTheDocument();
@@ -55,7 +55,7 @@ describe('DisplayEditor - Gauge e Bar', () => {
       binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID' },
     }));
     render(<Harness initial={initial} />);
-    fireEvent.pointerDown(screen.getByTestId('display-element-bar-1'));
+    fireEvent.doubleClick(screen.getByTestId('display-element-bar-1'));
     expect(screen.getByTestId('bar-properties-panel')).toBeInTheDocument();
     fireEvent.change(screen.getByTestId('bar-orientation'), { target: { value: 'horizontal' } });
     expect(screen.getByTestId('display-element-bar-1')).toHaveAttribute('data-element-type', 'bar');

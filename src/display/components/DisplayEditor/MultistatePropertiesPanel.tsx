@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
@@ -14,6 +14,7 @@ import {
 import type { PiDigitalState, PiDigitalStatesResult } from '../../../pi/piDataSource';
 import type { PiPointBinding } from '../../../pi/piPointBinding';
 import { TransparentColorPicker } from './TransparentColorPicker';
+import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 
 export interface MultistatePropertiesPanelProps {
   title?: string;
@@ -37,6 +38,53 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
   const styles = useStyles2(getStyles);
   const normalized = normalizeMultistateConfig(config) ?? { enabled: false, rules: [] };
   const [digitalStates, setDigitalStates] = useState<PiDigitalState[]>([]);
+
+  // Handle PI Point drop for sourceBinding
+  const handleSourceDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!normalized.enabled) return;
+    const data = event.dataTransfer.getData(PI_POINT_DRAG_MIME);
+    if (data) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+    }
+  }, [normalized.enabled]);
+
+  const handleSourceDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!normalized.enabled) return;
+    const data = event.dataTransfer.getData(PI_POINT_DRAG_MIME);
+    if (!data) return;
+
+    const dragData = parsePiPointDragData(data);
+    if (!dragData) return;
+
+    // Extract pointName from the name field and serverPath from the path field
+    const pointName = dragData.name;
+    // serverPath is the path without the point name suffix
+    const rawPath = dragData.path ?? '';
+    const pointSuffix = `\\${pointName}`;
+    const lowerPath = rawPath.toLocaleLowerCase();
+    const lowerSuffix = pointSuffix.toLocaleLowerCase();
+    const serverPath = lowerPath.endsWith(lowerSuffix)
+      ? rawPath.slice(0, rawPath.length - pointSuffix.length).replace(/^\\+/, '')
+      : rawPath.replace(/^\\+/, '');
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const newBinding: PiPointBinding = {
+      dataSourceUid: dragData.dataSourceUid ?? '',
+      serverPath,
+      pointName,
+      ...(dragData.webId ? { webId: dragData.webId } : {}),
+      ...(dragData.pointType ? { pointType: dragData.pointType } : {}),
+    };
+
+    onChange({ ...normalized, sourceBinding: newBinding });
+  }, [normalized, onChange]);
+
+  const handleRemoveSource = useCallback(() => {
+    onChange({ ...normalized, sourceBinding: undefined });
+  }, [normalized, onChange]);
   const [digitalMetadata, setDigitalMetadata] = useState<boolean | undefined>(undefined);
   const [digitalError, setDigitalError] = useState(false);
   const autoPopulatedFor = useRef<string | undefined>();
@@ -95,6 +143,33 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
           Habilitado
         </label>
       </div>
+      {normalized.enabled && (
+        <div className={styles.sourceSection}>
+          <div className={styles.sourceTitle}>Fonte do MultiState</div>
+          {!normalized.sourceBinding ? (
+            <div
+              className={styles.dropZone}
+              onDragOver={handleSourceDragOver}
+              onDrop={handleSourceDrop}
+            >
+              Arraste um PI Point aqui
+            </div>
+          ) : (
+            <div className={styles.sourceInfo}>
+              <div className={styles.sourcePointName}>{normalized.sourceBinding.pointName}</div>
+              <div className={styles.sourceServerPath}>{normalized.sourceBinding.serverPath}</div>
+              <button
+                type="button"
+                className={styles.removeSourceButton}
+                onClick={handleRemoveSource}
+              >
+                Remover
+              </button>
+            </div>
+          )}
+          <div className={styles.sourceHint}>Opcional. Se nenhuma tag for vinculada, será usado o valor do próprio elemento.</div>
+        </div>
+      )}
       <div className={styles.hint}>{isDigital ? 'Cada estado digital usa igualdade. A primeira regra correspondente vence.' : 'A primeira regra correspondente vence. Entre usa mínimo inclusivo e máximo exclusivo.'}</div>
       <button type="button" className={styles.addButton} data-testid={`${testIdPrefix}-add-rule`} onClick={addRule} disabled={!normalized.enabled}>
         Adicionar regra
@@ -270,4 +345,71 @@ const getStyles = (theme: GrafanaTheme2) => ({
   removeButton: css`grid-column: 1 / -1; width: 100%; max-width: 100%; min-height: 24px; padding: 2px 5px; border: 1px solid var(--border-color); border-radius: 0; background: var(--button-bg); color: var(--text-secondary); font-size: 9px;`,
   invalid: css`grid-column: 1 / -1; color: var(--warning); font-size: 9px;`,
   error: css`margin-top: 7px; color: var(--warning); font-size: 9px; line-height: 1.35;`,
+  sourceSection: css`
+    margin-bottom: 12px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--surface-secondary);
+  `,
+  sourceTitle: css`
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  `,
+  dropZone: css`
+    padding: 16px;
+    border: 2px dashed var(--border-color);
+    border-radius: 4px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    &:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+  `,
+  sourceInfo: css`
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--surface-primary);
+  `,
+  sourcePointName: css`
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+  `,
+  sourceServerPath: css`
+    font-size: 9px;
+    color: var(--text-secondary);
+    word-break: break-all;
+  `,
+  removeSourceButton: css`
+    margin-top: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    background: var(--button-bg);
+    color: var(--text-secondary);
+    font-size: 9px;
+    cursor: pointer;
+    align-self: flex-start;
+    &:hover {
+      background: var(--button-hover);
+      color: var(--text-primary);
+    }
+  `,
+  sourceHint: css`
+    margin-top: 6px;
+    font-size: 9px;
+    color: var(--text-secondary);
+    font-style: italic;
+  `,
 });

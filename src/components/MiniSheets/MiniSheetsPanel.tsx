@@ -651,42 +651,41 @@ export function MiniSheetsPanel({
 
       // Handle simple literals
       if (parsed.type === 'literal_number') {
-        setCells((prev) => {
-          const next = new Map(prev);
-          const existing = next.get(key);
-          next.set(key, { rawValue, displayValue: String(parsed.value), format: existing?.format });
-          return evaluateStaticFormulas(next).nextMap;
-        });
+        const updated = new Map(cellsRef.current);
+        const existing = updated.get(key);
+        updated.set(key, { rawValue, displayValue: String(parsed.value), format: existing?.format });
+        const finalMap = evaluateStaticFormulas(updated).nextMap;
+        cellsRef.current = finalMap;
+        setCells(finalMap);
         return;
       }
 
       if (parsed.type === 'literal_string') {
-        setCells((prev) => {
-          const next = new Map(prev);
-          const existing = next.get(key);
-          next.set(key, { rawValue, displayValue: parsed.value, format: existing?.format });
-          return evaluateStaticFormulas(next).nextMap;
-        });
+        const updated = new Map(cellsRef.current);
+        const existing = updated.get(key);
+        updated.set(key, { rawValue, displayValue: parsed.value, format: existing?.format });
+        const finalMap = evaluateStaticFormulas(updated).nextMap;
+        cellsRef.current = finalMap;
+        setCells(finalMap);
         return;
       }
 
       if (parsed.type === 'error') {
-        setCells((prev) => {
-          const next = new Map(prev);
-          const existing = next.get(key);
-          next.set(key, { rawValue, displayValue: parsed.error, format: existing?.format });
-          return next;
-        });
+        const updated = new Map(cellsRef.current);
+        const existing = updated.get(key);
+        updated.set(key, { rawValue, displayValue: parsed.error, format: existing?.format });
+        cellsRef.current = updated;
+        setCells(updated);
         return;
       }
 
       if (parsed.type === 'math_expression' || parsed.type === 'aggregate') {
-        setCells((prev) => {
-          const next = new Map(prev);
-          const existing = next.get(key);
-          next.set(key, { rawValue, displayValue: 'Carregando...', format: existing?.format });
-          return evaluateStaticFormulas(next).nextMap;
-        });
+        const updated = new Map(cellsRef.current);
+        const existing = updated.get(key);
+        updated.set(key, { rawValue, displayValue: 'Carregando...', format: existing?.format });
+        const finalMap = evaluateStaticFormulas(updated).nextMap;
+        cellsRef.current = finalMap;
+        setCells(finalMap);
         return;
       }
 
@@ -2299,26 +2298,23 @@ export function MiniSheetsPanel({
     if (!piPoint) return;
 
     const key = `${row},${col}`;
-    setCells((prev) => {
-      const next = new Map(prev);
-      
-      const rawValue = `=PICurrVal("${piPoint.name}")`;
-      
-      next.set(key, {
-        rawValue,
-        displayValue: piPoint.name,
-        piBinding: {
-          type: 'pi-point',
-          name: piPoint.name,
-          path: piPoint.path,
-          webId: piPoint.webId,
-          description: piPoint.description,
-          engineeringUnit: piPoint.engineeringUnit,
-        },
-      });
-      
-      return evaluateStaticFormulas(next).nextMap;
+    const next = new Map(cellsRef.current);
+    const rawValue = `=PICurrVal("${piPoint.name}")`;
+    next.set(key, {
+      rawValue,
+      displayValue: piPoint.name,
+      piBinding: {
+        type: 'pi-point',
+        name: piPoint.name,
+        path: piPoint.path,
+        webId: piPoint.webId,
+        description: piPoint.description,
+        engineeringUnit: piPoint.engineeringUnit,
+      },
     });
+    const finalMap = evaluateStaticFormulas(next).nextMap;
+    cellsRef.current = finalMap;
+    setCells(finalMap);
   };
 
   const handleCellDoubleClick = (col: number, row: number) => {
@@ -3087,6 +3083,7 @@ export function MiniSheetsPanel({
                         } ${isError ? styles.cellError : ''}`}
                         style={customStyle}
                         data-testid={`mini-sheets-cell-${colIndexToLetter(cIndex)}${rIndex + 1}`}
+                        aria-selected={isActive}
                         data-formula-target={formulaEditMode && formulaTargetCell?.col === cIndex && formulaTargetCell.row === rIndex ? 'true' : undefined}
                         onClick={(e) => handleCellClick(cIndex, rIndex, e)}
                         onPointerDown={(e) => handleCellPointerDown(cIndex, rIndex, e)}
@@ -3116,6 +3113,7 @@ export function MiniSheetsPanel({
                             autoFocus
                             ref={inlineFormulaInputRef}
                             className={styles.cellInlineInput}
+                            data-testid="mini-sheets-inline-input"
                             value={editingCellText}
                             onFocus={(e) => {
                               formulaCursorRef.current = { start: e.currentTarget.selectionStart ?? e.currentTarget.value.length, end: e.currentTarget.selectionEnd ?? e.currentTarget.value.length };

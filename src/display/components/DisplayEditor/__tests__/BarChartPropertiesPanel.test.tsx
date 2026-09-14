@@ -54,7 +54,7 @@ describe('BarChartPropertiesPanel', () => {
     expect(screen.getByText('Grade')).toBeInTheDocument();
     expect(screen.getByText('Visibilidade')).toBeInTheDocument();
     expect(screen.getByText('Escala')).toBeInTheDocument();
-    expect(screen.getByText('Início da barra')).toBeInTheDocument();
+    expect(screen.getByText('Início da Barra')).toBeInTheDocument();
     expect(screen.getByText('Barras (2)')).toBeInTheDocument();
   });
 

@@ -102,10 +102,10 @@ describe('CalculationsPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Funções e lógica/ }));
     expect(screen.getByTestId('calculation-function-help')).not.toHaveTextContent('IF(Temperatura > 80, 1, 0)');
-    fireEvent.click(screen.getByRole('button', { name: 'Explicação de IF / ELSE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Explicação de IF' }));
     expect(screen.getByTestId('calculation-function-help')).toHaveTextContent('Retorna um valor quando a condição é verdadeira');
     expect(screen.getByTestId('calculation-function-help')).toHaveTextContent('Ex.: IF(Temperatura > 80, 1, 0)');
-    fireEvent.click(screen.getByRole('button', { name: 'Inserir IF / ELSE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Inserir IF' }));
 
     expect(screen.getByTestId('calculation-editor-expression')).toHaveValue('IF(0, 0, 0) ');
   });

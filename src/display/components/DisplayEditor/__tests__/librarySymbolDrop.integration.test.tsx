@@ -110,6 +110,7 @@ describe('DisplayEditor - drop da Library', () => {
 
     render(<PropertiesHarness />);
     fireEvent.contextMenu(screen.getByTestId('display-element-library-symbol-01'));
+    fireEvent.click(screen.getByTestId('context-menu-configure-element'));
 
     expect(screen.getByTestId('library-symbol-properties-panel')).toBeInTheDocument();
     expect(screen.getByTestId('display-element-library-symbol-01')).toHaveAttribute('href', expect.stringContaining('?v=transparent-symbols-20260817'));
@@ -129,7 +130,7 @@ describe('DisplayEditor - drop da Library', () => {
     fireEvent.click(screen.getByTestId('library-symbol-color'));
     fireEvent.click(screen.getByTestId('library-symbol-color-transparent'));
     expect(screen.getByTestId('library-symbol-color-transparent')).toBeChecked();
-    expect(screen.getByTestId('library-symbol-color-layer-library-symbol-01')).toHaveAttribute('fill', 'transparent');
+    expect(screen.queryByTestId('library-symbol-color-layer-library-symbol-01')).toBeNull();
   });
 
   it('vincula uma Tag solta sobre o motor e habilita o Multistate', () => {
@@ -170,6 +171,7 @@ describe('DisplayEditor - drop da Library', () => {
 
     fireEvent(wrapper, event);
 
+    fireEvent.doubleClick(screen.getByTestId('display-element-library-symbol-drop'));
     expect(screen.getByTestId('library-symbol-properties-panel')).toBeInTheDocument();
     expect(screen.getByText('PI Point: MOTOR_01')).toBeInTheDocument();
     expect(screen.getByTestId('multistate-enabled')).toBeChecked();
