@@ -184,6 +184,7 @@ export {
   getMultistateColor,
   isValidMultistateRule,
   normalizeMultistateConfig,
+  parseMultistateNumber,
   TRANSPARENT_COLOR,
   updateMultistateConfig,
   updateBackgroundMultistateConfig,

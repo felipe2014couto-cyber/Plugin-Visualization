@@ -39,6 +39,22 @@ export interface NormalizedDigitalValue {
   value?: number | string;
 }
 
+/** Converts a MultiState numeric field, accepting the UI decimal comma. */
+export function parseMultistateNumber(value: unknown): number | undefined {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return undefined;
+  }
+  const parsed = Number(trimmed.replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 /**
  * Validates whether a sourceBinding is suitable for numeric multistate evaluation.
  * Returns true if the binding is numeric or type is unknown (will be validated at runtime).
@@ -98,8 +114,10 @@ export function evaluateMultistate(
   if (!config?.enabled) {
     return undefined;
   }
-  // Use sourceBinding value if present, otherwise use main value
-  const effectiveValue = sourceValue !== undefined ? sourceValue : value;
+  // Com sourceBinding, o valor da fonte é o único critério; sem valor
+  // (ainda carregando / No Data) nenhuma regra corresponde e o fallback vence.
+  // Sem sourceBinding, mantém o comportamento histórico do valor principal.
+  const effectiveValue = config.sourceBinding ? sourceValue : value;
   if (effectiveValue === undefined || effectiveValue === null) {
     return undefined;
   }
@@ -148,9 +166,9 @@ export function isValidMultistateRule(rule: MultistateRule): boolean {
     return false;
   }
   if (rule.operator === 'between') {
-    const num1 = typeof rule.value === 'number' ? rule.value : Number(rule.value);
-    const num2 = typeof rule.value2 === 'number' ? rule.value2 : Number(rule.value2);
-    return Number.isFinite(num1) && Number.isFinite(num2) && num1 < num2;
+    const num1 = parseMultistateNumber(rule.value);
+    const num2 = parseMultistateNumber(rule.value2);
+    return num1 !== undefined && num2 !== undefined && num1 < num2;
   }
   return true;
 }
@@ -257,9 +275,9 @@ function matchesRule(rawVal: unknown, rule: MultistateRule): boolean {
     if (['on', 'ligado', 'aberto', 'running', 'true'].includes(s)) numVal = 1;
     else if (['off', 'desligado', 'fechado', 'stopped', 'false'].includes(s)) numVal = 0;
   }
-  const numRule = typeof rule.value === 'number' ? rule.value : Number(rule.value);
+  const numRule = parseMultistateNumber(rule.value);
 
-  if (!Number.isFinite(numVal) || !Number.isFinite(numRule)) {
+  if (!Number.isFinite(numVal) || numRule === undefined) {
     return false;
   }
 
@@ -269,8 +287,8 @@ function matchesRule(rawVal: unknown, rule: MultistateRule): boolean {
     case 'gt': return numVal > numRule;
     case 'gte': return numVal >= numRule;
     case 'between': {
-      const numRule2 = typeof rule.value2 === 'number' ? rule.value2 : Number(rule.value2);
-      return Number.isFinite(numRule2) && numVal >= numRule && numVal < numRule2;
+      const numRule2 = parseMultistateNumber(rule.value2);
+      return numRule2 !== undefined && numVal >= numRule && numVal < numRule2;
     }
     default:
       return false;
@@ -291,16 +309,16 @@ function normalizeRule(rule: unknown, index: number): MultistateRule | undefined
     value = candidate.value;
   } else if (typeof candidate.value === 'string') {
     const trimmed = candidate.value.trim();
-    const num = Number(trimmed);
-    value = trimmed !== '' && Number.isFinite(num) ? num : trimmed;
+    const num = parseMultistateNumber(trimmed);
+    value = trimmed !== '' && num !== undefined ? num : trimmed;
   }
   let value2: number | string | undefined = undefined;
   if (typeof candidate.value2 === 'number') {
     value2 = candidate.value2;
   } else if (typeof candidate.value2 === 'string') {
     const trimmed = candidate.value2.trim();
-    const num = Number(trimmed);
-    value2 = trimmed !== '' && Number.isFinite(num) ? num : trimmed;
+    const num = parseMultistateNumber(trimmed);
+    value2 = trimmed !== '' && num !== undefined ? num : trimmed;
   }
   return {
     id: typeof candidate.id === 'string' && candidate.id.length > 0 ? candidate.id : `multistate-rule-${index + 1}`,

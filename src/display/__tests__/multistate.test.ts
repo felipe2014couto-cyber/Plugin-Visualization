@@ -4,7 +4,10 @@ import { appendGauge, createGauge } from '../createGauge';
 import { appendValue, createValue } from '../createValue';
 import {
   evaluateMultistate,
+  getMultistateColor,
   isValidMultistateRule,
+  normalizeMultistateConfig,
+  parseMultistateNumber,
   updateMultistateConfig,
   type MultistateConfig,
 } from '../multistate';
@@ -15,6 +18,37 @@ const rule = (id: string, operator: MultistateConfig['rules'][number]['operator'
 });
 
 describe('Multistate', () => {
+  it('converte decimais com ponto ou vírgula sem truncar', () => {
+    expect(parseMultistateNumber('5')).toBe(5);
+    expect(parseMultistateNumber('5.5')).toBe(5.5);
+    expect(parseMultistateNumber('5,5')).toBe(5.5);
+    expect(parseMultistateNumber('0.25')).toBe(0.25);
+    expect(parseMultistateNumber('-3.5')).toBe(-3.5);
+    expect(parseMultistateNumber('')).toBeUndefined();
+    expect(parseMultistateNumber('não é número')).toBeUndefined();
+  });
+
+  it('normaliza limites decimais e avalia BETWEEN e negativos', () => {
+    const normalized = normalizeMultistateConfig({
+      enabled: true,
+      rules: [
+        rule('decimal', 'gte', '5,5'),
+        rule('range', 'between', '5,5', '#00ff00', '7,25'),
+        rule('negative', 'lt', '-2,0'),
+      ],
+    })!;
+    expect(normalized.rules.map((item) => [item.value, item.value2])).toEqual([
+      [5.5, undefined],
+      [5.5, 7.25],
+      [-2, undefined],
+    ]);
+    expect(evaluateMultistate(5.7, config([rule('decimal', 'gte', 5.5)]))).toBeDefined();
+    expect(evaluateMultistate(5.4, config([rule('decimal', 'gte', 5.5)]))).toBeUndefined();
+    expect(evaluateMultistate(5.75, config([rule('range', 'between', 5.5, '#00ff00', 7.25)]))).toBeDefined();
+    expect(evaluateMultistate(-2.5, config([rule('negative', 'lt', -2)]))).toBeDefined();
+    expect(evaluateMultistate(0.005, config([rule('small', 'eq', 0.005)]))).toBeDefined();
+  });
+
   it('avalia operadores numéricos e ignora valores inválidos', () => {
     expect(evaluateMultistate(10, config([rule('lt', 'lt', 20)]))?.color).toBe('#ff0000');
     expect(evaluateMultistate(20, config([rule('lt', 'lt', 20)]))).toBeUndefined();
@@ -115,5 +149,46 @@ describe('Multistate', () => {
       expect(element.properties).not.toHaveProperty('currentValue');
       expect(element.properties).not.toHaveProperty('runtimeColor');
     }
+  });
+
+  describe('sourceBinding como fonte do valor', () => {
+    const sourceBinding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'CDT158' };
+    const withSource = (rules: MultistateConfig['rules']): MultistateConfig => ({
+      enabled: true, rules, sourceBinding,
+    });
+
+    it('usa o valor da fonte, não o valor principal do elemento', () => {
+      const rules = [
+        rule('low', 'lt', 20, '#0000ff'),
+        rule('mid', 'between', 20, '#ffff00', 40),
+        rule('high', 'gte', 40, '#ff0000'),
+      ];
+      const cfg = withSource(rules);
+      expect(evaluateMultistate(85, cfg, 35)?.color).toBe('#ffff00');
+      expect(evaluateMultistate(85, cfg, 45)?.color).toBe('#ff0000');
+      expect(evaluateMultistate(5, cfg, 15)?.color).toBe('#0000ff');
+    });
+
+    it('trata 0 como valor válido da fonte', () => {
+      const rules = [rule('zero', 'lt', 20, '#0000ff')];
+      const cfg = withSource(rules);
+      expect(evaluateMultistate(85, cfg, 0)?.color).toBe('#0000ff');
+      expect(getMultistateColor(85, cfg, '#999999', 0)).toBe('#0000ff');
+    });
+
+    it('sem valor da fonte (No Data) não casa regra e usa fallbackColor', () => {
+      const rules = [rule('any', 'gte', 0, '#ff0000')];
+      const cfg = withSource(rules);
+      expect(evaluateMultistate(85, cfg, undefined)).toBeUndefined();
+      expect(evaluateMultistate(85, cfg, null)).toBeUndefined();
+      expect(getMultistateColor(85, cfg, '#999999', undefined)).toBe('#999999');
+    });
+
+    it('sem sourceBinding mantém o comportamento do valor principal', () => {
+      const rules = [rule('high', 'gte', 40, '#ff0000')];
+      const cfg = config(rules);
+      expect(evaluateMultistate(85, cfg, undefined)?.color).toBe('#ff0000');
+      expect(evaluateMultistate(45, cfg, 10)?.color).toBe('#ff0000');
+    });
   });
 });

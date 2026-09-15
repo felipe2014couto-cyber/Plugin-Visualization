@@ -7,6 +7,7 @@ import {
   generateId,
   isValidMultistateRule,
   normalizeMultistateConfig,
+  parseMultistateNumber,
   type MultistateConfig,
   type MultistateOperator,
   type MultistateRule,
@@ -40,6 +41,7 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
   const normalized = normalizeMultistateConfig(config) ?? { enabled: false, rules: [] };
   const [digitalStates, setDigitalStates] = useState<PiDigitalState[]>([]);
   const [sourceDragActive, setSourceDragActive] = useState(false);
+  const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({});
 
   const hasPiPointDrag = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     return Array.from(event.dataTransfer.types).includes(PI_POINT_DRAG_MIME);
@@ -128,6 +130,28 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
   const updateRule = (ruleId: string, patch: Partial<MultistateRule>) => update({
     rules: normalized.rules.map((rule) => rule.id === ruleId ? { ...rule, ...patch } : rule),
   });
+  const updateNumericRuleValue = (ruleId: string, field: 'value' | 'value2', rawValue: string) => {
+    const draftKey = `${ruleId}:${field}`;
+    const trimmedValue = rawValue.trim();
+    const isIntermediateDecimal = /^[+-]?(?:\d+[.,]|[.,])$/.test(trimmedValue) || /^[+-]$/.test(trimmedValue);
+    if (trimmedValue === '' || isIntermediateDecimal) {
+      setNumberDrafts((current) => ({ ...current, [draftKey]: rawValue }));
+      updateRule(ruleId, { [field]: '' });
+      return;
+    }
+    const parsed = parseMultistateNumber(rawValue);
+    setNumberDrafts((current) => {
+      if (parsed !== undefined) {
+        const next = { ...current };
+        delete next[draftKey];
+        return next;
+      }
+      return { ...current, [draftKey]: rawValue };
+    });
+    updateRule(ruleId, { [field]: parsed === undefined ? rawValue : parsed });
+  };
+  const getNumericRuleValue = (ruleId: string, field: 'value' | 'value2', value: number | string | undefined) =>
+    numberDrafts[`${ruleId}:${field}`] ?? (value ?? '');
   const addRule = () => {
     if (!normalized.enabled) return;
     update({ rules: [...normalized.rules, isDigital ? createDigitalRule(generateId(), digitalStates[0]) : createDefaultMultistateRule(generateId())] });
@@ -176,6 +200,7 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
               <button
                 type="button"
                 className={styles.removeSourceButton}
+                data-testid={`${testIdPrefix}-remove-source`}
                 onClick={handleRemoveSource}
               >
                 Remover
@@ -221,12 +246,13 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
                 </select>
               ) : (
                 <input
-                  type={rule.operator === 'between' ? 'number' : 'text'}
-                  value={rule.value ?? ''}
+                  type="text"
+                  inputMode="decimal"
+                  value={getNumericRuleValue(rule.id, 'value', rule.value)}
                   placeholder={rule.operator === 'eq' ? 'Ex: LIGADO, 1...' : undefined}
                   aria-label={rule.operator === 'between' ? 'Mínimo da regra' : 'Valor da regra'}
                   data-testid={`${testIdPrefix}-value-${rule.id}`}
-                  onChange={(event) => updateRule(rule.id, { value: parseRuleValue(event.target.value, rule.value) })}
+                  onChange={(event) => updateNumericRuleValue(rule.id, 'value', event.target.value)}
                 />
               )}
             </label>
@@ -234,11 +260,12 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
               <label className={styles.numberField}>
                 <span>Máximo</span>
                 <input
-                  type="number"
-                  value={typeof rule.value2 === 'number' && Number.isFinite(rule.value2) ? rule.value2 : (rule.value2 ?? '')}
+                  type="text"
+                  inputMode="decimal"
+                  value={getNumericRuleValue(rule.id, 'value2', rule.value2)}
                   aria-label="Máximo da regra"
                   data-testid={`${testIdPrefix}-value2-${rule.id}`}
-                  onChange={(event) => updateRule(rule.id, { value2: parseRuleValue(event.target.value, rule.value2 ?? rule.value) })}
+                  onChange={(event) => updateNumericRuleValue(rule.id, 'value2', event.target.value)}
                 />
               </label>
             )}
@@ -281,15 +308,6 @@ function digitalRulePatch(state: PiDigitalState): Partial<MultistateRule> {
 
 function createDigitalRule(id: string, state?: PiDigitalState): MultistateRule {
   return { id, operator: 'eq', value: state?.value ?? state?.name ?? '', color: '#d32f2f', ...(state ? digitalRulePatch(state) : {}) };
-}
-
-function parseRuleValue(value: string, fallback: number | string): number | string {
-  const trimmed = value.trim();
-  if (trimmed === '') {
-    return '';
-  }
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : value;
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({

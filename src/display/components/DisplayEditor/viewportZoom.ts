@@ -30,6 +30,44 @@ export function zoomViewportAtPoint(
   };
 }
 
+/**
+ * Margin kept between the fitted content and the workspace edges.
+ */
+export const FIT_VIEWPORT_MARGIN_PX = 48;
+
+export interface FitViewportResult extends SurfaceViewport {}
+
+/**
+ * Calculates the zoom and view center that frame a content bounding box inside
+ * a viewport of the given physical dimensions, with a margin on each side.
+ */
+export function calculateFitViewport(
+  bounds: { left: number; top: number; width: number; height: number },
+  viewportWidth: number,
+  viewportHeight: number,
+  minZoom: number,
+  maxZoom: number,
+  margin: number = FIT_VIEWPORT_MARGIN_PX,
+): FitViewportResult {
+  const availableWidth = Math.max(1, viewportWidth - margin * 2);
+  const availableHeight = Math.max(1, viewportHeight - margin * 2);
+  const contentWidth = Math.max(1, bounds.width);
+  const contentHeight = Math.max(1, bounds.height);
+  const scaleX = availableWidth / contentWidth;
+  const scaleY = availableHeight / contentHeight;
+  const fitScale = Math.min(scaleX, scaleY);
+  const lower = Number.isFinite(minZoom) ? minZoom : 0.1;
+  const upper = Math.max(lower, Number.isFinite(maxZoom) ? maxZoom : 5);
+  const zoom = Number.isFinite(fitScale) ? Math.max(lower, Math.min(upper, fitScale)) : lower;
+  return {
+    zoom,
+    viewCenter: {
+      x: bounds.left + bounds.width / 2,
+      y: bounds.top + bounds.height / 2,
+    },
+  };
+}
+
 function finiteClamp(value: number, min: number, max: number): number {
   const lower = Number.isFinite(min) ? min : 0.1;
   const upper = Number.isFinite(max) ? Math.max(lower, max) : Math.max(lower, 5);

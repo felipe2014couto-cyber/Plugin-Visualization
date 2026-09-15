@@ -13,9 +13,10 @@ export interface BarElementViewProps {
   runtimeState?: ValueRuntimeState;
   databaseScale?: PiPointDatabaseLimits;
   label?: string;
+  sourceValue?: unknown;
 }
 
-export const BarElementView = React.memo(function BarElementView({ element, runtimeState, databaseScale, label }: BarElementViewProps) {
+export const BarElementView = React.memo(function BarElementView({ element, runtimeState, databaseScale, label, sourceValue }: BarElementViewProps) {
   const options = element.properties;
   const binding = options.binding;
   const barOptions = getBarOptions(element.properties);
@@ -74,8 +75,8 @@ export const BarElementView = React.memo(function BarElementView({ element, runt
   const fillY = !horizontal ? plotY + plotHeight - plotHeight * maxRatio : plotY;
   const scaleTickCount = getScaleTickCount(horizontal ? plotWidth : plotHeight, horizontal ? 44 : 34);
   const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
-  const activeColor = getMultistateColor(rawValue, options.multistate, barOptions.fillColor);
-  const blink = evaluateMultistate(rawValue, options.multistate)?.rule.blink === true;
+  const activeColor = getMultistateColor(rawValue, options.multistate, barOptions.fillColor, sourceValue);
+  const blink = evaluateMultistate(rawValue, options.multistate, sourceValue)?.rule.blink === true;
   const borderColor = resolveThemeForeground(barOptions.borderColor);
   const valueColor = isPiVisionCompactGauge
     ? (activeColor || barOptions.fillColor || '#00ff00')

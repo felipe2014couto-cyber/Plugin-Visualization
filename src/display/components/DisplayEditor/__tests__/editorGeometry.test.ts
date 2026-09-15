@@ -3,6 +3,7 @@ import {
   computeDragGeometry,
   computeResizeGeometry,
   clampSize,
+  getContentBounds,
   getElementById,
   getHandleCursor,
   getResizeHandlePositions,
@@ -16,7 +17,7 @@ import {
   type Point,
   type ResizeHandle,
 } from '../editorGeometry';
-import { createDisplayDocument, type DisplayDocument, type DisplayElement } from '../../../index';
+import { createDisplayDocument, GROUP_TYPE, type DisplayDocument, type DisplayElement } from '../../../index';
 
 describe('clampSize', () => {
   it('garante valor minimo positivo', () => {
@@ -349,6 +350,79 @@ describe('getResizeHandleRect', () => {
   it('centraliza o retangulo no cx,cy', () => {
     const rect = getResizeHandleRect({ handle: 'tl', cx: 100, cy: 50 }, 8);
     expect(rect).toEqual({ x: 96, y: 46, width: 8, height: 8 });
+  });
+});
+
+describe('getContentBounds', () => {
+  it('retorna as dimensões da superfície quando não há elementos', () => {
+    const doc = makeDoc();
+    const bounds = getContentBounds(doc.elements, doc.surface);
+    expect(bounds).toEqual({ left: 0, top: 0, width: 1920, height: 1080 });
+  });
+
+  it('calcula o bounding box exato de múltiplos elementos', () => {
+    const doc = makeDoc();
+    doc.elements = [
+      { id: 'a', type: 'value', x: 100, y: 200, width: 50, height: 50, properties: {} },
+      { id: 'b', type: 'text', x: 300, y: 400, width: 100, height: 60, properties: {} },
+    ];
+    const bounds = getContentBounds(doc.elements, doc.surface);
+    expect(bounds).toEqual({ left: 100, top: 200, width: 300, height: 260 });
+  });
+
+  it('suporta coordenadas negativas sem clamp para zero', () => {
+    const doc = makeDoc();
+    doc.elements = [
+      { id: 'neg', type: 'value', x: -200, y: -100, width: 100, height: 100, properties: {} },
+      { id: 'pos', type: 'value', x: 100, y: 200, width: 50, height: 50, properties: {} },
+    ];
+    const bounds = getContentBounds(doc.elements, doc.surface);
+    expect(bounds.left).toBe(-200);
+    expect(bounds.top).toBe(-100);
+    expect(bounds.width).toBe(350);
+    expect(bounds.height).toBe(350);
+  });
+
+  it('inclui os vértices de um elemento rotacionado no bounding box', () => {
+    const doc = makeDoc();
+    // Retângulo 100x100 centrado em (150, 150), rotacionado 45°.
+    // Vértices originais: (100,100), (200,100), (200,200), (100,200).
+    // Após rotação 45° em torno do centro, o bounding box expande para ~170.7x170.7.
+    const el: DisplayElement = {
+      id: 'rot',
+      type: 'rectangle',
+      x: 100,
+      y: 100,
+      width: 100,
+      height: 100,
+      properties: { rotation: 45 },
+    };
+    doc.elements = [el];
+    const bounds = getContentBounds(doc.elements, doc.surface);
+    expect(bounds.width).toBeCloseTo(100 * Math.SQRT2, 5);
+    expect(bounds.height).toBeCloseTo(100 * Math.SQRT2, 5);
+  });
+
+  it('expande o bounding box para incluir filhos de um grupo', () => {
+    const doc = makeDoc();
+    const child: DisplayElement = { id: 'child', type: 'value', x: 10, y: 10, width: 50, height: 50, properties: {} };
+    const group: DisplayElement = {
+      id: 'grp',
+      type: GROUP_TYPE,
+      x: 100,
+      y: 200,
+      width: 200,
+      height: 150,
+      properties: { elements: [child] },
+    };
+    doc.elements = [group];
+    const bounds = getContentBounds(doc.elements, doc.surface);
+    // Filho em coords relativas (10,10)-(60,60) dentro do grupo em (100,200).
+    // Posição absoluta do filho: (110,210)-(160,260).
+    expect(bounds.left).toBe(110);
+    expect(bounds.top).toBe(210);
+    expect(bounds.width).toBe(50);
+    expect(bounds.height).toBe(50);
   });
 });
 

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
-import { appendText, createDisplayDocument, createText } from '../../../index';
+import { appendDisplayElement, appendText, createDisplayDocument, createRectangle, createText } from '../../../index';
 import { DisplayEditor } from '../DisplayEditor';
 
 jest.mock('@grafana/ui', () => {
@@ -147,5 +147,60 @@ describe('DisplayEditor', () => {
 
     const updatedText = currentDoc.elements.find((el) => el.id === 'text-1');
     expect(updatedText?.properties.fontSize).toBe(40);
+  });
+
+  describe('Ajustar à tela', () => {
+    it('enquadra elementos distantes reduzindo o zoom para o bounding box', () => {
+      const base = createDisplayDocument({ name: 'Fit' });
+      const withA = appendDisplayElement(base, createRectangle({ id: 'rect-a', x: 100, y: 100, width: 100, height: 100 }));
+      const withB = appendDisplayElement(withA, createRectangle({ id: 'rect-b', x: 2000, y: 1200, width: 100, height: 100 }));
+      render(<DisplayEditor document={withB} />);
+      const surface = screen.getByTestId('display-surface');
+
+      fireEvent.click(screen.getByTestId('display-zoom-fit'));
+
+      // Conteúdo 2000x1200 em viewport 1920x1080 com margem 48 → zoom 0.82;
+      // largura renderizada = canvas 2100 * 0.82 ≈ 1722.
+      expect(parseFloat(surface.style.width)).toBeCloseTo(1722, 0);
+      expect(withB.elements).toHaveLength(2);
+    });
+
+    it('amplia um único elemento até o zoom máximo', () => {
+      const doc = appendDisplayElement(
+        createDisplayDocument({ name: 'Fit' }),
+        createRectangle({ id: 'rect-single', x: 500, y: 500, width: 100, height: 100 }),
+      );
+      render(<DisplayEditor document={doc} />);
+      const surface = screen.getByTestId('display-surface');
+
+      fireEvent.click(screen.getByTestId('display-zoom-fit'));
+
+      // fitScale 9.84 é limitado pelo zoom máximo 5; largura = 1920 * 5.
+      expect(parseFloat(surface.style.width)).toBeCloseTo(9600, 0);
+    });
+
+    it('enquadra conteúdo com coordenadas negativas', () => {
+      const base = createDisplayDocument({ name: 'Fit' });
+      const withA = appendDisplayElement(base, createRectangle({ id: 'rect-neg', x: -300, y: -200, width: 100, height: 100 }));
+      const withB = appendDisplayElement(withA, createRectangle({ id: 'rect-pos', x: 200, y: 300, width: 100, height: 100 }));
+      render(<DisplayEditor document={withB} />);
+      const surface = screen.getByTestId('display-surface');
+
+      fireEvent.click(screen.getByTestId('display-zoom-fit'));
+
+      // Bounding box 600x600 → zoom 1.64; canvas 2220 de largura ≈ 3640.8px.
+      expect(parseFloat(surface.style.width)).toBeCloseTo(3640.8, 0);
+    });
+
+    it('mantém o display vazio em zoom 1 sem quebrar', () => {
+      const doc = createDisplayDocument({ name: 'Fit' });
+      render(<DisplayEditor document={doc} />);
+      const surface = screen.getByTestId('display-surface');
+
+      fireEvent.click(screen.getByTestId('display-zoom-fit'));
+
+      expect(surface.style.width).toBe('100%');
+      expect(screen.getByTestId('display-surface')).toBeInTheDocument();
+    });
   });
 });

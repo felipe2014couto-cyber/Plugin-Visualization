@@ -1248,6 +1248,8 @@ export function DisplaySurface({
                   ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
                   : runtimeStates.get(element.id) ?? { status: 'loading' }}
                 label={calculation?.name}
+                sourceValue={getSourceValueForMultistate(element.id, 'multistate')}
+                bgSourceValue={getSourceValueForMultistate(element.id, 'bg-multistate')}
               />
             );
           }
@@ -1274,6 +1276,7 @@ export function DisplaySurface({
                   : runtimeStates.get(element.id)}
                 databaseScale={databaseScales[element.id]}
                 label={calculation?.name}
+                sourceValue={getSourceValueForMultistate(element.id, 'multistate')}
               />
             );
           }
@@ -1290,6 +1293,7 @@ export function DisplaySurface({
                   : runtimeStates.get(element.id)}
                 databaseScale={databaseScales[element.id]}
                 label={calculation?.name}
+                sourceValue={getSourceValueForMultistate(element.id, 'multistate')}
               />
             );
           }
