@@ -1,4 +1,54 @@
-import { calculateAnchoredZoomScroll, calculateViewCenterFromScroll, type FocalZoomIntent } from '../viewportZoom';
+import { calculateAnchoredZoomScroll, calculateFitViewport, calculateViewCenterFromScroll, type FocalZoomIntent } from '../viewportZoom';
+
+describe('calculateFitViewport', () => {
+  it('enquadra conteúdo maior que o viewport reduzindo o zoom', () => {
+    const bounds = { left: 0, top: 0, width: 2000, height: 1200 };
+    const fit = calculateFitViewport(bounds, 1920, 1080, 0.1, 5);
+    // (1920 - 96) / 2000 = 0.912; (1080 - 96) / 1200 = 0.82 → min.
+    expect(fit.zoom).toBeCloseTo(0.82);
+    expect(fit.viewCenter).toEqual({ x: 1000, y: 600 });
+  });
+
+  it('amplia conteúdo pequeno respeitando o zoom máximo', () => {
+    const bounds = { left: 0, top: 0, width: 100, height: 100 };
+    const fit = calculateFitViewport(bounds, 1920, 1080, 0.1, 5);
+    expect(fit.zoom).toBe(5);
+    expect(fit.viewCenter).toEqual({ x: 50, y: 50 });
+  });
+
+  it('nunca fica abaixo do zoom mínimo', () => {
+    const bounds = { left: 0, top: 0, width: 100000, height: 100000 };
+    const fit = calculateFitViewport(bounds, 800, 600, 0.1, 5);
+    expect(fit.zoom).toBe(0.1);
+  });
+
+  it('viewport estreito e alto limita pela largura', () => {
+    const bounds = { left: 0, top: 0, width: 400, height: 100 };
+    const fit = calculateFitViewport(bounds, 496, 2000, 0.1, 5);
+    // (496 - 96) / 400 = 1.0; (2000 - 96) / 100 = 19.04 → min 1.0.
+    expect(fit.zoom).toBeCloseTo(1.0);
+  });
+
+  it('viewport largo e baixo limita pela altura', () => {
+    const bounds = { left: 0, top: 0, width: 100, height: 400 };
+    const fit = calculateFitViewport(bounds, 2000, 496, 0.1, 5);
+    // (2000 - 96) / 100 = 19.04; (496 - 96) / 400 = 1.0 → min 1.0.
+    expect(fit.zoom).toBeCloseTo(1.0);
+  });
+
+  it('centraliza o bounding box fora da origem, incluindo negativos', () => {
+    const bounds = { left: -300, top: -200, width: 600, height: 600 };
+    const fit = calculateFitViewport(bounds, 1920, 1080, 0.1, 5);
+    expect(fit.viewCenter).toEqual({ x: 0, y: 100 });
+  });
+
+  it('um único elemento é enquadrado e centralizado', () => {
+    const bounds = { left: 500, top: 500, width: 100, height: 100 };
+    const fit = calculateFitViewport(bounds, 1920, 1080, 0.1, 5);
+    expect(fit.zoom).toBe(5);
+    expect(fit.viewCenter).toEqual({ x: 550, y: 550 });
+  });
+});
 
 describe('calculateAnchoredZoomScroll e calculateViewCenterFromScroll', () => {
   const canvasBounds = { left: 0, top: 0, width: 2000, height: 1200 };

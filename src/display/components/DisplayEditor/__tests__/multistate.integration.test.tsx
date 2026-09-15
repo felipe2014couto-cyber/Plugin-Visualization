@@ -5,6 +5,7 @@ import { appendBar, appendDisplayElement, appendGauge, appendText, appendValue, 
 import { DisplayEditor } from '../DisplayEditor';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
 import { createPiPointBinding } from '../../../../pi/piPointBinding';
+import type { MultistateConfig } from '../../../multistate';
 
 jest.mock('@grafana/ui', () => {
   const actual = jest.requireActual('@grafana/ui');
@@ -38,7 +39,7 @@ const point: PiPointSearchResult = {
   name: 'SINUSOID', path: '\\\\pims\\SINUSOID', webId: 'webid', dataSourceUid: 'ds',
 };
 
-function Harness({ initial, onChange, loadValue }: { initial?: DisplayDocument; onChange?: (document: DisplayDocument) => void; loadValue?: () => Promise<{ value: unknown }> }) {
+function Harness({ initial, onChange, loadValue }: { initial?: DisplayDocument; onChange?: (document: DisplayDocument) => void; loadValue?: (binding: { pointName: string }) => Promise<{ value: unknown }> }) {
   const [document, setDocument] = useState<DisplayDocument>(() => initial ?? createDisplayDocument({ name: 'Multistate' }));
   return <DisplayEditor document={document} onChange={(next) => { setDocument(next); onChange?.(next); }} selectedPiPoint={point} loadValue={loadValue} />;
 }
@@ -136,14 +137,40 @@ describe('Multistate no editor', () => {
     expect(screen.getByTestId(`multistate-value2-${ruleId}`)).toBeInTheDocument();
     fireEvent.change(screen.getByTestId(`multistate-value-${ruleId}`), { target: { value: '20' } });
     fireEvent.change(screen.getByTestId(`multistate-value2-${ruleId}`), { target: { value: '80' } });
-    expect(screen.getByTestId(`multistate-value-${ruleId}`)).toHaveValue(20);
-    expect(screen.getByTestId(`multistate-value2-${ruleId}`)).toHaveValue(80);
+    expect(screen.getByTestId(`multistate-value-${ruleId}`)).toHaveValue('20');
+    expect(screen.getByTestId(`multistate-value2-${ruleId}`)).toHaveValue('80');
 
     fireEvent.change(screen.getByTestId(`multistate-value-${ruleId}`), { target: { value: '' } });
-    expect(screen.getByTestId(`multistate-value-${ruleId}`)).toHaveValue(null);
+    expect(screen.getByTestId(`multistate-value-${ruleId}`)).toHaveValue('');
     expect(changes.at(-1)?.elements[0].properties.binding).toEqual({
       dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID', webId: 'webid',
     });
+  });
+
+  it('aceita decimais com ponto, vírgula, negativos e BETWEEN sem converter vazio em zero', () => {
+    const binding = createPiPointBinding(point)!;
+    const initial = appendDisplayElement(createDisplayDocument({ name: 'Multistate' }), createRectangle({ id: 'rect-ms', binding }));
+    render(<Harness initial={initial} />);
+    selectElement('rect-ms');
+    fireEvent.click(screen.getByTestId('multistate-enabled'));
+    fireEvent.click(screen.getByTestId('multistate-add-rule'));
+    const ruleId = screen.getByTestId(/^multistate-rule-/).getAttribute('data-testid')?.replace('multistate-rule-', '') as string;
+    const value = screen.getByTestId(`multistate-value-${ruleId}`);
+
+    fireEvent.change(screen.getByTestId(`multistate-operator-${ruleId}`), { target: { value: 'between' } });
+    fireEvent.change(value, { target: { value: '5.' } });
+    expect(value).toHaveValue('5.');
+    fireEvent.change(value, { target: { value: '5.5' } });
+    expect(value).toHaveValue('5.5');
+    fireEvent.change(value, { target: { value: '5,' } });
+    expect(value).toHaveValue('5,');
+    fireEvent.change(value, { target: { value: '5,5' } });
+    fireEvent.change(screen.getByTestId(`multistate-value2-${ruleId}`), { target: { value: '7,25' } });
+
+    expect(value).toHaveValue('5.5');
+    expect(screen.getByTestId(`multistate-value2-${ruleId}`)).toHaveValue('7.25');
+    fireEvent.change(value, { target: { value: '' } });
+    expect(value).toHaveValue('');
   });
 
   it('permite configurar estados digitais em string no operador eq', () => {
@@ -188,6 +215,76 @@ describe('Multistate no editor', () => {
     expect(screen.getByTestId('display-element-value-old')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('display-mode-view'));
     expect(screen.queryByTestId('display-selection-overlay')).toBeNull();
+  });
+
+  describe('Multistate com sourceBinding', () => {
+    const sourceBinding = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'CDT158' };
+    const rules = [
+      { id: 'low', operator: 'lt' as const, value: 20, color: '#0000ff' },
+      { id: 'mid', operator: 'between' as const, value: 20, value2: 40, color: '#ffff00' },
+      { id: 'high', operator: 'gte' as const, value: 40, color: '#ff0000' },
+    ];
+
+    function buildDocument(): DisplayDocument {
+      const binding = createPiPointBinding(point)!;
+      const base = createDisplayDocument({ name: 'Multistate' });
+      return appendDisplayElement(base, createRectangle({
+        id: 'rect-ms',
+        binding,
+        multistate: { enabled: true, rules: [], sourceBinding },
+      }));
+    }
+
+    it('preserva o sourceBinding ao adicionar e editar regras', () => {
+      const changes: DisplayDocument[] = [];
+      render(<Harness initial={buildDocument()} onChange={(document) => changes.push(document)} />);
+      selectElement('rect-ms');
+      expect(screen.getByText('CDT158')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByTestId('multistate-add-rule'));
+      const ruleId = screen.getByTestId(/^multistate-rule-/).getAttribute('data-testid')?.replace('multistate-rule-', '') as string;
+      fireEvent.change(screen.getByTestId(`multistate-value-${ruleId}`), { target: { value: '30' } });
+
+      const last = changes.at(-1);
+      const multistate = last?.elements[0].properties.multistate as MultistateConfig | undefined;
+      expect(multistate?.sourceBinding).toEqual(sourceBinding);
+      expect(multistate?.rules).toHaveLength(1);
+      expect(last?.elements[0].properties.binding).toEqual(createPiPointBinding(point));
+    });
+
+    it('remove a fonte sem perder as regras', () => {
+      const initial = appendDisplayElement(createDisplayDocument({ name: 'Multistate' }), createRectangle({
+        id: 'rect-ms',
+        binding: createPiPointBinding(point)!,
+        multistate: { enabled: true, rules, sourceBinding },
+      }));
+      const changes: DisplayDocument[] = [];
+      render(<Harness initial={initial} onChange={(document) => changes.push(document)} />);
+      selectElement('rect-ms');
+
+      fireEvent.click(screen.getByTestId('multistate-remove-source'));
+      const multistate = changes.at(-1)?.elements[0].properties.multistate as MultistateConfig | undefined;
+      expect(multistate?.sourceBinding).toBeUndefined();
+      expect(multistate?.rules).toEqual(rules);
+      expect(screen.getByText('Arraste um PI Point aqui')).toBeInTheDocument();
+    });
+
+    it('avalia a cor pelo valor da fonte, não pelo valor principal', async () => {
+      const loadValue = jest.fn(async (binding: { pointName: string }) =>
+        binding.pointName === 'CDT158' ? { value: 35 } : { value: 85 });
+      const initial = appendDisplayElement(createDisplayDocument({ name: 'Multistate' }), createRectangle({
+        id: 'rect-ms',
+        binding: createPiPointBinding(point)!,
+        multistate: { enabled: true, rules, sourceBinding },
+      }));
+      render(<Harness initial={initial} loadValue={loadValue} />);
+
+      await waitFor(() => {
+        // Fonte CDT158 = 35 → regra 'mid' (20 a 40) → amarelo, mesmo com principal 85.
+        expect(screen.getByTestId('display-element-rect-ms')).toHaveAttribute('fill', '#ffff00');
+      });
+      expect(loadValue).toHaveBeenCalledWith(expect.objectContaining({ pointName: 'CDT158' }));
+    });
   });
 
   it('aplica multistate de texto e fundo a um elemento de texto', async () => {

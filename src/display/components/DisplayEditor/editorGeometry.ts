@@ -62,17 +62,50 @@ export function getContentBounds(
   if (valid.length === 0) {
     return { left: 0, top: 0, width: surface?.width || 1920, height: surface?.height || 1080 };
   }
-  const minX = Math.min(...valid.map((e) => e.x));
-  const minY = Math.min(...valid.map((e) => e.y));
-  const maxX = Math.max(...valid.map((e) => e.x + e.width));
-  const maxY = Math.max(...valid.map((e) => e.y + e.height));
-  
-  const pad = 16;
-  const left = Math.max(0, minX - pad);
-  const top = Math.max(0, minY - pad);
-  const right = maxX + pad;
-  const bottom = maxY + pad;
-  return { left, top, width: Math.max(100, right - left), height: Math.max(100, bottom - top) };
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  const expand = (x: number, y: number) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  };
+  for (const element of valid) {
+    if (element.type === GROUP_TYPE) {
+      // Group children store coordinates relative to the group origin. When
+      // present, the children are the actual content to frame; the group
+      // rectangle is only a container and must not enlarge the bounds.
+      const children = (element.properties as { elements?: DisplayElement[] }).elements ?? [];
+      if (children.length > 0) {
+        const childBounds = getContentBounds(children);
+        expand(element.x + childBounds.left, element.y + childBounds.top);
+        expand(element.x + childBounds.left + childBounds.width, element.y + childBounds.top + childBounds.height);
+        continue;
+      }
+    }
+    const rotation = (element.properties as { rotation?: unknown }).rotation;
+    const angle = typeof rotation === 'number' && Number.isFinite(rotation) ? rotation : 0;
+    const cx = element.x + element.width / 2;
+    const cy = element.y + element.height / 2;
+    const corners: Point[] = [
+      { x: element.x, y: element.y },
+      { x: element.x + element.width, y: element.y },
+      { x: element.x + element.width, y: element.y + element.height },
+      { x: element.x, y: element.y + element.height },
+    ];
+    for (const corner of corners) {
+      const rotated = angle !== 0 ? rotatePointAroundCenter(corner, { x: cx, y: cy }, angle) : corner;
+      expand(rotated.x, rotated.y);
+    }
+  }
+  return {
+    left: minX,
+    top: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
 }
 
 export const MIN_ELEMENT_SIZE = 1;

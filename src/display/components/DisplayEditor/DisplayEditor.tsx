@@ -145,6 +145,7 @@ import {
   type Point,
   type ResizeHandle,
 } from './editorGeometry';
+import { calculateFitViewport } from './viewportZoom';
 
 export type DisplayEditorMode = 'edit' | 'view';
 export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'bar-chart' | 'table' | 'xy-plot';
@@ -1972,28 +1973,25 @@ export function DisplayEditor({
   const handleZoomFit = useCallback(() => {
     const elements = documentRef.current.elements;
     const surface = documentRef.current.surface;
-    const wrapper = surfaceWrapperRef.current;
-    const bounds = elements.length > 0 ? getContentBounds(elements, surface) : getCanvasBounds(surface, elements);
-    if (elements.length === 0 && (!bounds.width || !bounds.height)) {
+    // Empty display: frame the surface itself. The empty-canvas SVG takes the
+    // full workspace, so a zoom of 1 with the surface center already fits.
+    if (elements.length === 0) {
       setSurfaceZoom(1);
-      setSurfaceViewCenter({ x: surface.width / 2, y: surface.height / 2 });
+      setSurfaceViewCenter({
+        x: surface.width / 2,
+        y: surface.height / 2,
+      });
       return;
     }
-    const availableWidth = Math.max(1, (wrapper?.clientWidth || surface.width) - 16);
-    const availableHeight = Math.max(1, (wrapper?.clientHeight || surface.height) - 16);
-    const scaleX = availableWidth / bounds.width;
-    const scaleY = availableHeight / bounds.height;
-    const zoom = Math.max(DISPLAY_ZOOM_MIN, Math.min(DISPLAY_ZOOM_MAX, Math.min(scaleX, scaleY)));
-    setSurfaceZoom(Number(zoom.toFixed(2)));
-    setSurfaceViewCenter({ x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 });
-    if (wrapper) {
-      setTimeout(() => {
-        if (wrapper) {
-          wrapper.scrollLeft = Math.max(0, (wrapper.scrollWidth - wrapper.clientWidth) / 2);
-          wrapper.scrollTop = Math.max(0, (wrapper.scrollHeight - wrapper.clientHeight) / 2);
-        }
-      }, 10);
-    }
+    const wrapper = surfaceWrapperRef.current;
+    const bounds = getContentBounds(elements, surface);
+    const availableWidth = Math.max(1, wrapper?.clientWidth || surface.width);
+    const availableHeight = Math.max(1, wrapper?.clientHeight || surface.height);
+    const fit = calculateFitViewport(bounds, availableWidth, availableHeight, DISPLAY_ZOOM_MIN, DISPLAY_ZOOM_MAX);
+    setSurfaceZoom(Number(fit.zoom.toFixed(2)));
+    // The layout effect that syncs wrapper scroll from viewCenter applies the
+    // pan together with the zoom — no manual scroll adjustment needed here.
+    setSurfaceViewCenter(fit.viewCenter);
   }, []);
 
   useEffect(() => {

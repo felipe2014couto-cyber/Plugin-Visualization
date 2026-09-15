@@ -20,9 +20,11 @@ export interface ValueElementViewProps {
   loadValue?: (binding: PiPointBinding) => Promise<PiPointValue>;
   runtimeState?: ValueRuntimeState;
   label?: string;
+  sourceValue?: unknown;
+  bgSourceValue?: unknown;
 }
 
-export const ValueElementView = React.memo(function ValueElementView({ element, loadValue, runtimeState, label }: ValueElementViewProps) {
+export const ValueElementView = React.memo(function ValueElementView({ element, loadValue, runtimeState, label, sourceValue, bgSourceValue }: ValueElementViewProps) {
   const [state, setState] = useState<ValueLoadState>({ status: 'loading' });
   const { binding } = element.properties;
 
@@ -78,18 +80,18 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
       : resolveThemeForeground(visual.color);
   }
 
-  const textColor = getMultistateColor(runtimeVal, element.properties.multistate, baseTextColor);
+  const textColor = getMultistateColor(runtimeVal, element.properties.multistate, baseTextColor, sourceValue);
   const defaultBg = isPiVision && element.properties._piVisionExplicitTransparent !== true && (!visual.backgroundColor || visual.backgroundColor === 'transparent')
     ? '#000000'
     : (visual.backgroundColor || 'transparent');
-  const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, defaultBg);
+  const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, defaultBg, bgSourceValue);
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
   const responsiveFontSize = element.properties._piVisionPreserveFontSize === true
     ? visual.fontSize
     : getResponsiveFontSize(element, visual.fontSize, lines);
-  const textBlink = evaluateMultistate(runtimeVal, element.properties.multistate)?.rule.blink === true;
-  const bgBlink = evaluateMultistate(runtimeVal, element.properties.backgroundMultistate)?.rule.blink === true;
+  const textBlink = evaluateMultistate(runtimeVal, element.properties.multistate, sourceValue)?.rule.blink === true;
+  const bgBlink = evaluateMultistate(runtimeVal, element.properties.backgroundMultistate, bgSourceValue)?.rule.blink === true;
   return (
     <g
       data-testid={`display-element-${element.id}`}

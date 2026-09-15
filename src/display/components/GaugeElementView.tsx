@@ -13,11 +13,12 @@ export interface GaugeElementViewProps {
   runtimeState?: ValueRuntimeState;
   databaseScale?: PiPointDatabaseLimits;
   label?: string;
+  sourceValue?: unknown;
 }
 
 const DEFAULT_TEXT_COLOR = 'var(--text-primary, rgba(255, 255, 255, 0.86))';
 
-export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState, databaseScale, label }: GaugeElementViewProps) {
+export const GaugeElementView = React.memo(function GaugeElementView({ element, runtimeState, databaseScale, label, sourceValue }: GaugeElementViewProps) {
   const options = getGaugeOptions(element.properties);
   const binding = element.properties.binding;
   const numericValue = getNumericValue(runtimeState);
@@ -76,8 +77,8 @@ export const GaugeElementView = React.memo(function GaugeElementView({ element, 
   const valueText = getValueText(binding, label, runtimeState, numericValue, options.decimals);
   const detailLines = getDetailLines(valueText, runtimeState, options.showValue, options.showUnit, false);
   const rawValue = runtimeState?.status === 'success' ? runtimeState.result.value : undefined;
-  const activeColor = getMultistateColor(rawValue, element.properties.multistate, options.color);
-  const blink = evaluateMultistate(rawValue, element.properties.multistate)?.rule.blink === true;
+  const activeColor = getMultistateColor(rawValue, element.properties.multistate, options.color, sourceValue);
+  const blink = evaluateMultistate(rawValue, element.properties.multistate, sourceValue)?.rule.blink === true;
   const showGaugeScale = options.showScale && element.width >= 180 && element.height >= 160;
   const scaleColor = resolveThemeForeground(options.gaugeScaleColor);
   const borderColor = resolveThemeForeground(options.gaugeBorderColor);
