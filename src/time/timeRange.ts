@@ -125,6 +125,20 @@ export function formatRelativeDuration(duration: number): string {
   return `${Math.max(1, Math.round(duration / UNIT_MS.m))}m`;
 }
 
+export function formatPreciseDuration(duration: number): string {
+  const totalSeconds = Math.max(1, Math.round(duration / UNIT_MS.s));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}h${minutes > 0 ? `${minutes}m` : ''}${seconds > 0 ? `${String(seconds).padStart(2, '0')}s` : ''}`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m${seconds > 0 ? `${String(seconds).padStart(2, '0')}s` : ''}`;
+  }
+  return `${seconds}s`;
+}
+
 export const REFRESH_INTERVAL_OPTIONS = [
   { label: 'Adaptativa', value: 'adaptativa' },
   { label: 'Desativado', value: '' },
@@ -160,4 +174,3 @@ export function getRefreshIntervalMs(interval?: string): number {
       return 0;
   }
 }
-

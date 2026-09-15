@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
 import {
   addBarChartItem,
@@ -12,7 +12,7 @@ import {
   createValue,
   type DisplayDocument,
 } from '../../../index';
-import { DisplayEditor, type PiPointDropSymbolType } from '../DisplayEditor';
+import { DisplayEditor, type LoadTrendSeriesForRange, type PiPointDropSymbolType } from '../DisplayEditor';
 import type { PiPointSearchResult } from '../../../../pi/piDataSource';
 import type { LoadTrendSeries } from '../../../runtime/trendRuntime';
 
@@ -47,12 +47,16 @@ const selectedPiPoint: PiPointSearchResult = {
 function Harness({
   loadTrend,
   loadRecordedTrend,
+  loadTrendForRange,
+  trendTimeRange,
   initial,
   point = selectedPiPoint,
   onDocumentChange,
 }: {
   loadTrend: LoadTrendSeries;
   loadRecordedTrend?: LoadTrendSeries;
+  loadTrendForRange?: LoadTrendSeriesForRange;
+  trendTimeRange?: { from: number; to: number };
   initial?: DisplayDocument;
   point?: PiPointSearchResult;
   onDocumentChange?: (document: DisplayDocument) => void;
@@ -71,6 +75,8 @@ function Harness({
       onDropSymbolTypeChange={setDropSymbolType}
       loadTrend={loadTrend}
       loadRecordedTrend={loadRecordedTrend}
+      loadTrendForRange={loadTrendForRange}
+      trendTimeRange={trendTimeRange}
     />
   );
 }
@@ -203,6 +209,93 @@ describe('DisplayEditor - Trend', () => {
     expect(screen.queryByTestId('trend-popup-cursor-popup-cursor-1')).toBeNull();
     fireEvent.click(screen.getByTestId('trend-popup-close'));
     expect(screen.queryByTestId('trend-popup')).toBeNull();
+  });
+
+  it('consulta o intervalo visível e ignora respostas antigas ou falhas sem manter dados obsoletos', async () => {
+    const resultKey = 'resolved-datasource\u0000pims\u0000SINUSOID';
+    const resultFor = (range: { from: number; to: number }, value: number) => ({
+      [resultKey]: {
+        status: 'success' as const,
+        series: {
+          pointName: 'SINUSOID',
+          points: [{ time: range.from + (range.to - range.from) / 2, value }],
+        },
+      },
+    });
+    let resolveFirstZoom: ((results: ReturnType<typeof resultFor>) => void) | undefined;
+    let resolveSecondZoom: ((results: ReturnType<typeof resultFor>) => void) | undefined;
+    const loadTrendForRange = jest.fn((
+      _bindings: Parameters<LoadTrendSeriesForRange>[0],
+      range: Parameters<LoadTrendSeriesForRange>[1],
+    ) => {
+      if (loadTrendForRange.mock.calls.length === 1) {
+        return Promise.resolve(resultFor(range, 10));
+      }
+      if (loadTrendForRange.mock.calls.length === 2) {
+        return new Promise<ReturnType<typeof resultFor>>((resolve) => { resolveFirstZoom = resolve; });
+      }
+      if (loadTrendForRange.mock.calls.length === 3) {
+        return new Promise<ReturnType<typeof resultFor>>((resolve) => { resolveSecondZoom = resolve; });
+      }
+      return Promise.reject(new Error('zoom indisponível'));
+    });
+    const initial = appendTrend(createDisplayDocument(), createTrend({
+      id: 'trend-zoom',
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' },
+    }));
+    const loadTrend = jest.fn(async () => resultFor({ from: 1_000, to: 2_000 }, 5));
+    render(<Harness
+      initial={initial}
+      loadTrend={loadTrend}
+      loadTrendForRange={loadTrendForRange}
+      trendTimeRange={{ from: 1_000, to: 2_000 }}
+    />);
+
+    await screen.findByTestId('trend-line-trend-zoom');
+    fireEvent.click(screen.getByTestId('display-mode-view'));
+    fireEvent.doubleClick(screen.getByTestId('display-element-trend-zoom'));
+    await waitFor(() => expect(loadTrendForRange).toHaveBeenNthCalledWith(
+      1,
+      [{ dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' }],
+      { from: 1_000, to: 2_000 },
+      expect.any(Function),
+      { maxDataPoints: 500 },
+    ));
+    await screen.findByTestId('trend-popup-line-0');
+    const svg = screen.getByLabelText('Trend detalhada') as unknown as SVGSVGElement;
+    jest.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 2400, bottom: 800, width: 2400, height: 800, toJSON: () => ({}) });
+    const plot = screen.getByTestId('trend-popup-cursor-plot');
+
+    fireEvent.pointerDown(plot, { clientX: 500, clientY: 120, pointerId: 31 });
+    fireEvent.pointerUp(plot, { clientX: 1700, clientY: 650, pointerId: 31 });
+    const firstZoomRange = loadTrendForRange.mock.calls[1][1];
+    expect(firstZoomRange.from).toBeGreaterThan(1_000);
+    expect(firstZoomRange.to).toBeLessThan(2_000);
+
+    fireEvent.pointerDown(plot, { clientX: 750, clientY: 160, pointerId: 32 });
+    fireEvent.pointerUp(plot, { clientX: 1450, clientY: 620, pointerId: 32 });
+    expect(loadTrendForRange).toHaveBeenCalledTimes(3);
+    const secondZoomRange = loadTrendForRange.mock.calls[2][1];
+    expect(secondZoomRange.from).toBeGreaterThan(firstZoomRange.from);
+    expect(secondZoomRange.to).toBeLessThan(firstZoomRange.to);
+
+    expect(resolveSecondZoom).toBeDefined();
+    await act(async () => {
+      resolveSecondZoom?.(resultFor(secondZoomRange, 222));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.getByTestId('trend-popup-legend-item-0')).toHaveTextContent('222'));
+    expect(resolveFirstZoom).toBeDefined();
+    await act(async () => {
+      resolveFirstZoom?.(resultFor(firstZoomRange, 111));
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('trend-popup-legend-item-0')).toHaveTextContent('222');
+
+    fireEvent.pointerDown(plot, { clientX: 900, clientY: 200, pointerId: 33 });
+    fireEvent.pointerUp(plot, { clientX: 1300, clientY: 580, pointerId: 33 });
+    await waitFor(() => expect(screen.queryByTestId('trend-popup-line-0')).toBeNull());
+    expect(screen.getByText('Sem dados')).toBeInTheDocument();
   });
 
   it('abre o pop-up de tendência no duplo clique em elemento Value no modo Visualizar', async () => {

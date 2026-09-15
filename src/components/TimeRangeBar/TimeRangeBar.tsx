@@ -3,6 +3,7 @@ import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
 import {
+  formatPreciseDuration,
   formatRelativeDuration,
   moveTimeSelectionToNow,
   resolveTimeSelection,
@@ -15,6 +16,7 @@ export interface TimeRangeBarProps {
   onChange: (selection: DisplayTimeSelection) => void;
   compact?: boolean;
   presentationMode?: boolean;
+  preciseDuration?: boolean;
 }
 
 const QUICK_RANGES = [
@@ -30,6 +32,7 @@ export function TimeRangeBar({
   onChange,
   compact = false,
   presentationMode = false,
+  preciseDuration = false,
 }: TimeRangeBarProps) {
   const styles = useStyles2(getStyles);
   const [startExpression, setStartExpression] = useState(selection.startExpression);
@@ -57,7 +60,9 @@ export function TimeRangeBar({
 
   const shift = (direction: -1 | 1) => onChange(shiftTimeSelection(selection, direction));
   const now = () => onChange(moveTimeSelectionToNow(selection));
-  const duration = formatRelativeDuration(selection.range.to - selection.range.from);
+  const duration = preciseDuration
+    ? formatPreciseDuration(selection.range.to - selection.range.from)
+    : formatRelativeDuration(selection.range.to - selection.range.from);
   const selectQuickRange = (expression: string) => {
     const next = resolveTimeSelection(`*-${expression}`, '*');
     if (next) {

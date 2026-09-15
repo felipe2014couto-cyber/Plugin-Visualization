@@ -2,6 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { TrendPopup } from '../TrendPopup';
 import type { TrendSeriesViewState } from '../TrendElementView';
+import { DEFAULT_TREND_VISUAL_OPTIONS } from '../../createTrend';
 
 beforeAll(() => {
   const currentWindow = window as unknown as { PointerEvent?: typeof MouseEvent; MouseEvent: typeof MouseEvent };
@@ -28,6 +29,12 @@ const seriesStates: TrendSeriesViewState[] = [
 ];
 
 describe('TrendPopup - escalas', () => {
+  const setPopupBounds = () => {
+    const svg = screen.getByLabelText('Trend detalhada') as unknown as SVGSVGElement;
+    jest.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 2400, bottom: 800, width: 2400, height: 800, toJSON: () => ({}) });
+    return screen.getByTestId('trend-popup-cursor-plot');
+  };
+
   it('inicia com escalas múltiplas, compartilha domínio na escala única e aceita limites configuráveis', () => {
     render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
 
@@ -50,7 +57,8 @@ describe('TrendPopup - escalas', () => {
   });
 
   it('aplica zoom por seleção retangular e desfaz com Ctrl+Z', () => {
-    render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
+    const onVisibleTimeRangeChange = jest.fn();
+    render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onVisibleTimeRangeChange={onVisibleTimeRangeChange} onClose={jest.fn()} />);
     const originalPath = screen.getByTestId('trend-popup-line-0').getAttribute('d');
     expect(screen.getByTestId('trend-popup-zoom-mode')).toHaveAttribute('aria-pressed', 'true');
 
@@ -63,9 +71,130 @@ describe('TrendPopup - escalas', () => {
     fireEvent.pointerUp(plot, { clientX: 1300, clientY: 600, pointerId: 7 });
     expect(screen.queryByTestId('trend-popup-zoom-selection')).toBeNull();
     expect(screen.getByTestId('trend-popup-line-0').getAttribute('d')).not.toBe(originalPath);
+    expect(onVisibleTimeRangeChange).toHaveBeenCalledTimes(1);
+    const firstRange = onVisibleTimeRangeChange.mock.calls[0][0];
+    expect(firstRange.from).toBeGreaterThan(1_000);
+    expect(firstRange.to).toBeLessThan(2_000);
 
     fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
     expect(screen.getByTestId('trend-popup-line-0').getAttribute('d')).toBe(originalPath);
+    expect(onVisibleTimeRangeChange).toHaveBeenLastCalledWith({ from: 1_000, to: 2_000 });
+  });
+
+  it('reconsulta zooms temporais sucessivos, reseta a janela e mantém zoom vertical local', () => {
+    const onVisibleTimeRangeChange = jest.fn();
+    render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onVisibleTimeRangeChange={onVisibleTimeRangeChange} onClose={jest.fn()} />);
+    const svg = screen.getByLabelText('Trend detalhada') as unknown as SVGSVGElement;
+    jest.spyOn(svg, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 2400, bottom: 800, width: 2400, height: 800, toJSON: () => ({}) });
+    const plot = screen.getByTestId('trend-popup-cursor-plot');
+
+    fireEvent.pointerDown(plot, { clientX: 600, clientY: 120, pointerId: 20 });
+    fireEvent.pointerUp(plot, { clientX: 1600, clientY: 650, pointerId: 20 });
+    const firstRange = onVisibleTimeRangeChange.mock.calls[0][0];
+    fireEvent.pointerDown(plot, { clientX: 800, clientY: 180, pointerId: 21 });
+    fireEvent.pointerUp(plot, { clientX: 1400, clientY: 600, pointerId: 21 });
+    const secondRange = onVisibleTimeRangeChange.mock.calls[1][0];
+    expect(secondRange.from).toBeGreaterThan(firstRange.from);
+    expect(secondRange.to).toBeLessThan(firstRange.to);
+
+    fireEvent.click(screen.getByTestId('trend-popup-reset-zoom'));
+    expect(onVisibleTimeRangeChange).toHaveBeenLastCalledWith({ from: 1_000, to: 2_000 });
+
+    onVisibleTimeRangeChange.mockClear();
+    const plotX = Number(plot.getAttribute('x'));
+    const plotWidth = Number(plot.getAttribute('width'));
+    fireEvent.pointerDown(plot, { clientX: plotX, clientY: 150, pointerId: 22 });
+    fireEvent.pointerUp(plot, { clientX: plotX + plotWidth, clientY: 550, pointerId: 22 });
+    expect(onVisibleTimeRangeChange).not.toHaveBeenCalled();
+  });
+
+  it('limita a seleção fora do plot antes de decidir que o zoom mantém Y automático', () => {
+    const onVisibleTimeRangeChange = jest.fn();
+    render(<TrendPopup seriesStates={seriesStates} timeRange={{ from: 1_000, to: 2_000 }} onVisibleTimeRangeChange={onVisibleTimeRangeChange} onClose={jest.fn()} />);
+    const plot = setPopupBounds();
+    const plotX = Number(plot.getAttribute('x'));
+    const plotY = Number(plot.getAttribute('y'));
+    const plotWidth = Number(plot.getAttribute('width'));
+    const plotHeight = Number(plot.getAttribute('height'));
+
+    fireEvent.pointerDown(plot, { clientX: plotX + 200, clientY: plotY - 40, pointerId: 35 });
+    fireEvent.pointerUp(plot, { clientX: plotX + plotWidth - 200, clientY: plotY + plotHeight + 40, pointerId: 35 });
+
+    expect(onVisibleTimeRangeChange).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByTestId(/trend-popup-y-tick-0-/).map((tick) => tick.textContent)).toEqual([
+      '10', '9', '8', '7', '6', '5', '4', '3', '2', '1', '0',
+    ]);
+  });
+
+  it('sincroniza a barra local com zooms sucessivos, Ctrl+Z e reset sem alterar a janela global', () => {
+    const globalRange = { from: 1_000, to: 28_801_000 };
+    const onVisibleTimeRangeChange = jest.fn();
+    render(<TrendPopup seriesStates={seriesStates} timeRange={globalRange} onVisibleTimeRangeChange={onVisibleTimeRangeChange} onClose={jest.fn()} />);
+    const selectDuration = (durationMs: number) => {
+      fireEvent.change(screen.getByTestId('time-range-start'), { target: { value: new Date(globalRange.from).toISOString() } });
+      fireEvent.change(screen.getByTestId('time-range-end'), { target: { value: new Date(globalRange.from + durationMs).toISOString() } });
+      fireEvent.click(screen.getByTestId('time-range-apply'));
+    };
+
+    expect(screen.getByTestId('time-range-duration')).toHaveTextContent('8h');
+    selectDuration(27 * 60_000 + 38_000);
+    expect(screen.getByTestId('time-range-duration')).toHaveTextContent('27m38s');
+    selectDuration(7 * 60_000 + 6_000);
+    expect(screen.getByTestId('time-range-duration')).toHaveTextContent('7m06s');
+    selectDuration(31_000);
+    expect(screen.getByTestId('time-range-duration')).toHaveTextContent('31s');
+    expect(onVisibleTimeRangeChange).toHaveBeenLastCalledWith(expect.objectContaining({ from: expect.any(Number), to: expect.any(Number) }));
+
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    expect(screen.getByTestId('time-range-duration')).toHaveTextContent('7m06s');
+    fireEvent.click(screen.getByTestId('trend-popup-reset-zoom'));
+    expect(screen.getByTestId('time-range-duration')).toHaveTextContent('8h');
+    expect(onVisibleTimeRangeChange).toHaveBeenLastCalledWith(globalRange);
+    expect(screen.getByTestId('trend-popup-reset-zoom')).toBeDisabled();
+  });
+
+  it('preserva limites Y absolutos quando uma resposta detalhada chega após zoom retangular', () => {
+    const near32 = (values: number[]): TrendSeriesViewState[] => [{
+      series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'PV' }, color: '#6e9fff' },
+      runtimeState: { status: 'success', data: { pointName: 'PV', points: values.map((value, index) => ({ time: 1_000 + index * 250, value })) } },
+    }];
+    const { rerender } = render(<TrendPopup seriesStates={near32([31.99, 32.01, 32, 32.02, 31.98])} timeRange={{ from: 1_000, to: 2_000 }} onVisibleTimeRangeChange={jest.fn()} onClose={jest.fn()} />);
+    const plot = setPopupBounds();
+
+    fireEvent.pointerDown(plot, { clientX: 500, clientY: 180, pointerId: 40 });
+    fireEvent.pointerUp(plot, { clientX: 1800, clientY: 620, pointerId: 40 });
+    const ticksBefore = screen.getAllByTestId(/trend-popup-y-tick-0-/).map((tick) => tick.textContent);
+
+    rerender(<TrendPopup seriesStates={near32([31.7, 32.3, 31.8, 32.2, 32])} timeRange={{ from: 1_000, to: 2_000 }} onVisibleTimeRangeChange={jest.fn()} onClose={jest.fn()} />);
+    expect(screen.getAllByTestId(/trend-popup-y-tick-0-/).map((tick) => tick.textContent)).toEqual(ticksBefore);
+  });
+
+  it('distingue ticks próximos de 32 e inclui segundos em janelas temporais curtas', () => {
+    const closeSeries: TrendSeriesViewState[] = [{
+      series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'PV' }, color: '#6e9fff' },
+      runtimeState: { status: 'success', data: { pointName: 'PV', points: [{ time: 1_000, value: 31.998 }, { time: 61_000, value: 32.002 }] } },
+    }];
+    render(<TrendPopup seriesStates={closeSeries} timeRange={{ from: 1_000, to: 61_000 }} onClose={jest.fn()} />);
+
+    const yLabels = screen.getAllByTestId(/trend-popup-y-tick-0-/).map((tick) => tick.textContent);
+    expect(new Set(yLabels).size).toBe(yLabels.length);
+    const xLabels = screen.getAllByTestId(/trend-popup-x-tick-/).map((tick) => tick.textContent ?? '');
+    expect(xLabels.every((label) => /^\d{2}:\d{2}:\d{2}$/.test(label))).toBe(true);
+  });
+
+  it('recorta o traçado na área útil sem limitar os valores dos dados', () => {
+    const outOfRange: TrendSeriesViewState[] = [{
+      series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'PV' }, color: '#6e9fff', scaleMin: 31.99, scaleMax: 32.01 },
+      runtimeState: { status: 'success', data: { pointName: 'PV', points: [{ time: 1_000, value: 31 }, { time: 1_500, value: 32 }, { time: 2_000, value: 33 }] } },
+    }];
+    render(<TrendPopup seriesStates={outOfRange} timeRange={{ from: 1_000, to: 2_000 }} visualOptions={{ ...DEFAULT_TREND_VISUAL_OPTIONS, scaleMode: 'configurable' }} onClose={jest.fn()} />);
+
+    const clipGroup = screen.getByTestId('trend-popup-series-clip');
+    expect(clipGroup.getAttribute('clip-path')).toMatch(/^url\(#trend-popup-plot-clip-\d+\)$/);
+    const path = screen.getByTestId('trend-popup-line-0').getAttribute('d') ?? '';
+    const yCoordinates = [...path.matchAll(/[ML] [^ ]+ ([^ ]+)/g)].map((match) => Number(match[1]));
+    expect(Math.min(...yCoordinates)).toBeLessThan(20);
+    expect(Math.max(...yCoordinates)).toBeGreaterThan(744);
   });
 
   it('cria cursores com clique simples mesmo com zoom habilitado e os remove com duplo clique', () => {

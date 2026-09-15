@@ -10,6 +10,7 @@ import { DisplayEditor } from '../../display/components/DisplayEditor';
 import {
   DisplayEditorMode,
   PiPointDropSymbolType,
+  type LoadTrendSeriesForRange,
 } from '../../display/components/DisplayEditor/DisplayEditor';
 import {
   checkPiConnection,
@@ -499,6 +500,50 @@ export function App() {
 
   const rangeFrom = timeSelection.range.from;
   const rangeTo = timeSelection.range.to;
+  const loadTrendForRange = useCallback<LoadTrendSeriesForRange>(
+    async (bindings, range, publishUpdate, options) => {
+      const stateBindings = bindings.filter(isStatePiPointBinding);
+      const numericBindings = bindings.filter((binding) => !isStatePiPointBinding(binding));
+      const plotBindings = numericBindings.filter((binding) => Boolean(binding.webId));
+      const [plotDataResults, stateResults] = await Promise.all([
+        getPiTrendsPlotDataForRange(plotBindings, range, options),
+        getPiTrendsRecordedHistoryForRange(stateBindings, range, options),
+      ]);
+      const failedBindings = numericBindings.filter((binding) => (
+        !binding.webId || plotDataResults[getTrendBindingCacheKey(binding)]?.status === 'error'
+      ));
+      const results: Record<string, PiTrendSeriesResult> = { ...plotDataResults, ...stateResults };
+      if (failedBindings.length > 0) {
+        const cacheAndPublish = (next: Record<string, PiTrendSeriesResult>) => {
+          Object.entries(next).forEach(([key, result]) => {
+            if (result.status === 'success') {
+              trendSeriesCacheRef.current.set(key, { range, series: result.series });
+            }
+          });
+          publishUpdate?.(next);
+        };
+        const fallbackResults = range.to - range.from > TREND_PREVIEW_DURATION_MS
+          ? await getPiTrendsRecordedHistoryForRange(failedBindings, range, options)
+          : await progressiveTrendLoader(failedBindings, range, cacheAndPublish, options);
+        failedBindings.forEach((binding) => {
+          const key = getTrendBindingCacheKey(binding);
+          const fallback = fallbackResults[key];
+          if (fallback) {
+            results[key] = fallback;
+          } else {
+            delete results[key];
+          }
+        });
+      }
+      Object.entries(results).forEach(([key, result]) => {
+        if (result.status === 'success') {
+          trendSeriesCacheRef.current.set(key, { range, series: result.series });
+        }
+      });
+      return results;
+    },
+    [progressiveTrendLoader],
+  );
   const loadTrend = useCallback<LoadTrendSeries>(
     async (bindings, publishUpdate, options) => {
       const range = { from: rangeFrom, to: rangeTo };
@@ -513,54 +558,11 @@ export function App() {
       const fullBindings = bindings.filter((binding) => !incrementalKeys.has(getTrendBindingCacheKey(binding)));
       const results: Record<string, PiTrendSeriesResult> = {};
 
-      const storeSuccessfulResults = (next: Record<string, PiTrendSeriesResult>) => {
-        Object.entries(next).forEach(([key, result]) => {
-          if (result.status === 'success') {
-            trendSeriesCacheRef.current.set(key, { range, series: result.series });
-          }
-        });
-      };
-
       const loadFullHistory = async () => {
         if (fullBindings.length === 0) {
           return;
         }
-        const stateBindings = fullBindings.filter(isStatePiPointBinding);
-        const numericBindings = fullBindings.filter((binding) => !isStatePiPointBinding(binding));
-        const cacheAndPublish = (next: Record<string, PiTrendSeriesResult>) => {
-          storeSuccessfulResults(next);
-          publishUpdate?.(next);
-        };
-        const plotBindings = numericBindings.filter((binding) => Boolean(binding.webId));
-        const [plotDataResults, stateResults] = await Promise.all([
-          getPiTrendsPlotDataForRange(plotBindings, range, options),
-          getPiTrendsRecordedHistoryForRange(stateBindings, range, options),
-        ]);
-        const failedBindings = numericBindings.filter((binding) => (
-          !binding.webId || plotDataResults[getTrendBindingCacheKey(binding)]?.status === 'error'
-        ));
-        const fullResults: Record<string, PiTrendSeriesResult> = { ...plotDataResults, ...stateResults };
-        if (failedBindings.length > 0) {
-          // Para janelas maiores que a prévia (por exemplo, 1 dia), uma
-          // prévia de baixa resolução e o refinamento consultariam o mesmo
-          // histórico duas vezes. A consulta gravada única é mais rápida e
-          // já entrega a resolução necessária para esse período.
-          const fallbackResults = range.to - range.from > TREND_PREVIEW_DURATION_MS
-            ? await getPiTrendsRecordedHistoryForRange(failedBindings, range, options)
-            : await progressiveTrendLoader(failedBindings, range, cacheAndPublish, options);
-          // PlotData é apenas a primeira tentativa para tags sem WebID. Os
-          // erros dessa fase são provisórios enquanto o fallback está ativo.
-          failedBindings.forEach((binding) => {
-            const key = getTrendBindingCacheKey(binding);
-            const fallback = fallbackResults[key];
-            if (fallback?.status === 'success') {
-              fullResults[key] = fallback;
-            } else {
-              delete fullResults[key];
-            }
-          });
-        }
-        storeSuccessfulResults(fullResults);
+        const fullResults = await loadTrendForRange(fullBindings, range, publishUpdate, options);
         Object.assign(results, fullResults);
       };
 
@@ -589,7 +591,7 @@ export function App() {
       await Promise.all([loadFullHistory(), appendCurrentValues()]);
       return results;
     },
-    [progressiveTrendLoader, rangeFrom, rangeTo, refreshInterval, timeSelection.endExpression],
+    [loadTrendForRange, rangeFrom, rangeTo, refreshInterval, timeSelection.endExpression],
   );
   const hasPiConnection = piConnection.status === 'connected';
 
@@ -1241,6 +1243,7 @@ export function App() {
               // até haver resposta, em vez de exibir BAD durante o handshake.
               loadTrend={loadTrend}
               loadRecordedTrend={loadTrend}
+              loadTrendForRange={loadTrendForRange}
               loadRecordedData={(bindings, range, options) => getPiTrendsRecordedHistoryForRange(bindings, range, options)}
               loadInterpolatedData={(bindings, range, options) => getPiTrendsPreviewForRange(bindings, range, options)}
               showToolbar={isAssetsPanelOpen}

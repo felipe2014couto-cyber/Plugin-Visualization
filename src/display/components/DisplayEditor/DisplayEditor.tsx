@@ -66,7 +66,7 @@ import {
   type GeometricShape,
 } from '../../createRectangle';
 import { createPiPointBinding, isPiPointBinding, type PiPointBinding, type PiPointDatabaseLimits } from '../../../pi/piPointBinding';
-import { getPiPointMetadata, type PiDigitalStatesResult, type PiPointMetadata, type PiPointSearchResult, type PiPointValue } from '../../../pi/piDataSource';
+import { getPiPointMetadata, type PiDigitalStatesResult, type PiPointMetadata, type PiPointSearchResult, type PiPointValue, type PiTrendSeriesResult } from '../../../pi/piDataSource';
 import type { CalculationDefinition } from '../../../calculations/calculationEngine';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
 import { CALCULATION_DRAG_MIME, parseCalculationDragData } from '../../../calculations/calculationDrag';
@@ -149,6 +149,12 @@ import { calculateFitViewport } from './viewportZoom';
 
 export type DisplayEditorMode = 'edit' | 'view';
 export type PiPointDropSymbolType = 'value' | 'trend' | 'gauge' | 'bar' | 'bar-chart' | 'table' | 'xy-plot';
+export type LoadTrendSeriesForRange = (
+  bindings: readonly PiPointBinding[],
+  range: DisplayTimeRange,
+  publishUpdate?: (results: Record<string, PiTrendSeriesResult>) => void,
+  options?: { maxDataPoints: number },
+) => Promise<Record<string, PiTrendSeriesResult>>;
 
 export interface DisplayEditorProps {
   document: DisplayDocument;
@@ -162,6 +168,7 @@ export interface DisplayEditorProps {
   loadValues?: LoadCurrentValues;
   loadTrend?: LoadTrendSeries;
   loadRecordedTrend?: LoadTrendSeries;
+  loadTrendForRange?: LoadTrendSeriesForRange;
   dropSymbolType?: PiPointDropSymbolType;
   onDropSymbolTypeChange?: (type: PiPointDropSymbolType) => void;
   trendRefreshKey?: string;
@@ -236,6 +243,7 @@ export function DisplayEditor({
   loadValues,
   loadTrend,
   loadRecordedTrend,
+  loadTrendForRange,
   dropSymbolType = 'value',
   onDropSymbolTypeChange,
   trendRefreshKey,
@@ -1899,17 +1907,25 @@ export function DisplayEditor({
     }
   }, [dispatch, displayDocument, state.selectedElementId]);
 
-  const handleTrendOpen = useCallback((element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors: readonly TrendCursor[] = []) => {
-    const requestId = trendPopupRequest.current + 1;
-    trendPopupRequest.current = requestId;
-    const initialState = { element, seriesStates, cursors, loading: !!loadRecordedTrend };
-    trendPopupRef.current = initialState;
-    setTrendPopup(initialState);
-    if (!loadRecordedTrend) {
+  const requestTrendPopupRange = useCallback((element: TrendElement, range: DisplayTimeRange) => {
+    if (!loadTrendForRange) {
       return;
     }
+    const requestId = trendPopupRequest.current + 1;
+    trendPopupRequest.current = requestId;
     const series = getTrendSeries(element);
-    const applyResults = (results: Awaited<ReturnType<LoadTrendSeries>>) => {
+    setTrendPopup((current) => {
+      if (!current || current.element.id !== element.id) {
+        return current;
+      }
+      const next: TrendPopupState = {
+        ...current,
+        loading: true,
+      };
+      trendPopupRef.current = next;
+      return next;
+    });
+    const applyResults = (results: Awaited<ReturnType<LoadTrendSeriesForRange>>, complete: boolean) => {
       if (trendPopupRequest.current !== requestId) {
         return;
       }
@@ -1919,12 +1935,66 @@ export function DisplayEditor({
         }
         const next = {
           ...current,
-          loading: false,
+          loading: !complete,
           seriesStates: current.seriesStates.map(({ series: trendSeries, runtimeState }) => {
+            const result = results[`${trendSeries.binding.dataSourceUid}\u0000${trendSeries.binding.serverPath}\u0000${trendSeries.binding.pointName}`];
+            if (result?.status === 'success') {
+              return { series: trendSeries, runtimeState: { status: 'success' as const, data: result.series } };
+            }
+            if (result?.status === 'error') {
+              return { series: trendSeries, runtimeState: { status: 'error' as const, error: result.error } };
+            }
+            return complete
+              ? { series: trendSeries, runtimeState: { status: 'error' as const, error: new Error('Trend sem resposta') } }
+              : { series: trendSeries, runtimeState };
+          }),
+        };
+        trendPopupRef.current = next;
+        return next;
+      });
+    };
+    void loadTrendForRange(
+      series.map(({ binding }) => binding),
+      range,
+      (results) => applyResults(results, false),
+      { maxDataPoints: TREND_POPUP_MAX_DATA_POINTS },
+    ).then((results) => applyResults(results, true))
+      .catch((error: unknown) => applyResults(Object.fromEntries(series.map(({ binding }) => [
+        `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`,
+        { status: 'error' as const, error: error instanceof Error ? error : new Error(String(error)) },
+      ])), true));
+  }, [loadTrendForRange]);
+
+  const handleTrendOpen = useCallback((element: TrendElement, seriesStates: readonly TrendSeriesViewState[], cursors: readonly TrendCursor[] = []) => {
+    const initialState = { element, seriesStates, cursors, loading: Boolean(loadTrendForRange || loadRecordedTrend) };
+    trendPopupRef.current = initialState;
+    setTrendPopup(initialState);
+    if (loadTrendForRange && trendTimeRange) {
+      requestTrendPopupRange(element, trendTimeRange);
+      return;
+    }
+    if (!loadRecordedTrend) {
+      return;
+    }
+    const requestId = trendPopupRequest.current + 1;
+    trendPopupRequest.current = requestId;
+    const series = getTrendSeries(element);
+    const applyResults = (results: Awaited<ReturnType<LoadTrendSeries>>) => {
+      if (trendPopupRequest.current !== requestId) {
+        return;
+      }
+      setTrendPopup((current) => {
+        if (!current || current.element.id !== element.id) {
+          return current;
+        }
+        const next: TrendPopupState = {
+          ...current,
+          loading: false,
+          seriesStates: current.seriesStates.map(({ series: trendSeries }) => {
             const result = results[`${trendSeries.binding.dataSourceUid}\u0000${trendSeries.binding.serverPath}\u0000${trendSeries.binding.pointName}`];
             return result?.status === 'success'
               ? { series: trendSeries, runtimeState: { status: 'success' as const, data: result.series } }
-              : { series: trendSeries, runtimeState };
+              : { series: trendSeries, runtimeState: { status: 'error' as const, error: result?.error ?? new Error('Trend sem resposta') } };
           }),
         };
         trendPopupRef.current = next;
@@ -1933,16 +2003,11 @@ export function DisplayEditor({
     };
     void loadRecordedTrend(series.map(({ binding }) => binding), applyResults, { maxDataPoints: TREND_POPUP_MAX_DATA_POINTS })
       .then(applyResults)
-      .catch(() => {
-        if (trendPopupRequest.current === requestId) {
-          setTrendPopup((current) => {
-            const next = current ? { ...current, loading: false } : null;
-            trendPopupRef.current = next;
-            return next;
-          });
-        }
-      });
-  }, [loadRecordedTrend]);
+      .catch((error: unknown) => applyResults(Object.fromEntries(series.map(({ binding }) => [
+        `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`,
+        { status: 'error' as const, error: error instanceof Error ? error : new Error(String(error)) },
+      ]))));
+  }, [loadRecordedTrend, loadTrendForRange, requestTrendPopupRange, trendTimeRange]);
 
   const handleTrendPopupClose = useCallback(() => {
     trendPopupRequest.current += 1;
@@ -2379,6 +2444,7 @@ export function DisplayEditor({
           timeRange={trendTimeRange}
           timeSelection={timeSelection}
           onTimeSelectionChange={onTimeSelectionChange}
+          onVisibleTimeRangeChange={(range) => requestTrendPopupRange(trendPopup.element, range)}
           loading={trendPopup.loading}
           pointInfo={trendPointInfo ? { ...trendPointInfo, onClose: () => setTrendPointInfo(null) } : undefined}
           onSeriesContextMenu={handleTrendLegendInfo}

@@ -12,9 +12,9 @@ jest.mock('@grafana/ui', () => {
   };
 });
 
-function Harness({ initial }: { initial: DisplayTimeSelection }) {
+function Harness({ initial, preciseDuration = false }: { initial: DisplayTimeSelection; preciseDuration?: boolean }) {
   const [selection, setSelection] = useState(initial);
-  return <TimeRangeBar selection={selection} onChange={setSelection} />;
+  return <TimeRangeBar selection={selection} onChange={setSelection} preciseDuration={preciseDuration} />;
 }
 
 describe('TimeRangeBar', () => {
@@ -61,5 +61,10 @@ describe('TimeRangeBar', () => {
     expect(screen.getByTestId('time-range-duration')).toHaveTextContent('31d');
     expect(screen.queryByTestId('time-range-presets')).toBeNull();
     expect(screen.getByTestId('time-range-duration')).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('exibe duração precisa quando solicitado sem mudar o formato padrão', () => {
+    render(<Harness preciseDuration initial={{ startExpression: '2026-08-07 10:00:00', endExpression: '2026-08-07 10:27:38', range: { from: now - (27 * 60 + 38) * 1000, to: now } }} />);
+    expect(screen.getByTestId('time-range-duration')).toHaveTextContent('27m38s');
   });
 });

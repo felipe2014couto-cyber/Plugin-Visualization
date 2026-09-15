@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import { TimeRangeBar } from '../../components/TimeRangeBar';
-import type { DisplayTimeRange, DisplayTimeSelection } from '../../time/timeRange';
+import { formatAbsoluteTime, type DisplayTimeRange, type DisplayTimeSelection } from '../../time/timeRange';
 import type { TrendSeriesViewState } from './TrendElementView';
 import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
 import { DEFAULT_TREND_VISUAL_OPTIONS, type TrendScaleMode, type TrendSeries, type TrendVisualOptions } from '../createTrend';
@@ -21,6 +21,7 @@ export interface TrendPopupProps {
   timeRange?: DisplayTimeRange;
   timeSelection?: DisplayTimeSelection;
   onTimeSelectionChange?: (selection: DisplayTimeSelection) => void;
+  onVisibleTimeRangeChange?: (range: DisplayTimeRange) => void;
   loading?: boolean;
   visualOptions?: TrendVisualOptions;
   initialCursors?: readonly TrendCursor[];
@@ -40,17 +41,19 @@ const POPUP_LEGEND_ITEM_HEIGHT = 46;
 const POPUP_CURSOR_READING_FONT_SIZE = 13;
 const POPUP_CURSOR_READING_LINE_HEIGHT = 16;
 const POPUP_CURSOR_READING_BLOCK_HEIGHT = 34;
+const FULL_HEIGHT_ZOOM_TOLERANCE_PX = 8;
 const EMPTY_TREND_CURSORS: readonly TrendCursor[] = [];
 type PopupScaleMode = TrendScaleMode;
 type PopupCustomScales = Record<string, { min: string; max: string }>;
 interface PopupZoom {
   from: number;
   to: number;
-  topRatio: number;
-  bottomRatio: number;
+  yScales?: Record<string, ValueScale>;
 }
 
-export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelectionChange, loading = false, visualOptions = DEFAULT_TREND_VISUAL_OPTIONS, initialCursors = EMPTY_TREND_CURSORS, pointInfo, onSeriesContextMenu, onClose }: TrendPopupProps) {
+let nextPopupClipPathId = 1;
+
+export function TrendPopup({ seriesStates, timeRange, timeSelection, onVisibleTimeRangeChange, loading = false, visualOptions = DEFAULT_TREND_VISUAL_OPTIONS, initialCursors = EMPTY_TREND_CURSORS, pointInfo, onSeriesContextMenu, onClose }: TrendPopupProps) {
   const [scaleMode, setScaleMode] = useState<PopupScaleMode>(visualOptions.scaleMode === 'configurable' ? 'configurable' : 'individual');
   const [customScales, setCustomScales] = useState<PopupCustomScales>(() => getInitialCustomScales(seriesStates));
   const [cursorMode, setCursorMode] = useState(true);
@@ -61,6 +64,9 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
   const [cursorDrag, setCursorDrag] = useState<{ id: string; pointerId: number } | null>(null);
   const [hideLegend, setHideLegend] = useState<boolean>(() => visualOptions.hideLegend === true);
   const nextCursorId = useRef(1);
+  const initialTimeRange = useRef(timeRange).current;
+  const visibleRange = zoomHistory.at(-1) ?? initialTimeRange;
+  const popupTimeSelection = visibleRange ? createPopupTimeSelection(visibleRange) : timeSelection;
 
   useEffect(() => setCursors([...initialCursors]), [initialCursors]);
 
@@ -89,17 +95,21 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
       if (editingText || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') {
         return;
       }
-      setZoomHistory((current) => {
-        if (current.length === 0) {
-          return current;
-        }
-        event.preventDefault();
-        return current.slice(0, -1);
-      });
+      if (zoomHistory.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      const next = zoomHistory.slice(0, -1);
+      const currentRange = zoomHistory.at(-1);
+      const restoredRange = next.at(-1) ?? initialTimeRange;
+      setZoomHistory(next);
+      if (restoredRange && currentRange && !sameTimeRange(currentRange, restoredRange)) {
+        onVisibleTimeRangeChange?.({ from: restoredRange.from, to: restoredRange.to });
+      }
     };
     window.addEventListener('keydown', undoZoom);
     return () => window.removeEventListener('keydown', undoZoom);
-  }, []);
+  }, [initialTimeRange, onVisibleTimeRangeChange, zoomHistory]);
 
   const addCursor = (time: number) => {
     const cursor = { id: `popup-cursor-${nextCursorId.current}`, time };
@@ -184,6 +194,21 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
           <button
             type="button"
             className={styles.trendTool}
+            data-testid="trend-popup-reset-zoom"
+            disabled={zoomHistory.length === 0}
+            onClick={() => {
+              const currentRange = zoomHistory.at(-1);
+              setZoomHistory([]);
+              if (initialTimeRange && currentRange && !sameTimeRange(currentRange, initialTimeRange)) {
+                onVisibleTimeRangeChange?.(initialTimeRange);
+              }
+            }}
+          >
+            <TrendToolIcon kind="zoom" /><span>Reset zoom</span>
+          </button>
+          <button
+            type="button"
+            className={styles.trendTool}
             data-testid="trend-popup-clear-cursors"
             disabled={cursors.length === 0}
             onClick={() => {
@@ -261,7 +286,13 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
               zoom={zoomHistory.at(-1)}
               visualOptions={{ ...visualOptions, hideLegend }}
               zoomEnabled={zoomMode}
-              onApplyZoom={(zoom) => setZoomHistory((current) => [...current, zoom])}
+              onApplyZoom={(zoom) => {
+                const currentRange = zoomHistory.at(-1) ?? timeRange;
+                setZoomHistory((current) => [...current, zoom]);
+                if (currentRange && !sameTimeRange(currentRange, zoom)) {
+                  onVisibleTimeRangeChange?.({ from: zoom.from, to: zoom.to });
+                }
+              }}
               cursorEnabled={cursorMode}
               cursors={cursors}
               selectedCursorId={selectedCursorId}
@@ -286,19 +317,44 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onTimeSelec
           {pointInfo && <PiPointInfoPanel {...pointInfo} />}
         </div>
       </div>
-      {timeSelection && onTimeSelectionChange && (
-        <TimeRangeBar selection={timeSelection} onChange={onTimeSelectionChange} />
+      {popupTimeSelection && (
+        <TimeRangeBar
+          selection={popupTimeSelection}
+          preciseDuration
+          onChange={(selection) => {
+            if (visibleRange && sameTimeRange(visibleRange, selection.range)) {
+              return;
+            }
+            setZoomHistory((current) => [...current, { from: selection.range.from, to: selection.range.to }]);
+            onVisibleTimeRangeChange?.(selection.range);
+          }}
+        />
       )}
     </section>
   );
+}
+
+function createPopupTimeSelection(range: DisplayTimeRange): DisplayTimeSelection {
+  return {
+    startExpression: formatAbsoluteTime(range.from),
+    endExpression: formatAbsoluteTime(range.to),
+    range,
+  };
+}
+
+function sameTimeRange(
+  first: Pick<DisplayTimeRange, 'from' | 'to'>,
+  second: Pick<DisplayTimeRange, 'from' | 'to'>,
+): boolean {
+  return Math.abs(first.from - second.from) < 1 && Math.abs(first.to - second.to) < 1;
 }
 
 function getInitialCustomScales(seriesStates: readonly TrendSeriesViewState[]): PopupCustomScales {
   return Object.fromEntries(seriesStates.map(({ series }) => {
     const key = popupSeriesKey(series);
     return [key, {
-      min: Number.isFinite(series.scaleMin) ? formatValue(series.scaleMin as number) : '',
-      max: Number.isFinite(series.scaleMax) ? formatValue(series.scaleMax as number) : '',
+      min: Number.isFinite(series.scaleMin) ? String(series.scaleMin) : '',
+      max: Number.isFinite(series.scaleMax) ? String(series.scaleMax) : '',
     }];
   }));
 }
@@ -344,6 +400,7 @@ function PopupChart({
   onRemoveCursor,
   onSeriesContextMenu,
 }: PopupChartProps) {
+  const clipPathId = useRef(`trend-popup-plot-clip-${nextPopupClipPathId++}`).current;
   const [zoomDrag, setZoomDrag] = useState<{ pointerId: number; start: { x: number; y: number }; current: { x: number; y: number } } | null>(null);
   const [selectedSeriesKeys, setSelectedSeriesKeys] = useState<Set<string>>(() => new Set());
   useEffect(() => {
@@ -380,7 +437,7 @@ function PopupChart({
           : automaticScale;
     return {
       ...item,
-      scale: applyZoomScale(modeScale, zoom),
+      scale: applyZoomScale(modeScale, zoom, item.key),
       stateLabels: [...new Set((item.data.states ?? []).map(({ value }) => value))],
     };
   });
@@ -456,16 +513,22 @@ function PopupChart({
           if (isZoomSelection) {
             const from = domainStart + ((left - plot.x) / plot.width) * (domainEnd - domainStart);
             const to = domainStart + ((right - plot.x) / plot.width) * (domainEnd - domainStart);
-            const topRatio = (top - plot.y) / plot.height;
-            const bottomRatio = (bottom - plot.y) / plot.height;
-            const currentTop = zoom?.topRatio ?? 0;
-            const currentBottom = zoom?.bottomRatio ?? 1;
-            const currentSpan = currentBottom - currentTop;
+            const preservesAutomaticY = top <= plot.y + FULL_HEIGHT_ZOOM_TOLERANCE_PX
+              && bottom >= plot.y + plot.height - FULL_HEIGHT_ZOOM_TOLERANCE_PX;
+            const yScales = preservesAutomaticY ? undefined : Object.fromEntries(scaledSeries.map(({ key, scale }) => {
+              const span = scale.max - scale.min;
+              const topRatio = (top - plot.y) / plot.height;
+              const bottomRatio = (bottom - plot.y) / plot.height;
+              return [key, {
+                max: scale.max - topRatio * span,
+                min: scale.max - bottomRatio * span,
+                step: ((bottomRatio - topRatio) * span) / SCALE_INTERVALS,
+              }];
+            }));
             onApplyZoom({
               from,
               to,
-              topRatio: currentTop + topRatio * currentSpan,
-              bottomRatio: currentTop + bottomRatio * currentSpan,
+              yScales,
             });
           } else if (cursorEnabled) {
             onActivateCursor(pointerTime(event));
@@ -482,6 +545,11 @@ function PopupChart({
         onEndCursorDrag();
       }}
     >
+      <defs>
+        <clipPath id={clipPathId} clipPathUnits="userSpaceOnUse">
+          <rect x={plot.x} y={plot.y} width={plot.width} height={plot.height} />
+        </clipPath>
+      </defs>
       <rect x={plot.x} y={plot.y} width={plot.width} height={plot.height} fill={plotBackground} />
       {visualOptions.title && <text x={plot.x + plot.width / 2} y={plot.y + 18} textAnchor="middle" fill={foreground} fontSize={visualOptions.fontSize} fontFamily={visualOptions.fontFamily}>{visualOptions.title}</text>}
       {Array.from({ length: visualOptions.scaleIntervals + 1 }, (_, index) => index).map((index) => {
@@ -492,12 +560,12 @@ function PopupChart({
             {showHorizontalGrid && <line x1={plot.x} y1={y} x2={plot.x + plot.width} y2={y} stroke={gridColor} />}
             {axisSeries.map(({ color, scale, name, data, stateLabels }, seriesIndex) => {
               const axisValue = data.points.length > 0
-                ? formatValue(scale.max - ((scale.max - scale.min) * index) / visualOptions.scaleIntervals, visualOptions.numberFormat)
+                ? formatAxisValue(scale.max - ((scale.max - scale.min) * index) / visualOptions.scaleIntervals, scale.step, visualOptions.numberFormat)
                 : stateLabels.length > MAX_NAMED_STATE_LABELS
                   ? formatValue((stateLabels.length - 1) * (1 - index / visualOptions.scaleIntervals), visualOptions.numberFormat)
                   : undefined;
               return axisValue !== undefined ? (
-                <text key={name} x={8 + seriesIndex * POPUP_AXIS_COLUMN_WIDTH} y={y + 5} textAnchor="start" fill={color} fontSize={POPUP_AXIS_FONT_SIZE}>
+                <text key={name} data-testid={`trend-popup-y-tick-${seriesIndex}-${index}`} x={8 + seriesIndex * POPUP_AXIS_COLUMN_WIDTH} y={y + 5} textAnchor="start" fill={color} fontSize={POPUP_AXIS_FONT_SIZE}>
                   {axisValue}
                 </text>
               ) : null;
@@ -525,7 +593,7 @@ function PopupChart({
         <g key={`xtick-${time}-${tickIndex}`}>
           {showVerticalGrid && <line x1={xFor(time)} y1={plot.y} x2={xFor(time)} y2={plot.y + plot.height} stroke={gridColor} />}
           <line x1={xFor(time)} y1={plot.y + plot.height} x2={xFor(time)} y2={plot.y + plot.height - 6} stroke={axisColor} />
-          <text x={xFor(time)} y={plot.y + plot.height + 20} textAnchor="middle" fill={foreground} fontSize={POPUP_AXIS_FONT_SIZE}>{formatAxisTime(time, timeSpan)}</text>
+          <text data-testid={`trend-popup-x-tick-${tickIndex}`} x={xFor(time)} y={plot.y + plot.height + 20} textAnchor="middle" fill={foreground} fontSize={POPUP_AXIS_FONT_SIZE}>{formatAxisTime(time, timeSpan)}</text>
         </g>
       ))}
       {visualOptions.scaleMode === 'configurable' && scaledSeries
@@ -536,6 +604,7 @@ function PopupChart({
             {Number.isFinite(scaleMin) && <text x={plot.x + 8 + index * 64} y={plot.y + plot.height - 8}>{formatValue(scaleMin as number, visualOptions.numberFormat)}</text>}
           </g>
         ))}
+      <g clipPath={`url(#${clipPathId})`} data-testid="trend-popup-series-clip">
       {scaledSeries.map(({ key, name, color, lineWidth, lineStyle, marker, data, scale, stateLabels }, index) => {
         const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
         const path = points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${yFor(point.value, scale)}`).join(' ');
@@ -552,6 +621,7 @@ function PopupChart({
           </g>
         );
       })}
+      </g>
       {isLegendVisible && (
         <foreignObject
           x={legendX - 8}
@@ -879,6 +949,22 @@ function formatValue(value: number, format: TrendVisualOptions['numberFormat'] =
   return Math.abs(value) < 1 ? value.toFixed(1) : String(Math.round(value));
 }
 
+function formatAxisValue(value: number, step: number, format: TrendVisualOptions['numberFormat'] = 'automatic'): string {
+  if (format !== 'automatic') {
+    return formatValue(value, format);
+  }
+  const absoluteStep = Math.abs(step);
+  if (!Number.isFinite(value) || !Number.isFinite(absoluteStep) || absoluteStep === 0) {
+    return formatValue(value, format);
+  }
+  const magnitude = Math.abs(value);
+  if ((magnitude > 0 && (magnitude >= 1e9 || magnitude < 1e-6)) || absoluteStep < 1e-6) {
+    return value.toExponential(3);
+  }
+  const decimals = Math.min(8, Math.max(0, Math.ceil(-Math.log10(absoluteStep)) + 1));
+  return value.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+}
+
 function popupRegressionPath(points: ReadonlyArray<{ time: number; value: number }>, xFor: (time: number) => number, yFor: (value: number) => number): string {
   const meanTime = points.reduce((sum, point) => sum + point.time, 0) / points.length;
   const meanValue = points.reduce((sum, point) => sum + point.value, 0) / points.length;
@@ -934,14 +1020,8 @@ function applyCustomScale(automaticScale: ValueScale, customScale: { min: string
   return { min, max, step: (max - min) / SCALE_INTERVALS };
 }
 
-function applyZoomScale(scale: ValueScale, zoom: PopupZoom | undefined): ValueScale {
-  if (!zoom) {
-    return scale;
-  }
-  const span = scale.max - scale.min;
-  const max = scale.max - zoom.topRatio * span;
-  const min = scale.max - zoom.bottomRatio * span;
-  return { min, max, step: (max - min) / SCALE_INTERVALS };
+function applyZoomScale(scale: ValueScale, zoom: PopupZoom | undefined, seriesKey: string): ValueScale {
+  return zoom?.yScales?.[seriesKey] ?? scale;
 }
 
 function popupSeriesKey(series: TrendSeriesViewState['series']): string {
@@ -971,7 +1051,11 @@ function formatAxisTime(time: number, span: number): string {
   if (span >= 7 * 24 * 60 * 60 * 1000) {
     return new Date(time).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   }
-  return new Date(time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return new Date(time).toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(span < 60 * 60 * 1000 ? { second: '2-digit' as const } : {}),
+  });
 }
 
 function TrendToolIcon({ kind }: { kind: 'single' | 'multiple' | 'configurable' | 'cursor' | 'zoom' | 'clear' | 'legend' }) {
