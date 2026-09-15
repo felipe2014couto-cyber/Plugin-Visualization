@@ -15,6 +15,7 @@ import type { PiDigitalState, PiDigitalStatesResult } from '../../../pi/piDataSo
 import type { PiPointBinding } from '../../../pi/piPointBinding';
 import { TransparentColorPicker } from './TransparentColorPicker';
 import { PI_POINT_DRAG_MIME, parsePiPointDragData } from '../../../pi/piPointDrag';
+import { createPiPointBinding } from '../../../pi/piPointBinding';
 
 export interface MultistatePropertiesPanelProps {
   title?: string;
@@ -38,49 +39,60 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
   const styles = useStyles2(getStyles);
   const normalized = normalizeMultistateConfig(config) ?? { enabled: false, rules: [] };
   const [digitalStates, setDigitalStates] = useState<PiDigitalState[]>([]);
+  const [sourceDragActive, setSourceDragActive] = useState(false);
 
-  // Handle PI Point drop for sourceBinding
-  const handleSourceDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    if (!normalized.enabled) return;
-    const data = event.dataTransfer.getData(PI_POINT_DRAG_MIME);
-    if (data) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'copy';
+  const hasPiPointDrag = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    return Array.from(event.dataTransfer.types).includes(PI_POINT_DRAG_MIME);
+  }, []);
+
+  const handleSourceDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!normalized.enabled || !hasPiPointDrag(event)) {
+      return;
     }
-  }, [normalized.enabled]);
-
-  const handleSourceDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-    if (!normalized.enabled) return;
-    const data = event.dataTransfer.getData(PI_POINT_DRAG_MIME);
-    if (!data) return;
-
-    const dragData = parsePiPointDragData(data);
-    if (!dragData) return;
-
-    // Extract pointName from the name field and serverPath from the path field
-    const pointName = dragData.name;
-    // serverPath is the path without the point name suffix
-    const rawPath = dragData.path ?? '';
-    const pointSuffix = `\\${pointName}`;
-    const lowerPath = rawPath.toLocaleLowerCase();
-    const lowerSuffix = pointSuffix.toLocaleLowerCase();
-    const serverPath = lowerPath.endsWith(lowerSuffix)
-      ? rawPath.slice(0, rawPath.length - pointSuffix.length).replace(/^\\+/, '')
-      : rawPath.replace(/^\\+/, '');
-
     event.preventDefault();
     event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+    setSourceDragActive(true);
+  }, [normalized.enabled, hasPiPointDrag]);
 
-    const newBinding: PiPointBinding = {
-      dataSourceUid: dragData.dataSourceUid ?? '',
-      serverPath,
-      pointName,
-      ...(dragData.webId ? { webId: dragData.webId } : {}),
-      ...(dragData.pointType ? { pointType: dragData.pointType } : {}),
-    };
+  const handleSourceDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!normalized.enabled || !hasPiPointDrag(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+    setSourceDragActive(true);
+  }, [normalized.enabled, hasPiPointDrag]);
 
-    onChange({ ...normalized, sourceBinding: newBinding });
-  }, [normalized, onChange]);
+  const handleSourceDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    const next = event.relatedTarget as Node | null;
+    if (!next || !event.currentTarget.contains(next)) {
+      setSourceDragActive(false);
+    }
+  }, []);
+
+  const handleSourceDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!normalized.enabled || !hasPiPointDrag(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setSourceDragActive(false);
+
+    const raw = event.dataTransfer.getData(PI_POINT_DRAG_MIME);
+    const point = parsePiPointDragData(raw);
+    if (!point) {
+      return;
+    }
+
+    const bindingResult = createPiPointBinding(point);
+    if (!bindingResult) {
+      return;
+    }
+
+    onChange({ ...normalized, sourceBinding: bindingResult });
+  }, [normalized, onChange, hasPiPointDrag]);
 
   const handleRemoveSource = useCallback(() => {
     onChange({ ...normalized, sourceBinding: undefined });
@@ -148,11 +160,14 @@ export function MultistatePropertiesPanel({ title = 'Multistate', testIdPrefix =
           <div className={styles.sourceTitle}>Fonte do MultiState</div>
           {!normalized.sourceBinding ? (
             <div
-              className={styles.dropZone}
+              className={`${styles.dropZone} ${sourceDragActive ? styles.dropZoneActive : ''}`}
+              data-testid="multistate-source-dropzone"
+              onDragEnter={handleSourceDragEnter}
               onDragOver={handleSourceDragOver}
+              onDragLeave={handleSourceDragLeave}
               onDrop={handleSourceDrop}
             >
-              Arraste um PI Point aqui
+              {sourceDragActive ? 'Solte o PI Point aqui' : 'Arraste um PI Point aqui'}
             </div>
           ) : (
             <div className={styles.sourceInfo}>
@@ -366,11 +381,21 @@ const getStyles = (theme: GrafanaTheme2) => ({
     color: var(--text-secondary);
     font-size: 10px;
     cursor: pointer;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background-color 0.2s;
     &:hover {
       border-color: var(--accent);
       color: var(--text-primary);
     }
+  `,
+  dropZoneActive: css`
+    padding: 16px;
+    border: 2px solid var(--accent);
+    border-radius: 4px;
+    text-align: center;
+    color: var(--text-primary);
+    font-size: 10px;
+    cursor: pointer;
+    background-color: var(--selection-bg);
   `,
   sourceInfo: css`
     display: flex;
