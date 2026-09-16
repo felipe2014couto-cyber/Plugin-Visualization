@@ -73,16 +73,27 @@ describe('progressive trend loader', () => {
     const loader = createProgressiveTrendLoader(queryRange, queryPreview);
     const range = { from: 0, to: 2 * 24 * 60 * 60 * 1000 };
 
-    await expect(loader([binding], range)).resolves.toStrictEqual(preview);
+    const publishUpdate = jest.fn();
+    const resultPromise = loader([binding], range, publishUpdate, { revision: 7 });
     expect(queryPreview).toHaveBeenCalledWith([binding], range, { maxDataPoints: 250 });
     await flushAsyncWork();
+    expect(publishUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      revision: 7,
+      stage: 'preview',
+      completeness: 'complete',
+      results: preview,
+    }));
     expect(queryRange).toHaveBeenCalledWith([binding], range, { maxDataPoints: 750 });
 
     resolveComplete?.(complete);
-    await completePromise;
-    await Promise.resolve();
+    await expect(resultPromise).resolves.toEqual(expect.objectContaining({
+      revision: 7,
+      stage: 'final',
+      completeness: 'complete',
+      results: complete,
+    }));
     await expect(loader.loadRecorded([binding], range)).resolves.toStrictEqual(complete);
-    await expect(loader([binding], range)).resolves.toStrictEqual(preview);
+    await expect(loader([binding], range)).resolves.toEqual(expect.objectContaining({ results: complete }));
     expect(queryPreview).toHaveBeenCalledTimes(1);
     expect(queryRange).toHaveBeenCalledTimes(1);
   });
@@ -106,8 +117,9 @@ describe('progressive trend loader', () => {
     expect(queryPreview).toHaveBeenCalledTimes(1);
     expect(queryRecorded).toHaveBeenCalledTimes(1);
     resolvePreview?.({ [resultKey]: { status: 'error', error: new Error('prévia lenta') } });
-    await expect(resultPromise).resolves.toStrictEqual(recorded);
-    expect(publishComplete).toHaveBeenCalledWith(recorded);
+    await expect(resultPromise).resolves.toEqual(expect.objectContaining({ stage: 'final', results: recorded }));
+    expect(publishComplete).toHaveBeenCalledWith(expect.objectContaining({ stage: 'final', results: recorded }));
+    expect(publishComplete).not.toHaveBeenCalledWith(expect.objectContaining({ stage: 'preview' }));
   });
 
   it('revalida preview e refinamento depois do TTL sem reutilizar dados indefinidamente', async () => {
@@ -138,7 +150,12 @@ describe('progressive trend loader', () => {
     const loader = createProgressiveTrendLoader(queryRecorded, queryPreview);
     const range = { from: 0, to: TREND_PREVIEW_DURATION_MS };
 
-    await expect(loader([binding], range)).resolves.toStrictEqual(preview);
+    const publishUpdate = jest.fn();
+    await expect(loader([binding], range, publishUpdate)).resolves.toEqual(expect.objectContaining({
+      stage: 'final',
+      results: recorded,
+    }));
+    expect(publishUpdate).toHaveBeenCalledWith(expect.objectContaining({ stage: 'preview', results: preview }));
     expect(queryPreview).toHaveBeenCalledWith([binding], range, { maxDataPoints: 250 });
     await flushAsyncWork();
     expect(queryRecorded).toHaveBeenCalledWith([binding], range, { maxDataPoints: 750 });
@@ -159,11 +176,11 @@ describe('progressive trend loader', () => {
     const publishComplete = jest.fn();
     const loader = createProgressiveTrendLoader(queryRecorded, queryPreview);
 
-    const previews = await loader(bindings, range, publishComplete);
+    const finalResult = await loader(bindings, range, publishComplete);
     await Promise.all(bindings.map((selectedBinding) => loader.loadRecorded([selectedBinding], range)));
     await Promise.resolve();
 
-    expect(Object.keys(previews)).toEqual([
+    expect(Object.keys(finalResult.results)).toEqual([
       'ds\u0000pims\u0000SINUSOID',
       'ds\u0000pims\u0000OTHER',
       'ds\u0000pims\u0000THIRD',
@@ -172,7 +189,7 @@ describe('progressive trend loader', () => {
     expect(queryPreview).toHaveBeenCalledWith(bindings, range, { maxDataPoints: 250 });
     expect(queryRecorded).toHaveBeenCalledTimes(1);
     expect(queryRecorded).toHaveBeenCalledWith(bindings, range, { maxDataPoints: 750 });
-    expect(publishComplete).toHaveBeenCalledTimes(1);
+    expect(publishComplete).toHaveBeenCalledWith(expect.objectContaining({ stage: 'final', completeness: 'complete' }));
   });
 
   it('faz somente uma consulta por fase para vinte tags', async () => {
@@ -191,16 +208,16 @@ describe('progressive trend loader', () => {
     const loader = createProgressiveTrendLoader(queryRecorded, queryPreview);
     const range = { from: 0, to: TREND_PREVIEW_DURATION_MS };
 
-    const previews = await loader(bindings, range, publishComplete, { maxDataPoints: 900 });
+    const finalResult = await loader(bindings, range, publishComplete, { maxDataPoints: 900 });
     await loader.loadRecorded(bindings, range, { maxDataPoints: 900 });
     await Promise.resolve();
 
-    expect(Object.keys(previews)).toHaveLength(20);
+    expect(Object.keys(finalResult.results)).toHaveLength(20);
     expect(queryPreview).toHaveBeenCalledTimes(1);
     expect(queryPreview).toHaveBeenCalledWith(bindings, range, { maxDataPoints: 250 });
     expect(queryRecorded).toHaveBeenCalledTimes(1);
     expect(queryRecorded).toHaveBeenCalledWith(bindings, range, { maxDataPoints: 900 });
-    expect(publishComplete).toHaveBeenCalledTimes(1);
+    expect(publishComplete).toHaveBeenCalledWith(expect.objectContaining({ stage: 'final', completeness: 'complete' }));
   });
 
   it('envia até cinquenta targets da prévia em um único lote', async () => {
@@ -216,12 +233,12 @@ describe('progressive trend loader', () => {
     const queryPreview = jest.fn(async (selectedBindings: readonly PiPointBinding[]) => resultFor(selectedBindings));
     const publishUpdate = jest.fn();
     const loader = createProgressiveTrendLoader(jest.fn(async () => ({})), queryPreview);
-    const previews = await loader(bindings, { from: 0, to: TREND_PREVIEW_DURATION_MS }, publishUpdate);
+    const finalResult = await loader(bindings, { from: 0, to: TREND_PREVIEW_DURATION_MS }, publishUpdate);
 
     expect(queryPreview).toHaveBeenCalledTimes(1);
     expect(queryPreview.mock.calls[0][0]).toHaveLength(21);
-    expect(Object.keys(previews)).toHaveLength(21);
-    expect(publishUpdate).not.toHaveBeenCalled();
+    expect(Object.keys(finalResult.results)).toHaveLength(21);
+    expect(publishUpdate).toHaveBeenCalledWith(expect.objectContaining({ stage: 'final', completeness: 'complete' }));
   });
 
   it.each([1, 3, 10, 20])('mede uma chamada por fase para %i tag(s) compatíveis', async (count) => {
@@ -264,11 +281,37 @@ describe('progressive trend loader', () => {
     );
 
     await expect(loader([binding, secondBinding], { from: 0, to: TREND_PREVIEW_DURATION_MS }, publishComplete))
-      .resolves.toStrictEqual(preview);
+      .resolves.toEqual(expect.objectContaining({ stage: 'final', results: recorded }));
     await loader.loadRecorded([binding, secondBinding], { from: 0, to: TREND_PREVIEW_DURATION_MS });
     await Promise.resolve();
 
-    expect(publishComplete).toHaveBeenCalledWith(recorded);
+    expect(publishComplete).toHaveBeenCalledWith(expect.objectContaining({
+      stage: 'final',
+      completeness: 'complete',
+      results: recorded,
+      errors: { [secondKey]: recorded[secondKey].error },
+    }));
+  });
+
+  it('não consulta nem publica preview no modo final-only', async () => {
+    const recorded = {
+      [resultKey]: { status: 'success' as const, series: { pointName: 'SINUSOID', points: [{ time: 2, value: 3 }] } },
+    };
+    const queryPreview = jest.fn(async () => ({}));
+    const publishUpdate = jest.fn();
+    const loader = createProgressiveTrendLoader(jest.fn(async () => recorded), queryPreview);
+    const range = { from: 10, to: 20 };
+
+    await expect(loader([binding], range, publishUpdate, { mode: 'final-only', revision: 9, maxDataPoints: 500 }))
+      .resolves.toEqual(expect.objectContaining({
+        revision: 9,
+        range,
+        stage: 'final',
+        completeness: 'complete',
+        results: recorded,
+      }));
+    expect(queryPreview).not.toHaveBeenCalled();
+    expect(publishUpdate).not.toHaveBeenCalled();
   });
 
   it('deduplica somente requisições idênticas do mesmo binding, intervalo e modo', async () => {

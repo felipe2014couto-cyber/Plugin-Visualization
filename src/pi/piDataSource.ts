@@ -191,6 +191,7 @@ export interface PiTrendTimeRange {
 
 export interface PiTrendQueryOptions {
   maxDataPoints?: number;
+  includeOutside?: boolean;
 }
 
 export type PiCapabilityStatus = 'confirmed' | 'unsupported' | 'permission-denied' | 'invalid' | 'error' | 'not-tested';
@@ -2072,7 +2073,7 @@ function buildHistoricalTrendRequest(
         ? { enable: true, interval }
         : { enable: false },
       recordedValues: mode === 'recorded'
-        ? { enable: true, maxNumber: maxDataPoints, boundaryType: 'Inside' }
+        ? { enable: true, maxNumber: maxDataPoints, boundaryType: options.includeOutside ? 'Outside' : 'Inside' }
         : { enable: false, boundaryType: 'Inside' },
       summary: { enable: false, types: [] },
       useUnit: { enable: false },
@@ -2390,7 +2391,7 @@ function normalizePlotDataResponse(response: unknown, pointName: string): PiTren
     }
     const point = item as { Timestamp?: unknown; Value?: unknown };
     const time = normalizeTrendTimestamp(point.Timestamp);
-    const value = point.Value;
+    const value = normalizePlotValue(point.Value);
     return time === undefined || value === null || value === undefined ? [] : [{ time, value }];
   });
   const numericPoints = values.flatMap(({ time, value }) => (
@@ -2404,6 +2405,17 @@ function normalizePlotDataResponse(response: unknown, pointName: string): PiTren
     points: [],
     states: values.map(({ time, value }) => ({ time, value: String(value) })).sort((left, right) => left.time - right.time),
   };
+}
+
+function normalizePlotValue(value: unknown): unknown {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const structured = value as { Name?: unknown; Value?: unknown };
+  if (typeof structured.Name === 'string' && structured.Name.trim()) {
+    return structured.Name;
+  }
+  return structured.Value;
 }
 
 function normalizeStateTrendFrame(

@@ -36,7 +36,6 @@ import {
   type TrendSeries,
   updateTrendSeriesOptions,
   updateTrendVisualOptions,
-  createTrendElementForElement,
   createCalculationTrendBinding,
 } from '../../createTrend';
 import {
@@ -153,7 +152,11 @@ export type LoadTrendSeriesForRange = (
   bindings: readonly PiPointBinding[],
   range: DisplayTimeRange,
   publishUpdate?: (results: Record<string, PiTrendSeriesResult>) => void,
-  options?: { maxDataPoints: number },
+  options?: {
+    maxDataPoints: number;
+    revision?: number;
+    mode?: 'progressive' | 'final-only';
+  },
 ) => Promise<Record<string, PiTrendSeriesResult>>;
 
 export interface DisplayEditorProps {
@@ -1956,8 +1959,8 @@ export function DisplayEditor({
     void loadTrendForRange(
       series.map(({ binding }) => binding),
       range,
-      (results) => applyResults(results, false),
-      { maxDataPoints: TREND_POPUP_MAX_DATA_POINTS },
+      undefined,
+      { maxDataPoints: TREND_POPUP_MAX_DATA_POINTS, revision: requestId, mode: 'final-only' },
     ).then((results) => applyResults(results, true))
       .catch((error: unknown) => applyResults(Object.fromEntries(series.map(({ binding }) => [
         `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`,
@@ -2070,21 +2073,6 @@ export function DisplayEditor({
     const timeout = setTimeout(handleZoomFit, 0);
     return () => clearTimeout(timeout);
   }, [displayDocument.elements, displayDocument.id, handleZoomFit]);
-
-  useEffect(() => {
-    const current = trendPopupRef.current;
-    if (!current) {
-      return;
-    }
-    const element = displayDocument.elements.find((candidate) => candidate.id === current.element.id);
-    if (!element) {
-      return;
-    }
-    const trendElement = createTrendElementForElement(element);
-    if (trendElement) {
-      handleTrendOpen(trendElement, current.seriesStates, current.cursors);
-    }
-  }, [displayDocument.elements, handleTrendOpen, trendRefreshKey]);
 
   const presentationMountedRef = useRef(false);
   useEffect(() => {

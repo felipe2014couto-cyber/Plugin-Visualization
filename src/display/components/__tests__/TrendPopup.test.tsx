@@ -169,6 +169,64 @@ describe('TrendPopup - escalas', () => {
     expect(screen.getAllByTestId(/trend-popup-y-tick-0-/).map((tick) => tick.textContent)).toEqual(ticksBefore);
   });
 
+  it('mantém o estado anterior na borda esquerda durante o zoom', () => {
+    const stateSeries: TrendSeriesViewState[] = [{
+      series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'CODIGO_UM', pointType: 'String' }, color: '#ff9830' },
+      runtimeState: {
+        status: 'success',
+        data: {
+          pointName: 'CODIGO_UM',
+          points: [],
+          states: [{ time: 900, value: 'RJNTB' }, { time: 1_500, value: 'P989H' }],
+        },
+      },
+    }];
+    render(<TrendPopup seriesStates={stateSeries} timeRange={{ from: 1_000, to: 2_000 }} onVisibleTimeRangeChange={jest.fn()} onClose={jest.fn()} />);
+    const plot = setPopupBounds();
+    const plotX = Number(plot.getAttribute('x'));
+
+    expect(screen.getByTestId('trend-popup-state-line-0').getAttribute('d')).toMatch(new RegExp(`^M ${plotX} `));
+
+    fireEvent.pointerDown(plot, { clientX: plotX + 200, clientY: 100, pointerId: 44 });
+    fireEvent.pointerUp(plot, { clientX: plotX + 1_000, clientY: 700, pointerId: 44 });
+
+    expect(screen.getByTestId('trend-popup-state-line-0').getAttribute('d')).toMatch(new RegExp(`^M ${plotX} `));
+  });
+
+  it('mostra somente limites coloridos das escalas digitais nas bordas, sem nomes no eixo', () => {
+    const states: TrendSeriesViewState[] = [
+      seriesStates[0],
+      {
+        series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'CODIGO_UM', pointType: 'String' }, color: '#ff9830', scaleMin: 0.8, scaleMax: 12 },
+        runtimeState: { status: 'success', data: { pointName: 'CODIGO_UM', points: [], states: [{ time: 1_000, value: 'P989H' }, { time: 1_500, value: 'RJMF2' }] } },
+      },
+      {
+        series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'STATUS', pointType: 'Digital' }, color: '#73bf69' },
+        runtimeState: { status: 'success', data: { pointName: 'STATUS', points: [], states: [{ time: 1_000, value: 'Off' }, { time: 1_500, value: 'On' }] } },
+      },
+      {
+        series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'STATUS_2', pointType: 'Digital' }, color: '#b877d9', scaleMin: -0.87, scaleMax: 1 },
+        runtimeState: { status: 'success', data: { pointName: 'STATUS_2', points: [], states: [{ time: 1_000, value: 'A' }] } },
+      },
+      {
+        series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'STATUS_3', pointType: 'Digital' }, color: '#f2495c', scaleMin: -0.063, scaleMax: 1 },
+        runtimeState: { status: 'success', data: { pointName: 'STATUS_3', points: [], states: [{ time: 1_000, value: 'B' }] } },
+      },
+    ];
+    render(<TrendPopup seriesStates={states} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
+
+    expect(screen.getByTestId('trend-popup-y-tick-1-0')).toHaveTextContent('12');
+    expect(screen.getByTestId('trend-popup-y-tick-1-10')).toHaveTextContent('0.8');
+    expect(screen.getByTestId('trend-popup-y-tick-2-0')).toHaveTextContent('1');
+    expect(screen.getByTestId('trend-popup-y-tick-2-10')).toHaveTextContent('0');
+    expect(screen.getByTestId('trend-popup-y-tick-3-10')).toHaveTextContent('-0.87');
+    expect(screen.getByTestId('trend-popup-y-tick-4-10')).toHaveTextContent('-0.063');
+    expect(screen.queryByTestId('trend-popup-y-tick-1-5')).toBeNull();
+    expect(screen.getByTestId('trend-popup-cursor-plot')).toHaveAttribute('x', '46');
+    expect(screen.getByTestId('trend-popup-state-line-1')).toBeInTheDocument();
+    expect(screen.getByTestId('trend-popup-state-line-2')).toBeInTheDocument();
+  });
+
   it('distingue ticks próximos de 32 e inclui segundos em janelas temporais curtas', () => {
     const closeSeries: TrendSeriesViewState[] = [{
       series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'PV' }, color: '#6e9fff' },
@@ -212,6 +270,24 @@ describe('TrendPopup - escalas', () => {
 
     fireEvent.doubleClick(screen.getByTestId('trend-popup-cursor-hit-popup-cursor-1'));
     expect(screen.queryByTestId('trend-popup-cursor-popup-cursor-1')).toBeNull();
+  });
+
+  it('não desenha leituras de cursores fora da janela sobre a régua das escalas', () => {
+    render(<TrendPopup
+      seriesStates={seriesStates}
+      timeRange={{ from: 1_000, to: 2_000 }}
+      initialCursors={[
+        { id: 'before', time: 900 },
+        { id: 'visible', time: 1_500 },
+        { id: 'after', time: 2_100 },
+      ]}
+      onClose={jest.fn()}
+    />);
+
+    expect(screen.queryByTestId('trend-popup-cursor-before')).toBeNull();
+    expect(screen.getByTestId('trend-popup-cursor-visible')).toBeInTheDocument();
+    expect(screen.queryByTestId('trend-popup-cursor-after')).toBeNull();
+    expect(screen.queryByTestId('trend-popup-cursor-reading-before-0')).toBeNull();
   });
 
   it('exibe handle de redimensionamento e permite expandir/reduzir horizontalmente a legenda no popup', () => {

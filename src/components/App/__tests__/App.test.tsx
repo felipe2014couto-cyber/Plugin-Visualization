@@ -3,9 +3,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
 import {
   checkPiConnection,
+  getPiTrendsPlotDataForRange,
+  getPiTrendsRecordedHistoryForRange,
 } from '../../../pi';
 import { createDisplayDocument } from '../../../display';
-import { App, VISUALIZATION_THEME_STORAGE_KEY } from '../App';
+import { App, loadFinalTrendForRange, VISUALIZATION_THEME_STORAGE_KEY } from '../App';
 
 const mockGetBackendSrv = jest.fn();
 const mockPostBackendSrv = jest.fn();
@@ -32,6 +34,7 @@ jest.mock('../../../pi', () => ({
   checkPiConnection: jest.fn(),
   createProgressiveTrendLoader: jest.fn(() => jest.fn(async () => ({}))),
   getPiTrendsHistoryForRange: jest.fn(async () => ({})),
+  getPiTrendsPlotDataForRange: jest.fn(async () => ({})),
   getPiTrendsPreviewForRange: jest.fn(async () => ({})),
   getPiTrendsRecordedHistoryForRange: jest.fn(async () => ({})),
 }));
@@ -56,6 +59,47 @@ describe('App', () => {
       return Promise.resolve({});
     });
     mockPostBackendSrv.mockResolvedValue({ uid: 'new-dashboard-uid', url: '/d/new-dashboard-uid' });
+  });
+
+  it('usa PlotData para séries numéricas e Recorded para estados no carregamento final do popup', async () => {
+    const numeric = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'SINUSOID', webId: 'numeric-webid' };
+    const state = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'STATUS', webId: 'state-webid', pointType: 'Digital' };
+    const range = { from: 1_000, to: 2_000 };
+    const options = { maxDataPoints: 500, mode: 'final-only' as const, revision: 3 };
+    const plotResult = { 'ds\u0000pims\u0000SINUSOID': { status: 'success' as const, series: { pointName: 'SINUSOID', points: [] } } };
+    const stateResult = { 'ds\u0000pims\u0000STATUS': { status: 'success' as const, series: { pointName: 'STATUS', points: [], states: [] } } };
+    const plotMock = getPiTrendsPlotDataForRange as jest.MockedFunction<typeof getPiTrendsPlotDataForRange>;
+    const recordedMock = getPiTrendsRecordedHistoryForRange as jest.MockedFunction<typeof getPiTrendsRecordedHistoryForRange>;
+    plotMock.mockResolvedValueOnce(plotResult);
+    recordedMock.mockResolvedValueOnce(stateResult);
+
+    await expect(loadFinalTrendForRange([numeric, state], range, options)).resolves.toEqual({ ...plotResult, ...stateResult });
+    expect(plotMock).toHaveBeenCalledWith([numeric], range, options);
+    expect(recordedMock).toHaveBeenCalledWith([state], range, { ...options, includeOutside: true });
+  });
+
+  it('usa Recorded como fallback atômico quando PlotData não suporta uma série do popup', async () => {
+    const numeric = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'CODIGO_UM', webId: 'code-webid' };
+    const range = { from: 1_000, to: 2_000 };
+    const options = { maxDataPoints: 500, mode: 'final-only' as const, revision: 4 };
+    const recordedResult = {
+      'ds\u0000pims\u0000CODIGO_UM': {
+        status: 'success' as const,
+        series: { pointName: 'CODIGO_UM', points: [], states: [{ time: 900, value: 'RJNTB' }] },
+      },
+    };
+    const plotMock = getPiTrendsPlotDataForRange as jest.MockedFunction<typeof getPiTrendsPlotDataForRange>;
+    const recordedMock = getPiTrendsRecordedHistoryForRange as jest.MockedFunction<typeof getPiTrendsRecordedHistoryForRange>;
+    plotMock.mockResolvedValueOnce({
+      'ds\u0000pims\u0000CODIGO_UM': {
+        status: 'success',
+        series: { pointName: 'CODIGO_UM', points: [], states: [] },
+      },
+    });
+    recordedMock.mockResolvedValueOnce({}).mockResolvedValueOnce(recordedResult);
+
+    await expect(loadFinalTrendForRange([numeric], range, options)).resolves.toEqual(recordedResult);
+    expect(recordedMock).toHaveBeenLastCalledWith([numeric], range, { ...options, includeOutside: true });
   });
 
   afterEach(() => {

@@ -17,6 +17,8 @@ const TREND_CACHE_MAX_ENTRIES = 128;
 
 export interface TrendLoadOptions {
   maxDataPoints?: number;
+  revision?: number;
+  mode?: 'progressive' | 'final-only';
 }
 
 export type QueryTrendRange = (
@@ -25,7 +27,19 @@ export type QueryTrendRange = (
   options?: TrendLoadOptions,
 ) => Promise<Record<string, PiTrendSeriesResult>>;
 
-export type PublishTrendResults = (results: Record<string, PiTrendSeriesResult>) => void;
+export interface TrendLoadPublication {
+  revision: number;
+  range: PiTrendTimeRange;
+  stage: 'preview' | 'final';
+  completeness: 'partial' | 'complete';
+  expectedSeriesKeys: readonly string[];
+  completedSeriesKeys: readonly string[];
+  results: Record<string, PiTrendSeriesResult>;
+  errors: Record<string, Error>;
+}
+
+export type PublishTrendResults = (publication: TrendLoadPublication) => void;
+type PublishRawTrendResults = (results: Record<string, PiTrendSeriesResult>) => void;
 
 export interface ProgressiveTrendLoader {
   (
@@ -33,7 +47,7 @@ export interface ProgressiveTrendLoader {
     range: PiTrendTimeRange,
     publishComplete?: PublishTrendResults,
     options?: TrendLoadOptions,
-  ): Promise<Record<string, PiTrendSeriesResult>>;
+  ): Promise<TrendLoadPublication>;
   loadRecorded: (
     bindings: readonly PiPointBinding[],
     range: PiTrendTimeRange,
@@ -62,34 +76,59 @@ export function createProgressiveTrendLoader(
     range: PiTrendTimeRange,
     publishComplete?: PublishTrendResults,
     options: TrendLoadOptions = {},
-  ): Promise<Record<string, PiTrendSeriesResult>> => {
+  ): Promise<TrendLoadPublication> => {
     const previewRange = range;
     const maxDataPoints = options.maxDataPoints ?? TREND_REFINED_DEFAULT_MAX_DATA_POINTS;
-    let recordedResults: Record<string, PiTrendSeriesResult> | undefined;
-    let recordedComplete = false;
+    const revision = options.revision ?? 0;
+    const expectedSeriesKeys = deduplicateBindings(bindings).map(bindingResultKey);
+    let finalPublished = false;
+    const publication = (
+      stage: TrendLoadPublication['stage'],
+      completeness: TrendLoadPublication['completeness'],
+      results: Record<string, PiTrendSeriesResult>,
+    ): TrendLoadPublication => ({
+      revision,
+      range,
+      stage,
+      completeness,
+      expectedSeriesKeys,
+      completedSeriesKeys: Object.keys(results),
+      results,
+      errors: Object.fromEntries(Object.entries(results).flatMap(([key, result]) => (
+        result.status === 'error' ? [[key, result.error]] : []
+      ))),
+    });
+
+    if (options.mode === 'final-only') {
+      const results = await loadRecordedBatch(entries, bindings, range, maxDataPoints, queryRecorded, persistentCache);
+      return publication('final', 'complete', results);
+    }
+
     const previewPromise = loadPreviewBatch(
       entries,
       bindings,
       previewRange,
       queryPreview,
       (results) => {
-        if (!recordedComplete) {
-          publishComplete?.(results);
+        if (!finalPublished) {
+          publishComplete?.(publication('preview', 'partial', results));
         }
       },
     );
     // A fase refinada pode ocupar vagas livres enquanto a prévia ainda está
     // sendo processada. O limitador compartilhado das consultas históricas
     // mantém no máximo cinco chamadas simultâneas ao PI.
-    void loadRecordedBatch(entries, bindings, range, maxDataPoints, queryRecorded, persistentCache)
-      .then((recorded) => {
-        recordedResults = recorded;
-        recordedComplete = true;
-        publishComplete?.(recorded);
-      })
-      .catch(() => undefined);
-    const previewResults = await previewPromise;
-    return recordedResults ?? previewResults;
+    const recordedPromise = loadRecordedBatch(entries, bindings, range, maxDataPoints, queryRecorded, persistentCache);
+    void previewPromise.then((results) => {
+      if (!finalPublished) {
+        publishComplete?.(publication('preview', 'complete', results));
+      }
+    });
+    const recordedResults = await recordedPromise;
+    finalPublished = true;
+    const finalResult = publication('final', 'complete', recordedResults);
+    publishComplete?.(finalResult);
+    return finalResult;
   };
 
   load.loadRecorded = async (
@@ -115,7 +154,7 @@ async function loadPreviewBatch(
   bindings: readonly PiPointBinding[],
   queryRange: PiTrendTimeRange,
   queryPreview: QueryTrendRange,
-  publishUpdate?: PublishTrendResults,
+  publishUpdate?: PublishRawTrendResults,
 ): Promise<Record<string, PiTrendSeriesResult>> {
   const unique = deduplicateBindings(bindings);
   const missing: Array<{ binding: PiPointBinding; entry: TrendCacheEntry; deferred: Deferred<PiTrendSeriesResult> }> = [];
@@ -153,7 +192,7 @@ async function runPreviewBatches(
   batches: ReadonlyArray<ReadonlyArray<{ binding: PiPointBinding; entry: TrendCacheEntry; deferred: Deferred<PiTrendSeriesResult> }>>,
   queryRange: PiTrendTimeRange,
   queryPreview: QueryTrendRange,
-  publishUpdate?: PublishTrendResults,
+  publishUpdate?: PublishRawTrendResults,
 ): Promise<void> {
   let nextBatch = 0;
   const workerCount = Math.min(DATA_QUERY_MAX_CONCURRENT_BATCHES, batches.length);

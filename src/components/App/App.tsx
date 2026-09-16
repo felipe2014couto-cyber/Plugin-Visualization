@@ -56,6 +56,37 @@ import { LibraryPanel } from '../Library/LibraryPanel';
 import { CalculationsPanel } from '../Calculations/CalculationsPanel';
 import { PiChatPopover, PiChatIcon } from '../PiChat';
 
+export async function loadFinalTrendForRange(
+  bindings: Parameters<LoadTrendSeriesForRange>[0],
+  range: Parameters<LoadTrendSeriesForRange>[1],
+  options: NonNullable<Parameters<LoadTrendSeriesForRange>[3]>,
+): Promise<Record<string, PiTrendSeriesResult>> {
+  const stateBindings = bindings.filter(isStatePiPointBinding);
+  const numericBindings = bindings.filter((binding) => !isStatePiPointBinding(binding));
+  const [plotDataResults, stateResults] = await Promise.all([
+    getPiTrendsPlotDataForRange(numericBindings, range, options),
+    getPiTrendsRecordedHistoryForRange(stateBindings, range, { ...options, includeOutside: true }),
+  ]);
+  const failedPlotBindings = numericBindings.filter((binding) => (
+    !binding.webId || isEmptyOrFailedTrendResult(plotDataResults[getTrendBindingCacheKey(binding)])
+  ));
+  if (failedPlotBindings.length === 0) {
+    return { ...plotDataResults, ...stateResults };
+  }
+  const fallbackResults = await getPiTrendsRecordedHistoryForRange(
+    failedPlotBindings,
+    range,
+    { ...options, includeOutside: true },
+  );
+  return { ...plotDataResults, ...stateResults, ...fallbackResults };
+}
+
+function isEmptyOrFailedTrendResult(result: PiTrendSeriesResult | undefined): boolean {
+  return !result
+    || result.status === 'error'
+    || (result.series.points.length === 0 && (result.series.states?.length ?? 0) === 0);
+}
+
 const MiniSheetsPanel = React.lazy(async () => {
   const module = await import('../MiniSheets/MiniSheetsPanel');
   return { default: module.MiniSheetsPanel };
@@ -502,6 +533,9 @@ export function App() {
   const rangeTo = timeSelection.range.to;
   const loadTrendForRange = useCallback<LoadTrendSeriesForRange>(
     async (bindings, range, publishUpdate, options) => {
+      if (options?.mode === 'final-only') {
+        return loadFinalTrendForRange(bindings, range, options);
+      }
       const stateBindings = bindings.filter(isStatePiPointBinding);
       const numericBindings = bindings.filter((binding) => !isStatePiPointBinding(binding));
       const plotBindings = numericBindings.filter((binding) => Boolean(binding.webId));
@@ -514,17 +548,19 @@ export function App() {
       ));
       const results: Record<string, PiTrendSeriesResult> = { ...plotDataResults, ...stateResults };
       if (failedBindings.length > 0) {
-        const cacheAndPublish = (next: Record<string, PiTrendSeriesResult>) => {
-          Object.entries(next).forEach(([key, result]) => {
+        const cacheAndPublish = (publication: Parameters<NonNullable<Parameters<ProgressiveTrendLoader>[2]>>[0]) => {
+          Object.entries(publication.results).forEach(([key, result]) => {
             if (result.status === 'success') {
               trendSeriesCacheRef.current.set(key, { range, series: result.series });
             }
           });
-          publishUpdate?.(next);
+          if (publication.stage === 'preview') {
+            publishUpdate?.(publication.results);
+          }
         };
         const fallbackResults = range.to - range.from > TREND_PREVIEW_DURATION_MS
           ? await getPiTrendsRecordedHistoryForRange(failedBindings, range, options)
-          : await progressiveTrendLoader(failedBindings, range, cacheAndPublish, options);
+          : (await progressiveTrendLoader(failedBindings, range, cacheAndPublish, options)).results;
         failedBindings.forEach((binding) => {
           const key = getTrendBindingCacheKey(binding);
           const fallback = fallbackResults[key];

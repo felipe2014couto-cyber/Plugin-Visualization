@@ -49,6 +49,7 @@ function Harness({
   loadRecordedTrend,
   loadTrendForRange,
   trendTimeRange,
+  trendRefreshKey,
   initial,
   point = selectedPiPoint,
   onDocumentChange,
@@ -57,6 +58,7 @@ function Harness({
   loadRecordedTrend?: LoadTrendSeries;
   loadTrendForRange?: LoadTrendSeriesForRange;
   trendTimeRange?: { from: number; to: number };
+  trendRefreshKey?: string;
   initial?: DisplayDocument;
   point?: PiPointSearchResult;
   onDocumentChange?: (document: DisplayDocument) => void;
@@ -77,6 +79,7 @@ function Harness({
       loadRecordedTrend={loadRecordedTrend}
       loadTrendForRange={loadTrendForRange}
       trendTimeRange={trendTimeRange}
+      trendRefreshKey={trendRefreshKey}
     />
   );
 }
@@ -258,8 +261,8 @@ describe('DisplayEditor - Trend', () => {
       1,
       [{ dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' }],
       { from: 1_000, to: 2_000 },
-      expect.any(Function),
-      { maxDataPoints: 500 },
+      undefined,
+      { maxDataPoints: 500, mode: 'final-only', revision: 1 },
     ));
     await screen.findByTestId('trend-popup-line-0');
     const svg = screen.getByLabelText('Trend detalhada') as unknown as SVGSVGElement;
@@ -268,6 +271,8 @@ describe('DisplayEditor - Trend', () => {
 
     fireEvent.pointerDown(plot, { clientX: 500, clientY: 120, pointerId: 31 });
     fireEvent.pointerUp(plot, { clientX: 1700, clientY: 650, pointerId: 31 });
+    expect(screen.queryByTestId('trend-popup-line-0')).toBeNull();
+    expect(screen.getByTestId('trend-popup-loading')).toBeInTheDocument();
     const firstZoomRange = loadTrendForRange.mock.calls[1][1];
     expect(firstZoomRange.from).toBeGreaterThan(1_000);
     expect(firstZoomRange.to).toBeLessThan(2_000);
@@ -296,6 +301,79 @@ describe('DisplayEditor - Trend', () => {
     fireEvent.pointerUp(plot, { clientX: 1300, clientY: 580, pointerId: 33 });
     await waitFor(() => expect(screen.queryByTestId('trend-popup-line-0')).toBeNull());
     expect(screen.getByText('Sem dados')).toBeInTheDocument();
+  });
+
+  it('mantém o popup congelado no refresh automático e reconsulta somente ao clicar em Agora', async () => {
+    const resultKey = 'resolved-datasource\u0000pims\u0000SINUSOID';
+    const result = {
+      [resultKey]: {
+        status: 'success' as const,
+        series: { pointName: 'SINUSOID', points: [{ time: 1_500, value: 42 }] },
+      },
+    };
+    const loadTrendForRange = jest.fn(async () => result);
+    const initial = appendTrend(createDisplayDocument(), createTrend({
+      id: 'trend-popup-refresh',
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' },
+    }));
+    const props = {
+      initial,
+      loadTrend: jest.fn(async () => result),
+      loadTrendForRange,
+      trendTimeRange: { from: 1_000, to: 2_000 },
+    };
+    const { rerender } = render(<Harness {...props} trendRefreshKey="refresh-1" />);
+
+    await screen.findByTestId('trend-line-trend-popup-refresh');
+    fireEvent.click(screen.getByTestId('display-mode-view'));
+    fireEvent.doubleClick(screen.getByTestId('display-element-trend-popup-refresh'));
+    await waitFor(() => expect(loadTrendForRange).toHaveBeenCalledTimes(1));
+    await screen.findByTestId('trend-popup-line-0');
+
+    rerender(<Harness {...props} trendRefreshKey="refresh-2" />);
+    await act(async () => Promise.resolve());
+    expect(loadTrendForRange).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('trend-popup-line-0')).toBeInTheDocument();
+
+    const popupNow = screen.getAllByTestId('time-range-now').at(-1);
+    expect(popupNow).toBeDefined();
+    fireEvent.click(popupNow!);
+    await waitFor(() => expect(loadTrendForRange).toHaveBeenCalledTimes(2));
+  });
+
+  it('não reconsulta o popup quando a lista de elementos recebe nova identidade', async () => {
+    const resultKey = 'resolved-datasource\u0000pims\u0000SINUSOID';
+    const result = {
+      [resultKey]: {
+        status: 'success' as const,
+        series: { pointName: 'SINUSOID', points: [{ time: 1_500, value: 42 }] },
+      },
+    };
+    const loadTrendForRange = jest.fn(async () => result);
+    const document = appendTrend(createDisplayDocument(), createTrend({
+      id: 'trend-popup-elements-identity',
+      binding: { dataSourceUid: 'resolved-datasource', serverPath: 'pims', pointName: 'SINUSOID', webId: 'point-webid' },
+    }));
+    const commonProps = {
+      onChange: jest.fn(),
+      loadTrend: jest.fn(async () => result),
+      loadTrendForRange,
+      trendTimeRange: { from: 1_000, to: 2_000 },
+    };
+    const { rerender } = render(<DisplayEditor {...commonProps} document={document} />);
+
+    await screen.findByTestId('trend-line-trend-popup-elements-identity');
+    fireEvent.click(screen.getByTestId('display-mode-view'));
+    fireEvent.doubleClick(screen.getByTestId('display-element-trend-popup-elements-identity'));
+    await waitFor(() => expect(loadTrendForRange).toHaveBeenCalledTimes(1));
+    await screen.findByTestId('trend-popup-line-0');
+
+    rerender(<DisplayEditor {...commonProps} document={{ ...document, elements: [...document.elements] }} />);
+    await act(async () => Promise.resolve());
+
+    expect(loadTrendForRange).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('trend-popup-loading')).toBeNull();
+    expect(screen.getByTestId('trend-popup-line-0')).toBeInTheDocument();
   });
 
   it('abre o pop-up de tendência no duplo clique em elemento Value no modo Visualizar', async () => {

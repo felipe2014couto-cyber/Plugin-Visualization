@@ -48,6 +48,7 @@ export {
   type ProgressiveTrendLoader,
   type QueryTrendRange,
   type TrendLoadOptions,
+  type TrendLoadPublication,
 } from './progressiveTrendLoader';
 export {
   DATA_QUERY_BATCH_WINDOW_MS,

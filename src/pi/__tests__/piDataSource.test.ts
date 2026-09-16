@@ -1108,6 +1108,35 @@ describe('PI data source integration', () => {
     );
   });
 
+  it('preserva o nome de valores estruturados retornados pelo PlotData como estado', async () => {
+    const getResource = jest.fn(async () => ({
+      Items: [
+        { Timestamp: '2026-08-05T12:00:00.000Z', Value: { Name: 'RJNTB', Value: 1, IsSystem: false } },
+        { Timestamp: '2026-08-05T12:05:00.000Z', Value: { Name: 'P989H', Value: 2, IsSystem: false } },
+      ],
+    }));
+    const dataSourceSrv = makeDataSourceSrv({
+      dataSources: [makeDataSource({ isDefault: true })],
+      getResource,
+    });
+    const from = Date.parse('2026-08-05T12:00:00.000Z');
+    const to = Date.parse('2026-08-05T13:00:00.000Z');
+    const { getPiTrendsPlotDataForRange } = await import('../piDataSource');
+
+    await expect(getPiTrendsPlotDataForRange([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'CODIGO_UM', webId: 'state-webid' },
+    ], { from, to }, dataSourceSrv)).resolves.toEqual({
+      'pi-default\u0000pims\u0000CODIGO_UM': {
+        status: 'success',
+        series: {
+          pointName: 'CODIGO_UM',
+          points: [],
+          states: [{ time: from, value: 'RJNTB' }, { time: from + 5 * 60 * 1000, value: 'P989H' }],
+        },
+      },
+    });
+  });
+
   it('usa interpolação adaptativa limitada pela resolução visual na prévia rápida do Trend', async () => {
     const query = jest.fn(async (_request: unknown) => ({ data: [] }));
     const dataSourceSrv = makeDataSourceSrv({
@@ -1153,6 +1182,22 @@ describe('PI data source integration', () => {
       targets: [expect.objectContaining({
         interpolate: { enable: false },
         recordedValues: { enable: true, maxNumber: 2_000, boundaryType: 'Inside' },
+      })],
+    });
+  });
+
+  it('solicita valores externos somente quando o consumidor precisa manter estados nas bordas', async () => {
+    const query = jest.fn(async (_request: unknown) => ({ data: [] }));
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], query });
+    const { getPiTrendsRecordedHistoryForRange } = await import('../piDataSource');
+
+    await getPiTrendsRecordedHistoryForRange([
+      { dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'STATUS' },
+    ], { from: 1_000, to: 2_000 }, dataSourceSrv, { includeOutside: true });
+
+    expect(query.mock.calls[0][0]).toMatchObject({
+      targets: [expect.objectContaining({
+        recordedValues: expect.objectContaining({ boundaryType: 'Outside' }),
       })],
     });
   });

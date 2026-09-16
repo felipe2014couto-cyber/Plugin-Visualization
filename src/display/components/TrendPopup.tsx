@@ -33,7 +33,6 @@ export interface TrendPopupProps {
 const POPUP_WIDTH = 2400;
 const POPUP_HEIGHT = 800;
 const SCALE_INTERVALS = 10;
-const MAX_NAMED_STATE_LABELS = 8;
 const POPUP_AXIS_FONT_SIZE = 15;
 const POPUP_AXIS_COLUMN_WIDTH = 58;
 const POPUP_LEGEND_LINE_HEIGHT = 19;
@@ -280,6 +279,7 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onVisibleTi
           >
             <PopupChart
               seriesStates={seriesStates}
+              loading={loading}
               timeRange={timeRange}
               scaleMode={scaleMode}
               customScales={customScales}
@@ -312,7 +312,7 @@ export function TrendPopup({ seriesStates, timeRange, timeSelection, onVisibleTi
               onSeriesContextMenu={onSeriesContextMenu}
             />
             </svg>
-            {loading && !seriesStates.some((s) => s.runtimeState.status === 'success') && <span className={styles.loading} data-testid="trend-popup-loading">Carregando tendência...</span>}
+            {loading && <span className={styles.loading} data-testid="trend-popup-loading">Carregando tendência...</span>}
           </div>
           {pointInfo && <PiPointInfoPanel {...pointInfo} />}
         </div>
@@ -359,7 +359,7 @@ function getInitialCustomScales(seriesStates: readonly TrendSeriesViewState[]): 
   }));
 }
 
-interface PopupChartProps extends Pick<TrendPopupProps, 'seriesStates' | 'timeRange'> {
+interface PopupChartProps extends Pick<TrendPopupProps, 'seriesStates' | 'timeRange' | 'loading'> {
   visualOptions: TrendVisualOptions;
   scaleMode: PopupScaleMode;
   customScales: PopupCustomScales;
@@ -381,6 +381,7 @@ interface PopupChartProps extends Pick<TrendPopupProps, 'seriesStates' | 'timeRa
 
 function PopupChart({
   seriesStates,
+  loading,
   timeRange,
   scaleMode,
   customScales,
@@ -441,13 +442,13 @@ function PopupChart({
       stateLabels: [...new Set((item.data.states ?? []).map(({ value }) => value))],
     };
   });
-  const axisSeries = [scaledSeries.find(({ data }) => data.points.length > 0), ...scaledSeries.filter(({ data }) => data.points.length === 0)]
-    .filter((item): item is typeof scaledSeries[number] => item !== undefined)
-    .slice(0, 4);
-  // Keep a full column for each independent scale. The previous 38px spacing
-  // caused values such as -1049 and -969 to overlap when the popup was scaled
-  // down to a smaller panel.
-  const plotX = Math.max(46, 8 + axisSeries.length * POPUP_AXIS_COLUMN_WIDTH);
+  const primaryAxisSeries = scaledSeries.find(({ primaryScale, data }) => primaryScale && data.points.length > 0)
+    ?? scaledSeries.find(({ data }) => data.points.length > 0)
+    ?? scaledSeries[0];
+  const axisSeries = scaleMode === 'single'
+    ? [primaryAxisSeries]
+    : [primaryAxisSeries, ...scaledSeries.filter(({ key }) => key !== primaryAxisSeries.key)];
+  const plotX = 46;
 
   const [popupLegendWidth, setPopupLegendWidth] = useState<number>(() => {
     return typeof visualOptions.legendWidth === 'number' && visualOptions.legendWidth >= 100
@@ -558,35 +559,28 @@ function PopupChart({
           <g key={index}>
             {index < visualOptions.scaleIntervals && index % 2 === 1 && <rect x={plot.x} y={y} width={plot.width} height={plot.height / visualOptions.scaleIntervals} fill="var(--chart-band)" />}
             {showHorizontalGrid && <line x1={plot.x} y1={y} x2={plot.x + plot.width} y2={y} stroke={gridColor} />}
-            {axisSeries.map(({ color, scale, name, data, stateLabels }, seriesIndex) => {
-              const axisValue = data.points.length > 0
-                ? formatAxisValue(scale.max - ((scale.max - scale.min) * index) / visualOptions.scaleIntervals, scale.step, visualOptions.numberFormat)
-                : stateLabels.length > MAX_NAMED_STATE_LABELS
-                  ? formatValue((stateLabels.length - 1) * (1 - index / visualOptions.scaleIntervals), visualOptions.numberFormat)
-                  : undefined;
-              return axisValue !== undefined ? (
-                <text key={name} data-testid={`trend-popup-y-tick-${seriesIndex}-${index}`} x={8 + seriesIndex * POPUP_AXIS_COLUMN_WIDTH} y={y + 5} textAnchor="start" fill={color} fontSize={POPUP_AXIS_FONT_SIZE}>
-                  {axisValue}
-                </text>
-              ) : null;
-            })}
+            <text data-testid={`trend-popup-y-tick-0-${index}`} x={8} y={y + 5} textAnchor="start" fill={primaryAxisSeries.color} fontSize={POPUP_AXIS_FONT_SIZE}>
+              {axisLabelAt(primaryAxisSeries, index, visualOptions.scaleIntervals, visualOptions.numberFormat)}
+            </text>
           </g>
         );
       })}
-      {axisSeries.flatMap(({ color, name, stateLabels }, seriesIndex) => (
-        stateLabels.length <= MAX_NAMED_STATE_LABELS ? stateLabels.map((label) => (
+      {axisSeries.slice(1).flatMap((item, index) => {
+        const seriesIndex = index + 1;
+        return [0, visualOptions.scaleIntervals].map((tickIndex) => (
           <text
-            key={`${name}-${label}`}
+            key={`${item.key}-${tickIndex}`}
+            data-testid={`trend-popup-y-tick-${seriesIndex}-${tickIndex}`}
             x={8 + seriesIndex * POPUP_AXIS_COLUMN_WIDTH}
-            y={stateY(label, stateLabels, plot) + 4}
+            y={(tickIndex === 0 ? plot.y : plot.y + plot.height) + 5}
             textAnchor="start"
-            fill={color}
+            fill={item.color}
             fontSize={POPUP_AXIS_FONT_SIZE}
           >
-            {label}
+            {axisLabelAt(item, tickIndex, visualOptions.scaleIntervals, visualOptions.numberFormat)}
           </text>
-        )) : []
-      ))}
+        ));
+      })}
       <line x1={plot.x} y1={plot.y} x2={plot.x} y2={plot.y + plot.height} stroke={axisColor} />
       <line x1={plot.x} y1={plot.y + plot.height} x2={plot.x + plot.width} y2={plot.y + plot.height} stroke={axisColor} />
       {xTicks.map((time, tickIndex) => (
@@ -596,19 +590,11 @@ function PopupChart({
           <text data-testid={`trend-popup-x-tick-${tickIndex}`} x={xFor(time)} y={plot.y + plot.height + 20} textAnchor="middle" fill={foreground} fontSize={POPUP_AXIS_FONT_SIZE}>{formatAxisTime(time, timeSpan)}</text>
         </g>
       ))}
-      {visualOptions.scaleMode === 'configurable' && scaledSeries
-        .filter(({ primaryScale, data }) => !primaryScale && data.points.length > 0)
-        .map(({ key, color, scaleMin, scaleMax }, index) => (
-          <g key={`configured-popup-scale-${key}`} fill={color} fontSize={POPUP_AXIS_FONT_SIZE} pointerEvents="none" opacity={getTrendSeriesOpacity(key, selectedSeriesKeys)}>
-            {Number.isFinite(scaleMax) && <text x={plot.x + 8 + index * 64} y={plot.y + 18}>{formatValue(scaleMax as number, visualOptions.numberFormat)}</text>}
-            {Number.isFinite(scaleMin) && <text x={plot.x + 8 + index * 64} y={plot.y + plot.height - 8}>{formatValue(scaleMin as number, visualOptions.numberFormat)}</text>}
-          </g>
-        ))}
       <g clipPath={`url(#${clipPathId})`} data-testid="trend-popup-series-clip">
-      {scaledSeries.map(({ key, name, color, lineWidth, lineStyle, marker, data, scale, stateLabels }, index) => {
+      {!loading && scaledSeries.map(({ key, name, color, lineWidth, lineStyle, marker, data, scale, stateLabels }, index) => {
         const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
         const path = points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${yFor(point.value, scale)}`).join(' ');
-        const states = (data.states ?? []).filter((state) => state.time >= domainStart && state.time <= domainEnd);
+        const states = statesForVisibleRange(data.states ?? [], domainStart, domainEnd);
         const statePath = digitalPopupPath(states, domainEnd, xFor, (value) => stateY(value, stateLabels, plot));
         const seriesOpacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
         return (
@@ -639,10 +625,10 @@ function PopupChart({
               viewBox={`${legendX - 8} ${plot.y} ${Math.max(1, effectiveLegendWidth)} ${legendContentHeight}`}
               preserveAspectRatio="none"
             >
-      {scaledSeries.map(({ configured, key, name, color, data, stateLabels }, index) => {
+      {!loading && scaledSeries.map(({ configured, key, name, color, data, stateLabels }, index) => {
         const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
         const currentValue = points.at(-1)?.value;
-        const states = (data.states ?? []).filter((state) => state.time >= domainStart && state.time <= domainEnd);
+        const states = statesForVisibleRange(data.states ?? [], domainStart, domainEnd);
         const currentState = states.at(-1)?.value;
         const displayLabel = truncateLegendLabel(name, effectiveLegendWidth, visualOptions.fontSize);
         const seriesOpacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
@@ -785,7 +771,7 @@ function PopupChart({
           data-testid="trend-popup-zoom-selection"
         />
       )}
-      {cursors.map((cursor) => {
+      {cursors.filter((cursor) => cursor.time >= domainStart && cursor.time <= domainEnd).map((cursor) => {
         const x = xFor(cursor.time);
         const selected = cursor.id === selectedCursorId;
         const readings = scaledSeries.map(({ name, color, data, scale, stateLabels }) => {
@@ -942,11 +928,53 @@ function digitalPopupPath(
   return `${path} H ${xFor(domainEnd)}`;
 }
 
+function statesForVisibleRange(
+  states: ReadonlyArray<{ time: number; value: string }>,
+  domainStart: number,
+  domainEnd: number,
+): Array<{ time: number; value: string }> {
+  const visible = states.filter((state) => state.time >= domainStart && state.time <= domainEnd);
+  const previous = [...states].reverse().find((state) => state.time < domainStart);
+  if (!previous) {
+    return visible;
+  }
+  return [{ time: domainStart, value: previous.value }, ...visible];
+}
+
 function formatValue(value: number, format: TrendVisualOptions['numberFormat'] = 'automatic'): string {
   if (format === 'integer') return String(Math.round(value));
   if (format === 'oneDecimal') return value.toFixed(1);
   if (format === 'twoDecimals') return value.toFixed(2);
   return Math.abs(value) < 1 ? value.toFixed(1) : String(Math.round(value));
+}
+
+function axisLabelAt(
+  item: {
+    data: { points: ReadonlyArray<{ value: number }> };
+    scale: ValueScale;
+    stateLabels: readonly string[];
+    scaleMin?: number;
+    scaleMax?: number;
+  },
+  index: number,
+  intervals: number,
+  format: TrendVisualOptions['numberFormat'],
+): string {
+  if (item.data.points.length > 0) {
+    const value = item.scale.max - ((item.scale.max - item.scale.min) * index) / intervals;
+    return formatAxisValue(value, item.scale.step, format);
+  }
+  if (index === 0) {
+    return formatScaleLimit(Number.isFinite(item.scaleMax) ? item.scaleMax as number : Math.max(1, item.stateLabels.length - 1), format);
+  }
+  if (index === intervals) {
+    return formatScaleLimit(Number.isFinite(item.scaleMin) ? item.scaleMin as number : 0, format);
+  }
+  return '';
+}
+
+function formatScaleLimit(value: number, format: TrendVisualOptions['numberFormat']): string {
+  return format === 'automatic' ? String(value) : formatValue(value, format);
 }
 
 function formatAxisValue(value: number, step: number, format: TrendVisualOptions['numberFormat'] = 'automatic'): string {
