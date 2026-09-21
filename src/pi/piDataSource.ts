@@ -177,10 +177,16 @@ export interface TrendStatePoint {
   value: string;
 }
 
+export interface TrendGap {
+  time: number;
+  reason?: string;
+}
+
 export interface PiTrendSeries {
   pointName: string;
   points: TrendPoint[];
   states?: TrendStatePoint[];
+  gaps?: TrendGap[];
   historicalValues?: PiHistoricalValue[];
 }
 
@@ -2384,22 +2390,37 @@ function normalizeTrendFrame(frame: DataFrame, pointName: string, origin?: PiHis
 
   const times = getFieldValues(timeField);
   const points: TrendPoint[] = [];
+  const gaps: TrendGap[] = [];
   const historicalValues: PiHistoricalValue[] = [];
   const length = Math.min(times.length, values.length);
   for (let index = 0; index < length; index += 1) {
     const time = normalizeTrendTimestamp(times[index]);
     const value = values[index];
-    if (time === undefined || typeof value !== 'number' || !Number.isFinite(value)) {
+    if (time === undefined) {
+      continue;
+    }
+    const quality = normalizeHistoricalQuality(qualityFields, index);
+    if (quality?.good === false) {
+      gaps.push({ time, reason: 'Good=false' });
+      continue;
+    }
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      gaps.push({ time, reason: value === null || value === undefined ? 'No Data' : 'Invalid value' });
       continue;
     }
     points.push({ time, value });
-    const quality = normalizeHistoricalQuality(qualityFields, index);
     historicalValues.push({ timestamp: time, value, ...(quality ? { quality } : {}), ...(origin ? { origin } : {}) });
   }
 
   points.sort((left, right) => left.time - right.time);
+  gaps.sort((left, right) => left.time - right.time);
   historicalValues.sort((left, right) => left.timestamp - right.timestamp);
-  return { pointName, points, ...(historicalValues.length > 0 ? { historicalValues } : {}) };
+  return {
+    pointName,
+    points,
+    ...(gaps.length > 0 ? { gaps } : {}),
+    ...(historicalValues.length > 0 ? { historicalValues } : {}),
+  };
 }
 
 function normalizePlotDataResponse(response: unknown, pointName: string): PiTrendSeries {
@@ -2410,21 +2431,32 @@ function normalizePlotDataResponse(response: unknown, pointName: string): PiTren
     if (!item || typeof item !== 'object') {
       return [];
     }
-    const point = item as { Timestamp?: unknown; Value?: unknown };
+    const point = item as { Timestamp?: unknown; Value?: unknown; Good?: unknown };
     const time = normalizeTrendTimestamp(point.Timestamp);
     const value = normalizePlotValue(point.Value);
-    return time === undefined || value === null || value === undefined ? [] : [{ time, value }];
+    return time === undefined ? [] : [{ time, value, good: point.Good }];
   });
-  const numericPoints = values.flatMap(({ time, value }) => (
-    typeof value === 'number' && Number.isFinite(value) ? [{ time, value }] : []
+  const gaps: TrendGap[] = values.flatMap(({ time, value, good }) => (
+    good === false || value === null || value === undefined || (typeof value !== 'number' && typeof value !== 'string')
+      ? [{ time, reason: good === false ? 'Good=false' : 'No Data' }]
+      : []
+  ));
+  const numericPoints = values.flatMap(({ time, value, good }) => (
+    good !== false && typeof value === 'number' && Number.isFinite(value) ? [{ time, value }] : []
   ));
   if (numericPoints.length > 0) {
-    return { pointName, points: numericPoints.sort((left, right) => left.time - right.time) };
+    return {
+      pointName,
+      points: numericPoints.sort((left, right) => left.time - right.time),
+      ...(gaps.length > 0 ? { gaps: gaps.sort((left, right) => left.time - right.time) } : {}),
+    };
   }
   return {
     pointName,
     points: [],
-    states: values.map(({ time, value }) => ({ time, value: String(value) })).sort((left, right) => left.time - right.time),
+    states: values.filter(({ value, good }) => good !== false && value !== null && value !== undefined)
+      .map(({ time, value }) => ({ time, value: String(value) })).sort((left, right) => left.time - right.time),
+    ...(gaps.length > 0 ? { gaps: gaps.sort((left, right) => left.time - right.time) } : {}),
   };
 }
 
@@ -2447,21 +2479,27 @@ function normalizeStateTrendFrame(
   origin?: PiHistoricalOrigin,
 ): PiTrendSeries {
   const states: TrendStatePoint[] = [];
+  const gaps: TrendGap[] = [];
   const historicalValues: PiHistoricalValue[] = [];
   const length = Math.min(times.length, values.length);
   for (let index = 0; index < length; index += 1) {
     const time = normalizeTrendTimestamp(times[index]);
     const value = values[index];
-    if (time === undefined || value === null || value === undefined) {
+    if (time === undefined) {
+      continue;
+    }
+    const quality = normalizeHistoricalQuality(qualityFields, index);
+    if (quality?.good === false || value === null || value === undefined) {
+      gaps.push({ time, reason: quality?.good === false ? 'Good=false' : 'No Data' });
       continue;
     }
     states.push({ time, value: normalizeStateValue(value) });
-    const quality = normalizeHistoricalQuality(qualityFields, index);
     historicalValues.push({ timestamp: time, value: normalizeStateValue(value), ...(quality ? { quality } : {}), ...(origin ? { origin } : {}) });
   }
   states.sort((left, right) => left.time - right.time);
+  gaps.sort((left, right) => left.time - right.time);
   historicalValues.sort((left, right) => left.timestamp - right.timestamp);
-  return { pointName, points: [], states, ...(historicalValues.length > 0 ? { historicalValues } : {}) };
+  return { pointName, points: [], states, ...(gaps.length > 0 ? { gaps } : {}), ...(historicalValues.length > 0 ? { historicalValues } : {}) };
 }
 
 function normalizeStateValue(value: unknown): string {
@@ -2474,7 +2512,8 @@ function normalizeStateValue(value: unknown): string {
       return String(structured.Value);
     }
   }
-  return String(value);
+  const normalized = String(value);
+  return normalized.trim() === '' ? 'No Data' : normalized;
 }
 
 function normalizeHistoricalQuality(

@@ -3,7 +3,7 @@ import { css } from '@emotion/css';
 import { TimeRangeBar } from '../../components/TimeRangeBar';
 import { formatAbsoluteTime, type DisplayTimeRange, type DisplayTimeSelection } from '../../time/timeRange';
 import type { TrendSeriesViewState } from './TrendElementView';
-import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
+import { resolveTrendCursorValue, segmentTrendPoints, type TrendCursor } from '../runtime/trendCursor';
 import { DEFAULT_TREND_VISUAL_OPTIONS, type TrendScaleMode, type TrendSeries, type TrendVisualOptions } from '../createTrend';
 import {
   getEffectiveTrendLegendWidth,
@@ -593,14 +593,14 @@ function PopupChart({
       <g clipPath={`url(#${clipPathId})`} data-testid="trend-popup-series-clip">
       {!loading && scaledSeries.map(({ key, name, color, lineWidth, lineStyle, marker, data, scale, stateLabels }, index) => {
         const points = data.points.filter((point) => point.time >= domainStart && point.time <= domainEnd);
-        const path = points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${yFor(point.value, scale)}`).join(' ');
+        const path = segmentTrendPoints(points, data.gaps).map((segment) => segment.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${yFor(point.value, scale)}`).join(' ')).join(' ');
         const states = statesForVisibleRange(data.states ?? [], domainStart, domainEnd);
         const statePath = digitalPopupPath(states, domainEnd, xFor, (value) => stateY(value, stateLabels, plot));
         const seriesOpacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
         return (
           <g key={key} opacity={seriesOpacity}>
             {path && visualOptions.traceMode !== 'markers' && <path d={path} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="round" strokeLinecap="round" data-testid={`trend-popup-line-${index}`} />}
-            {visualOptions.showRegression && points.length > 1 && <path d={popupRegressionPath(points, xFor, (value) => yFor(value, scale))} fill="none" stroke={color} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} />}
+            {visualOptions.showRegression && points.length > 1 && segmentTrendPoints(points, data.gaps).map((segment, segmentIndex) => segment.length > 1 && <path key={`regression-${segmentIndex}`} d={popupRegressionPath(segment, xFor, (value) => yFor(value, scale))} fill="none" stroke={color} strokeWidth={1} strokeDasharray="5 4" opacity={0.7} />)}
             {statePath && <path d={statePath} fill="none" stroke={color} strokeWidth={lineWidth} strokeDasharray={lineStyle === 'dashed' ? '8 5' : lineStyle === 'dotted' ? '2 4' : undefined} strokeLinejoin="miter" data-testid={`trend-popup-state-line-${index}`} />}
             {(visualOptions.traceMode === 'line-markers' || visualOptions.traceMode === 'markers' || marker === 'circle') && points.map((point, pIdx) => <circle key={`c-${point.time}-${pIdx}`} cx={xFor(point.time)} cy={yFor(point.value, scale)} r={3} fill={color} />)}
             {visualOptions.traceMode === 'line' && marker === 'square' && points.map((point, pIdx) => <rect key={`sq-${point.time}-${pIdx}`} x={xFor(point.time) - 3} y={yFor(point.value, scale) - 3} width={6} height={6} fill={color} />)}
@@ -682,7 +682,7 @@ function PopupChart({
             >
               <title>{name}</title>
               <tspan x={legendX}>{displayLabel}</tspan>
-              <tspan x={legendX} dy={POPUP_LEGEND_LINE_HEIGHT}>{currentValue !== undefined ? formatValue(currentValue, visualOptions.numberFormat) : currentState ?? '--'}</tspan>
+              <tspan x={legendX} dy={POPUP_LEGEND_LINE_HEIGHT}>{currentValue !== undefined ? formatValue(currentValue, visualOptions.numberFormat) : normalizePopupStateLabel(currentState)}</tspan>
             </text>
           </g>
         );
@@ -776,22 +776,24 @@ function PopupChart({
         const selected = cursor.id === selectedCursorId;
         const readings = scaledSeries.map(({ name, color, data, scale, stateLabels }) => {
           if (data.points.length > 0) {
-            const value = resolveTrendCursorValue(data.points, cursor.time);
-            return value === undefined ? undefined : {
+            const value = resolveTrendCursorValue(data.points, cursor.time, data.gaps);
+            return {
               name,
               color,
-              label: formatValue(value),
-              y: yFor(value, scale),
+              label: value === undefined ? 'No Data' : formatValue(value),
+              y: value === undefined ? plot.y + plot.height / 2 : yFor(value, scale),
+              hasValue: value !== undefined,
             };
           }
           const value = resolvePopupState(data.states ?? [], cursor.time);
-          return value === undefined ? undefined : {
+          return {
             name,
             color,
-            label: value,
-            y: stateY(value, stateLabels, plot),
+            label: value === undefined ? 'No Data' : value,
+            y: value === undefined ? plot.y + plot.height / 2 : stateY(value, stateLabels, plot),
+            hasValue: value !== undefined,
           };
-        }).filter((reading): reading is { name: string; color: string; label: string; y: number } => reading !== undefined);
+        });
         const labelAnchor = x > plot.x + plot.width * 0.72 ? 'end' : 'start';
         const labelX = x + (labelAnchor === 'end' ? -6 : 6);
         const labelWidth = 158;
@@ -830,7 +832,7 @@ function PopupChart({
             </text>
             {readings.map((reading, index) => (
               <g key={`${reading.name}-${index}`} pointerEvents="none" data-testid={`trend-popup-cursor-reading-${cursor.id}-${index}`}>
-                <circle cx={x} cy={reading.y} r={4} fill={reading.color} stroke="var(--canvas-bg)" strokeWidth={2} />
+                {reading.hasValue && <circle cx={x} cy={reading.y} r={4} fill={reading.color} stroke="var(--canvas-bg)" strokeWidth={2} />}
                 <text
                   x={labelX}
                   y={plot.y + 30 + index * POPUP_CURSOR_READING_BLOCK_HEIGHT}
@@ -883,14 +885,19 @@ function clampPopupPoint(point: { x: number; y: number }, plot: { x: number; y: 
 }
 
 function resolvePopupState(states: ReadonlyArray<{ time: number; value: string }>, time: number): string | undefined {
-  let resolved: string | undefined;
-  for (const state of states) {
-    if (state.time > time) {
-      break;
-    }
-    resolved = state.value;
+  const ordered = states
+    .filter((state) => Number.isFinite(state.time))
+    .slice()
+    .sort((left, right) => left.time - right.time);
+  if (ordered.length === 0 || !Number.isFinite(time) || time < ordered[0].time) {
+    return undefined;
   }
-  return resolved ?? states[0]?.value;
+  const resolved = [...ordered].reverse().find((state) => state.time <= time)?.value;
+  return normalizePopupStateLabel(resolved);
+}
+
+function normalizePopupStateLabel(value: string | undefined): string {
+  return value === undefined || value.trim() === '' ? 'No Data' : value;
 }
 
 function formatCursorDate(time: number): string {

@@ -237,6 +237,29 @@ describe('TrendPopup - escalas', () => {
     expect(screen.getByTestId('trend-popup-legend-item-0')).toHaveTextContent('Shutdown');
   });
 
+  it('mantém String no cursor e mostra No Data antes do primeiro estado', () => {
+    const stringSeries: TrendSeriesViewState[] = [{
+      series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'TAG_STRING', pointType: 'String' }, color: '#ff9830' },
+      runtimeState: { status: 'success', data: { pointName: 'TAG_STRING', points: [], states: [{ time: 1_500, value: 'P989H' }] } },
+    }];
+    render(<TrendPopup seriesStates={stringSeries} timeRange={{ from: 1_000, to: 2_000 }} initialCursors={[{ id: 'cursor-string', time: 1_250 }]} onClose={jest.fn()} />);
+
+    expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).toHaveTextContent('TAG_STRING');
+    expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).toHaveTextContent('No Data');
+  });
+
+  it('preserva o último estado String depois do último evento e respeita No Data explícito', () => {
+    const stringSeries: TrendSeriesViewState[] = [{
+      series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'TAG_STRING', pointType: 'String' }, color: '#ff9830' },
+      runtimeState: { status: 'success', data: { pointName: 'TAG_STRING', points: [], states: [{ time: 1_000, value: 'P989H' }, { time: 1_500, value: 'No Data' }, { time: 1_750, value: 'RJNTB' }] } },
+    }];
+    const { rerender } = render(<TrendPopup seriesStates={stringSeries} timeRange={{ from: 1_000, to: 2_000 }} initialCursors={[{ id: 'cursor-string', time: 1_600 }]} onClose={jest.fn()} />);
+    expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).toHaveTextContent('No Data');
+
+    rerender(<TrendPopup seriesStates={stringSeries} timeRange={{ from: 1_000, to: 2_000 }} initialCursors={[{ id: 'cursor-string', time: 1_900 }]} onClose={jest.fn()} />);
+    expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).toHaveTextContent('RJNTB');
+  });
+
   it('distingue ticks próximos de 32 e inclui segundos em janelas temporais curtas', () => {
     const closeSeries: TrendSeriesViewState[] = [{
       series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'PV' }, color: '#6e9fff' },

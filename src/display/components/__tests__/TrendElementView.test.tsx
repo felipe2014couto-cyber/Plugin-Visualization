@@ -13,7 +13,8 @@ describe('TrendElementView', () => {
     expect(screen.getByTestId('trend-loading-trend-1')).toHaveTextContent('Carregando');
 
     rerender(<svg><TrendElementView element={element} runtimeState={{ status: 'success', data: { pointName: 'SINUSOID', points: [] } }} /></svg>);
-    expect(screen.getByTestId('trend-empty-trend-1')).toHaveTextContent('Sem dados');
+    expect(screen.getByTestId('trend-empty-chart-trend-1')).toBeInTheDocument();
+    expect(screen.getAllByText('No Data').length).toBeGreaterThan(0);
 
     rerender(<svg><TrendElementView element={element} runtimeState={{ status: 'error', error: new Error('bad') }} /></svg>);
     expect(screen.getByTestId('trend-error-trend-1')).toHaveTextContent('BAD');
@@ -48,6 +49,29 @@ describe('TrendElementView', () => {
       .toMatch(/^url\(#trend-plot-clip-/);
   });
 
+  it('separa a linha em segmentos quando há No Data entre pontos válidos', () => {
+    render(
+      <svg>
+        <TrendElementView
+          element={element}
+          timeRange={{ from: 1_000, to: 3_000 }}
+          runtimeState={{
+            status: 'success',
+            data: {
+              pointName: 'SINUSOID',
+              points: [{ time: 1_000, value: 1 }, { time: 3_000, value: 3 }],
+              gaps: [{ time: 2_000, reason: 'Good=false' }],
+            },
+          }}
+        />
+      </svg>,
+    );
+
+    const path = screen.getByTestId('trend-line-trend-1').getAttribute('d') ?? '';
+    expect((path.match(/M/g) ?? []).length).toBe(2);
+    expect(screen.getByTestId('trend-legend-value-trend-1-0')).toHaveTextContent('3');
+  });
+
   it('renderiza mudanças de estado de uma tag digital/string sem marcar BAD', () => {
     render(
       <svg>
@@ -75,6 +99,54 @@ describe('TrendElementView', () => {
     expect(screen.getByText('0')).toBeInTheDocument();
     expect(screen.getByText('1')).toBeInTheDocument();
     expect(screen.queryByTestId('trend-error-trend-1')).toBeNull();
+  });
+
+  it('mantém String no cursor, mostra No Data antes do primeiro estado e preserva o último estado', () => {
+    const stringElement = {
+      ...element,
+      properties: { series: [{ binding: { ...binding, pointName: 'TAG_STRING', pointType: 'String' }, color: '#6e9fff' }] },
+    };
+    const { rerender } = render(
+      <svg>
+        <TrendElementView
+          element={stringElement}
+          timeRange={{ from: 1_000, to: 3_000 }}
+          cursors={[{ id: 'cursor-string', time: 900 }]}
+          seriesStates={[{ series: stringElement.properties.series[0], runtimeState: { status: 'success', data: { pointName: 'TAG_STRING', points: [], states: [{ time: 1_000, value: 'P989H' }] } } }]}
+        />
+      </svg>,
+    );
+    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-string')).toHaveTextContent('No Data');
+
+    rerender(
+      <svg>
+        <TrendElementView
+          element={stringElement}
+          timeRange={{ from: 1_000, to: 3_000 }}
+          cursors={[{ id: 'cursor-string', time: 2_000 }]}
+          seriesStates={[{ series: stringElement.properties.series[0], runtimeState: { status: 'success', data: { pointName: 'TAG_STRING', points: [], states: [{ time: 1_000, value: 'P989H' }] } } }]}
+        />
+      </svg>,
+    );
+    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-string')).toHaveTextContent('P989H');
+  });
+
+  it('não substitui um estado explícito No Data pelo estado anterior', () => {
+    const stringElement = {
+      ...element,
+      properties: { series: [{ binding: { ...binding, pointName: 'TAG_STRING', pointType: 'String' }, color: '#6e9fff' }] },
+    };
+    render(
+      <svg>
+        <TrendElementView
+          element={stringElement}
+          timeRange={{ from: 1_000, to: 3_000 }}
+          cursors={[{ id: 'cursor-string', time: 2_500 }]}
+          seriesStates={[{ series: stringElement.properties.series[0], runtimeState: { status: 'success', data: { pointName: 'TAG_STRING', points: [], states: [{ time: 1_000, value: 'P989H' }, { time: 2_000, value: 'No Data' }, { time: 3_000, value: 'RJNTB' }] } } }]}
+        />
+      </svg>,
+    );
+    expect(screen.getByTestId('trend-cursor-label-trend-1-cursor-string')).toHaveTextContent('No Data');
   });
 
   it('mantém a série textual e a numérica com escalas independentes', () => {

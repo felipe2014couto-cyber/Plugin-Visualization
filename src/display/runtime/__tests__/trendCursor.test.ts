@@ -2,6 +2,7 @@ import {
   clampTrendCursorTime,
   isTrendCursorWithinSeries,
   resolveTrendCursorValue,
+  segmentTrendPoints,
 } from '../trendCursor';
 
 describe('trendCursor', () => {
@@ -38,5 +39,19 @@ describe('trendCursor', () => {
     expect(clampTrendCursorTime([], 1_000)).toBeUndefined();
     expect(isTrendCursorWithinSeries(points, 2_000)).toBe(true);
     expect(isTrendCursorWithinSeries(points, 4_000)).toBe(false);
+  });
+
+  it('não interpola através de uma lacuna explícita de No Data', () => {
+    const points = [
+      { time: 1_000, value: 10 }, { time: 1_500, value: 15 },
+      { time: 2_500, value: 25 }, { time: 3_000, value: 30 },
+    ];
+    const gaps = [{ time: 2_000, reason: 'Good=false' }];
+
+    expect(resolveTrendCursorValue(points, 1_250, gaps)).toBe(12.5);
+    expect(resolveTrendCursorValue(points, 2_000, gaps)).toBeUndefined();
+    expect(resolveTrendCursorValue(points, 2_250, gaps)).toBeUndefined();
+    expect(resolveTrendCursorValue(points, 2_750, gaps)).toBe(27.5);
+    expect(segmentTrendPoints(points, gaps)).toEqual([[points[0], points[1]], [points[2], points[3]]]);
   });
 });

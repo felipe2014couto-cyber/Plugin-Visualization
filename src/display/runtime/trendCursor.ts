@@ -1,4 +1,4 @@
-import type { TrendPoint } from '../../pi/piDataSource';
+import type { TrendGap, TrendPoint } from '../../pi/piDataSource';
 
 export interface TrendCursor {
   id: string;
@@ -8,6 +8,7 @@ export interface TrendCursor {
 export function resolveTrendCursorValue(
   points: readonly TrendPoint[],
   cursorTime: number,
+  gaps: readonly TrendGap[] = [],
 ): number | undefined {
   if (!Number.isFinite(cursorTime)) {
     return undefined;
@@ -44,6 +45,9 @@ export function resolveTrendCursorValue(
     if (cursorTime === right.time) {
       return right.value;
     }
+    if (gaps.some((gap) => gap.time > left.time && gap.time < right.time)) {
+      return undefined;
+    }
     const fraction = (cursorTime - left.time) / (right.time - left.time);
     const value = left.value + (right.value - left.value) * fraction;
     return Number.isFinite(value) ? value : undefined;
@@ -69,6 +73,32 @@ export function clampTrendCursorTime(
 export function isTrendCursorWithinSeries(
   points: readonly TrendPoint[],
   time: number,
+  gaps: readonly TrendGap[] = [],
 ): boolean {
-  return resolveTrendCursorValue(points, time) !== undefined;
+  return resolveTrendCursorValue(points, time, gaps) !== undefined;
+}
+
+export function segmentTrendPoints(
+  points: readonly TrendPoint[],
+  gaps: readonly TrendGap[] = [],
+): TrendPoint[][] {
+  const sorted = points
+    .filter((point) => Number.isFinite(point.time) && Number.isFinite(point.value))
+    .slice()
+    .sort((left, right) => left.time - right.time);
+  if (sorted.length === 0) {
+    return [];
+  }
+  const segments: TrendPoint[][] = [[sorted[0]]];
+  for (let index = 1; index < sorted.length; index += 1) {
+    const previous = sorted[index - 1];
+    const current = sorted[index];
+    const hasGap = gaps.some((gap) => gap.time > previous.time && gap.time < current.time);
+    if (hasGap) {
+      segments.push([current]);
+    } else {
+      segments[segments.length - 1].push(current);
+    }
+  }
+  return segments;
 }

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { getTrendSeries, getTrendVisualOptions, trendBindingKey, type TrendElement, type TrendSeries } from '../createTrend';
-import type { PiTrendSeries, TrendPoint, TrendStatePoint } from '../../pi/piDataSource';
+import type { PiTrendSeries, TrendGap, TrendPoint, TrendStatePoint } from '../../pi/piDataSource';
 import type { TrendRuntimeState } from '../runtime/trendRuntime';
-import { resolveTrendCursorValue, type TrendCursor } from '../runtime/trendCursor';
+import { resolveTrendCursorValue, segmentTrendPoints, type TrendCursor } from '../runtime/trendCursor';
 import type { DisplayTimeRange } from '../../time/timeRange';
 import {
   AUTO_HIDE_LEGEND_WIDTH_THRESHOLD,
@@ -322,6 +322,8 @@ function getTrendContent(
               ? '...'
               : runtimeState.status === 'error'
                 ? (data?.states?.at(-1)?.value ?? 'BAD')
+                : data
+                  ? 'No Data'
                 : '--';
         const legendY = element.y + 26 + index * 54;
         const fullName = series.legendLabel || series.binding.pointName;
@@ -430,8 +432,12 @@ function getTrendContent(
     return <>{title}<TrendMessage element={element} message="BAD" testId="trend-error" /></>;
   }
 
-  if (dataSeries.every(({ data }) => data.points.length === 0)) {
-    return <>{title}<TrendMessage element={element} message="Sem dados" testId="trend-empty" /></>;
+  const resolvedEmptySeries = orderedSeriesStates.some(({ runtimeState }) => {
+    const data = runtimeState.status === 'success' || runtimeState.status === 'error' ? runtimeState.data : undefined;
+    return Boolean(data && data.points.length === 0 && !(data.states && data.states.length > 0));
+  });
+  if (dataSeries.length === 0 && stateSeries.length === 0 && resolvedEmptySeries) {
+    return <>{visual.title && <TrendTitle element={element} visual={visual} legendWidth={effectiveLegendWidth} />}{title}<EmptyTrendChart element={element} seriesStates={orderedSeriesStates} cursors={cursors} timeRange={timeRange} visual={visual} legendWidth={effectiveLegendWidth} /></>;
   }
 
   const drawableSeries = dataSeries.filter(({ data }) => data.points.length > 0);
@@ -578,7 +584,7 @@ function getTrendContent(
       {drawableSeries.map(({ series, data }, index) => {
         const key = trendBindingKey(series.binding);
         const seriesChart = seriesCharts.get(key) ?? chart;
-        const path = trendPathForPoints(seriesChart, data.points);
+        const path = trendPathForPoints(seriesChart, data.points, data.gaps);
         const singlePoint = data.points.length === 1 ? trendPointForValue(seriesChart, data.points[0]) : undefined;
         const opacity = getTrendSeriesOpacity(key, selectedSeriesKeys);
         return (
@@ -612,13 +618,11 @@ function getTrendContent(
       })}
       </g>
       {cursors.map((cursor) => {
-        const values = drawableSeries.flatMap(({ series, data }) => {
-          const value = resolveTrendCursorValue(data.points, cursor.time);
-          return value === undefined ? [] : [{ pointName: series.binding.pointName, value, color: series.color || LINE_COLOR }];
+        const values = orderedSeriesStates.map(({ series, runtimeState }) => {
+          const data = runtimeState.status === 'success' || runtimeState.status === 'error' ? runtimeState.data : undefined;
+          const value = data?.points.length ? resolveTrendCursorValue(data.points, cursor.time, data.gaps) : undefined;
+          return { pointName: series.binding.pointName, value, color: series.color || LINE_COLOR };
         });
-        if (values.length === 0) {
-          return null;
-        }
         const x = trendXForTime(chart, cursor.time);
         const selected = cursor.id === selectedCursorId;
         const labelAnchor = x > chart.plotX + chart.plotWidth / 2 ? 'end' : 'start';
@@ -660,7 +664,7 @@ function getTrendContent(
               <tspan x={labelX} y={chart.plotY + 12}>{formatCursorTime(cursor.time)}</tspan>
               {values.map(({ pointName, value, color }, index) => (
                 <tspan key={pointName} x={labelX} y={chart.plotY + 12 + (index + 1) * 18} fill={color}>
-                  {formatValue(value)}
+                  {value === undefined ? 'No Data' : formatValue(value)}
                 </tspan>
               ))}
             </text>
@@ -698,6 +702,61 @@ function TrendMessage({
     >
       {message}
     </text>
+  );
+}
+
+function EmptyTrendChart({
+  element,
+  seriesStates,
+  cursors,
+  timeRange,
+  visual,
+  legendWidth,
+}: {
+  element: TrendElement;
+  seriesStates: readonly TrendSeriesViewState[];
+  cursors: readonly TrendCursor[];
+  timeRange?: DisplayTimeRange;
+  visual: ReturnType<typeof getTrendVisualOptions>;
+  legendWidth: number;
+}) {
+  const plotX = element.x + PLOT_MARGIN.left;
+  const plotY = element.y + (visual.title ? 24 : PLOT_MARGIN.top);
+  const plotWidth = Math.max(1, element.width - PLOT_MARGIN.left - legendWidth - 8);
+  const plotHeight = Math.max(1, element.height - (visual.title ? 24 : PLOT_MARGIN.top) - PLOT_MARGIN.bottom);
+  const domainStart = Number.isFinite(timeRange?.from) ? timeRange!.from : 0;
+  const domainEnd = Number.isFinite(timeRange?.to) && (timeRange!.to > domainStart) ? timeRange!.to : domainStart + 1;
+  const timeSpan = domainEnd - domainStart;
+  const xFor = (time: number) => plotX + ((Math.max(domainStart, Math.min(domainEnd, time)) - domainStart) / timeSpan) * plotWidth;
+  const foreground = visual.foregroundColor || TEXT_COLOR;
+  const axisColor = visual.foregroundColor || AXIS_COLOR;
+  const gridColor = visual.foregroundColor || GRID_COLOR;
+  const showHorizontalGrid = visual.gridMode !== 'none';
+  const showVerticalGrid = visual.gridMode === 'both';
+  const ticks = [0, 1, 2].map((index) => domainStart + (timeSpan * index) / 2);
+  const intervalCount = Math.max(1, Math.min(visual.scaleIntervals || 10, 10));
+  return (
+    <g data-testid={`trend-empty-chart-${element.id}`}>
+      <rect x={plotX} y={plotY} width={plotWidth} height={plotHeight} fill={visual.backgroundColor || 'rgba(0, 0, 0, 0.12)'} data-testid={`trend-plot-${element.id}`} />
+      {Array.from({ length: intervalCount + 1 }, (_, index) => {
+        const y = plotY + (plotHeight * index) / intervalCount;
+        return <line key={`empty-y-${index}`} x1={plotX} y1={y} x2={plotX + plotWidth} y2={y} stroke={showHorizontalGrid ? gridColor : 'transparent'} />;
+      })}
+      {ticks.map((time, index) => <line key={`empty-x-${index}`} x1={xFor(time)} y1={plotY} x2={xFor(time)} y2={plotY + plotHeight} stroke={showVerticalGrid ? gridColor : 'transparent'} />)}
+      <line x1={plotX} y1={plotY} x2={plotX} y2={plotY + plotHeight} stroke={axisColor} data-testid={`trend-y-axis-${element.id}`} />
+      <line x1={plotX} y1={plotY + plotHeight} x2={plotX + plotWidth} y2={plotY + plotHeight} stroke={axisColor} data-testid={`trend-x-axis-${element.id}`} />
+      {cursors.map((cursor) => {
+        const x = xFor(cursor.time);
+        return <g key={cursor.id} data-testid={`trend-cursor-${element.id}-${cursor.id}`}>
+          <line x1={x} y1={plotY} x2={x} y2={plotY + plotHeight} stroke="var(--trend-cursor, #ffffff)" data-testid={`trend-cursor-line-${element.id}-${cursor.id}`} />
+          <text x={x + 4} y={plotY + 14} fill="var(--trend-cursor, #ffffff)" fontSize={AXIS_FONT_SIZE}>
+            <tspan x={x + 4} y={plotY + 14}>{formatCursorTime(cursor.time)}</tspan>
+            {seriesStates.map(({ series }, index) => <tspan key={trendBindingKey(series.binding)} x={x + 4} y={plotY + 14 + (index + 1) * 18} fill={series.color || LINE_COLOR}>No Data</tspan>)}
+          </text>
+        </g>;
+      })}
+      <text x={plotX + plotWidth / 2} y={plotY + plotHeight / 2} textAnchor="middle" fill={foreground} fontSize={AXIS_FONT_SIZE} pointerEvents="none">No Data</text>
+    </g>
   );
 }
 
@@ -877,7 +936,7 @@ function MixedTrend({
         return (
           <g key={key} opacity={opacity}>
             <path
-              d={data.points.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${numericY(point.value, seriesScale)}`).join(' ')}
+              d={segmentTrendPoints(data.points, data.gaps).map((segment) => segment.map((point, pointIndex) => `${pointIndex === 0 ? 'M' : 'L'} ${xFor(point.time)} ${numericY(point.value, seriesScale)}`).join(' ')).join(' ')}
               fill="none"
               stroke={series.color || LINE_COLOR}
               strokeWidth={2}
@@ -895,16 +954,15 @@ function MixedTrend({
         const labelAnchor = x > plotX + plotWidth / 2 ? 'end' : 'start';
         const labelX = labelAnchor === 'end' ? x - 4 : x + 4;
         const values = [
-          ...numericSeries.flatMap(({ series, data }) => {
-            const value = resolveTrendCursorValue(data.points, cursor.time);
-            return value === undefined ? [] : [{ name: series.legendLabel || series.binding.pointName, value: formatNumber(value, visual.numberFormat), color: series.color || LINE_COLOR }];
+          ...numericSeries.map(({ series, data }) => {
+            const value = resolveTrendCursorValue(data.points, cursor.time, data.gaps);
+            return { name: series.legendLabel || series.binding.pointName, value: value === undefined ? 'No Data' : formatNumber(value, visual.numberFormat), color: series.color || LINE_COLOR };
           }),
-          ...stateSeries.flatMap(({ series, states: points }) => {
+          ...stateSeries.map(({ series, states: points }) => {
             const value = resolveTrendCursorState(points, cursor.time);
-            return value === undefined ? [] : [{ name: series.legendLabel || series.binding.pointName, value, color: series.color || LINE_COLOR }];
+            return { name: series.legendLabel || series.binding.pointName, value: value ?? 'No Data', color: series.color || LINE_COLOR };
           }),
         ];
-        if (values.length === 0) return null;
         return (
           <g key={cursor.id} data-testid={`trend-cursor-${element.id}-${cursor.id}`}>
             <line
@@ -1089,9 +1147,8 @@ function DigitalTrend({
         const labelX = labelAnchor === 'end' ? x - 4 : x + 4;
         const values = series.flatMap(({ series: trendSeries, states }) => {
           const state = resolveTrendCursorState(states, cursor.time);
-          return state === undefined ? [] : [{ name: trendSeries.legendLabel || trendSeries.binding.pointName, value: state, color: trendSeries.color || LINE_COLOR }];
+          return [{ name: trendSeries.legendLabel || trendSeries.binding.pointName, value: state ?? 'No Data', color: trendSeries.color || LINE_COLOR }];
         });
-        if (values.length === 0) return null;
         return (
           <g key={cursor.id} data-testid={`trend-cursor-${element.id}-${cursor.id}`}>
             <line x1={x} y1={plotY} x2={x} y2={plotY + plotHeight} stroke="var(--trend-cursor, #ffffff)" strokeWidth={selected ? 2 : 1} pointerEvents="none" />
@@ -1107,7 +1164,7 @@ function DigitalTrend({
               onPointerDown={onCursorPointerDown ? (event) => onCursorPointerDown(event, element.id, cursor, chart) : undefined}
               onDoubleClick={onCursorDoubleClick ? (event) => onCursorDoubleClick(event, element.id, cursor) : undefined}
             />
-            <text x={labelX} y={plotY + 12} textAnchor={labelAnchor} fill="var(--trend-cursor, #ffffff)" fontSize={AXIS_FONT_SIZE} pointerEvents="none">
+            <text x={labelX} y={plotY + 12} textAnchor={labelAnchor} fill="var(--trend-cursor, #ffffff)" fontSize={AXIS_FONT_SIZE} pointerEvents="none" data-testid={`trend-cursor-label-${element.id}-${cursor.id}`}>
               <tspan x={labelX} y={plotY + 12}>{formatCursorTime(cursor.time)}</tspan>
               {values.map(({ name, value, color }, index) => (
                 <tspan key={name} x={labelX} y={plotY + 12 + (index + 1) * 18} fill={color}>{value}</tspan>
@@ -1122,8 +1179,9 @@ function DigitalTrend({
 
 function resolveTrendCursorState(states: readonly TrendStatePoint[], time: number): string | undefined {
   const ordered = [...states].filter((state) => Number.isFinite(state.time)).sort((left, right) => left.time - right.time);
-  if (ordered.length === 0 || time < ordered[0].time || time > ordered[ordered.length - 1].time) return undefined;
-  return [...ordered].reverse().find((state) => state.time <= time)?.value;
+  if (ordered.length === 0 || !Number.isFinite(time) || time < ordered[0].time) return undefined;
+  const state = [...ordered].reverse().find((candidate) => candidate.time <= time)?.value;
+  return state === undefined || state.trim() === '' ? 'No Data' : state;
 }
 
 function digitalTrendPath(
@@ -1246,11 +1304,11 @@ export function trendPlotRightMargin(width: number, preferredLegendWidth?: numbe
   return getEffectiveTrendLegendWidth(width, preferredLegendWidth);
 }
 
-function trendPathForPoints(chart: TrendChartModel, points: readonly TrendPoint[]): string {
-  return points.map((point, index) => {
+function trendPathForPoints(chart: TrendChartModel, points: readonly TrendPoint[], gaps: readonly TrendGap[] = []): string {
+  return segmentTrendPoints(points, gaps).map((segment) => segment.map((point, index) => {
     const position = trendPointForValue(chart, point);
     return `${index === 0 ? 'M' : 'L'} ${position.x} ${position.y}`;
-  }).join(' ');
+  }).join(' ')).join(' ');
 }
 
 function trendPointForValue(chart: TrendChartModel, point: TrendPoint): { x: number; y: number } {
