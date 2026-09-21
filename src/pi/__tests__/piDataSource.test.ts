@@ -1,6 +1,6 @@
 import type { DataSourceSrv } from '@grafana/runtime';
 import { of, throwError, type Observable } from 'rxjs';
-import { checkPiConnection, decodePiAlarmState, getPiDigitalStateSets, getPiPerformanceEquationPointAttributes, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, getPiRecordedRawHistory, getPiResource, PI_DATASOURCE_TYPE, probePiCapabilities, resolvePiDataSource, searchPiPointsWithStatus } from '../piDataSource';
+import { checkPiConnection, decodePiAlarmState, getPiDigitalStateSets, getPiPerformanceEquationPointAttributes, getPiPointDatabaseLimits, getPiPointDigitalStates, getPiPointMetadata, getPiPointRawCurrentValue, getPiRecordedRawHistory, getPiResource, PI_DATASOURCE_TYPE, probePiCapabilities, resolvePiDataSource, searchPiPointsWithStatus } from '../piDataSource';
 
 function makeDataSource(overrides: Partial<{ uid: string; name: string; isDefault: boolean }> = {}) {
   return {
@@ -48,6 +48,25 @@ it('decodifica o encoding documentado do Pialarm33 e rejeita set digital comum',
 });
 
 describe('PI data source integration', () => {
+  it('preserva o Name de estado de sistema no valor atual raw mesmo com qualidade ruim', async () => {
+    const getResource = jest.fn().mockResolvedValue({
+      Timestamp: '2026-09-04T10:34:12Z',
+      Value: { Name: 'Shutdown', Value: 254, IsSystem: true },
+      Good: false,
+      Questionable: false,
+    });
+    const dataSourceSrv = makeDataSourceSrv({ dataSources: [makeDataSource({ isDefault: true })], getResource });
+
+    await expect(getPiPointRawCurrentValue({
+      dataSourceUid: 'pi-default', serverPath: 'pims', pointName: 'STATUS', webId: 'point-webid',
+    }, dataSourceSrv)).resolves.toEqual({
+      value: { Name: 'Shutdown', Value: 254, IsSystem: true },
+      timestamp: '2026-09-04T10:34:12.000Z',
+      quality: { good: false, questionable: false },
+    });
+    expect(getResource).toHaveBeenCalledWith('/streams/point-webid/value');
+  });
+
   it('lê atributos de candidato PE somente pelo recurso GET e preserva Location/ExDesc brutos', async () => {
     const getResource = jest.fn().mockResolvedValue({ Items: [
       { Name: 'pointsource', Value: 'R' }, { Name: 'exdesc', Value: "event=TRIGGER, Delay('INPUT',1,2)" },

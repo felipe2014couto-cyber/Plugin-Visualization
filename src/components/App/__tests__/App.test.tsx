@@ -3,8 +3,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createTheme } from '@grafana/data';
 import {
   checkPiConnection,
+  getPiPointRawCurrentValue,
+  getPiPointsCurrentValues,
   getPiTrendsPlotDataForRange,
   getPiTrendsRecordedHistoryForRange,
+  type PiPointValue,
 } from '../../../pi';
 import { createDisplayDocument } from '../../../display';
 import { App, loadFinalTrendForRange, VISUALIZATION_THEME_STORAGE_KEY } from '../App';
@@ -34,6 +37,8 @@ jest.mock('../../../pi', () => ({
   checkPiConnection: jest.fn(),
   createProgressiveTrendLoader: jest.fn(() => jest.fn(async () => ({}))),
   getPiTrendsHistoryForRange: jest.fn(async () => ({})),
+  getPiPointsCurrentValues: jest.fn(async () => ({})),
+  getPiPointRawCurrentValue: jest.fn(async () => ({ value: undefined })),
   getPiTrendsPlotDataForRange: jest.fn(async () => ({})),
   getPiTrendsPreviewForRange: jest.fn(async () => ({})),
   getPiTrendsRecordedHistoryForRange: jest.fn(async () => ({})),
@@ -45,6 +50,8 @@ describe('App', () => {
   beforeEach(() => {
     localStorage.clear();
     checkPiConnectionMock.mockReset();
+    (getPiPointsCurrentValues as jest.MockedFunction<typeof getPiPointsCurrentValues>).mockClear();
+    (getPiPointRawCurrentValue as jest.MockedFunction<typeof getPiPointRawCurrentValue>).mockReset();
     mockPostBackendSrv.mockReset();
     mockGetBackendSrv.mockImplementation((url: string) => {
       if (url === '/api/user') {
@@ -100,6 +107,114 @@ describe('App', () => {
 
     await expect(loadFinalTrendForRange([numeric], range, options)).resolves.toEqual(recordedResult);
     expect(recordedMock).toHaveBeenLastCalledWith([numeric], range, { ...options, includeOutside: true });
+  });
+
+  it('exibe o estado atual na legenda de binding legado sem pointType quando não houve evento histórico', async () => {
+    const now = Date.parse('2026-09-17T11:35:27.000Z');
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    const state = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'DTH_INICIO', webId: 'state-webid' };
+    const range = { from: now - 8 * 60 * 60 * 1000, to: now };
+    const options = { maxDataPoints: 500, mode: 'final-only' as const, revision: 5 };
+    const plotMock = getPiTrendsPlotDataForRange as jest.MockedFunction<typeof getPiTrendsPlotDataForRange>;
+    const recordedMock = getPiTrendsRecordedHistoryForRange as jest.MockedFunction<typeof getPiTrendsRecordedHistoryForRange>;
+    const currentMock = getPiPointsCurrentValues as jest.MockedFunction<typeof getPiPointsCurrentValues>;
+    plotMock.mockResolvedValueOnce({
+      'ds\u0000pims\u0000DTH_INICIO': { status: 'success', series: { pointName: 'DTH_INICIO', points: [], states: [] } },
+    });
+    recordedMock.mockResolvedValueOnce({}).mockResolvedValueOnce({
+      'ds\u0000pims\u0000DTH_INICIO': {
+        status: 'success',
+        series: { pointName: 'DTH_INICIO', points: [], states: [{ time: now - 1_000, value: '--' }] },
+      },
+    });
+    currentMock.mockResolvedValueOnce({
+      'ds\u0000pims\u0000DTH_INICIO': {
+        status: 'success',
+        value: { value: '--', timestamp: new Date(now).toISOString() },
+      },
+    });
+    (getPiPointRawCurrentValue as jest.MockedFunction<typeof getPiPointRawCurrentValue>).mockResolvedValueOnce({
+      value: { Name: 'Shutdown', Value: 254, IsSystem: true },
+      timestamp: '2026-09-04T10:34:12.000Z',
+      quality: { good: false },
+    });
+
+    await expect(loadFinalTrendForRange([state], range, options)).resolves.toEqual({
+      'ds\u0000pims\u0000DTH_INICIO': {
+        status: 'success',
+        series: { pointName: 'DTH_INICIO', points: [], states: [{ time: now, value: 'Shutdown' }] },
+      },
+    });
+    expect(currentMock).toHaveBeenCalledWith([state]);
+    expect(getPiPointRawCurrentValue).toHaveBeenCalledWith(state);
+  });
+
+  it('não usa o valor atual para uma janela histórica antiga', async () => {
+    const now = Date.parse('2026-09-17T11:35:27.000Z');
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    const state = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'DTH_INICIO', pointType: 'Digital' };
+    const range = { from: now - 10 * 60 * 60 * 1000, to: now - 2 * 60 * 60 * 1000 };
+    const options = { maxDataPoints: 500, mode: 'final-only' as const, revision: 6 };
+    const recordedMock = getPiTrendsRecordedHistoryForRange as jest.MockedFunction<typeof getPiTrendsRecordedHistoryForRange>;
+    const currentMock = getPiPointsCurrentValues as jest.MockedFunction<typeof getPiPointsCurrentValues>;
+    const historical = {
+      'ds\u0000pims\u0000DTH_INICIO': { status: 'success' as const, series: { pointName: 'DTH_INICIO', points: [], states: [] } },
+    };
+    recordedMock.mockResolvedValueOnce(historical);
+
+    await expect(loadFinalTrendForRange([state], range, options)).resolves.toEqual(historical);
+    expect(currentMock).not.toHaveBeenCalled();
+  });
+
+  it('não transforma valor numérico atual em estado de série vazia', async () => {
+    const now = Date.parse('2026-09-17T11:35:27.000Z');
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    const numeric = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'NUMERIC', webId: 'numeric-webid' };
+    const range = { from: now - 60_000, to: now };
+    const options = { maxDataPoints: 500, mode: 'final-only' as const, revision: 7 };
+    const empty = {
+      'ds\u0000pims\u0000NUMERIC': { status: 'success' as const, series: { pointName: 'NUMERIC', points: [], states: [] } },
+    };
+    (getPiTrendsPlotDataForRange as jest.MockedFunction<typeof getPiTrendsPlotDataForRange>).mockResolvedValueOnce(empty);
+    (getPiPointsCurrentValues as jest.MockedFunction<typeof getPiPointsCurrentValues>).mockResolvedValueOnce({
+      'ds\u0000pims\u0000NUMERIC': { status: 'success', value: { value: 42, timestamp: new Date(now).toISOString() } },
+    });
+
+    await expect(loadFinalTrendForRange([numeric], range, options)).resolves.toEqual(empty);
+  });
+
+  it('consulta estados raw de múltiplas séries em paralelo', async () => {
+    const now = Date.parse('2026-09-17T11:35:27.000Z');
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+    const first = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'STATE_A', webId: 'state-a', pointType: 'String' };
+    const second = { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'STATE_B', webId: 'state-b', pointType: 'String' };
+    const range = { from: now - 60_000, to: now };
+    const options = { maxDataPoints: 500, mode: 'final-only' as const, revision: 8 };
+    const unresolved = Object.fromEntries([first, second].map((binding) => [
+      `ds\u0000pims\u0000${binding.pointName}`,
+      { status: 'success' as const, series: { pointName: binding.pointName, points: [], states: [{ time: now - 1_000, value: '--' }] } },
+    ]));
+    (getPiTrendsRecordedHistoryForRange as jest.MockedFunction<typeof getPiTrendsRecordedHistoryForRange>)
+      .mockResolvedValueOnce(unresolved);
+    (getPiPointsCurrentValues as jest.MockedFunction<typeof getPiPointsCurrentValues>).mockResolvedValueOnce(
+      Object.fromEntries([first, second].map((binding) => [
+        `ds\u0000pims\u0000${binding.pointName}`,
+        { status: 'success', value: { value: '--', timestamp: new Date(now).toISOString() } },
+      ])),
+    );
+    const pending = new Map<string, (value: PiPointValue) => void>();
+    const rawMock = getPiPointRawCurrentValue as jest.MockedFunction<typeof getPiPointRawCurrentValue>;
+    rawMock.mockImplementation((binding) => new Promise((resolve) => pending.set(binding.pointName, resolve)));
+
+    const loading = loadFinalTrendForRange([first, second], range, options);
+    await waitFor(() => expect(rawMock).toHaveBeenCalledTimes(2));
+    pending.get('STATE_A')?.({ value: { Name: 'Shutdown' } });
+    pending.get('STATE_B')?.({ value: 'Running' });
+
+    await expect(loading).resolves.toMatchObject({
+      'ds\u0000pims\u0000STATE_A': { series: { states: [{ time: now, value: 'Shutdown' }] } },
+      'ds\u0000pims\u0000STATE_B': { series: { states: [{ time: now, value: 'Running' }] } },
+    });
   });
 
   afterEach(() => {

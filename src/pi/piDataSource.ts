@@ -915,6 +915,27 @@ export async function getPiPointCurrentValue(
   return result.value;
 }
 
+/** Reads the current PI value without allowing the datasource frame to replace system states with a no-data placeholder. */
+export async function getPiPointRawCurrentValue(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+): Promise<PiPointValue> {
+  if (!binding.webId) {
+    throw new Error('Valor atual raw requer WebId do PI Point.');
+  }
+  const response = await getPiResource<unknown>(
+    binding.dataSourceUid,
+    `/streams/${encodeURIComponent(binding.webId)}/value`,
+    dataSourceSrv,
+  );
+  const point = normalizeRawRecordedPoint(response);
+  return {
+    value: point.value,
+    timestamp: new Date(point.time).toISOString(),
+    ...(point.quality ? { quality: { ...point.quality } } : {}),
+  };
+}
+
 export async function getPiPointDatabaseLimits(
   binding: PiPointBinding,
   dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
@@ -2434,13 +2455,26 @@ function normalizeStateTrendFrame(
     if (time === undefined || value === null || value === undefined) {
       continue;
     }
-    states.push({ time, value: String(value) });
+    states.push({ time, value: normalizeStateValue(value) });
     const quality = normalizeHistoricalQuality(qualityFields, index);
-    historicalValues.push({ timestamp: time, value: String(value), ...(quality ? { quality } : {}), ...(origin ? { origin } : {}) });
+    historicalValues.push({ timestamp: time, value: normalizeStateValue(value), ...(quality ? { quality } : {}), ...(origin ? { origin } : {}) });
   }
   states.sort((left, right) => left.time - right.time);
   historicalValues.sort((left, right) => left.timestamp - right.timestamp);
   return { pointName, points: [], states, ...(historicalValues.length > 0 ? { historicalValues } : {}) };
+}
+
+function normalizeStateValue(value: unknown): string {
+  if (value && typeof value === 'object') {
+    const structured = value as { Name?: unknown; Value?: unknown };
+    if (typeof structured.Name === 'string' && structured.Name.trim()) {
+      return structured.Name;
+    }
+    if (structured.Value !== undefined && structured.Value !== null) {
+      return String(structured.Value);
+    }
+  }
+  return String(value);
 }
 
 function normalizeHistoricalQuality(

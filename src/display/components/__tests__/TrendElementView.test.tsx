@@ -562,7 +562,7 @@ describe('TrendElementView', () => {
       expect(lineNumeric.parentElement).toHaveAttribute('opacity', '0.2');
     });
 
-    it('oculta a legenda automaticamente quando a largura do elemento é inferior a 500px (ex: 480px)', () => {
+    it('exibe a legenda em Trends compactos com 480px e preserva o espaço do gráfico', () => {
       const compactTrend = {
         ...element,
         id: 'compact-trend',
@@ -581,8 +581,23 @@ describe('TrendElementView', () => {
         </svg>,
       );
 
-      expect(screen.queryByTestId('trend-title-compact-trend')).toBeNull();
-      expect(screen.queryByTestId('trend-legend-resizer-compact-trend')).toBeNull();
+      expect(screen.getByTestId('trend-legend-resizer-compact-trend')).toBeInTheDocument();
+      expect(screen.getByTestId('trend-legend-compact-trend-0')).toHaveTextContent('SINUSOID');
+    });
+
+    it('oculta a legenda somente quando o Trend é estreito demais para gráfico e legenda', () => {
+      const narrowTrend = { ...element, id: 'narrow-trend', width: 300, height: 250 };
+      render(
+        <svg>
+          <TrendElementView element={narrowTrend} runtimeState={{
+            status: 'success',
+            data: { pointName: 'SINUSOID', points: [{ time: 1000, value: 50 }] },
+          }} />
+        </svg>,
+      );
+
+      expect(screen.queryByTestId('trend-legend-resizer-narrow-trend')).toBeNull();
+      expect(screen.queryByTestId('trend-legend-narrow-trend-0')).toBeNull();
     });
 
     it('adapta os intervalos da escala vertical para menos valores quando a altura é reduzida', () => {

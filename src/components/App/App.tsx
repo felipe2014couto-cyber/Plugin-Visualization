@@ -15,6 +15,7 @@ import {
 import {
   checkPiConnection,
   getPiPointCurrentValue,
+  getPiPointRawCurrentValue,
   getPiPointDatabaseLimits,
   getPiPointDigitalStates,
   getPiPointsCurrentValues,
@@ -70,15 +71,86 @@ export async function loadFinalTrendForRange(
   const failedPlotBindings = numericBindings.filter((binding) => (
     !binding.webId || isEmptyOrFailedTrendResult(plotDataResults[getTrendBindingCacheKey(binding)])
   ));
-  if (failedPlotBindings.length === 0) {
-    return { ...plotDataResults, ...stateResults };
+  const fallbackResults = failedPlotBindings.length > 0
+    ? await getPiTrendsRecordedHistoryForRange(
+        failedPlotBindings,
+        range,
+        { ...options, includeOutside: true },
+      )
+    : {};
+  const results = { ...plotDataResults, ...stateResults, ...fallbackResults };
+  if (!isRangeAtNow(range)) {
+    return results;
   }
-  const fallbackResults = await getPiTrendsRecordedHistoryForRange(
-    failedPlotBindings,
-    range,
-    { ...options, includeOutside: true },
-  );
-  return { ...plotDataResults, ...stateResults, ...fallbackResults };
+  const emptyStateBindings = bindings.filter((binding) => {
+    const result = results[getTrendBindingCacheKey(binding)];
+    const states = result?.status === 'success' ? result.series.states ?? [] : [];
+    return result?.status === 'success'
+      && result.series.points.length === 0
+      && (states.length === 0 || isUnresolvedTrendState(states[states.length - 1].value));
+  });
+  if (emptyStateBindings.length === 0) {
+    return results;
+  }
+  try {
+    const currentValues = await getPiPointsCurrentValues(emptyStateBindings);
+    const resolvedStates = await Promise.all(emptyStateBindings.map(async (binding) => {
+      const key = getTrendBindingCacheKey(binding);
+      const current = currentValues[key];
+      let state = current?.status === 'success' ? currentStateName(current.value.value) : undefined;
+      if ((!state || isUnresolvedTrendState(state)) && binding.webId) {
+        try {
+          state = currentStateName((await getPiPointRawCurrentValue(binding)).value);
+        } catch {
+          // Mantém o resultado histórico quando o recurso raw não está disponível.
+        }
+      }
+      return { binding, state };
+    }));
+    for (const { binding, state } of resolvedStates) {
+      const key = getTrendBindingCacheKey(binding);
+      if (!state) {
+        continue;
+      }
+      const existing = results[key];
+      if (existing?.status !== 'success') {
+        continue;
+      }
+      results[key] = {
+        status: 'success',
+        series: {
+          ...existing.series,
+          states: [{ time: range.to, value: state }],
+        },
+      };
+    }
+  } catch {
+    // A tendência histórica continua válida quando a leitura atual falha.
+  }
+  return results;
+}
+
+function isRangeAtNow(range: PiTrendTimeRange): boolean {
+  const distance = Date.now() - range.to;
+  return distance >= -60_000 && distance <= 5 * 60_000;
+}
+
+function currentStateName(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value.trim() || undefined;
+  }
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const structured = value as { Name?: unknown; Value?: unknown };
+  if (typeof structured.Name === 'string' && structured.Name.trim()) {
+    return structured.Name;
+  }
+  return typeof structured.Value === 'string' && structured.Value.trim() ? structured.Value : undefined;
+}
+
+function isUnresolvedTrendState(value: string): boolean {
+  return /^-+$/.test(value.trim());
 }
 
 function isEmptyOrFailedTrendResult(result: PiTrendSeriesResult | undefined): boolean {

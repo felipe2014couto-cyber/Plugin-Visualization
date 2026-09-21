@@ -227,6 +227,16 @@ describe('TrendPopup - escalas', () => {
     expect(screen.getByTestId('trend-popup-state-line-2')).toBeInTheDocument();
   });
 
+  it('mostra Shutdown na legenda quando o único estado recebido é o valor atual no fim da janela', () => {
+    const shutdown: TrendSeriesViewState[] = [{
+      series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'DTH_INICIO', pointType: 'Digital' }, color: '#f2495c' },
+      runtimeState: { status: 'success', data: { pointName: 'DTH_INICIO', points: [], states: [{ time: 2_000, value: 'Shutdown' }] } },
+    }];
+    render(<TrendPopup seriesStates={shutdown} timeRange={{ from: 1_000, to: 2_000 }} onClose={jest.fn()} />);
+
+    expect(screen.getByTestId('trend-popup-legend-item-0')).toHaveTextContent('Shutdown');
+  });
+
   it('distingue ticks próximos de 32 e inclui segundos em janelas temporais curtas', () => {
     const closeSeries: TrendSeriesViewState[] = [{
       series: { binding: { dataSourceUid: 'ds', serverPath: 'pims', pointName: 'PV' }, color: '#6e9fff' },

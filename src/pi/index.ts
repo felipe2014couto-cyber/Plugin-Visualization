@@ -5,6 +5,7 @@ export {
   searchPiPoints,
   searchPiPointsWithStatus,
   getPiPointCurrentValue,
+  getPiPointRawCurrentValue,
   getPiPointDatabaseLimits,
   getPiPointMetadata,
   getPiPointDigitalStates,
