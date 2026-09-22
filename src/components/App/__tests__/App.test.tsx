@@ -48,6 +48,10 @@ describe('App', () => {
   const checkPiConnectionMock = checkPiConnection as jest.MockedFunction<typeof checkPiConnection>;
 
   beforeEach(() => {
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: jest.fn(),
+    });
     localStorage.clear();
     checkPiConnectionMock.mockReset();
     (getPiPointsCurrentValues as jest.MockedFunction<typeof getPiPointsCurrentValues>).mockClear();
@@ -386,6 +390,37 @@ describe('App', () => {
 
     fireEvent.click(screen.getByTestId('pims-vision-assets-tab'));
     expect(screen.getByTestId('pims-vision-assets-tab')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('mantém o botão do PiChat visível e abre o popover', async () => {
+    checkPiConnectionMock.mockResolvedValue({ status: 'error' });
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    const piChatButton = screen.getByTestId('pims-vision-pichat-tab');
+    expect(piChatButton).toBeInTheDocument();
+    expect(piChatButton).toHaveAttribute('aria-label', 'PiChat');
+
+    fireEvent.click(piChatButton);
+
+    expect(screen.getByTestId('pichat-popover')).toBeInTheDocument();
+    expect(piChatButton).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByTestId('pichat-close-button'));
+    expect(screen.queryByTestId('pichat-popover')).toBeNull();
+  });
+
+  it('mantém o botão do PiChat visível quando o backend está indisponível', async () => {
+    checkPiConnectionMock.mockResolvedValue({ status: 'error' });
+    mockPostBackendSrv.mockRejectedValue(new Error('PiChat backend unavailable'));
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('pims-vision-home')).toBeInTheDocument());
+
+    expect(screen.getByTestId('pims-vision-pichat-tab')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('pims-vision-pichat-tab'));
+    expect(screen.getByTestId('pichat-popover')).toBeInTheDocument();
   });
 
   it('salva diretamente as alterações do dashboard atual', async () => {

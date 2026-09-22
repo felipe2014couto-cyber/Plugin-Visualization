@@ -1,4 +1,5 @@
 import { PiChatMessage } from './types';
+import { safeStoredPiChatErrorMessage } from './piChatErrors';
 
 export const PICHAT_STORAGE_KEY = 'pims_pichat_history';
 
@@ -31,7 +32,7 @@ export function loadChatHistory(): PiChatMessage[] {
         const cleanMsg: PiChatMessage = {
           id: item.id,
           role: item.role,
-          content: item.content,
+          content: safeStoredPiChatErrorMessage(item.content, item.isError),
           timestamp: item.timestamp,
         };
         if (Array.isArray(item.tags_consultadas)) {
@@ -39,6 +40,9 @@ export function loadChatHistory(): PiChatMessage[] {
         }
         if (typeof item.isError === 'boolean') {
           cleanMsg.isError = item.isError;
+        }
+        if (item.errorCode && typeof item.errorCode === 'string') {
+          cleanMsg.errorCode = item.errorCode as PiChatMessage['errorCode'];
         }
         if (item.attachment && typeof item.attachment.fileName === 'string' && typeof item.attachment.mimeType === 'string') {
           cleanMsg.attachment = {
@@ -48,8 +52,8 @@ export function loadChatHistory(): PiChatMessage[] {
         }
         return cleanMsg;
       });
-  } catch (err) {
-    console.warn('[PiChat] Erro ao carregar histórico do sessionStorage:', err);
+  } catch {
+    console.warn('[PiChat]', { component: 'PiChatStorage', code: 'STORAGE_READ_ERROR' });
     return [];
   }
 }
@@ -64,7 +68,7 @@ export function saveChatHistory(messages: PiChatMessage[]): void {
       const item: PiChatMessage = {
         id: msg.id,
         role: msg.role,
-        content: msg.content,
+        content: safeStoredPiChatErrorMessage(msg.content, msg.isError),
         timestamp: msg.timestamp,
       };
       if (msg.tags_consultadas && msg.tags_consultadas.length > 0) {
@@ -72,6 +76,9 @@ export function saveChatHistory(messages: PiChatMessage[]): void {
       }
       if (msg.isError) {
         item.isError = msg.isError;
+      }
+      if (msg.errorCode) {
+        item.errorCode = msg.errorCode;
       }
       if (msg.attachment) {
         item.attachment = {
@@ -82,8 +89,8 @@ export function saveChatHistory(messages: PiChatMessage[]): void {
       return item;
     });
     window.sessionStorage.setItem(PICHAT_STORAGE_KEY, JSON.stringify(sanitized));
-  } catch (err) {
-    console.warn('[PiChat] Erro ao salvar histórico no sessionStorage:', err);
+  } catch {
+    console.warn('[PiChat]', { component: 'PiChatStorage', code: 'STORAGE_WRITE_ERROR' });
   }
 }
 
@@ -94,7 +101,7 @@ export function clearChatHistory(): void {
 
   try {
     window.sessionStorage.removeItem(PICHAT_STORAGE_KEY);
-  } catch (err) {
-    console.warn('[PiChat] Erro ao limpar histórico do sessionStorage:', err);
+  } catch {
+    console.warn('[PiChat]', { component: 'PiChatStorage', code: 'STORAGE_CLEAR_ERROR' });
   }
 }

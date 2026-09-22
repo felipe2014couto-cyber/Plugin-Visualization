@@ -1,4 +1,5 @@
 export type PiChatRole = 'user' | 'assistant';
+import type { PiChatErrorCode } from './piChatErrors';
 
 export interface PiChatAttachment {
   fileName: string;
@@ -13,6 +14,7 @@ export interface PiChatMessage {
   timestamp: string;
   tags_consultadas?: string[];
   isError?: boolean;
+  errorCode?: PiChatErrorCode;
   attachment?: PiChatAttachment;
 }
 
@@ -37,6 +39,9 @@ export interface PiChatResponsePayload {
   tags_consultadas?: string[];
   agent_trace?: unknown[];
   answer_generation_error?: string | null;
+  errorCode?: PiChatErrorCode;
+  requestId?: string;
+  cancelled?: boolean;
   tool_name?: string | null;
 }
 

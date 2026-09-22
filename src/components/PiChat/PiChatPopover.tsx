@@ -8,6 +8,7 @@ import { PiChatMessage } from './PiChatMessage';
 import { PiChatInput } from './PiChatInput';
 import { PiChatIcon } from './PiChatIcon';
 import { getPiChatStyles } from './styles';
+import { PICHAT_IMAGE_PROCESSING_ERROR } from './piChatErrors';
 
 export interface PiChatPopoverProps {
   open: boolean;
@@ -69,8 +70,17 @@ export const PiChatPopover: React.FC<PiChatPopoverProps> = ({ open, onClose }) =
           fileName: file.name,
           mimeType: file.type || 'image/png',
         };
-      } catch (err) {
-        console.error('[PiChat] Erro ao processar imagem para envio:', err);
+      } catch {
+        const errorMessage: PiChatMessageModel = {
+          id: `msg_bot_${Date.now()}`,
+          role: 'assistant',
+          content: PICHAT_IMAGE_PROCESSING_ERROR,
+          timestamp: formatCurrentTime(),
+          isError: true,
+          errorCode: 'UNSUPPORTED_FILE',
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+        return;
       }
     }
 
@@ -92,6 +102,10 @@ export const PiChatPopover: React.FC<PiChatPopoverProps> = ({ open, onClose }) =
 
     setIsLoading(false);
 
+    if (response.cancelled) {
+      return;
+    }
+
     const botMsg: PiChatMessageModel = {
       id: `msg_bot_${Date.now()}`,
       role: 'assistant',
@@ -99,6 +113,7 @@ export const PiChatPopover: React.FC<PiChatPopoverProps> = ({ open, onClose }) =
       timestamp: formatCurrentTime(),
       tags_consultadas: response.tags_consultadas,
       isError: !response.ok,
+      ...(response.errorCode ? { errorCode: response.errorCode } : {}),
     };
 
     setMessages((prev) => [...prev, botMsg]);

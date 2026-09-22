@@ -1,141 +1,53 @@
+import { getBackendSrv } from '@grafana/runtime';
+
 import { PiChatImagePayload, PiChatRequestPayload, PiChatResponsePayload } from './types';
+import {
+  formatPiChatErrorForUser,
+  piChatErrorCodeForStatus,
+  piChatErrorCodeFromBackend,
+  type PiChatErrorCode,
+} from './piChatErrors';
 
-declare global {
-  interface Window {
-    __PIMS_PICHAT_API_BASE_URL__?: string;
-  }
-}
+export const PICHAT_RESOURCE_PATH = '/api/plugins/pims-vision-app/resources/pichat/chat';
 
-declare const __PIMS_PICHAT_API_BASE_URL_FROM_ENV__: string | undefined;
-
-export function getPiChatApiBaseUrl(): string {
-  if (typeof window !== 'undefined') {
-    const win = window as any;
-    if (win.__PIMS_PICHAT_API_BASE_URL__) {
-      return String(win.__PIMS_PICHAT_API_BASE_URL__).replace(/\/$/, '');
-    }
-    if (win.PIMS_PICHAT_API_BASE_URL) {
-      return String(win.PIMS_PICHAT_API_BASE_URL).replace(/\/$/, '');
-    }
-  }
-
-  let envUrl: string | undefined;
-  try {
-    if (typeof __PIMS_PICHAT_API_BASE_URL_FROM_ENV__ !== 'undefined' && __PIMS_PICHAT_API_BASE_URL_FROM_ENV__) {
-      envUrl = __PIMS_PICHAT_API_BASE_URL_FROM_ENV__;
-    }
-  } catch {
-    // Ignore ReferenceError if undefined
-  }
-
-  if (!envUrl && typeof process !== 'undefined' && process.env?.PIMS_PICHAT_API_BASE_URL) {
-    envUrl = process.env.PIMS_PICHAT_API_BASE_URL;
-  }
-
-  if (envUrl && envUrl.trim()) {
-    return String(envUrl).trim().replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined') {
-    const win = window as any;
-    if (win.location?.hostname) {
-      const protocol = win.location.protocol || 'http:';
-      const hostname = win.location.hostname;
-      return `${protocol}//${hostname}:8002`;
-    }
-  }
-
-  return 'http://localhost:8002';
-}
-
-export async function sendChatMessage(
-  message: string,
-  userId: string,
-  images?: PiChatImagePayload[],
-  externalSignal?: AbortSignal
-): Promise<PiChatResponsePayload> {
-  const baseUrl = getPiChatApiBaseUrl();
-  const url = `${baseUrl}/chat`;
-
-  const controller = new AbortController();
-  const timeoutMs = 120_000;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  if (externalSignal) {
-    externalSignal.addEventListener('abort', () => {
-      controller.abort();
-    });
-  }
-
-  const payload: PiChatRequestPayload = {
-    message: message.trim(),
-    user_id: userId,
-    images: Array.isArray(images) && images.length > 0 ? images : [],
-  };
+export async function sendChatMessage(message: string, userId: string, images?: PiChatImagePayload[], externalSignal?: AbortSignal): Promise<PiChatResponsePayload> {
+  if (externalSignal?.aborted) return cancelledResponse();
+  const payload: PiChatRequestPayload = { message: message.trim(), user_id: userId, images: Array.isArray(images) && images.length > 0 ? images : [] };
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      let errorMsg = `Erro ${response.status} ao comunicar com o PiChat Agent.`;
-      try {
-        const errJson = JSON.parse(errorText);
-        if (errJson.detail) {
-          errorMsg = errJson.detail;
-        }
-      } catch {
-        // Ignora erro de parse
-      }
-      return {
-        ok: false,
-        output: errorMsg,
-        answer_generation_error: errorMsg,
-      };
-    }
-
-    const data = await response.json();
+    const data = await getBackendSrv().post<unknown>(PICHAT_RESOURCE_PATH, payload, { showErrorAlert: false, hideFromInspector: true });
+    if (externalSignal?.aborted) return cancelledResponse();
+    if (!isPiChatResponseObject(data)) return safeErrorResponse('INVALID_RESPONSE');
+    if (data.ok === false) return safeErrorResponse(piChatErrorCodeFromBackend(data.error_code ?? data.answer_generation_error));
+    if (data.output !== undefined && typeof data.output !== 'string' && typeof data.answer !== 'string') return safeErrorResponse('INVALID_RESPONSE');
     return {
-      ok: Boolean(data.ok ?? true),
+      ok: true,
       user_id: data.user_id ?? userId,
       message_original: data.message_original ?? message,
       processed_message: data.processed_message,
       output: data.output ?? data.answer ?? 'Sem resposta retornada pelo agente.',
       tags_consultadas: Array.isArray(data.tags_consultadas) ? data.tags_consultadas : [],
-      agent_trace: Array.isArray(data.agent_trace) ? data.agent_trace : [],
-      answer_generation_error: data.answer_generation_error ?? null,
+      answer_generation_error: null,
       tool_name: data.tool_name ?? null,
     };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-
-    if (err.name === 'AbortError' || controller.signal.aborted) {
-      return {
-        ok: false,
-        output: 'Tempo limite esgotado (120s). O Agent Bot demorou para responder.',
-        answer_generation_error: 'TIMEOUT',
-      };
-    }
-
-    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-    const msg = isOffline
-      ? 'Você está offline. Verifique sua conexão de rede.'
-      : `Não foi possível conectar ao PiChat Agent Bot (${baseUrl}). Verifique se o serviço está em execução.`;
-
-    return {
-      ok: false,
-      output: msg,
-      answer_generation_error: err.message ?? 'NETWORK_ERROR',
-    };
+  } catch (error: any) {
+    if (externalSignal?.aborted || error?.cancelled) return cancelledResponse();
+    if (error?.name === 'AbortError') return safeErrorResponse('TIMEOUT');
+    const status = Number(error?.status);
+    const code = Number.isFinite(status) && status > 0 ? piChatErrorCodeForStatus(status) : (typeof navigator !== 'undefined' && !navigator.onLine ? 'OFFLINE' : 'NETWORK_ERROR');
+    return safeErrorResponse(code, Number.isFinite(status) && status > 0 ? status : undefined);
   }
+}
+
+function isPiChatResponseObject(value: unknown): value is Record<string, any> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function safeErrorResponse(code: PiChatErrorCode, status?: number): PiChatResponsePayload {
+  const error = formatPiChatErrorForUser(code, status);
+  return { ok: false, output: error.userMessage, answer_generation_error: error.code, errorCode: error.code };
+}
+
+function cancelledResponse(): PiChatResponsePayload {
+  return { ok: false, output: '', answer_generation_error: 'CANCELLED', errorCode: 'CANCELLED', cancelled: true };
 }

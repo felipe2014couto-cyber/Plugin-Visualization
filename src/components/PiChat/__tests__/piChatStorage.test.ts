@@ -79,4 +79,20 @@ describe('piChatStorage', () => {
     clearChatHistory();
     expect(loadChatHistory()).toEqual([]);
   });
+
+  it('sanitiza erro técnico legado antes de carregar e salvar no sessionStorage', () => {
+    saveChatHistory([{
+      id: 'msg-error',
+      role: 'assistant',
+      content: 'Não foi possível conectar em http://10.247.140.156:8002/chat: password invalid',
+      timestamp: '10:10',
+      isError: true,
+      errorCode: 'NETWORK_ERROR',
+    }]);
+
+    const loaded = loadChatHistory();
+    expect(loaded[0].content).toBe('Não foi possível concluir sua solicitação. Tente novamente.');
+    expect(loaded[0].content).not.toMatch(/10\.247|8002|http|password|\/chat/i);
+    expect(window.sessionStorage.getItem(PICHAT_STORAGE_KEY)).not.toMatch(/10\.247|8002|password|\/chat/i);
+  });
 });

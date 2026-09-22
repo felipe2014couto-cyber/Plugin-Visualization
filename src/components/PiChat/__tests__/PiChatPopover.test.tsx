@@ -16,7 +16,6 @@ if (typeof window.URL.revokeObjectURL === 'undefined') {
 
 jest.mock('../piChatApi', () => ({
   sendChatMessage: jest.fn(),
-  getPiChatApiBaseUrl: jest.fn(() => 'http://localhost:8002'),
 }));
 
 describe('PiChatPopover', () => {
@@ -533,4 +532,3 @@ describe('PiChatPopover', () => {
     expect(screen.getByTestId('pichat-minimize-button')).toHaveAttribute('title', 'Minimizar PiChat');
   });
 });
-

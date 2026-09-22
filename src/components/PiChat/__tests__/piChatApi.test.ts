@@ -1,129 +1,55 @@
-import { getPiChatApiBaseUrl, sendChatMessage } from '../piChatApi';
+import { getBackendSrv } from '@grafana/runtime';
+
+import { PICHAT_RESOURCE_PATH, sendChatMessage } from '../piChatApi';
+
+jest.mock('@grafana/runtime', () => ({ getBackendSrv: jest.fn() }));
 
 describe('piChatApi', () => {
-  const originalFetch = global.fetch;
-  const originalLocation = window.location;
+  const backendPost = jest.fn();
 
   beforeEach(() => {
-    delete (window as any).__PIMS_PICHAT_API_BASE_URL__;
-    delete (window as any).PIMS_PICHAT_API_BASE_URL;
-    delete (process.env as any).PIMS_PICHAT_API_BASE_URL;
-    jest.clearAllMocks();
+    backendPost.mockReset();
+    (getBackendSrv as jest.Mock).mockReturnValue({ post: backendPost });
   });
 
-  afterAll(() => {
-    global.fetch = originalFetch;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: originalLocation,
-    });
-  });
-
-  it('deve priorizar window.__PIMS_PICHAT_API_BASE_URL__ quando definido', () => {
-    (window as any).__PIMS_PICHAT_API_BASE_URL__ = 'http://custom-host:8015/';
-    expect(getPiChatApiBaseUrl()).toBe('http://custom-host:8015');
-  });
-
-  it('deve priorizar process.env.PIMS_PICHAT_API_BASE_URL quando definido', () => {
-    process.env.PIMS_PICHAT_API_BASE_URL = 'http://custom-env-host:8012/';
-    expect(getPiChatApiBaseUrl()).toBe('http://custom-env-host:8012');
-  });
-
-  it('deve resolver dinamicamente pelo hostname do Grafana', () => {
-    delete (window as any).__PIMS_PICHAT_API_BASE_URL__;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: {
-        protocol: 'http:',
-        hostname: 'grafana-server',
-      },
-    });
-
-    expect(getPiChatApiBaseUrl()).toBe('http://grafana-server:8002');
-  });
-
-  it('deve resolver corretamente para localhost', () => {
-    delete (window as any).__PIMS_PICHAT_API_BASE_URL__;
-    Object.defineProperty(window, 'location', {
-      writable: true,
-      value: {
-        protocol: 'http:',
-        hostname: 'localhost',
-      },
-    });
-
-    expect(getPiChatApiBaseUrl()).toBe('http://localhost:8002');
-  });
-
-  it('deve enviar requisição com sucesso utilizando o endpoint resolvido', async () => {
-    (window as any).__PIMS_PICHAT_API_BASE_URL__ = 'http://custom-host:8015';
-
-    global.fetch = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        ok: true,
-        output: 'Resposta do bot',
-        tags_consultadas: [],
-      }),
-    });
-
+  it('usa somente o resource path do Grafana', async () => {
+    backendPost.mockResolvedValueOnce({ ok: true, output: 'Resposta do bot', tags_consultadas: [] });
     const result = await sendChatMessage('olá', 'user-1');
-    expect(result.ok).toBe(true);
     expect(result.output).toBe('Resposta do bot');
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://custom-host:8015/chat',
-      expect.objectContaining({
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          message: 'olá',
-          user_id: 'user-1',
-          images: [],
-        }),
-      })
-    );
+    expect(backendPost).toHaveBeenCalledWith(PICHAT_RESOURCE_PATH, { message: 'olá', user_id: 'user-1', images: [] }, { showErrorAlert: false, hideFromInspector: true });
+    expect(PICHAT_RESOURCE_PATH).toBe('/api/plugins/pims-vision-app/resources/pichat/chat');
+    expect(PICHAT_RESOURCE_PATH).not.toMatch(/localhost|:\d+|http/i);
   });
 
-  it('deve enviar payload multimodal contendo array de imagens', async () => {
-    (window as any).__PIMS_PICHAT_API_BASE_URL__ = 'http://custom-host:8015';
+  it('envia imagens sem expor um destino configurável', async () => {
+    const images = [{ image_base64: 'base64', mime_type: 'image/png', file_name: 'grafico.png' }];
+    backendPost.mockResolvedValueOnce({ ok: true, output: 'Imagem processada', tags_consultadas: ['TAG_01'] });
+    await sendChatMessage('Analise', 'user-1', images);
+    expect(backendPost).toHaveBeenCalledWith(PICHAT_RESOURCE_PATH, { message: 'Analise', user_id: 'user-1', images }, expect.anything());
+  });
 
-    global.fetch = jest.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        ok: true,
-        output: 'Imagem processada pelo OCR',
-        tags_consultadas: ['TAG_01'],
-      }),
-    });
+  it.each([
+    [401, 'UNAUTHORIZED'], [403, 'FORBIDDEN'], [429, 'RATE_LIMITED'], [500, 'SERVER_ERROR'], [503, 'SERVICE_UNAVAILABLE'], [504, 'SERVICE_UNAVAILABLE'],
+  ])('sanitiza erro HTTP %s', async (status, code) => {
+    backendPost.mockRejectedValueOnce({ status, data: { detail: 'database password 10.1.2.3' } });
+    const result = await sendChatMessage('olá', 'user-1');
+    expect(result.errorCode).toBe(code);
+    expect(result.output).not.toMatch(/10\.1\.2\.3|password|database|http/i);
+  });
 
-    const mockImages = [
-      {
-        image_base64: 'base64-fake-string',
-        mime_type: 'image/png',
-        file_name: 'grafico.png',
-      },
-    ];
+  it('sanitiza falha de rede', async () => {
+    backendPost.mockRejectedValueOnce(new Error('Failed to fetch http://10.1.2.3:8002/chat'));
+    const result = await sendChatMessage('olá', 'user-1');
+    expect(result.errorCode).toBe('NETWORK_ERROR');
+    expect(result.output).not.toMatch(/10\.1\.2\.3|8002|http|failed to fetch|\/chat/i);
+  });
 
-    const result = await sendChatMessage('Analise este gráfico', 'user-1', mockImages);
-    expect(result.ok).toBe(true);
-    expect(result.output).toBe('Imagem processada pelo OCR');
-    expect(global.fetch).toHaveBeenCalledWith(
-      'http://custom-host:8015/chat',
-      expect.objectContaining({
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          message: 'Analise este gráfico',
-          user_id: 'user-1',
-          images: mockImages,
-        }),
-      })
-    );
+  it('trata resposta inválida e erro do agente sem repassar detalhes', async () => {
+    backendPost.mockResolvedValueOnce({ ok: false, answer_generation_error: 'Traceback password token' });
+    const result = await sendChatMessage('olá', 'user-1');
+    expect(result.errorCode).toBe('AGENT_ERROR');
+    expect(result.output).not.toMatch(/Traceback|password|token/i);
+    backendPost.mockResolvedValueOnce('invalid');
+    expect((await sendChatMessage('olá', 'user-1')).errorCode).toBe('INVALID_RESPONSE');
   });
 });
