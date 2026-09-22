@@ -483,7 +483,7 @@ describe('App', () => {
 
     const select = screen.getByTestId('header-auto-refresh-select') as HTMLSelectElement;
     expect(select).toBeInTheDocument();
-    expect(select.value).toBe('adaptativa');
+    expect(select.value).toBe('');
 
     fireEvent.change(select, { target: { value: '10s' } });
     expect(select.value).toBe('10s');

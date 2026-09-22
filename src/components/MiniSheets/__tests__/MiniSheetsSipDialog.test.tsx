@@ -138,7 +138,7 @@ describe('MiniSheetsSipDialog', () => {
     );
 
     const editor = screen.getByTestId('sip-sql-editor') as HTMLTextAreaElement;
-    expect(editor.value.length).toBeGreaterThan(0);
+    expect(editor).toHaveValue('');
 
     fireEvent.click(screen.getByTestId('sip-clear-button'));
     expect(editor.value).toBe('');
@@ -205,6 +205,9 @@ describe('MiniSheetsSipDialog', () => {
       />
     );
 
+    fireEvent.change(screen.getByTestId('sip-sql-editor'), {
+      target: { value: 'SELECT 1 FROM DUAL' },
+    });
     fireEvent.click(screen.getByTestId('sip-execute-button'));
 
     await waitFor(() => {

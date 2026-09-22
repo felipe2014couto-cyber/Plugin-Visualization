@@ -13,12 +13,7 @@ import {
 } from '../SqlQuery/oracleApi';
 import { parseCellAddress, parseRangeAddresses } from './miniSheetFormula';
 
-export const DEFAULT_SQL_TEMPLATE = `SELECT 
-  HU.DTH_INIC_PROCE as TS,
-  OEE.TEMPO_SETUP as PIVALUE,
-  0 as status
-FROM 
-  ACEFCDSED.OEE_TEMPOS_POR_UM_OEE`;
+export const DEFAULT_SQL_TEMPLATE = '';
 
 export interface MiniSheetsSipDialogProps {
   embedded?: boolean;

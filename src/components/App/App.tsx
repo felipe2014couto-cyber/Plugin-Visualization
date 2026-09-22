@@ -298,7 +298,7 @@ export function App() {
   const [editorMode, setEditorMode] = useState<DisplayEditorMode>('edit');
   const [dropSymbolType, setDropSymbolType] = useState<PiPointDropSymbolType>('trend');
   const [timeSelection, setTimeSelection] = useState(() => createDefaultTimeSelection());
-  const [refreshInterval, setRefreshInterval] = useState<string>('adaptativa');
+  const [refreshInterval, setRefreshInterval] = useState<string>('');
   const [refreshCount, setRefreshCount] = useState<number>(0);
   const [programmingDraft, setProgrammingDraft] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
   const [programmingApplied, setProgrammingApplied] = useState<ProgrammingDocument>(DEFAULT_PROGRAMMING_DOCUMENT);
