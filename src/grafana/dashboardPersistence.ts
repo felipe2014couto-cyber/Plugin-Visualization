@@ -124,7 +124,7 @@ function createDashboardModel(document: DisplayDocument, title: string, uid?: st
       type: 'text',
       title: '',
       transparent: true,
-      gridPos: { h: 24, w: 24, x: 0, y: 0 },
+      gridPos: { h: 1, w: 24, x: 0, y: 0 },
       options: {
         mode: 'html',
         content: createDashboardRedirectHtml(appUrl),
@@ -146,39 +146,7 @@ function createDashboardModel(document: DisplayDocument, title: string, uid?: st
 }
 
 export function createDashboardRedirectHtml(appUrl: string): string {
-  return [
-    '<div style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#111217;z-index:999999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;color:#ccccdc;">',
-    '  <div style="display:flex;align-items:center;gap:12px;">',
-    '    <svg style="animation:pims-spin 0.8s linear infinite;width:28px;height:28px;" viewBox="0 0 24 24" fill="none" stroke="#5794f2" stroke-width="2.5">',
-    '      <circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.15)" stroke-width="2.5"></circle>',
-    '      <path d="M12 2 a10 10 0 0 1 10 10" stroke-linecap="round"></path>',
-    '    </svg>',
-    '    <span style="font-size:16px;font-weight:500;color:#f4f5f5;">Carregando Aperam Visualization...</span>',
-    '  </div>',
-    `  <a id="pims-vision-fallback" href="${appUrl}" style="margin-top:16px;font-size:13px;color:#5794f2;text-decoration:underline;">Clique aqui caso não seja redirecionado automaticamente</a>`,
-    '  <style>@keyframes pims-spin { 100% { transform: rotate(360deg); } }</style>',
-    '</div>',
-    '<script>',
-    '(function() {',
-    '  var base = (window.grafanaBootData && window.grafanaBootData.settings && window.grafanaBootData.settings.appSubUrl) || "";',
-    `  var target = base + "${appUrl}";`,
-    '  try {',
-    '    if (window.location.search) {',
-    '      var currentParams = new URLSearchParams(window.location.search);',
-    '      var targetUrl = new URL(target, window.location.origin);',
-    '      currentParams.forEach(function(val, key) {',
-    '        if (!targetUrl.searchParams.has(key)) {',
-    '          targetUrl.searchParams.set(key, val);',
-    '        }',
-    '      });',
-    '      target = targetUrl.pathname + targetUrl.search;',
-    '    }',
-    '  } catch (e) {}',
-    '  window.location.replace(target);',
-    '})();',
-    '</script>',
-    `<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" style="display:none;" onload="window.location.replace('${appUrl}')" />`,
-  ].join('\\n');
+  return `<iframe src="about:blank" style="display:none;width:0;height:0;border:0;" onload="try{window.location.replace('${appUrl}')}catch(e){}"></iframe>`;
 }
 
 
