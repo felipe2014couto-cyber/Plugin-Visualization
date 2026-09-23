@@ -2,7 +2,18 @@ import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } fr
 import { css } from '@emotion/css';
 import { GrafanaTheme2 } from '@grafana/data';
 import { useStyles2 } from '@grafana/ui';
-import { createDisplayDocument } from '../../display';
+import {
+  createDisplayDocument,
+  appendDisplayElement,
+  createBar,
+  createBarChart,
+  createGauge,
+  createTable,
+  createTrend,
+  createValue,
+  createXYPlot,
+  type DisplayElement,
+} from '../../display';
 import type { DisplayDocument } from '../../display/displayDocument';
 import { collectDisplayDataBindings } from '../../display/displayDataExport';
 import { appendProgramming, createProgramming, PROGRAMMING_TYPE, type ProgrammingElement } from '../../display/createProgramming';
@@ -367,6 +378,74 @@ export function App() {
     setProgrammingPiPoints(points);
     commitProgrammingDraft({ ...programmingDraft, query });
   }, [commitProgrammingDraft, programmingDraft]);
+
+  const handleInsertPiPoint = useCallback((point: PiPointSearchResult) => {
+    setSelectedPiPoint(point);
+    const binding = createPiPointBinding(point);
+    if (!binding) {
+      return;
+    }
+    const currentDoc = document;
+    const createOptions = {
+      binding,
+      surface: currentDoc.surface,
+      existingIds: currentDoc.elements.map((item) => item.id),
+    };
+    let newElement: DisplayElement;
+    switch (dropSymbolType) {
+      case 'trend':
+        newElement = createTrend(createOptions);
+        break;
+      case 'gauge':
+        newElement = createGauge(createOptions);
+        break;
+      case 'bar':
+        newElement = createBar(createOptions);
+        break;
+      case 'bar-chart':
+        newElement = createBarChart({
+          item: {
+            binding,
+            ...(point.description ? { description: point.description } : {}),
+            ...(point.engineeringUnit ? { engineeringUnit: point.engineeringUnit } : {}),
+          },
+          surface: currentDoc.surface,
+          existingIds: currentDoc.elements.map((item) => item.id),
+        });
+        break;
+      case 'table':
+        newElement = createTable({
+          item: {
+            binding,
+            ...(point.path ? { path: point.path } : {}),
+            ...(point.description ? { description: point.description } : {}),
+            ...(point.engineeringUnit ? { engineeringUnit: point.engineeringUnit } : {}),
+            ...(point.pointType ? { pointType: point.pointType } : {}),
+          },
+          surface: currentDoc.surface,
+          existingIds: currentDoc.elements.map((item) => item.id),
+        });
+        break;
+      case 'xy-plot':
+        newElement = createXYPlot({
+          xBinding: binding,
+          surface: currentDoc.surface,
+          existingIds: currentDoc.elements.map((item) => item.id),
+        });
+        break;
+      case 'value':
+      default:
+        newElement = createValue(createOptions);
+        break;
+    }
+    const centered = {
+      ...newElement,
+      x: Math.max(0, Math.round((currentDoc.surface.width - newElement.width) / 2)),
+      y: Math.max(0, Math.round((currentDoc.surface.height - newElement.height) / 2)),
+    };
+    setDocument((prev) => appendDisplayElement(prev, centered));
+    setSelectedElementIds([centered.id]);
+  }, [document, dropSymbolType]);
 
   const handleManualRefresh = useCallback(() => {
     setTimeSelection((current) => (current.endExpression === '*' ? moveTimeSelectionToNow(current) : current));
@@ -1212,6 +1291,7 @@ export function App() {
                           <PiPointSearch
                             enabled={piConnection.status === 'connected'}
                             onSelect={setSelectedPiPoint}
+                            onInsert={handleInsertPiPoint}
                             filtersOpen={isPiPointFiltersOpen}
                             onCloseFilters={() => setIsPiPointFiltersOpen(false)}
                           />

@@ -11,6 +11,7 @@ type SearchStatus = 'idle' | 'loading' | 'success' | 'empty' | 'error';
 export interface PiPointSearchProps {
   enabled: boolean;
   onSelect?: (result: PiPointSearchResult) => void;
+  onInsert?: (result: PiPointSearchResult) => void;
   filtersOpen?: boolean;
   onCloseFilters?: () => void;
   onSearchInteraction?: () => void;
@@ -19,6 +20,7 @@ export interface PiPointSearchProps {
 export function PiPointSearch({
   enabled,
   onSelect,
+  onInsert,
   filtersOpen = false,
   onCloseFilters,
   onSearchInteraction,
@@ -150,6 +152,11 @@ export function PiPointSearch({
                   onClick={() => {
                     setSelected(result);
                     onSelect?.(result);
+                  }}
+                  onDoubleClick={() => {
+                    setSelected(result);
+                    onSelect?.(result);
+                    onInsert?.(result);
                   }}
                 >
                   <span className={styles.resultName}>{result.name}</span>

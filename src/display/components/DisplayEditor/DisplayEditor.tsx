@@ -711,6 +711,81 @@ export function DisplayEditor({
     setOptionsTrendId(null);
   }, [commitDocument, dispatch]);
 
+  const handleSymbolButtonClick = useCallback((type: PiPointDropSymbolType) => {
+    onDropSymbolTypeChange?.(type);
+    if (!selectedPiPoint || !onChangeRef.current) {
+      return;
+    }
+    const currentDoc = documentRef.current;
+    const binding = createPiPointBinding(selectedPiPoint);
+    if (!binding) {
+      return;
+    }
+    const createOptions = {
+      binding,
+      surface: currentDoc.surface,
+      existingIds: currentDoc.elements.map((item) => item.id),
+    };
+    let newElement: DisplayElement;
+    switch (type) {
+      case 'trend':
+        newElement = createTrend(createOptions);
+        break;
+      case 'gauge':
+        newElement = createGauge(createOptions);
+        break;
+      case 'bar':
+        newElement = createBar(createOptions);
+        break;
+      case 'bar-chart':
+        newElement = createBarChart({
+          item: {
+            binding,
+            ...(selectedPiPoint.description ? { description: selectedPiPoint.description } : {}),
+            ...(selectedPiPoint.engineeringUnit ? { engineeringUnit: selectedPiPoint.engineeringUnit } : {}),
+          },
+          surface: currentDoc.surface,
+          existingIds: currentDoc.elements.map((item) => item.id),
+        });
+        break;
+      case 'table':
+        newElement = createTable({
+          item: {
+            binding,
+            ...(selectedPiPoint.path ? { path: selectedPiPoint.path } : {}),
+            ...(selectedPiPoint.description ? { description: selectedPiPoint.description } : {}),
+            ...(selectedPiPoint.engineeringUnit ? { engineeringUnit: selectedPiPoint.engineeringUnit } : {}),
+            ...(selectedPiPoint.pointType ? { pointType: selectedPiPoint.pointType } : {}),
+          },
+          surface: currentDoc.surface,
+          existingIds: currentDoc.elements.map((item) => item.id),
+        });
+        break;
+      case 'xy-plot':
+        newElement = createXYPlot({
+          xBinding: binding,
+          surface: currentDoc.surface,
+          existingIds: currentDoc.elements.map((item) => item.id),
+        });
+        break;
+      case 'value':
+      default:
+        newElement = createValue(createOptions);
+        break;
+    }
+    const targetX = surfaceViewCenter?.x ?? (currentDoc.surface.width / 2);
+    const targetY = surfaceViewCenter?.y ?? (currentDoc.surface.height / 2);
+    const centered = {
+      ...newElement,
+      x: Math.max(0, Math.round(targetX - newElement.width / 2)),
+      y: Math.max(0, Math.round(targetY - newElement.height / 2)),
+    };
+    commitDocument(appendDisplayElement(currentDoc, centered));
+    dispatch({ type: 'SELECT', elementId: centered.id });
+    setOptionsElementId(null);
+    setOptionsTrendId(null);
+  }, [commitDocument, dispatch, onDropSymbolTypeChange, selectedPiPoint, surfaceViewCenter]);
+
 
 
   const reorderSelected = useCallback((direction: 'front' | 'back', all = false) => {
@@ -773,7 +848,8 @@ export function DisplayEditor({
       event.preventDefault();
       const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
       const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
-      const target = resolveDataSourceDropTarget(documentRef.current, event.target, event.clientX, event.clientY, point);
+      const rawTarget = resolveDataSourceDropTarget(documentRef.current, event.target, event.clientX, event.clientY, point);
+      const target = filterDropTargetBySymbolType(rawTarget, dropSymbolType);
       const preview = svg
         ? createCalculationDragPreview(
           svg,
@@ -802,13 +878,14 @@ export function DisplayEditor({
     const pointResult = parsePiPointDragData(event.dataTransfer.getData(PI_POINT_DRAG_MIME)) ?? selectedPiPoint;
     const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
-    const target = resolveDataSourceDropTarget(
+    const rawTarget = resolveDataSourceDropTarget(
       documentRef.current,
       event.target,
       event.clientX,
       event.clientY,
       point,
     );
+    const target = filterDropTargetBySymbolType(rawTarget, dropSymbolType);
     const preview = svg && pointResult
       ? createPiPointDragPreview(
         svg,
@@ -867,7 +944,8 @@ export function DisplayEditor({
           surface: currentDocument.surface,
           existingIds: currentDocument.elements.map((item) => item.id),
         };
-        const target = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
+        const rawTarget = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
+        const target = filterDropTargetBySymbolType(rawTarget, dropSymbolType);
         if (target) {
           const capability = getElementDataSourceCapability(target);
           if (capability === 'single') {
@@ -1016,8 +1094,8 @@ export function DisplayEditor({
     const svg = event.currentTarget.querySelector<SVGSVGElement>('svg[data-testid="display-surface"]');
     const point = svg ? getDropPoint(svg, event.clientX, event.clientY, documentRef.current) : undefined;
     const currentDocument = documentRef.current;
-    const resolvedTarget = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
-    const target = resolvedTarget?.type === 'trend' && dropSymbolType !== 'trend' ? undefined : resolvedTarget;
+    const rawTarget = resolveDataSourceDropTarget(currentDocument, event.target, event.clientX, event.clientY, point);
+    const target = filterDropTargetBySymbolType(rawTarget, dropSymbolType);
     if (!binding || (!point && !target)) {
       return;
     }
@@ -2182,13 +2260,13 @@ export function DisplayEditor({
                 <button type="button" title="Inserir texto" aria-label="Inserir texto" className={styles.iconButton} data-testid="display-insert-text" onClick={handleInsertText}><TextIcon /></button>
                 <button type="button" title="Inserir imagem" aria-label="Inserir imagem" className={styles.iconButton} data-testid="display-insert-image" onClick={() => imageInputRef.current?.click()}><ImageIcon /></button>
                 <input ref={imageInputRef} type="file" accept="image/*" data-testid="display-image-input" className={styles.fileInput} onChange={handleImageFile} />
-                <button type="button" title="Arrastar como Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} onClick={() => onDropSymbolTypeChange?.('value')}><ValueIcon /></button>
-                <button type="button" title="Arrastar como Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} onClick={() => onDropSymbolTypeChange?.('gauge')}><GaugeIcon /></button>
-                <button type="button" title="Arrastar como Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} onClick={() => onDropSymbolTypeChange?.('bar')}><BarGaugeIcon /></button>
-                <button type="button" title="Arrastar como Gráfico de Barras" aria-label="Arrastar como Gráfico de Barras" className={dropSymbolType === 'bar-chart' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar-chart" aria-pressed={dropSymbolType === 'bar-chart'} onClick={() => onDropSymbolTypeChange?.('bar-chart')}><BarChartIcon /></button>
-                <button type="button" title="Arrastar como Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => onDropSymbolTypeChange?.('trend')}><TrendIcon /></button>
-                <button type="button" title="Arrastar como Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => onDropSymbolTypeChange?.('table')}>▦</button>
-                <button type="button" title="Arrastar como XY Plot" aria-label="Arrastar como XY Plot" className={dropSymbolType === 'xy-plot' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-xy-plot" aria-pressed={dropSymbolType === 'xy-plot'} onClick={() => onDropSymbolTypeChange?.('xy-plot')}>XY</button>
+                <button type="button" title="Arrastar ou clicar para inserir Value" aria-label="Arrastar como Value" className={dropSymbolType === 'value' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-value" aria-pressed={dropSymbolType === 'value'} onClick={() => handleSymbolButtonClick('value')}><ValueIcon /></button>
+                <button type="button" title="Arrastar ou clicar para inserir Gauge" aria-label="Arrastar como Gauge" className={dropSymbolType === 'gauge' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-gauge" aria-pressed={dropSymbolType === 'gauge'} onClick={() => handleSymbolButtonClick('gauge')}><GaugeIcon /></button>
+                <button type="button" title="Arrastar ou clicar para inserir Barra" aria-label="Arrastar como Barra" className={dropSymbolType === 'bar' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar" aria-pressed={dropSymbolType === 'bar'} onClick={() => handleSymbolButtonClick('bar')}><BarGaugeIcon /></button>
+                <button type="button" title="Arrastar ou clicar para inserir Gráfico de Barras" aria-label="Arrastar como Gráfico de Barras" className={dropSymbolType === 'bar-chart' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-bar-chart" aria-pressed={dropSymbolType === 'bar-chart'} onClick={() => handleSymbolButtonClick('bar-chart')}><BarChartIcon /></button>
+                <button type="button" title="Arrastar ou clicar para inserir Trend" aria-label="Arrastar como Trend" className={dropSymbolType === 'trend' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-trend" aria-pressed={dropSymbolType === 'trend'} onClick={() => handleSymbolButtonClick('trend')}><TrendIcon /></button>
+                <button type="button" title="Arrastar ou clicar para inserir Tabela" aria-label="Arrastar como Tabela" className={dropSymbolType === 'table' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-table" aria-pressed={dropSymbolType === 'table'} onClick={() => handleSymbolButtonClick('table')}>▦</button>
+                <button type="button" title="Arrastar ou clicar para inserir XY Plot" aria-label="Arrastar como XY Plot" className={dropSymbolType === 'xy-plot' ? styles.symbolModeButtonActive : styles.symbolModeButton} data-testid="display-insert-xy-plot" aria-pressed={dropSymbolType === 'xy-plot'} onClick={() => handleSymbolButtonClick('xy-plot')}>XY</button>
               </div>
               <span className={styles.toolbarDivider} aria-hidden="true" />
               <div className={styles.toolbarGroup} aria-label="Ordem dos objetos">
@@ -2732,6 +2810,53 @@ function resolveDataSourceDropTarget(
       && point.y >= element.y
       && point.y <= element.y + element.height
   ));
+}
+
+function filterDropTargetBySymbolType(
+  target: DisplayElement | undefined,
+  symbolType: PiPointDropSymbolType,
+): DisplayElement | undefined {
+  if (!target) {
+    return undefined;
+  }
+
+  if (symbolType === 'trend') {
+    return target.type === 'trend' ? target : undefined;
+  }
+  if (symbolType === 'bar-chart') {
+    return target.type === 'bar-chart' ? target : undefined;
+  }
+  if (symbolType === 'table') {
+    return target.type === 'table' ? target : undefined;
+  }
+  if (symbolType === 'xy-plot') {
+    return target.type === 'xy-plot' ? target : undefined;
+  }
+  if (symbolType === 'gauge') {
+    return target.type === 'gauge' ? target : undefined;
+  }
+  if (symbolType === 'bar') {
+    return target.type === 'bar' ? target : undefined;
+  }
+  if (symbolType === 'value') {
+    if (target.type === 'value' || target.type === 'library-symbol') {
+      return target;
+    }
+    if (target.type === 'rectangle') {
+      const fill = String(target.properties.fill ?? '').toLowerCase().trim();
+      const isTransparentFill = fill === 'transparent' || fill === 'none' || fill === 'rgba(0,0,0,0)' || fill === 'rgba(0, 0, 0, 0)';
+      const isLargeArea = (target.width * target.height) >= 150000;
+      const hasEnabledMultistate = Boolean((target.properties.multistate as any)?.enabled);
+      // Section containers or large transparent shapes should never intercept value drops
+      if (isTransparentFill || (isLargeArea && !hasEnabledMultistate)) {
+        return undefined;
+      }
+      return target;
+    }
+    return undefined;
+  }
+
+  return undefined;
 }
 
 function createInvalidDragPreview(

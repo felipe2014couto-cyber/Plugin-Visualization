@@ -398,6 +398,47 @@ describe('DisplayEditor - drop de PI Point', () => {
     expect((readDocument().elements[0].properties as any).items.map((item: any) => item.binding.pointName))
       .toEqual(['EXISTING', 'SINUSOID']);
   });
+
+  it('cria novo Trend ao soltar sobre forma retangular existente com type trend', async () => {
+    render(<Harness type="trend" withExistingShape />);
+    mockSurfaceBounds();
+
+    const shapeElement = screen.getByTestId('display-element-existing-shape');
+    fireDragEvent(shapeElement, 'dragover', createDataTransfer(), 150, 100);
+    fireDragEvent(shapeElement, 'drop', createDataTransfer(), 150, 100);
+
+    await waitFor(() => expect(readDocument().elements).toHaveLength(2));
+    expect(readDocument().elements[0].type).toBe('rectangle');
+    expect(readDocument().elements[1].type).toBe('trend');
+    expect(readDocument().elements[1].properties.series![0].binding.pointName).toBe('SINUSOID');
+  });
+
+  it('insere Trend diretamente ao clicar no botão da barra de ferramentas com tag selecionada', async () => {
+    function ToolbarHarness() {
+      const [doc, setDoc] = useState<DisplayDocument>(() => createDisplayDocument({ name: 'ToolbarTest' }));
+      const [symbolType, setSymbolType] = useState<PiPointDropSymbolType>('value');
+      return (
+        <>
+          <DisplayEditor
+            document={doc}
+            onChange={setDoc}
+            dropSymbolType={symbolType}
+            onDropSymbolTypeChange={setSymbolType}
+            selectedPiPoint={point}
+          />
+          <output data-testid="display-document-json">{JSON.stringify(doc)}</output>
+        </>
+      );
+    }
+
+    render(<ToolbarHarness />);
+    const trendButton = screen.getByTestId('display-insert-trend');
+    fireEvent.click(trendButton);
+
+    await waitFor(() => expect(readDocument().elements).toHaveLength(1));
+    expect(readDocument().elements[0].type).toBe('trend');
+    expect(readDocument().elements[0].properties.series![0].binding.pointName).toBe('SINUSOID');
+  });
 });
 
 function readDocument(): {
