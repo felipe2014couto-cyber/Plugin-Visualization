@@ -1146,7 +1146,8 @@ jest.mock('../../SqlQuery/oracleApi', () => ({
         expect(screen.getByTestId('sip-status-bar')).toBeInTheDocument();
       });
 
-      // Define célula de saída A1 e executa
+      // Define SQL e célula de saída A1 e executa
+      fireEvent.change(screen.getByTestId('sip-sql-editor'), { target: { value: 'SELECT TAG, VALOR FROM PIMS_SIP_SAMPLE' } });
       fireEvent.change(screen.getByTestId('sip-target-cell'), { target: { value: 'A1' } });
       fireEvent.click(screen.getByTestId('sip-execute-button'));
 

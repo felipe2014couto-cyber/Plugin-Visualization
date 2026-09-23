@@ -13,12 +13,7 @@ import {
 } from '../SqlQuery/oracleApi';
 import { parseCellAddress, parseRangeAddresses } from './miniSheetFormula';
 
-export const DEFAULT_SQL_TEMPLATE = `SELECT 
-  HU.DTH_INIC_PROCE as TS,
-  OEE.TEMPO_SETUP as PIVALUE,
-  0 as status
-FROM 
-  ACEFCDSED.OEE_TEMPOS_POR_UM_OEE`;
+export const DEFAULT_SQL_TEMPLATE = '';
 
 export interface MiniSheetsSipDialogProps {
   embedded?: boolean;
@@ -352,16 +347,14 @@ export function MiniSheetsSipDialog({
 
             {/* SQL Query Editor */}
             <div className={styles.formRow}>
-              <label className={styles.label} htmlFor="sip-sql-editor">
-                Instrução SQL
-              </label>
               <textarea
                 id="sip-sql-editor"
                 className={styles.sqlTextarea}
                 value={sql}
                 rows={6}
-                placeholder="SELECT ..."
+                placeholder="Digite sua consulta SQL aqui (SELECT / WITH; final opcional)...&#10;Pressione Ctrl+Enter para executar."
                 data-testid="sip-sql-editor"
+                spellCheck={false}
                 onChange={(e) => handleSqlChange(e.target.value)}
                 onKeyDown={(e) => {
                   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -371,7 +364,7 @@ export function MiniSheetsSipDialog({
                 }}
               />
               <p className={styles.securityNotice}>
-                A consulta SQL pode ser salva com esta planilha. Não coloque senhas ou segredos diretamente no SQL; use parâmetros.
+                A consulta SQL pode ser salva com este painel. Não coloque senhas ou segredos diretamente no SQL; use parâmetros.
               </p>
             </div>
 
