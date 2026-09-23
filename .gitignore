@@ -40,7 +40,6 @@ ci/
 
 .eslintcache
 
-
 RELATORIO_*.md
 relatorio sprint 11 parcial.md
 sprint5_parcial.md
@@ -50,3 +49,8 @@ __pycache__/
 
 *.env
 .env
+
+# pims-vision-app specific
+pims-vision-app.tar.gz
+*.bak
+*.map
