@@ -19,6 +19,7 @@ describe('oracleApi security contract', () => {
     window.__PIMS_SIP_API_BASE_URL__ = '/api/sip';
     expect(getApiBaseUrl()).toBe('/api/sip');
     delete window.__PIMS_SIP_API_BASE_URL__;
+    expect(getApiBaseUrl()).toBe('http://localhost:8085');
   });
 
   it('connects by registered profile and never sends a DSN', async () => {

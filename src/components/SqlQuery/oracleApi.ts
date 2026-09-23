@@ -42,6 +42,8 @@ declare global {
 
 const ERROR_MESSAGES: Record<string, string> = {
   SIP_AUTH_FAILED: 'Usuário ou senha inválidos.',
+  SIP_ACCOUNT_LOCKED: 'A conta Oracle está bloqueada. Contate o DBA.',
+  SIP_PASSWORD_EXPIRED: 'A senha da conta Oracle expirou.',
   SIP_SESSION_EXPIRED: 'A sessão SIP expirou. Conecte-se novamente.',
   SIP_QUERY_REJECTED: 'A consulta foi rejeitada pela política de leitura do SIP.',
   SIP_QUERY_TIMEOUT: 'A consulta excedeu o tempo máximo permitido.',
@@ -50,6 +52,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   SIP_INVALID_PARAMETERS: 'Os parâmetros informados são inválidos.',
   SIP_RATE_LIMIT: 'Muitas solicitações. Aguarde e tente novamente.',
   SIP_ORIGIN_REJECTED: 'A origem desta solicitação não é permitida.',
+  SIP_REQUEST_FAILED: 'Não foi possível completar a operação no serviço SIP.',
 };
 
 export class OracleApiError extends Error {
@@ -64,12 +67,9 @@ export function getApiBaseUrl(): string {
     return window.__PIMS_SIP_API_BASE_URL__.replace(/\/$/, '');
   }
   if (typeof window !== 'undefined' && window.location?.hostname) {
-    const hostname = window.location.hostname;
-    if (process.env.NODE_ENV === 'development' || hostname === 'localhost' || hostname === '127.0.0.1' || /^10\.|^192\.168\.|^172\./.test(hostname)) {
-      return `${window.location.protocol}//${hostname}:8085`;
-    }
+    return `${window.location.protocol}//${window.location.hostname}:8085`;
   }
-  return '/api/sip';
+  return 'http://localhost:8085';
 }
 
 function finiteNonNegative(value: unknown): value is number {
@@ -107,7 +107,10 @@ async function parseError(response: Response): Promise<OracleApiError> {
   }
 
   requestId = requestId || response.headers.get('x-request-id') || undefined;
-  const friendlyMsg = rawMsg || ERROR_MESSAGES[code] || 'A operação SIP não pôde ser concluída.';
+  const statusFallback = response.status === 404
+    ? 'Serviço SIP não encontrado (404). Verifique se o serviço está ativo na porta 8085.'
+    : (response.status >= 500 ? 'Erro interno no serviço SIP.' : undefined);
+  const friendlyMsg = rawMsg || ERROR_MESSAGES[code] || statusFallback || 'A operação SIP não pôde ser concluída.';
   const support = requestId ? ` (Código de suporte: ${requestId})` : '';
   return new OracleApiError(`${friendlyMsg}${support}`, code, requestId, response.status);
 }
@@ -154,7 +157,7 @@ export async function createOracleSession(params: OracleConnectParams, signal?: 
       username: params.username,
       password: params.password || '',
     }),
-  }, 15_000);
+  }, 30_000);
   const data = await response.json() as Partial<OracleSession>;
   if (data.connected !== true) {
     throw new OracleApiError('Resposta inválida recebida do serviço SIP.', 'SIP_INVALID_RESPONSE');

@@ -24,9 +24,8 @@ export function SqlConnectionForm({ onConnect, isConnecting, error }: SqlConnect
     
     const submittedUsername = username.trim();
     const submittedPassword = password;
-    setUsername('');
-    setPassword('');
     await onConnect({ username: submittedUsername, password: submittedPassword });
+    setPassword('');
   };
 
   return (

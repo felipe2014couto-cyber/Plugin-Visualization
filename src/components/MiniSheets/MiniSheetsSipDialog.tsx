@@ -13,7 +13,12 @@ import {
 } from '../SqlQuery/oracleApi';
 import { parseCellAddress, parseRangeAddresses } from './miniSheetFormula';
 
-export const DEFAULT_SQL_TEMPLATE = '';
+export const DEFAULT_SQL_TEMPLATE = `SELECT 
+  HU.DTH_INIC_PROCE as TS,
+  OEE.TEMPO_SETUP as PIVALUE,
+  0 as status
+FROM 
+  ACEFCDSED.OEE_TEMPOS_POR_UM_OEE`;
 
 export interface MiniSheetsSipDialogProps {
   embedded?: boolean;
@@ -140,14 +145,15 @@ export function MiniSheetsSipDialog({
     setConnectionError(undefined);
     const submittedUsername = username.trim();
     const submittedPassword = password;
-    setUsername('');
-    setPassword('');
 
     try {
       requestControllerRef.current?.abort();
       requestControllerRef.current = new AbortController();
       await createOracleSession({ username: submittedUsername, password: submittedPassword }, requestControllerRef.current.signal);
-      if (mountedRef.current) updateConnection(true);
+      if (mountedRef.current) {
+        setPassword('');
+        updateConnection(true);
+      }
     } catch (err: any) {
       if (mountedRef.current) {
         const msg = typeof err?.message === 'string' && err.message !== '[object Object]'
