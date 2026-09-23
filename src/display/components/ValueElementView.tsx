@@ -8,7 +8,7 @@ import {
 } from '../createValue';
 import type { ValueRuntimeState } from '../runtime/valueRuntime';
 import { evaluateMultistate, getMultistateColor } from '../multistate';
-import { resolveThemeForeground } from '../themeColor';
+import { getSmartContrastTextColor, isRedBackground, isLightBackground } from '../contrast';
 
 type ValueLoadState =
   | { status: 'loading' }
@@ -22,9 +22,10 @@ export interface ValueElementViewProps {
   label?: string;
   sourceValue?: unknown;
   bgSourceValue?: unknown;
+  cardBgColor?: string;
 }
 
-export const ValueElementView = React.memo(function ValueElementView({ element, loadValue, runtimeState, label, sourceValue, bgSourceValue }: ValueElementViewProps) {
+export const ValueElementView = React.memo(function ValueElementView({ element, loadValue, runtimeState, label, sourceValue, bgSourceValue, cardBgColor }: ValueElementViewProps) {
   const [state, setState] = useState<ValueLoadState>({ status: 'loading' });
   const { binding } = element.properties;
 
@@ -58,12 +59,6 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const lines = getValueLines(currentState, visual, label ?? binding?.pointName ?? '', isCalculation, element.width);
   const runtimeVal = getRuntimeValue(runtimeState ?? state);
   const isPiVision = element.properties._piVisionSquareBackground === true || element.properties._piVisionPreserveFontSize === true;
-  const normalMultistateColor = element.properties.multistate?.enabled && element.properties.multistate.rules.length > 0
-    ? element.properties.multistate.rules[0].color
-    : undefined;
-  const isColorBlack = !visual.color || visual.color === '#000000' || visual.color === '#000' || visual.color === 'rgba(0,0,0,1)';
-  const isColorBlue = visual.color === '#0000ff' || visual.color === 'blue' || visual.color === 'rgba(0,0,255,1)';
-  const isUnreadableDark = isColorBlack || isColorBlue;
 
   const isZeroAlphaRgba = typeof visual.backgroundColor === 'string' &&
     /^rgba\(\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?\s*,\s*(?:0|0\.0+)\s*\)$/i.test(visual.backgroundColor.trim());
@@ -71,26 +66,31 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
     isZeroAlphaRgba ||
     visual.backgroundColor === 'none';
 
-  let baseTextColor: string;
-  if (isPiVision) {
-    if (normalMultistateColor) {
-      baseTextColor = normalMultistateColor;
-    } else if (isUnreadableDark && !isExplicitTransparent) {
-      baseTextColor = '#00ff00';
-    } else {
-      baseTextColor = resolveThemeForeground(visual.color);
-    }
-  } else {
-    baseTextColor = isColorBlack && normalMultistateColor
-      ? normalMultistateColor
-      : resolveThemeForeground(visual.color);
-  }
-
-  const textColor = getMultistateColor(runtimeVal, element.properties.multistate, baseTextColor, sourceValue);
   const defaultBg = isPiVision && !isExplicitTransparent && (!visual.backgroundColor || visual.backgroundColor === 'transparent')
     ? '#000000'
     : (isExplicitTransparent ? 'transparent' : (visual.backgroundColor || 'transparent'));
   const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, defaultBg, bgSourceValue);
+  const isBgTransparent = isExplicitTransparent || bgColor === 'transparent' || isZeroAlphaRgba || bgColor === 'none';
+
+  const isColorBlack = !visual.color || visual.color === '#000000' || visual.color === '#000' || visual.color === 'rgba(0,0,0,1)';
+  const normalMultistateColor = element.properties.multistate?.enabled && element.properties.multistate.rules.length > 0
+    ? element.properties.multistate.rules[0].color
+    : undefined;
+
+  // Fundo efetivo atras do texto: fundo do proprio elemento ou do cartao envolvente
+  const effectiveBg = (!isBgTransparent && bgColor) ? bgColor : cardBgColor;
+  let baseTextColor: string;
+  if (!isPiVision && isColorBlack && normalMultistateColor) {
+    baseTextColor = normalMultistateColor;
+  } else {
+    baseTextColor = getSmartContrastTextColor(effectiveBg, visual.color);
+  }
+  let textColor = getMultistateColor(runtimeVal, element.properties.multistate, baseTextColor, sourceValue);
+  if (effectiveBg && isRedBackground(effectiveBg)) {
+    textColor = '#ffffff';
+  } else if (effectiveBg && isLightBackground(effectiveBg) && isLightBackground(textColor) && textColor !== '#000000') {
+    textColor = '#000000';
+  }
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
   const responsiveFontSize = element.properties._piVisionPreserveFontSize === true
@@ -98,7 +98,6 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
     : getResponsiveFontSize(element, visual.fontSize, lines);
   const textBlink = evaluateMultistate(runtimeVal, element.properties.multistate, sourceValue)?.rule.blink === true;
   const bgBlink = evaluateMultistate(runtimeVal, element.properties.backgroundMultistate, bgSourceValue)?.rule.blink === true;
-  const isBgTransparent = isExplicitTransparent || bgColor === 'transparent' || isZeroAlphaRgba || bgColor === 'none';
   return (
     <g
       data-testid={`display-element-${element.id}`}

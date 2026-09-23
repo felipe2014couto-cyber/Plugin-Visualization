@@ -33,7 +33,7 @@ import type { DisplayTimeRange } from '../../../time/timeRange';
 import { useValueRuntime, type LoadCurrentValues, type ValueRuntimeConsumer, type ValueRuntimeState } from '../../runtime/valueRuntime';
 import { evaluateMultistate, getMultistateColor } from '../../multistate';
 import { TEXT_TYPE, type TextElement } from '../../createText';
-import { resolveThemeForeground } from '../../themeColor';
+import { getSmartContrastTextColor, isRedBackground, isLightBackground } from '../../contrast';
 import { IMAGE_TYPE, type ImageElement } from '../../createImage';
 import { PROGRAMMING_TYPE, type ProgrammingElement } from '../../createProgramming';
 import { ProgrammingDisplayElementView, getProgrammingConsumerId } from '../../../programming/ProgrammingDisplayElementView';
@@ -1216,6 +1216,54 @@ export function DisplaySurface({
       )}
 
       {(() => {
+        const getCardBgColorForElement = (el: DisplayElement): string | undefined => {
+          const candidates: { element: RectangleElement; area: number }[] = [];
+          const elCx = el.x + el.width / 2;
+          const elCy = el.y + el.height / 2;
+
+          for (const other of elements) {
+            if (other.id === el.id) continue;
+            if (other.type !== RECTANGLE_TYPE && other.type !== 'ellipse' && other.type !== 'polygon') continue;
+            const isEnclosing = (
+              (el.x >= other.x - 5 && el.x + el.width <= other.x + other.width + 5 &&
+               el.y >= other.y - 5 && el.y + el.height <= other.y + other.height + 5) ||
+              (elCx >= other.x && elCx <= other.x + other.width &&
+               elCy >= other.y && elCy <= other.y + other.height)
+            );
+            if (isEnclosing) {
+              candidates.push({ element: other as RectangleElement, area: other.width * other.height });
+            }
+          }
+
+          candidates.sort((a, b) => a.area - b.area);
+
+          for (const { element: shape } of candidates) {
+            const calc = typeof shape.properties.calculationId === 'string'
+              ? calculations.find((item) => item.id === shape.properties.calculationId)
+              : undefined;
+            const rState = calc
+              ? calculationValueRuntimeState(calc, shape.id, runtimeStates)
+              : runtimeStates.get(shape.id);
+            const val = rState?.status === 'loading' ? undefined : rState?.result?.value;
+            const baseFill = getElementFill(shape);
+            const normalMsColor = shape.properties.multistate?.enabled && shape.properties.multistate.rules.length > 0
+              ? shape.properties.multistate.rules[0].color
+              : undefined;
+            const effectiveBase = (!baseFill || baseFill === 'transparent') && normalMsColor
+              ? normalMsColor
+              : baseFill;
+            const sKey = `${shape.id}:multistate-source`;
+            const sVal = sourceBindingValues?.get(sKey);
+            const currentFill = getMultistateColor(val, shape.properties.multistate, effectiveBase, sVal);
+
+            if (currentFill && currentFill !== 'transparent' && currentFill !== 'rgba(0,0,0,0)' && currentFill !== 'none') {
+              return currentFill;
+            }
+          }
+
+          return surface.backgroundColor ?? '#ffffff';
+        };
+
         const renderSingleElement = (element: DisplayElement): React.ReactNode => {
           if (element.type === GROUP_TYPE) {
             const group = element as GroupElement;
@@ -1240,6 +1288,7 @@ export function DisplaySurface({
             const calculation = typeof element.properties.calculationId === 'string'
               ? calculations.find((item) => item.id === element.properties.calculationId)
               : undefined;
+            const cardBgColor = getCardBgColorForElement(element);
             return (
               <ValueElementView
                 key={element.id}
@@ -1250,6 +1299,7 @@ export function DisplaySurface({
                 label={calculation?.name}
                 sourceValue={getSourceValueForMultistate(element.id, 'multistate')}
                 bgSourceValue={getSourceValueForMultistate(element.id, 'bg-multistate')}
+                cardBgColor={cardBgColor}
               />
             );
           }
@@ -1387,14 +1437,20 @@ export function DisplaySurface({
               ? calculationValueRuntimeState(calculation, element.id, runtimeStates)
               : runtimeStates.get(element.id);
             const runtimeVal = runtimeState?.status === 'loading' ? undefined : runtimeState?.result?.value;
-            const normalTextColor = textElement.properties.multistate?.enabled && textElement.properties.multistate.rules.length > 0
-              ? textElement.properties.multistate.rules[0].color
-              : undefined;
-            const isColorBlack = !textElement.properties.color || textElement.properties.color === '#000000' || textElement.properties.color === '#000' || textElement.properties.color === 'rgba(0,0,0,1)';
-            const baseTextColor = isColorBlack && normalTextColor ? normalTextColor : resolveThemeForeground(textElement.properties.color);
             const textSourceValue = getSourceValueForMultistate(element.id, 'multistate');
             const bgSourceValue = getSourceValueForMultistate(element.id, 'bg-multistate');
-            const textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, baseTextColor, textSourceValue);
+            const cardBg = getCardBgColorForElement(element);
+            const effectiveBg = textElement.properties.backgroundColor && textElement.properties.backgroundColor !== 'transparent' && textElement.properties.backgroundColor !== 'none'
+              ? textElement.properties.backgroundColor
+              : cardBg;
+
+            const baseTextColor = getSmartContrastTextColor(effectiveBg, textElement.properties.color);
+            let textColor = getMultistateColor(runtimeVal, textElement.properties.multistate, baseTextColor, textSourceValue);
+            if (effectiveBg && isRedBackground(effectiveBg)) {
+              textColor = '#ffffff';
+            } else if (effectiveBg && isLightBackground(effectiveBg) && isLightBackground(textColor) && textColor !== '#000000') {
+              textColor = '#000000';
+            }
             const bgColor = getMultistateColor(runtimeVal, textElement.properties.backgroundMultistate, textElement.properties.backgroundColor || 'transparent', bgSourceValue);
             const textBlink = evaluateMultistate(runtimeVal, textElement.properties.multistate, textSourceValue)?.rule.blink === true;
             const bgBlink = evaluateMultistate(runtimeVal, textElement.properties.backgroundMultistate, bgSourceValue)?.rule.blink === true;

@@ -484,17 +484,6 @@ function propagateMultistateToValues(elements: DisplayElement[]) {
         if (!vProps.binding && donorProps.binding) {
           vProps.binding = donorProps.binding;
         }
-        const normalColor = donorMultistate.rules[0]?.color;
-        const isBlackOrBlue = !vProps.visual.color ||
-          vProps.visual.color === '#000000' ||
-          vProps.visual.color === '#000' ||
-          vProps.visual.color === 'rgba(0,0,0,1)' ||
-          vProps.visual.color === '#0000ff' ||
-          vProps.visual.color === 'blue' ||
-          vProps.visual.color === 'rgba(0,0,255,1)';
-        if (normalColor && isBlackOrBlue) {
-          vProps.visual.color = normalColor;
-        }
       }
     }
 
@@ -572,7 +561,7 @@ export function convertPiVisionDisplay(
     ? display.Height
     : (bounds?.height ?? 1080);
   const rawBg = normalizeColor(display.BackgroundColor ?? display.DisplayProperties?.BackgroundColor);
-  const backgroundColor = (rawBg && rawBg.toLowerCase() !== '#ffffff' && rawBg.toLowerCase() !== '#fff') ? rawBg : '#000000';
+  const backgroundColor = rawBg ? rawBg.toLowerCase() : '#000000';
 
   const afMap = new Map<string, AfAttributeMetadata>();
   const rawAfData = (display as any).AfAttributes;
@@ -720,14 +709,7 @@ function convertValue(
 
   const multistate = extractAnyMultistate(symbol, cfg);
   const rawColor = normalizeColor(cfg.ForeColor ?? cfg.ValueStroke ?? cfg.Stroke);
-  const isBlackOrBlue = !rawColor ||
-    rawColor === '#000000' ||
-    rawColor === '#000' ||
-    rawColor === '#0000ff' ||
-    rawColor === 'blue' ||
-    rawColor === 'rgba(0,0,255,1)';
-  const color = multistate.multistate?.rules?.[0]?.color
-    ?? (isBlackOrBlue ? '#00ff00' : (rawColor ?? DEFAULT_VALUE_VISUAL_OPTIONS.color));
+  const color = rawColor ?? DEFAULT_VALUE_VISUAL_OPTIONS.color;
 
   const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
   const isZeroAlphaBg = typeof rawBg === 'string' && /^rgba\(\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?\s*,\s*(?:0|0\.0+)\s*\)$/i.test(rawBg.trim());
@@ -1607,6 +1589,25 @@ function convertPiVisionThresholdMultistate(
   }
 
   const allNumeric = converted.every((s) => typeof s.value === 'number');
+  const isConsecutiveIntegers = allNumeric && converted.length >= 2 &&
+    converted.every((s) => Number.isInteger(s.value)) &&
+    converted.every((s, i) => i === 0 || (s.value as number) === (converted[i - 1].value as number) + 1);
+
+  if (isConsecutiveIntegers && converted.length >= 3 && (converted[0].value as number) === 1) {
+    const rules: MultistateRule[] = converted.map((s, index) => {
+      const isLast = index === converted.length - 1;
+      return {
+        id: generateId(),
+        operator: isLast ? 'gte' : 'eq',
+        value: s.value,
+        digitalStateValue: s.value,
+        color: s.color,
+        ...(s.blink ? { blink: true } : {}),
+      };
+    });
+    return { enabled: true, rules };
+  }
+
   const isDigital = !allNumeric || (converted.length <= 4 && converted.every((s, i) => s.value === i));
 
   if (isDigital) {

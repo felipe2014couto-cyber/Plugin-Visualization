@@ -843,19 +843,54 @@ describe('conversao de Value', () => {
     expect(props.backgroundMultistate).toBeUndefined();
   });
 
-  it('define fundo preto e texto verde para Value por padrao quando cores nao sao declaradas ou sao pretas/azuis', () => {
+  it('preserva a cor original do ForeColor do Value sem forçar verde neon #00ff00', () => {
     const sym: PiVisionSymbol = {
       SymbolType: 'Value',
       Configuration: {
         DataSources: ['pi:\\\\SERVER\\TAG_VAL'],
-        ForeColor: 'blue',
+        ForeColor: '#000000',
       },
     };
     const { elements } = convertPiVisionDisplay(makeDisplay(sym), 'my-uid');
     const props = elements[0].properties as any;
     expect(props.visual.backgroundColor).toBe('#000000');
-    expect(props.visual.color).toBe('#00ff00');
+    expect(props.visual.color).toBe('#000000');
     expect(props._piVisionSquareBackground).toBe(true);
+  });
+
+  it('preserva BackgroundColor #ffffff do DisplayProperties sem forçar #000000', () => {
+    const result = convertPiVisionDisplay({
+      DisplayProperties: { BackgroundColor: '#FFFFFF' },
+    });
+    expect(result.surface.backgroundColor).toBe('#ffffff');
+  });
+
+  it('converte multistate com inteiros consecutivos [1, 2, 3] para regras discretas eq 1, eq 2 e gte 3', () => {
+    const sym: PiVisionSymbol = {
+      SymbolType: 'rectangle',
+      Configuration: {
+        Multistates: [
+          {
+            StateVariables: ['Fill', 'Blink'],
+            States: [
+              { UpperValue: 1, StateValues: ['#32cd32', false] },
+              { UpperValue: 2, StateValues: ['#ff0000', false] },
+              { UpperValue: 3, StateValues: ['#d3d3d3', false] },
+            ],
+          },
+        ],
+      },
+    };
+    const { elements } = convertPiVisionDisplay(makeDisplay(sym), 'my-uid');
+    const props = elements[0].properties as any;
+    expect(props.multistate).toMatchObject({
+      enabled: true,
+      rules: [
+        { operator: 'eq', value: 1, color: '#32cd32' },
+        { operator: 'eq', value: 2, color: '#ff0000' },
+        { operator: 'gte', value: 3, color: '#d3d3d3' },
+      ],
+    });
   });
 
   it('respeita transparencia explicita quando Transparent: true', () => {
@@ -1450,7 +1485,7 @@ describe('Multistate Blink e Background na conversão PI Vision', () => {
     expect(props.multistate?.enabled).toBe(true);
     expect(props.multistate.rules).toHaveLength(3);
     expect(props.multistate.rules[0]).toMatchObject({ operator: 'lte', value: 4, color: '#00ff00' });
-    expect(props.visual.color).toBe('#00ff00');
+    expect(props.visual.color).toBe('rgba(0,0,0,1)');
   });
 
   it('extrai binding e multistate de Value que usa MSDataSources e cor base preta', () => {
@@ -1475,6 +1510,6 @@ describe('Multistate Blink e Background na conversão PI Vision', () => {
     const props = valEl?.properties as any;
     expect(props.binding).toMatchObject({ pointName: 'TAG_VALOR' });
     expect(props.multistate?.enabled).toBe(true);
-    expect(props.visual.color).toBe('#00ff00');
+    expect(props.visual.color).toBe('#000000');
   });
 });
