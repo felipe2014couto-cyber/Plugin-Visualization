@@ -4,6 +4,24 @@ export interface PiPointBinding {
   pointName: string;
   webId?: string;
   pointType?: string;
+  kind?: 'pipoint' | 'af';
+  afPath?: string;
+  elementPath?: string;
+  attributeName?: string;
+}
+
+export function isAfBinding(binding: Partial<PiPointBinding> | undefined | null): boolean {
+  if (!binding) return false;
+  return binding.kind === 'af'
+    || typeof binding.afPath === 'string'
+    || (typeof binding.webId === 'string' && binding.webId.indexOf('F1Ab') === 0);
+}
+
+export function getBindingKey(binding: PiPointBinding): string {
+  if (isAfBinding(binding) && binding.afPath) {
+    return `${binding.dataSourceUid}\u0000af\u0000${binding.afPath.toLowerCase()}`;
+  }
+  return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
 }
 
 export interface PiPointDatabaseLimits {

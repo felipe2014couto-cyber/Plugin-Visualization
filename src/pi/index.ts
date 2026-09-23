@@ -59,7 +59,7 @@ export {
   DATA_QUERY_MAX_CONCURRENT_BATCHES,
   DATA_QUERY_MAX_TARGETS,
 } from './dataQueryPolicy';
-export { createPiPointBinding, isPiPointBinding } from './piPointBinding';
+export { createPiPointBinding, isPiPointBinding, isAfBinding, getBindingKey } from './piPointBinding';
 export type { PiPointBinding, PiPointDatabaseLimits } from './piPointBinding';
 export { PiPointSearch, type PiPointSearchProps } from './PiPointSearch';
 export { PiPointSearchDialog, type PiPointSearchDialogProps } from './PiPointSearchDialog';

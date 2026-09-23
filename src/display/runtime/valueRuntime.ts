@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { PiPointBinding } from '../../pi/piPointBinding';
+import { isAfBinding, type PiPointBinding } from '../../pi/piPointBinding';
 import type { PiPointValue, PiPointValueResult } from '../../pi/piDataSource';
 import {
   DATA_QUERY_BATCH_WINDOW_MS,
@@ -385,6 +385,9 @@ export function useValueRuntime(
 }
 
 export function getBindingKey(binding: PiPointBinding): string {
+  if (isAfBinding(binding) && binding.afPath) {
+    return `${binding.dataSourceUid}\u0000af\u0000${binding.afPath.toLowerCase()}`;
+  }
   return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
 }
 

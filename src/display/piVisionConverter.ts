@@ -191,6 +191,19 @@ export interface PiVisionSymbolConfiguration {
   NewTab?: boolean | null;
   // Orientacao (Bar)
   Orientation?: string;
+  // PI AF Metadata
+  AfAttribute?: AfAttributeMetadata;
+  MSAfAttribute?: AfAttributeMetadata;
+  AfAttributes?: AfAttributeMetadata[];
+}
+
+export interface AfAttributeMetadata {
+  path?: string;
+  webId?: string;
+  name?: string;
+  cleanPath?: string;
+  plugin?: string;
+  configString?: string;
 }
 
 export interface PiVisionThresholdMultistate {
@@ -545,11 +558,37 @@ export function convertPiVisionDisplay(
   const rawBg = normalizeColor(display.BackgroundColor ?? display.DisplayProperties?.BackgroundColor);
   const backgroundColor = (rawBg && rawBg.toLowerCase() !== '#ffffff' && rawBg.toLowerCase() !== '#fff') ? rawBg : '#000000';
 
+  const afMap = new Map<string, AfAttributeMetadata>();
+  const rawAfData = (display as any).AfAttributes;
+  const rawAfList: AfAttributeMetadata[] = Array.isArray(rawAfData)
+    ? rawAfData
+    : (rawAfData && typeof rawAfData === 'object'
+      ? Object.entries(rawAfData).map(([key, val]) => {
+          const item = val && typeof val === 'object' ? { ...(val as any) } : {};
+          if (!item.path) item.path = key;
+          return item;
+        })
+      : []);
+  for (const item of rawAfList) {
+    if (!item) continue;
+    if (item.path) {
+      afMap.set(item.path, item);
+      afMap.set(item.path.toLowerCase(), item);
+    }
+    if (item.cleanPath) {
+      afMap.set(item.cleanPath, item);
+      afMap.set(item.cleanPath.toLowerCase(), item);
+      const withoutLeading = item.cleanPath.replace(/^[\\/]+/, '');
+      afMap.set(withoutLeading, item);
+      afMap.set(withoutLeading.toLowerCase(), item);
+    }
+  }
+
   const existingIds = new Set<string>();
   const elements: DisplayElement[] = [];
 
   for (const symbol of symbols) {
-    const element = convertSymbol(symbol, uid, existingIds, calculationsByName);
+    const element = convertSymbol(symbol, uid, existingIds, calculationsByName, afMap);
     if (element !== undefined) {
       existingIds.add(element.id);
       elements.push(element);
@@ -578,6 +617,7 @@ function convertSymbol(
   dataSourceUid: string,
   existingIds: Set<string>,
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): DisplayElement | undefined {
   const type = (symbol.SymbolType ?? '').trim().toLowerCase();
   const geo = extractGeometry(symbol);
@@ -585,34 +625,34 @@ function convertSymbol(
   switch (type) {
     case 'value':
     case 'currentvalue':
-      return convertValue(symbol, geo, dataSourceUid, existingIds, calculationsByName);
+      return convertValue(symbol, geo, dataSourceUid, existingIds, calculationsByName, afMap);
 
     case 'trend':
     case 'multitrend':
-      return convertTrend(symbol, geo, dataSourceUid, existingIds, calculationsByName);
+      return convertTrend(symbol, geo, dataSourceUid, existingIds, calculationsByName, afMap);
 
     case 'gauge':
     case 'radialgauge':
     case 'lineargauge':
-      return convertGauge(symbol, geo, dataSourceUid, existingIds, calculationsByName);
+      return convertGauge(symbol, geo, dataSourceUid, existingIds, calculationsByName, afMap);
 
     case 'verticalbar':
     case 'horizontalbar':
     case 'verticalgauge':
     case 'horizontalgauge':
     case 'bar':
-      return convertBar(symbol, geo, dataSourceUid, existingIds, calculationsByName);
+      return convertBar(symbol, geo, dataSourceUid, existingIds, calculationsByName, afMap);
 
     case 'table':
     case 'simpletable':
     case 'assettable':
     case 'eventtable':
-      return convertTable(symbol, geo, dataSourceUid, existingIds, calculationsByName);
+      return convertTable(symbol, geo, dataSourceUid, existingIds, calculationsByName, afMap);
 
     case 'statictext':
     case 'label':
     case 'text':
-      return convertText(symbol, geo, dataSourceUid, existingIds, calculationsByName);
+      return convertText(symbol, geo, dataSourceUid, existingIds, calculationsByName, afMap);
     case 'rectangle':
     case 'circle':
     case 'ellipse':
@@ -621,10 +661,10 @@ function convertSymbol(
     case 'polyline':
     case 'path':
     case 'shape':
-      return convertShape(symbol, geo, dataSourceUid, existingIds, calculationsByName);
+      return convertShape(symbol, geo, dataSourceUid, existingIds, calculationsByName, afMap);
 
     case 'graphic':
-      return convertGraphic(symbol, geo, dataSourceUid, existingIds, calculationsByName);
+      return convertGraphic(symbol, geo, dataSourceUid, existingIds, calculationsByName, afMap);
 
     case 'image':
       return convertAttachedImage(symbol, geo, existingIds);
@@ -650,13 +690,14 @@ function convertValue(
   dataSourceUid: string,
   existingIds: Set<string>,
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): DisplayElement | undefined {
   const cfg = symbol.Configuration ?? {};
   const valueGeo = hasExplicitWidth(symbol)
     ? geo
     : { ...geo, width: estimateCompactValueWidth(cfg) };
   const calculation = firstCalculation(symbol, calculationsByName);
-  const binding = calculation ? undefined : (firstBinding(symbol, dataSourceUid) ?? firstMultistateBinding(symbol, dataSourceUid));
+  const binding = calculation ? undefined : (firstBinding(symbol, dataSourceUid, afMap) ?? firstMultistateBinding(symbol, dataSourceUid, afMap));
   if (!binding && !calculation) {
     return undefined;
   }
@@ -716,6 +757,7 @@ function convertTrend(
   dataSourceUid: string,
   existingIds: Set<string>,
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): DisplayElement | undefined {
   const cfg = symbol.Configuration ?? {};
   const rawTraces: Array<PiVisionTrace | PiVisionDataItem> = [
@@ -738,9 +780,10 @@ function convertTrend(
   const series: TrendSeries[] = [];
   for (let i = 0; i < allPaths.length; i++) {
     const calculation = resolveCalculationReference(allPaths[i], calculationsByName);
+    const afMeta = (Array.isArray((symbol as any).AfAttributes) ? (symbol as any).AfAttributes[i] : (i === 0 ? (symbol as any).AfAttribute : undefined)) ?? resolveAfMeta(allPaths[i], undefined, afMap);
     const binding = calculation
       ? createCalculationTrendBinding(calculation.id)
-      : parseDataSourcePath(allPaths[i], dataSourceUid);
+      : parseDataSourcePath(allPaths[i], dataSourceUid, afMeta);
     if (!binding) {
       continue;
     }
@@ -790,9 +833,10 @@ function convertGauge(
   dataSourceUid: string,
   existingIds: Set<string>,
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): DisplayElement | undefined {
   const cfg = symbol.Configuration ?? {};
-  const binding = firstBinding(symbol, dataSourceUid);
+  const binding = firstBinding(symbol, dataSourceUid, afMap);
   const calculation = firstCalculation(symbol, calculationsByName);
   if (!binding && !calculation) {
     return undefined;
@@ -851,9 +895,10 @@ function convertBar(
   dataSourceUid: string,
   existingIds: Set<string>,
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): DisplayElement | undefined {
   const cfg = symbol.Configuration ?? {};
-  const binding = firstBinding(symbol, dataSourceUid);
+  const binding = firstBinding(symbol, dataSourceUid, afMap);
   const calculation = firstCalculation(symbol, calculationsByName);
   if (!binding && !calculation) {
     return undefined;
@@ -918,6 +963,7 @@ function convertTable(
   dataSourceUid: string,
   existingIds: Set<string>,
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): DisplayElement | undefined {
   const cfg = symbol.Configuration ?? {};
   const paths = getDataSourcePaths(symbol);
@@ -926,7 +972,7 @@ function convertTable(
   const sourcePaths = allPaths.length > 0 ? allPaths : paths;
 
   const items: TableDataItem[] = sourcePaths
-    .map((path): TableDataItem | undefined => {
+    .map((path, i): TableDataItem | undefined => {
       const calculation = resolveCalculationReference(path, calculationsByName);
       if (calculation) {
         return {
@@ -953,7 +999,8 @@ function convertTable(
           nameMode: 'custom' as const,
         };
       }
-      const binding = parseDataSourcePath(path, dataSourceUid);
+      const afMeta = (Array.isArray((symbol as any).AfAttributes) ? (symbol as any).AfAttributes[i] : (i === 0 ? (symbol as any).AfAttribute : undefined)) ?? resolveAfMeta(path, undefined, afMap);
+      const binding = parseDataSourcePath(path, dataSourceUid, afMeta);
       return binding ? { binding, path } : undefined;
     })
     .filter((item): item is TableDataItem => item !== undefined);
@@ -982,6 +1029,7 @@ function convertText(
   dataSourceUid: string,
   existingIds: Set<string>,
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): DisplayElement {
   const cfg = symbol.Configuration ?? {};
   const text = decodePiVisionText(cfg.Content ?? cfg.Text ?? cfg.StaticText ?? '');
@@ -994,7 +1042,7 @@ function convertText(
   const textAlign = normalizeTextAlign(cfg.TextAlignment) as TextAlign;
 
   const multistate = extractAnyMultistate(symbol, cfg);
-  const binding = firstMultistateBinding(symbol, dataSourceUid);
+  const binding = firstMultistateBinding(symbol, dataSourceUid, afMap);
   const calculation = firstMultistateCalculation(symbol, calculationsByName);
 
   const properties: TextProperties = {
@@ -1040,6 +1088,7 @@ function convertShape(
   dataSourceUid: string,
   existingIds: Set<string>,
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): DisplayElement {
   const cfg = symbol.Configuration ?? {};
   const symType = (symbol.SymbolType ?? cfg.ShapeType ?? 'rectangle').toLowerCase();
@@ -1048,7 +1097,7 @@ function convertShape(
   const rawFill = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill ?? (cfg as any).FillColor);
   const fill = isTransparent ? 'transparent' : (rawFill ?? 'transparent');
   const stroke = normalizeColor(cfg.ForeColor ?? cfg.Stroke ?? (cfg as any).LineColor) ?? DEFAULT_RECTANGLE_PROPERTIES.stroke;
-  const multistateBinding = firstMultistateBinding(symbol, dataSourceUid);
+  const multistateBinding = firstMultistateBinding(symbol, dataSourceUid, afMap);
   const calculation = firstMultistateCalculation(symbol, calculationsByName);
   const multistate = extractAnyMultistate(symbol, cfg);
 
@@ -1121,6 +1170,7 @@ function convertGraphic(
   dataSourceUid: string,
   existingIds: Set<string>,
   calculationsByName: ReadonlyMap<string, CalculationDefinition>,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): DisplayElement {
   const cfg = symbol.Configuration ?? {};
   const fileKey = cfg.FileKey?.trim() || 'Graphic';
@@ -1129,7 +1179,7 @@ function convertGraphic(
     ? `data:image/svg+xml,${encodeURIComponent(officialSource)}`
     : createPiVisionGraphicDataUrl(fileKey, normalizeColor(cfg.Fill) ?? '#808080');
   const multistate = convertPiVisionThresholdMultistate(cfg.Multistates);
-  const binding = firstMultistateBinding(symbol, dataSourceUid);
+  const binding = firstMultistateBinding(symbol, dataSourceUid, afMap);
   const calculation = firstMultistateCalculation(symbol, calculationsByName);
   
   const mappedSymbol = mapPiVisionGraphicToLocalSymbol(cfg.DirectoryKey, fileKey);
@@ -1741,15 +1791,18 @@ function opStringToOperator(op: string): MultistateOperator | undefined {
 export function parseDataSourcePath(
   path: string,
   dataSourceUid: string,
+  afMeta?: AfAttributeMetadata,
 ): PiPointBinding | undefined {
   if (!path || !dataSourceUid) {
     return undefined;
   }
 
-  let normalized = path.trim();
+  const rawTrimmed = path.trim();
+  const isAf = rawTrimmed.toLowerCase().indexOf('af:') === 0 || Boolean(afMeta) || rawTrimmed.indexOf('|') >= 0;
 
-  // Remove prefixo de protocolo: "pi:\\", "af:\\"
-  normalized = normalized.replace(/^[a-z]+:\\+/i, '');
+  let normalized = rawTrimmed;
+  // Remove prefixo de protocolo: "pi:\\", "af:\\", "af:", etc.
+  normalized = normalized.replace(/^[a-z]+:\\+/i, '').replace(/^[a-z]+:/i, '');
   // Remove barras iniciais extras
   normalized = normalized.replace(/^[\\/]+/, '');
 
@@ -1757,7 +1810,37 @@ export function parseDataSourcePath(
     return undefined;
   }
 
-  // Divide no primeiro separador de caminho
+  if (isAf) {
+    const pipeIdx = normalized.indexOf('|');
+    let cleanElement = '';
+    let rawAttr = '';
+    if (pipeIdx >= 0) {
+      cleanElement = removePiVisionResourceId(normalized.slice(0, pipeIdx));
+      rawAttr = normalized.slice(pipeIdx + 1);
+    } else {
+      cleanElement = removePiVisionResourceId(normalized);
+    }
+    const attributeName = afMeta?.name ?? (rawAttr ? removePiVisionResourceId(rawAttr) : removePiVisionResourceId(cleanElement.slice(cleanElement.lastIndexOf('\\') + 1)));
+    const canonicalAfPath = afMeta?.cleanPath ?? afMeta?.path ?? (rawAttr ? `\\\\${cleanElement.replace(/^[\\/]+/, '')}|${attributeName}` : `\\\\${cleanElement.replace(/^[\\/]+/, '')}`);
+
+    const firstSep = cleanElement.indexOf('\\') >= 0 ? cleanElement.indexOf('\\') : cleanElement.indexOf('/');
+    const serverPath = firstSep >= 0 ? cleanElement.slice(0, firstSep) : (afMeta?.piServer ?? 'SRVPIMS5');
+    const elementPath = firstSep >= 0 ? cleanElement.slice(firstSep + 1) : '';
+    const pointName = afMeta?.piTag ?? attributeName;
+
+    return {
+      dataSourceUid,
+      serverPath,
+      pointName,
+      kind: 'af',
+      afPath: canonicalAfPath,
+      elementPath,
+      attributeName,
+      ...(afMeta?.webId ? { webId: afMeta.webId } : {}),
+    };
+  }
+
+  // Divide no primeiro separador de caminho (PI Point padrão)
   const firstSep = normalized.indexOf('\\') >= 0
     ? normalized.indexOf('\\')
     : normalized.indexOf('/');
@@ -1773,8 +1856,6 @@ export function parseDataSourcePath(
     return undefined;
   }
 
-  // Para paths AF com subestrutura (DB\Element|Attribute), o "pointName"
-  // e a ultima parte apos o ultimo separador ou pipe
   const lastSep = Math.max(remainder.lastIndexOf('\\'), remainder.lastIndexOf('/'), remainder.lastIndexOf('|'));
   const rawPointName = lastSep >= 0 ? remainder.slice(lastSep + 1) : remainder;
   const pointName = removePiVisionResourceId(rawPointName);
@@ -1950,27 +2031,59 @@ function makeElement<TType extends string, TProps>(
   return { id, type, x: geo.x, y: geo.y, width: geo.width, height: geo.height, properties };
 }
 
+function resolveAfMeta(
+  path: string | undefined,
+  symbolMeta: AfAttributeMetadata | undefined,
+  afMap?: Map<string, AfAttributeMetadata>,
+): AfAttributeMetadata | undefined {
+  if (symbolMeta) return symbolMeta;
+  if (!path || !afMap) return undefined;
+  const p = path.trim();
+  const lower = p.toLowerCase();
+  const clean = p.replace(/^[a-z]+:\\+/i, '').replace(/^[\\/]+/, '').replace(/\?.*/, '');
+  const cleanLower = clean.toLowerCase();
+  const canonical = '\\\\' + clean;
+  const canonicalLower = canonical.toLowerCase();
+
+  return (
+    afMap.get(p) ??
+    afMap.get(lower) ??
+    afMap.get(clean) ??
+    afMap.get(cleanLower) ??
+    afMap.get(canonical) ??
+    afMap.get(canonicalLower)
+  );
+}
+
 function firstBinding(
   symbol: PiVisionSymbol,
   dataSourceUid: string,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): PiPointBinding | undefined {
   const cfg = symbol.Configuration ?? {};
   const paths = getDataSourcePaths(symbol);
   if (paths.length === 0 && Array.isArray(cfg.DataItems) && cfg.DataItems.length > 0) {
     const first = cfg.DataItems[0];
-    return parseDataSourcePath(first?.Path ?? first?.DataSource ?? '', dataSourceUid);
+    const path = first?.Path ?? first?.DataSource ?? '';
+    const afMeta = resolveAfMeta(path, (symbol as any).AfAttribute, afMap);
+    return parseDataSourcePath(path, dataSourceUid, afMeta);
   }
-  return paths.length > 0 ? parseDataSourcePath(paths[0], dataSourceUid) : undefined;
+  const path = paths[0] ?? '';
+  const afMeta = resolveAfMeta(path, (symbol as any).AfAttribute, afMap);
+  return paths.length > 0 ? parseDataSourcePath(path, dataSourceUid, afMeta) : undefined;
 }
 
 function firstMultistateBinding(
   symbol: PiVisionSymbol,
   dataSourceUid: string,
+  afMap?: Map<string, AfAttributeMetadata>,
 ): PiPointBinding | undefined {
   const path = Array.isArray(symbol.MSDataSources) && symbol.MSDataSources.length > 0
     ? symbol.MSDataSources[0]
     : getDataSourcePaths(symbol)[0];
-  return typeof path === 'string' ? parseDataSourcePath(path, dataSourceUid) : undefined;
+  if (typeof path !== 'string') return undefined;
+  const afMeta = resolveAfMeta(path, (symbol as any).MSAfAttribute ?? (symbol as any).AfAttribute, afMap);
+  return parseDataSourcePath(path, dataSourceUid, afMeta);
 }
 
 function firstMultistateCalculation(

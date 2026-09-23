@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 101 101" id="fuxaWidget" style="border: none !important; outline: none !important; box-shadow: none !important; margin: 0; padding: 0; background: transparent;" width="100%" height="100%">
+  <ns0:g id="fuxaSymbol">
+    <ns0:defs id="defs1" />
+    <ns0:g data-cell-id="b54Z_1cSVq9n6jkFMYGL-50" id="g20" style="fill:none">
+      <ns0:g id="cell-b54Z_1cSVq9n6jkFMYGL-50" style="fill:none">
+        <ns0:g transform="translate(0.5,0.5)" id="g17" style="fill:none">
+          <ns0:circle cx="50" cy="50" fill="#ffffff" stroke="#000000" pointer-events="all" style="fill:none" id="ellipse16" r="50" />
+        </ns0:g>
+        <ns0:g id="g19" style="fill:none">
+          <ns0:g id="g18" style="fill:none">
+            <ns0:switch id="switch17" style="fill:none">
+              <ns0:text x="50" y="64" fill="light-dark(#000000, #ffffff)" font-family="Helvetica" font-size="45px" text-anchor="middle" id="text17" style="fill:none">G</ns0:text>
+            </ns0:switch>
+          </ns0:g>
+        </ns0:g>
+      </ns0:g>
+    </ns0:g>
+  </ns0:g>
+  </ns0:svg>

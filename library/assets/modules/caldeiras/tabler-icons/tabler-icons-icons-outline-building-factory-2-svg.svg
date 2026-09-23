@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#35211C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-style="colored" data-modified="true" data-palette="industrial">
+  <g id="sym_9d0ab7772f29_body" data-role="body"><g id="sym_9d0ab7772f29_outline" data-role="outline"><path d="M3 21h18" fill="#8D3F2E" />
+  <path d="M5 21v-12l5 4v-4l5 4h4" fill="#D87835" />
+  <path d="M19 21v-8l-1.436 -9.574a.5 .5 0 0 0 -.495 -.426h-1.145a.5 .5 0 0 0 -.494 .418l-1.43 8.582" fill="#F0B429" />
+  <path d="M9 17h1" fill="#8D3F2E" />
+  <path d="M14 17h1" fill="#D87835" />
+</g></g></svg>

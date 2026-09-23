@@ -10,7 +10,7 @@ import {
 } from '@grafana/data';
 import { getDataSourceSrv, type DataSourceSrv } from '@grafana/runtime';
 import { firstValueFrom, type Observable } from 'rxjs';
-import type { PiPointBinding, PiPointDatabaseLimits } from './piPointBinding';
+import { isAfBinding, type PiPointBinding, type PiPointDatabaseLimits } from './piPointBinding';
 import {
   DATA_QUERY_CURRENT_MAX_CONCURRENT_BATCHES,
   DATA_QUERY_CURRENT_MAX_TARGETS,
@@ -946,6 +946,16 @@ export async function getPiPointDatabaseLimits(
   binding: PiPointBinding,
   dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'> = getDataSourceSrv(),
 ): Promise<PiPointDatabaseLimits> {
+  if (isAfBinding(binding)) {
+    try {
+      const meta = await loadAfAttributeMetadata(binding, dataSourceSrv);
+      const zero = (meta as any).zero ?? 0;
+      const span = (meta as any).span ?? 100;
+      return { zero, span };
+    } catch {
+      return { zero: 0, span: 100 };
+    }
+  }
   const dataSource = resolvePiDataSource(dataSourceSrv);
   if (!dataSource) throw new Error('PI Data Source não configurada');
   const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
@@ -1048,10 +1058,62 @@ function rawPiPointAttributes(response: unknown): Record<string, unknown> {
   return Object.fromEntries(entries);
 }
 
+const afWebIdCache = new Map<string, string>();
+
+async function resolveAfWebId(
+  dataSourceUid: string,
+  afPath: string,
+  dataSourceSrv: Pick<DataSourceSrv, 'get'>,
+): Promise<string | undefined> {
+  const cacheKey = `${dataSourceUid}\u0000${afPath.toLowerCase()}`;
+  if (afWebIdCache.has(cacheKey)) {
+    return afWebIdCache.get(cacheKey);
+  }
+  try {
+    const cleanPath = afPath.indexOf('\\\\') === 0 ? afPath : ('\\\\' + afPath.replace(/^[\\/]+/, ''));
+    const res = await getPiResource<{ WebId?: string }>(
+      dataSourceUid,
+      `/attributes?path=${encodeURIComponent(cleanPath)}`,
+      dataSourceSrv,
+    );
+    if (res?.WebId) {
+      afWebIdCache.set(cacheKey, res.WebId);
+      return res.WebId;
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+async function loadAfAttributeMetadata(
+  binding: PiPointBinding,
+  dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'>,
+): Promise<PiPointMetadata> {
+  const webId = binding.webId ?? (binding.afPath ? await resolveAfWebId(binding.dataSourceUid, binding.afPath, dataSourceSrv) : undefined);
+  if (!webId) {
+    return { name: binding.pointName };
+  }
+  try {
+    const raw = await getPiResource<any>(binding.dataSourceUid, `/attributes/${encodeURIComponent(webId)}`, dataSourceSrv);
+    return {
+      name: raw?.Name ?? binding.pointName,
+      ...(raw?.Description ? { description: raw.Description } : {}),
+      ...(raw?.Type ? { pointType: raw.Type } : {}),
+      ...(raw?.DefaultUnitsNameAbbreviation ? { engineeringUnit: raw.DefaultUnitsNameAbbreviation } : {}),
+    };
+  } catch {
+    return { name: binding.pointName };
+  }
+}
+
 async function loadPiPointMetadata(
   binding: PiPointBinding,
   dataSourceSrv: Pick<DataSourceSrv, 'getList' | 'get'>,
 ): Promise<PiPointMetadata> {
+  if (isAfBinding(binding)) {
+    return loadAfAttributeMetadata(binding, dataSourceSrv);
+  }
   const dataSource = resolvePiDataSource(dataSourceSrv);
   if (!dataSource) throw new Error('PI Data Source não configurada');
   const instance = await getResolvedPiDataSource(dataSourceSrv, dataSource);
@@ -1638,14 +1700,160 @@ export function decodePiAlarmState(states: readonly PiDigitalState[], value: unk
   return { conditionCode, conditionText: condition.name, acknowledgementStatus, priority };
 }
 
-export async function getPiPointsCurrentValues(
-  bindings: readonly PiPointBinding[],
-  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
-): Promise<Record<string, PiPointValueResult>> {
-  const uniqueBindings = deduplicateBindings(bindings);
-  if (uniqueBindings.length === 0) {
-    return {};
+const DATA_QUERY_AF_BATCH_SIZE = 25;
+
+function normalizeAfStreamsetValue(raw: unknown): PiPointValue {
+  if (!raw || typeof raw !== 'object') {
+    return { value: raw };
   }
+  const item = raw as Record<string, unknown>;
+  const valObj = (item.Value && typeof item.Value === 'object') ? item.Value as Record<string, unknown> : item;
+
+  let val: unknown = valObj.Value !== undefined ? valObj.Value : (valObj.value !== undefined ? valObj.value : undefined);
+  if (val === undefined && valObj !== item) {
+    val = valObj;
+  }
+  if (val && typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    if (obj.Name !== undefined || obj.name !== undefined) {
+      val = obj.Name ?? obj.name;
+    } else if (obj.Value !== undefined || obj.value !== undefined) {
+      val = obj.Value ?? obj.value;
+    }
+  }
+
+  const timestamp = typeof valObj.Timestamp === 'string' ? valObj.Timestamp : (typeof valObj.timestamp === 'string' ? valObj.timestamp : undefined);
+  const unit = typeof valObj.UnitsAbbreviation === 'string' ? valObj.UnitsAbbreviation : (typeof valObj.unitsAbbreviation === 'string' ? valObj.unitsAbbreviation : undefined);
+  const good = typeof valObj.Good === 'boolean' ? valObj.Good : (typeof valObj.good === 'boolean' ? valObj.good : true);
+
+  return {
+    value: val,
+    timestamp: normalizeTimestamp(timestamp),
+    ...(unit ? { unit } : {}),
+    quality: { good },
+  };
+}
+
+function storeAfCurrentValueResult(
+  results: Record<string, PiPointValueResult>,
+  binding: PiPointBinding,
+  pointValue: PiPointValue,
+): void {
+  const result: PiPointValueResult = { status: 'success', value: pointValue };
+  results[getBindingKey(binding)] = result;
+  if (binding.afPath) {
+    results[`${binding.dataSourceUid}\u0000af\u0000${binding.afPath.toLowerCase()}`] = result;
+  }
+  if (binding.serverPath && binding.pointName) {
+    results[`${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`] = result;
+  }
+  if (binding.webId) {
+    results[`${binding.dataSourceUid}\u0000${binding.webId}`] = result;
+  }
+}
+
+function storeAfCurrentValueError(
+  results: Record<string, PiPointValueResult>,
+  binding: PiPointBinding,
+  error: Error,
+): void {
+  const result: PiPointValueResult = { status: 'error', error };
+  results[getBindingKey(binding)] = result;
+  if (binding.afPath) {
+    results[`${binding.dataSourceUid}\u0000af\u0000${binding.afPath.toLowerCase()}`] = result;
+  }
+  if (binding.serverPath && binding.pointName) {
+    results[`${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`] = result;
+  }
+}
+
+async function queryAfCurrentValues(
+  afBindings: readonly PiPointBinding[],
+  dataSourceSrv: Pick<DataSourceSrv, 'get'>,
+  results: Record<string, PiPointValueResult>,
+): Promise<void> {
+  const byDataSource = new Map<string, PiPointBinding[]>();
+  for (const b of afBindings) {
+    const list = byDataSource.get(b.dataSourceUid) ?? [];
+    list.push(b);
+    byDataSource.set(b.dataSourceUid, list);
+  }
+
+  for (const [dataSourceUid, group] of byDataSource) {
+    for (const b of group) {
+      if (!b.webId && b.afPath) {
+        b.webId = await resolveAfWebId(dataSourceUid, b.afPath, dataSourceSrv);
+      }
+    }
+
+    const resolvable = group.filter((b) => Boolean(b.webId));
+    const unresolvable = group.filter((b) => !b.webId);
+    for (const b of unresolvable) {
+      storeAfCurrentValueError(
+        results,
+        b,
+        new Error(`Não foi possível resolver o WebId do atributo AF: ${b.afPath ?? b.pointName}`),
+      );
+    }
+
+    const batches: PiPointBinding[][] = [];
+    for (let i = 0; i < resolvable.length; i += DATA_QUERY_AF_BATCH_SIZE) {
+      batches.push(resolvable.slice(i, i + DATA_QUERY_AF_BATCH_SIZE));
+    }
+
+    for (const batch of batches) {
+      try {
+        const queryParams = batch.map((b) => `webId=${encodeURIComponent(b.webId!)}`).join('&');
+        const url = `/streamsets/value?${queryParams}`;
+        const response = await getPiResource<{ Items?: Array<{ WebId?: string; Name?: string; Value?: unknown; Exception?: { Errors?: string[] } }> }>(
+          dataSourceUid,
+          url,
+          dataSourceSrv,
+        );
+
+        const items = response?.Items ?? [];
+        const itemsByWebId = new Map<string, typeof items[0]>();
+        for (const item of items) {
+          if (item?.WebId) {
+            itemsByWebId.set(item.WebId, item);
+          }
+        }
+
+        for (const binding of batch) {
+          const item = itemsByWebId.get(binding.webId!);
+          if (!item) {
+            storeAfCurrentValueError(results, binding, new Error(`Sem valor retornado para ${binding.pointName}`));
+          } else if (item.Exception) {
+            const msg = item.Exception.Errors?.[0] ?? 'Erro ao obter valor do atributo AF';
+            storeAfCurrentValueError(results, binding, new Error(msg));
+          } else {
+            const pointValue = normalizeAfStreamsetValue(item);
+            storeAfCurrentValueResult(results, binding, pointValue);
+          }
+        }
+      } catch (batchError) {
+        for (const binding of batch) {
+          try {
+            const single = await getPiResource<unknown>(
+              dataSourceUid,
+              `/streams/${encodeURIComponent(binding.webId!)}/value`,
+              dataSourceSrv,
+            );
+            const pointValue = normalizeAfStreamsetValue(single);
+            storeAfCurrentValueResult(results, binding, pointValue);
+          } catch (singleErr) {
+            storeAfCurrentValueError(results, binding, toError(singleErr));
+          }
+        }
+      }
+    }
+  }
+}
+
+async function queryStandardPiCurrentValues(
+  uniqueBindings: readonly PiPointBinding[],
+  dataSourceSrv: Pick<DataSourceSrv, 'get'>,
+): Promise<Record<string, PiPointValueResult>> {
   const grouped = groupBindingsByQuerySource(uniqueBindings);
   const results: Record<string, PiPointValueResult> = {};
 
@@ -1668,21 +1876,13 @@ export async function getPiPointsCurrentValues(
         const batchResults = normalizeCurrentValues(response, batch);
         Object.assign(results, batchResults);
 
-        // Se alguma tag dentro do lote falhou, tenta individualmente para ela
         const failedInBatch = batch.filter((binding) => {
           const res = batchResults[getBindingKey(binding)];
           return !res || res.status === 'error';
         });
 
-        // Alguns drivers retornam HTTP 200, mas incluem response.error e não
-        // produzem frames quando uma tag do lote falha. Nessa situação todas
-        // as tags precisam do retry unitário; uma resposta vazia sem erro não
-        // deve multiplicar consultas desnecessariamente.
         const responseHasError = Boolean(response.error);
         if (failedInBatch.length > 0 && responseHasError && failedInBatch.length === batch.length && batch.length > 1) {
-          // Quando o driver invalida o lote inteiro, a consulta unitária de
-          // todas as tags fica cara. A divisão binária encontra as tags ruins
-          // mantendo os grupos válidos em lote.
           const retryFailedBatch = async (failedBatch: readonly PiPointBinding[]): Promise<void> => {
             try {
               const retryResponse = await queryCurrentValues(instance, failedBatch, now, deadline);
@@ -1701,7 +1901,6 @@ export async function getPiPointsCurrentValues(
                 markCurrentValueErrors(results, failedBatch, toError(retryError));
                 return;
               }
-              // Divide o lote abaixo para isolar a falha.
             }
             if (failedBatch.length > 1) {
               const middle = Math.ceil(failedBatch.length / 2);
@@ -1722,7 +1921,6 @@ export async function getPiPointsCurrentValues(
               if (isCurrentValueTimeout(singleError)) {
                 results[getBindingKey(binding)] = { status: 'error', error: toError(singleError) };
               }
-              // Mantém o status original para falhas que não sejam timeout.
             }
           }
         }
@@ -1732,9 +1930,6 @@ export async function getPiPointsCurrentValues(
           markCurrentValueErrors(results, batch, batchError);
           return;
         }
-        // Alguns PI Web APIs rejeitam todo o lote quando apenas uma tag possui
-        // erro. Separamos o lote recursivamente para preservar as leituras
-        // válidas sem depender de uma sequência longa de consultas unitárias.
         try {
           const instance = await getResolvedPiDataSource(dataSourceSrv, {
             uid: dataSourceUid,
@@ -1788,6 +1983,35 @@ export async function getPiPointsCurrentValues(
   ));
   await runQueryTasks(tasks, DATA_QUERY_CURRENT_MAX_CONCURRENT_BATCHES);
 
+  return results;
+}
+
+export async function getPiPointsCurrentValues(
+  bindings: readonly PiPointBinding[],
+  dataSourceSrv: Pick<DataSourceSrv, 'get'> = getDataSourceSrv(),
+): Promise<Record<string, PiPointValueResult>> {
+  const uniqueBindings = deduplicateBindings(bindings);
+  if (uniqueBindings.length === 0) {
+    return {};
+  }
+  const piBindings: PiPointBinding[] = [];
+  const afBindings: PiPointBinding[] = [];
+  for (const b of uniqueBindings) {
+    if (isAfBinding(b)) {
+      afBindings.push(b);
+    } else {
+      piBindings.push(b);
+    }
+  }
+
+  const results: Record<string, PiPointValueResult> = {};
+  if (piBindings.length > 0) {
+    const piResults = await queryStandardPiCurrentValues(piBindings, dataSourceSrv);
+    Object.assign(results, piResults);
+  }
+  if (afBindings.length > 0) {
+    await queryAfCurrentValues(afBindings, dataSourceSrv, results);
+  }
   return results;
 }
 
@@ -1845,8 +2069,15 @@ export async function getPiTrendsPlotDataForRange(
   const tasks = uniqueBindings.map((binding) => async () => {
     const key = getBindingKey(binding);
     try {
-      if (!binding.webId) {
-        throw new Error('PlotData requer o WebID do PI Point');
+      let webId = binding.webId;
+      if (!webId && isAfBinding(binding) && binding.afPath) {
+        webId = await resolveAfWebId(binding.dataSourceUid, binding.afPath, dataSourceSrv);
+        if (webId) {
+          binding.webId = webId;
+        }
+      }
+      if (!webId) {
+        throw new Error('PlotData requer o WebID do PI Point ou Atributo AF');
       }
       const instance = await getResolvedPiDataSource(dataSourceSrv, {
         uid: binding.dataSourceUid,
@@ -1858,15 +2089,23 @@ export async function getPiTrendsPlotDataForRange(
         throw new Error('A Data Source PI não expõe o recurso PlotData');
       }
       const intervals = clampTrendMaxDataPoints(options.maxDataPoints);
-      const path = `/streams/${encodeURIComponent(binding.webId)}/plot?startTime=${encodeURIComponent(new Date(range.from).toISOString())}&endTime=${encodeURIComponent(new Date(range.to).toISOString())}&intervals=${intervals}`;
+      const path = `/streams/${encodeURIComponent(webId)}/plot?startTime=${encodeURIComponent(new Date(range.from).toISOString())}&endTime=${encodeURIComponent(new Date(range.to).toISOString())}&intervals=${intervals}`;
       const response = await withTimeout(
         resourceApi.getResource(path),
         5_000,
         `PlotData excedeu o tempo limite para ${binding.pointName}`,
       );
-      results[key] = { status: 'success', series: normalizePlotDataResponse(response, binding.pointName) };
+      const series = normalizePlotDataResponse(response, binding.pointName);
+      results[key] = { status: 'success', series };
+      if (isAfBinding(binding) && binding.afPath) {
+        results[`${binding.dataSourceUid}\u0000af\u0000${binding.afPath.toLowerCase()}`] = { status: 'success', series };
+      }
     } catch (error) {
-      results[key] = { status: 'error', error: toError(error) };
+      const errRes: PiTrendSeriesResult = { status: 'error', error: toError(error) };
+      results[key] = errRes;
+      if (isAfBinding(binding) && binding.afPath) {
+        results[`${binding.dataSourceUid}\u0000af\u0000${binding.afPath.toLowerCase()}`] = errRes;
+      }
     }
   });
   await runQueryTasks(tasks);
@@ -2744,6 +2983,9 @@ function deduplicateBindings(bindings: readonly PiPointBinding[]): PiPointBindin
 }
 
 function getBindingKey(binding: PiPointBinding): string {
+  if (isAfBinding(binding) && binding.afPath) {
+    return `${binding.dataSourceUid}\u0000af\u0000${binding.afPath.toLowerCase()}`;
+  }
   return `${binding.dataSourceUid}\u0000${binding.serverPath}\u0000${binding.pointName}`;
 }
 

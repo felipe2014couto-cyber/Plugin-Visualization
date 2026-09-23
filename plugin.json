@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "app",
+  "backend": true,
+  "executable": "gpx_pims_vision_app",
+  "name": "Visualization",
+  "id": "pims-vision-app",
+  "info": {
+    "keywords": ["app"],
+    "description": "Editor de displays industriais para Grafana.",
+    "author": {
+      "name": "Pims"
+    },
+    "logos": {
+      "small": "img/logo-visualization.png",
+      "large": "img/logo-visualization.png"
+    },
+    "screenshots": [],
+    "version": "0.1.9",
+    "updated": "2026-09-22"
+  },
+  "includes": [
+    {
+      "type": "page",
+      "name": "Visualization",
+      "path": "/a/pims-vision-app",
+      "role": "Viewer",
+      "addToNav": true,
+      "defaultNav": true
+    }
+  ],
+  "dependencies": {
+    "grafanaDependency": ">=9.3.16",
+    "plugins": []
+  }
+}

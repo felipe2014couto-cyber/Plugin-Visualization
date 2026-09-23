@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1B2E3A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-style="colored" data-modified="true" data-palette="industrial">
+  <g id="sym_3a70a299faea_body" data-role="body"><g id="sym_3a70a299faea_outline" data-role="outline"><g id="sym_3a70a299faea_active_part" data-role="active-part"><path d="M12 6.5v-.5v12" fill="#2E6386" />
+</g><path d="M5 5a2 2 0 0 1 2 -2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2l0 -2" fill="#2E6386" />
+  <path d="M5 17a2 2 0 0 1 2 -2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2l0 -2" fill="#7AA8BF" />
+  <path d="M15 5a2 2 0 0 1 2 -2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2l0 -2" fill="#D98732" />
+  <path d="M15 17a2 2 0 0 1 2 -2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2a2 2 0 0 1 -2 -2l0 -2" fill="#2E6386" />
+  <path d="M9 18h6" fill="#7AA8BF" />
+  <path d="M9 6h6" fill="#D98732" />
+  </g></g></svg>

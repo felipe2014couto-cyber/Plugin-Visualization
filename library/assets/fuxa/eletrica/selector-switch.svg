@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+<ns0:svg xmlns:ns0="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 75 67" id="fuxaWidget" style="border: none !important; outline: none !important; box-shadow: none !important; margin: 0; padding: 0; background: transparent;" width="100%" height="100%">
+  <ns0:g id="fuxaSymbol">
+    <ns0:defs id="defs1" />
+    <ns0:g data-cell-id="gQ551Ar7PwXLAaA90adm-79" id="g79" style="fill:none" transform="translate(-10.5,-19.999999)">
+      <ns0:g id="cell-gQ551Ar7PwXLAaA90adm-79" style="fill:none">
+        <ns0:g transform="translate(0.5,0.5)" id="g78" style="fill:none">
+          <ns0:path d="M 10,53 H 25 M 61,22.97 H 85 M 70,43.1 H 85 M 70,62.9 H 85 M 61,83.03 h 24" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="all" style="fill:none" id="path73" />
+          <ns0:ellipse cx="28" cy="53" rx="3" ry="2.97" fill="#ffffff" stroke="#000000" pointer-events="all" style="fill:none" id="ellipse73" />
+          <ns0:ellipse cx="58" cy="22.969999" rx="3" ry="2.97" fill="#ffffff" stroke="#000000" pointer-events="all" style="fill:none" id="ellipse74" />
+          <ns0:ellipse cx="67" cy="43.099998" rx="3" ry="2.97" fill="#ffffff" stroke="#000000" pointer-events="all" style="fill:none" id="ellipse75" />
+          <ns0:ellipse cx="67" cy="62.900002" rx="3" ry="2.97" fill="#ffffff" stroke="#000000" pointer-events="all" style="fill:none" id="ellipse76" />
+          <ns0:ellipse cx="58" cy="83.029999" rx="3" ry="2.97" fill="#ffffff" stroke="#000000" pointer-events="all" style="fill:none" id="ellipse77" />
+          <ns0:path d="M 30.25,51.02 53.5,27.26" fill="none" stroke="#000000" stroke-miterlimit="10" pointer-events="all" style="fill:none" id="path77" />
+          <ns0:path d="m 48.63,27.59 7.12,-2.31 -2.25,6.6 z" fill="#000000" stroke="none" pointer-events="all" style="fill:none" id="path78" />
+        </ns0:g>
+      </ns0:g>
+    </ns0:g>
+  </ns0:g>
+  </ns0:svg>
