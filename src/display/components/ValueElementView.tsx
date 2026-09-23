@@ -65,11 +65,17 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   const isColorBlue = visual.color === '#0000ff' || visual.color === 'blue' || visual.color === 'rgba(0,0,255,1)';
   const isUnreadableDark = isColorBlack || isColorBlue;
 
+  const isZeroAlphaRgba = typeof visual.backgroundColor === 'string' &&
+    /^rgba\(\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?\s*,\s*(?:0|0\.0+)\s*\)$/i.test(visual.backgroundColor.trim());
+  const isExplicitTransparent = element.properties._piVisionExplicitTransparent === true ||
+    isZeroAlphaRgba ||
+    visual.backgroundColor === 'none';
+
   let baseTextColor: string;
   if (isPiVision) {
     if (normalMultistateColor) {
       baseTextColor = normalMultistateColor;
-    } else if (isUnreadableDark) {
+    } else if (isUnreadableDark && !isExplicitTransparent) {
       baseTextColor = '#00ff00';
     } else {
       baseTextColor = resolveThemeForeground(visual.color);
@@ -81,9 +87,9 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
   }
 
   const textColor = getMultistateColor(runtimeVal, element.properties.multistate, baseTextColor, sourceValue);
-  const defaultBg = isPiVision && element.properties._piVisionExplicitTransparent !== true && (!visual.backgroundColor || visual.backgroundColor === 'transparent')
+  const defaultBg = isPiVision && !isExplicitTransparent && (!visual.backgroundColor || visual.backgroundColor === 'transparent')
     ? '#000000'
-    : (visual.backgroundColor || 'transparent');
+    : (isExplicitTransparent ? 'transparent' : (visual.backgroundColor || 'transparent'));
   const bgColor = getMultistateColor(runtimeVal, element.properties.backgroundMultistate, defaultBg, bgSourceValue);
   const textX = getTextX(element, visual.textAlign);
   const textAnchor = visual.textAlign === 'left' ? 'start' : visual.textAlign === 'right' ? 'end' : 'middle';
@@ -92,6 +98,7 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
     : getResponsiveFontSize(element, visual.fontSize, lines);
   const textBlink = evaluateMultistate(runtimeVal, element.properties.multistate, sourceValue)?.rule.blink === true;
   const bgBlink = evaluateMultistate(runtimeVal, element.properties.backgroundMultistate, bgSourceValue)?.rule.blink === true;
+  const isBgTransparent = isExplicitTransparent || bgColor === 'transparent' || isZeroAlphaRgba || bgColor === 'none';
   return (
     <g
       data-testid={`display-element-${element.id}`}
@@ -105,7 +112,8 @@ export const ValueElementView = React.memo(function ValueElementView({ element, 
         width={element.width}
         height={element.height}
         rx={element.properties._piVisionSquareBackground === true ? 0 : 14}
-        fill={bgColor}
+        fill={isBgTransparent ? 'transparent' : bgColor}
+        fillOpacity={isBgTransparent ? 0 : 1}
         stroke="none"
         strokeWidth={0}
         data-testid={`value-background-${element.id}`}

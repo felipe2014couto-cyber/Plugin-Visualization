@@ -471,27 +471,43 @@ function propagateMultistateToValues(elements: DisplayElement[]) {
     if (donorShape) {
       const donorProps = donorShape.properties as any;
       const donorMultistate = donorProps.multistate;
-      vProps.multistate = donorMultistate;
-      if (donorProps.backgroundMultistate) {
-        vProps.backgroundMultistate = donorProps.backgroundMultistate;
+      const hasBinding = Boolean(vProps.binding);
+      const sameBinding = Boolean(
+        vBinding?.pointName && donorProps.binding?.pointName &&
+        vBinding.pointName.toLowerCase() === donorProps.binding.pointName.toLowerCase()
+      );
+      if (!hasBinding || sameBinding) {
+        vProps.multistate = donorMultistate;
+        if (donorProps.backgroundMultistate) {
+          vProps.backgroundMultistate = donorProps.backgroundMultistate;
+        }
+        if (!vProps.binding && donorProps.binding) {
+          vProps.binding = donorProps.binding;
+        }
+        const normalColor = donorMultistate.rules[0]?.color;
+        const isBlackOrBlue = !vProps.visual.color ||
+          vProps.visual.color === '#000000' ||
+          vProps.visual.color === '#000' ||
+          vProps.visual.color === 'rgba(0,0,0,1)' ||
+          vProps.visual.color === '#0000ff' ||
+          vProps.visual.color === 'blue' ||
+          vProps.visual.color === 'rgba(0,0,255,1)';
+        if (normalColor && isBlackOrBlue) {
+          vProps.visual.color = normalColor;
+        }
       }
-      if (!vProps.binding && donorProps.binding) {
-        vProps.binding = donorProps.binding;
-      }
-      const normalColor = donorMultistate.rules[0]?.color;
-      const isBlackOrBlue = !vProps.visual.color ||
-        vProps.visual.color === '#000000' ||
-        vProps.visual.color === '#000' ||
-        vProps.visual.color === 'rgba(0,0,0,1)' ||
-        vProps.visual.color === '#0000ff' ||
-        vProps.visual.color === 'blue' ||
-        vProps.visual.color === 'rgba(0,0,255,1)';
-      if (normalColor && isBlackOrBlue) {
-        vProps.visual.color = normalColor;
-      }
-      if (donorProps.fill && donorProps.fill !== 'transparent' && (!vProps.visual.backgroundColor || vProps.visual.backgroundColor === 'transparent')) {
-        vProps.visual.backgroundColor = donorProps.fill;
-      }
+    }
+
+    // Se o valor esta dentro de qualquer retangulo/forma (ex: cartao de KANBAN),
+    // o fundo do valor DEVE ser transparente para nao desenhar caixa preta/opaca sobre o cartao.
+    const isOverShape = elements.some((other) => {
+      if (other.id === el.id) return false;
+      if (other.type !== RECTANGLE_TYPE && other.type !== 'ellipse' && other.type !== 'polygon') return false;
+      return isInside(el, other);
+    });
+    if (isOverShape) {
+      vProps.visual.backgroundColor = 'transparent';
+      (vProps as any)._piVisionExplicitTransparent = true;
     }
   }
 }
@@ -714,9 +730,10 @@ function convertValue(
     ?? (isBlackOrBlue ? '#00ff00' : (rawColor ?? DEFAULT_VALUE_VISUAL_OPTIONS.color));
 
   const rawBg = normalizeColor(cfg.BackColor ?? cfg.BackgroundColor ?? cfg.Fill);
-  const isExplicitTransparent = cfg.Transparent === true || cfg.IsTransparent === true || rawBg === 'transparent';
+  const isZeroAlphaBg = typeof rawBg === 'string' && /^rgba\(\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?\s*,\s*(?:0|0\.0+)\s*\)$/i.test(rawBg.trim());
+  const isExplicitTransparent = cfg.Transparent === true || cfg.IsTransparent === true || rawBg === 'transparent' || isZeroAlphaBg;
   const backgroundColor = isExplicitTransparent
-    ? 'transparent'
+    ? (isZeroAlphaBg ? rawBg : 'transparent')
     : (rawBg && rawBg.toLowerCase() !== '#ffffff' && rawBg.toLowerCase() !== '#fff' ? rawBg : '#000000');
   const fontSize = normalizeFontSize(cfg.TextSize ?? cfg.FontSize);
   const textAlign = normalizeTextAlign(cfg.TextAlignment);
@@ -740,7 +757,7 @@ function convertValue(
     },
     _piVisionPreserveFontSize: fontSize !== undefined,
     _piVisionSquareBackground: true,
-    ...(isExplicitTransparent ? { _piVisionExplicitTransparent: true } : {}),
+    ...(isExplicitTransparent || backgroundColor === 'transparent' ? { _piVisionExplicitTransparent: true } : {}),
     ...multistate,
   };
 

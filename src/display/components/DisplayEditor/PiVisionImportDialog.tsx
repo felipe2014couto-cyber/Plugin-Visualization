@@ -412,14 +412,6 @@ export function PiVisionImportDialog({ onImport, onClose }: PiVisionImportDialog
                   onKeyDown={(e) => { if (e.key === 'Enter' && canConvert) { handleConvert(); } }}
                 />
               </div>
-              <div className={styles.notice} role="note">
-                <strong>Requisito:</strong> o proxy precisa estar configurado com uma conta Windows
-                que tenha acesso ao Display. Como alternativa, autentique-se no PI Vision neste mesmo
-                navegador. Se a importacao por link nao estiver disponivel, use a aba{' '}
-                <button type="button" className={styles.noticeLink} onClick={() => setTab('file')}>
-                  Upload de Arquivo
-                </button>.
-              </div>
             </>
           )}
 
@@ -677,24 +669,6 @@ const styles = {
     font-size: 11px;
     color: var(--text-secondary, #9fa6b2);
     line-height: 1.4;
-  `,
-  notice: css`
-    padding: 8px 12px;
-    border: 1px solid var(--warning-border, #6b5c00);
-    border-radius: 4px;
-    background: var(--warning-bg, rgba(107, 92, 0, 0.15));
-    color: var(--warning-text, #d4b82a);
-    font-size: 11px;
-    line-height: 1.5;
-  `,
-  noticeLink: css`
-    background: none;
-    border: none;
-    color: var(--primary, #5a78d1);
-    cursor: pointer;
-    font-size: 11px;
-    padding: 0;
-    text-decoration: underline;
   `,
   error: css`
     padding: 8px 12px;

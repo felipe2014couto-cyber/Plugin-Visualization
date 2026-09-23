@@ -31,6 +31,7 @@ export interface MultistateMatch {
 
 const DEFAULT_RULE_COLOR = '#d32f2f';
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const RGBA_COLOR = /^rgba?\(\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?\s*,\s*\d+(?:\.\d+)?(?:\s*,\s*(?:0|1|0?\.\d+))?\s*\)$/i;
 
 export const TRANSPARENT_COLOR = 'transparent' as const;
 
@@ -155,7 +156,7 @@ export function normalizePiDigitalValue(value: unknown): NormalizedDigitalValue 
 }
 
 export function isValidMultistateRule(rule: MultistateRule): boolean {
-  const hasValidColor = HEX_COLOR.test(rule.color) || rule.color === TRANSPARENT_COLOR;
+  const hasValidColor = HEX_COLOR.test(rule.color) || rule.color === TRANSPARENT_COLOR || RGBA_COLOR.test(rule.color);
   if (!hasValidColor) {
     return false;
   }
