@@ -38,8 +38,7 @@ const POPUP_AXIS_COLUMN_WIDTH = 58;
 const POPUP_LEGEND_LINE_HEIGHT = 19;
 const POPUP_LEGEND_ITEM_HEIGHT = 46;
 const POPUP_CURSOR_READING_FONT_SIZE = 13;
-const POPUP_CURSOR_READING_LINE_HEIGHT = 16;
-const POPUP_CURSOR_READING_BLOCK_HEIGHT = 34;
+const POPUP_CURSOR_READING_BLOCK_HEIGHT = 20;
 const FULL_HEIGHT_ZOOM_TOLERANCE_PX = 8;
 const EMPTY_TREND_CURSORS: readonly TrendCursor[] = [];
 type PopupScaleMode = TrendScaleMode;
@@ -840,8 +839,7 @@ function PopupChart({
                   fill={reading.color}
                   fontSize={POPUP_CURSOR_READING_FONT_SIZE}
                 >
-                  <tspan x={labelX}>{reading.name}</tspan>
-                  <tspan x={labelX} dy={POPUP_CURSOR_READING_LINE_HEIGHT}>{reading.label}</tspan>
+                  <tspan x={labelX}>{reading.label}</tspan>
                 </text>
               </g>
             ))}

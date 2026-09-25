@@ -244,8 +244,8 @@ describe('TrendPopup - escalas', () => {
     }];
     render(<TrendPopup seriesStates={stringSeries} timeRange={{ from: 1_000, to: 2_000 }} initialCursors={[{ id: 'cursor-string', time: 1_250 }]} onClose={jest.fn()} />);
 
-    expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).toHaveTextContent('TAG_STRING');
     expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).toHaveTextContent('No Data');
+    expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).not.toHaveTextContent('TAG_STRING');
   });
 
   it('preserva o último estado String depois do último evento e respeita No Data explícito', () => {
@@ -255,9 +255,11 @@ describe('TrendPopup - escalas', () => {
     }];
     const { rerender } = render(<TrendPopup seriesStates={stringSeries} timeRange={{ from: 1_000, to: 2_000 }} initialCursors={[{ id: 'cursor-string', time: 1_600 }]} onClose={jest.fn()} />);
     expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).toHaveTextContent('No Data');
+    expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).not.toHaveTextContent('TAG_STRING');
 
     rerender(<TrendPopup seriesStates={stringSeries} timeRange={{ from: 1_000, to: 2_000 }} initialCursors={[{ id: 'cursor-string', time: 1_900 }]} onClose={jest.fn()} />);
     expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).toHaveTextContent('RJNTB');
+    expect(screen.getByTestId('trend-popup-cursor-reading-cursor-string-0')).not.toHaveTextContent('TAG_STRING');
   });
 
   it('distingue ticks próximos de 32 e inclui segundos em janelas temporais curtas', () => {

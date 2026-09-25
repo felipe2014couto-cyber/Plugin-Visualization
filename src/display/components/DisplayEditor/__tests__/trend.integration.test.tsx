@@ -200,7 +200,9 @@ describe('DisplayEditor - Trend', () => {
     fireEvent.pointerDown(screen.getByTestId('trend-popup-cursor-plot'), { clientX: 400, clientY: 300, pointerId: 10 });
     fireEvent.pointerUp(screen.getByTestId('trend-popup-cursor-plot'), { clientX: 400, clientY: 300, pointerId: 10 });
     expect(screen.getByTestId('trend-popup-cursor-popup-cursor-1')).toBeInTheDocument();
-    expect(screen.getByTestId('trend-popup-cursor-reading-popup-cursor-1-0')).toHaveTextContent('SINUSOID');
+    expect(screen.getByTestId('trend-popup-cursor-reading-popup-cursor-1-0')).toHaveTextContent('Off');
+    expect(screen.getByTestId('trend-popup-cursor-reading-popup-cursor-1-0')).not.toHaveTextContent('SINUSOID');
+    expect(screen.getByTestId('trend-popup-legend-item-0')).toHaveTextContent('SINUSOID');
     const cursorLine = screen.getByTestId('trend-popup-cursor-line-popup-cursor-1');
     const cursorX = cursorLine.getAttribute('x1');
     const cursorHit = screen.getByTestId('trend-popup-cursor-hit-popup-cursor-1');
