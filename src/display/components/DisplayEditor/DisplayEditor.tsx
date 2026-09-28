@@ -711,8 +711,6 @@ export function DisplayEditor({
     setOptionsTrendId(null);
   }, [commitDocument, dispatch]);
 
-
-
   const reorderSelected = useCallback((direction: 'front' | 'back', all = false) => {
     const selectedId = stateRef.current.selectedElementId;
     if (!selectedId) {
