@@ -713,78 +713,7 @@ export function DisplayEditor({
 
   const handleSymbolButtonClick = useCallback((type: PiPointDropSymbolType) => {
     onDropSymbolTypeChange?.(type);
-    if (!selectedPiPoint || !onChangeRef.current) {
-      return;
-    }
-    const currentDoc = documentRef.current;
-    const binding = createPiPointBinding(selectedPiPoint);
-    if (!binding) {
-      return;
-    }
-    const createOptions = {
-      binding,
-      surface: currentDoc.surface,
-      existingIds: currentDoc.elements.map((item) => item.id),
-    };
-    let newElement: DisplayElement;
-    switch (type) {
-      case 'trend':
-        newElement = createTrend(createOptions);
-        break;
-      case 'gauge':
-        newElement = createGauge(createOptions);
-        break;
-      case 'bar':
-        newElement = createBar(createOptions);
-        break;
-      case 'bar-chart':
-        newElement = createBarChart({
-          item: {
-            binding,
-            ...(selectedPiPoint.description ? { description: selectedPiPoint.description } : {}),
-            ...(selectedPiPoint.engineeringUnit ? { engineeringUnit: selectedPiPoint.engineeringUnit } : {}),
-          },
-          surface: currentDoc.surface,
-          existingIds: currentDoc.elements.map((item) => item.id),
-        });
-        break;
-      case 'table':
-        newElement = createTable({
-          item: {
-            binding,
-            ...(selectedPiPoint.path ? { path: selectedPiPoint.path } : {}),
-            ...(selectedPiPoint.description ? { description: selectedPiPoint.description } : {}),
-            ...(selectedPiPoint.engineeringUnit ? { engineeringUnit: selectedPiPoint.engineeringUnit } : {}),
-            ...(selectedPiPoint.pointType ? { pointType: selectedPiPoint.pointType } : {}),
-          },
-          surface: currentDoc.surface,
-          existingIds: currentDoc.elements.map((item) => item.id),
-        });
-        break;
-      case 'xy-plot':
-        newElement = createXYPlot({
-          xBinding: binding,
-          surface: currentDoc.surface,
-          existingIds: currentDoc.elements.map((item) => item.id),
-        });
-        break;
-      case 'value':
-      default:
-        newElement = createValue(createOptions);
-        break;
-    }
-    const targetX = surfaceViewCenter?.x ?? (currentDoc.surface.width / 2);
-    const targetY = surfaceViewCenter?.y ?? (currentDoc.surface.height / 2);
-    const centered = {
-      ...newElement,
-      x: Math.max(0, Math.round(targetX - newElement.width / 2)),
-      y: Math.max(0, Math.round(targetY - newElement.height / 2)),
-    };
-    commitDocument(appendDisplayElement(currentDoc, centered));
-    dispatch({ type: 'SELECT', elementId: centered.id });
-    setOptionsElementId(null);
-    setOptionsTrendId(null);
-  }, [commitDocument, dispatch, onDropSymbolTypeChange, selectedPiPoint, surfaceViewCenter]);
+  }, [onDropSymbolTypeChange]);
 
 
 

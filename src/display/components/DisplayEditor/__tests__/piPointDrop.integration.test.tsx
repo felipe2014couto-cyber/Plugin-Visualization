@@ -413,7 +413,7 @@ describe('DisplayEditor - drop de PI Point', () => {
     expect(readDocument().elements[1].properties.series![0].binding.pointName).toBe('SINUSOID');
   });
 
-  it('insere Trend diretamente ao clicar no botão da barra de ferramentas com tag selecionada', async () => {
+  it('apenas seleciona o tipo na toolbar; cada drop cria um símbolo na posição solta', async () => {
     function ToolbarHarness() {
       const [doc, setDoc] = useState<DisplayDocument>(() => createDisplayDocument({ name: 'ToolbarTest' }));
       const [symbolType, setSymbolType] = useState<PiPointDropSymbolType>('value');
@@ -432,18 +432,41 @@ describe('DisplayEditor - drop de PI Point', () => {
     }
 
     render(<ToolbarHarness />);
-    const trendButton = screen.getByTestId('display-insert-trend');
-    fireEvent.click(trendButton);
+    fireEvent.click(screen.getByTestId('display-insert-trend'));
+    fireEvent.click(screen.getByTestId('display-insert-gauge'));
+    fireEvent.click(screen.getByTestId('display-insert-value'));
+    fireEvent.click(screen.getByTestId('display-insert-trend'));
+    expect(readDocument().elements).toHaveLength(0);
 
+    mockSurfaceBounds();
+    const canvas = screen.getByTestId('display-editor-surface-wrapper');
+    fireDragEvent(canvas, 'drop', createDataTransfer(), 600, 350);
     await waitFor(() => expect(readDocument().elements).toHaveLength(1));
-    expect(readDocument().elements[0].type).toBe('trend');
+    const first = readDocument().elements[0];
+    const surface = screen.getByTestId('display-surface');
+    const [viewBoxX, viewBoxY, viewBoxWidth, viewBoxHeight] = (surface.getAttribute('viewBox') ?? '').split(/[\s,]+/).map(Number);
+    const scale = Math.min(800 / viewBoxWidth, 600 / viewBoxHeight);
+    const expectedDropX = viewBoxX + (600 - 100 - (800 - viewBoxWidth * scale) / 2) / scale;
+    const expectedDropY = viewBoxY + (350 - 50 - (600 - viewBoxHeight * scale) / 2) / scale;
+    expect(first.type).toBe('trend');
+    expect(first.x! + first.width! / 2).toBeCloseTo(expectedDropX);
+    expect(first.y! + first.height! / 2).toBeCloseTo(expectedDropY);
     expect(readDocument().elements[0].properties.series![0].binding.pointName).toBe('SINUSOID');
+
+    fireDragEvent(canvas, 'drop', createDataTransfer({ ...point, name: 'SECOND', path: '\\\\pims\\SECOND' }), 150, 350);
+    await waitFor(() => expect(readDocument().elements).toHaveLength(2));
+    expect(readDocument().elements[1].type).toBe('trend');
+    expect(readDocument().elements[1].properties.series![0].binding.pointName).toBe('SECOND');
   });
 });
 
 function readDocument(): {
   elements: Array<{
     type?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
     properties: {
       series?: Array<{ binding: { dataSourceUid: string; pointName: string } }>;
       items?: Array<{ binding: { dataSourceUid: string; pointName: string } }>;
@@ -453,4 +476,3 @@ function readDocument(): {
 } {
   return JSON.parse(screen.getByTestId('display-document-json').textContent ?? '{}');
 }
-
