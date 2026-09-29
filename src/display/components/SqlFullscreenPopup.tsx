@@ -34,19 +34,6 @@ export function SqlFullscreenPopup({ element, onClose }: SqlFullscreenPopupProps
 
   const content = (
     <section className={styles.popup} role="dialog" aria-modal="true" aria-label="Pop-up de tendência">
-      <header className={styles.topHeader}>
-        <span
-          className={styles.brand}
-          role="img"
-          aria-label="Aperam Visualization"
-        />
-        <div className={styles.topActions}>
-          <button type="button" className={styles.newDisplayButton}><span>+</span> Novo display</button>
-          <button type="button" className={styles.headerIconButton} aria-label="Mais opções">⋮</button>
-          <button type="button" className={styles.headerIconButton} aria-label="Ajuda">?</button>
-        </div>
-      </header>
-
       <div className={styles.titleBar}>
         <span className={styles.title}>{title}</span>
         <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Fechar pop-up">
@@ -90,57 +77,6 @@ const styles = {
     height: 100vh;
     box-sizing: border-box;
     overflow: hidden;
-  `,
-  topHeader: css`
-    height: 64px;
-    flex: 0 0 64px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 10px;
-    background: transparent;
-  `,
-  brand: css`
-    display: block;
-    width: 150px;
-    height: 56px;
-    background-image: var(--brand-logo);
-    background-repeat: no-repeat;
-    background-position: center left;
-    background-size: contain;
-  `,
-  topActions: css`
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    font-weight: 600;
-  `,
-  newDisplayButton: css`
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    height: 40px;
-    padding: 0 16px;
-    border: 1px solid var(--border-color, #1f293d);
-    border-radius: 14px;
-    color: var(--text-primary, #f3f4f6);
-    background: var(--surface-primary, #111827);
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 13px;
-
-    span { color: var(--accent, #b4167e); font-size: 20px; font-weight: 300; }
-  `,
-  headerIconButton: css`
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--border-color, #1f293d);
-    border-radius: 50%;
-    color: var(--text-primary, #f3f4f6);
-    background: var(--surface-primary, #111827);
-    cursor: pointer;
-    font-size: 16px;
   `,
   titleBar: css`
     position: relative;
